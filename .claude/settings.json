@@ -1,0 +1,14 @@
+{
+  "extraKnownMarketplaces": {
+    "llm-project-harness": {
+      "source": {
+        "source": "github",
+        "repo": "rlatndud9090/llm-project-harness"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "llm-project-harness": true,
+    "llm-project-harness@llm-project-harness": true
+  }
+}

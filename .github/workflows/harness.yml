@@ -1,0 +1,28 @@
+name: harness
+on:
+  pull_request:
+    # main-타겟 PR만 게이트한다. 코드 변경은 전부 PR을 거쳐 여기서 검증하고, main 직접
+    # push는 로컬 pre-commit(harness:check)이 막는다(서버 push 게이트는 두지 않는다 —
+    # squash-merge to main이 이미 통과한 게이트를 재실행하던 낭비를 없앤다).
+    branches: [main]
+
+# 같은 PR의 이전 실행은 취소한다 — 연속 커밋 시 최신 커밋만 게이트해 무효화된 중간
+# 커밋의 게이트가 끝까지 도는 낭비를 막는다.
+concurrency:
+  group: harness-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      # git-history 검사가 HEAD 대비 비교하고, action이 PR base 대비 변경 스코프를
+      # 판정하므로 전체 히스토리가 필요하다.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+      # docs/ 전용 PR이면 action이 harness:check만, 코드 변경이면 full gate를 돌린다.
+      - uses: rlatndud9090/llm-project-harness@main
