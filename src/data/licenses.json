@@ -1,0 +1,72 @@
+{
+  "entries": [
+    {
+      "id": "data:pokeapi",
+      "kind": "data",
+      "license": "BSD-3-Clause",
+      "name": "PokeAPI CSV",
+      "noticeSource": "PokeAPI/pokeapi/LICENSE.md @ e5b79b2e15d7c50735a945936afd4cd1cfd94eae",
+      "source": "https://github.com/PokeAPI/pokeapi/tree/e5b79b2e15d7c50735a945936afd4cd1cfd94eae",
+      "usage": "스냅샷의 한국어 명칭 파생 데이터(원본 CSV는 번들하지 않음)",
+      "version": "e5b79b2e15d7c50735a945936afd4cd1cfd94eae"
+    },
+    {
+      "id": "data:showdown-pkmn",
+      "kind": "data",
+      "license": "MIT",
+      "name": "Pokémon Showdown 데이터(@pkmn/mods·@pkmn/dex 패키징)",
+      "noticeSource": "@pkmn/dex/package.json license 필드(패키지에 LICENSE 파일 없음, MIT 표준 문안), @pkmn/mods/LICENSE",
+      "source": "https://github.com/smogon/pokemon-showdown @ 4148c1187ae723ecf84697c75e0b226bffdb6c81 (참고), https://github.com/pkmn/ps",
+      "usage": "스냅샷의 종·기술·도구·특성·성격·학습 기술 파생 데이터(빌드 시 추출, 패키지 자체는 번들하지 않음)",
+      "version": "@pkmn/dex@0.10.13, @pkmn/mods@0.10.13"
+    },
+    {
+      "id": "npm:@smogon/calc",
+      "kind": "code",
+      "license": "MIT",
+      "name": "@smogon/calc",
+      "noticeSource": "@smogon/calc/package.json license 필드(패키지에 LICENSE 파일 없음, MIT 표준 문안)",
+      "source": "github:smogon/damage-calc",
+      "usage": "앱 번들에 포함되는 런타임 코드",
+      "version": "0.12.0"
+    },
+    {
+      "id": "npm:react",
+      "kind": "code",
+      "license": "MIT",
+      "name": "react",
+      "noticeSource": "react/LICENSE",
+      "source": "https://github.com/react/react.git",
+      "usage": "앱 번들에 포함되는 런타임 코드",
+      "version": "19.3.1"
+    },
+    {
+      "id": "npm:react-dom",
+      "kind": "code",
+      "license": "MIT",
+      "name": "react-dom",
+      "noticeSource": "react-dom/LICENSE",
+      "source": "https://github.com/react/react.git",
+      "usage": "앱 번들에 포함되는 런타임 코드",
+      "version": "19.3.1"
+    },
+    {
+      "id": "npm:scheduler",
+      "kind": "code",
+      "license": "MIT",
+      "name": "scheduler",
+      "noticeSource": "scheduler/LICENSE",
+      "source": "https://github.com/react/react.git",
+      "usage": "앱 번들에 포함되는 런타임 코드",
+      "version": "0.28.0"
+    }
+  ],
+  "testOnly": [
+    {
+      "path": "docs/raw/feature/champions-calc-data-core/mega-ko-official.tsv",
+      "source": "https://pokemonkorea.co.kr/pokedex (포켓몬코리아 공식 도감)",
+      "usage": "메가 82항목 한국어 이름의 테스트 기준값. 앱 번들에 넣지 않는다."
+    }
+  ],
+  "trademark": "Pokémon and Pokémon character names are trademarks of Nintendo, Creatures Inc. and GAME FREAK inc. 포켓몬스터·포켓몬 및 등장 캐릭터 이름은 Nintendo·Creatures·GAME FREAK의 상표다. 이 프로젝트는 비공식이며 이들과 관계없다."
+}

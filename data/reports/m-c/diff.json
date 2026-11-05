@@ -1,0 +1,118 @@
+{
+  "diff": {
+    "abilities": {
+      "added": [
+        "auraguard",
+        "emergencyexit",
+        "grasspelt",
+        "grassysurge",
+        "guarddog",
+        "libero",
+        "liquidooze",
+        "psychicsurge",
+        "punkrock",
+        "rattled",
+        "runaway",
+        "seedsower",
+        "stakeout",
+        "steelyspirit",
+        "thermalexchange"
+      ],
+      "removed": []
+    },
+    "items": {
+      "added": [
+        "absolitez",
+        "airballoon",
+        "baxcalibrite",
+        "bindingband",
+        "ejectbutton",
+        "electricseed",
+        "garchompitez",
+        "golisopite",
+        "grassyseed",
+        "leek",
+        "lucarionitez",
+        "mistyseed",
+        "normalgem",
+        "psychicseed",
+        "redcard",
+        "rockyhelmet",
+        "salamencite",
+        "terrainextender"
+      ],
+      "removed": []
+    },
+    "megas": {
+      "added": [
+        "absolmegaz",
+        "baxcaliburmega",
+        "garchompmegaz",
+        "golisopodmega",
+        "lucariomegaz",
+        "salamencemega"
+      ],
+      "removed": []
+    },
+    "moves": {
+      "added": [],
+      "removed": []
+    },
+    "species": {
+      "added": [
+        "absolmegaz",
+        "arboliva",
+        "baxcalibur",
+        "baxcaliburmega",
+        "cinderace",
+        "farfetchd",
+        "garchompmegaz",
+        "gogoat",
+        "golisopod",
+        "golisopodmega",
+        "grapploct",
+        "indeedee",
+        "indeedeef",
+        "inteleon",
+        "lucariomegaz",
+        "mabosstiff",
+        "mrmime",
+        "pawmot",
+        "perrserker",
+        "persian",
+        "persianalola",
+        "pincurchin",
+        "rillaboom",
+        "salamence",
+        "salamencemega",
+        "sirfetchd",
+        "squawkabilly",
+        "squawkabillyblue",
+        "squawkabillywhite",
+        "squawkabillyyellow",
+        "swalot",
+        "thievul",
+        "toxtricity",
+        "toxtricitylowkey",
+        "wigglytuff"
+      ],
+      "removed": []
+    },
+    "warnings": [
+      {
+        "added": [
+          "slash"
+        ],
+        "field": "learnset",
+        "id": "archaludon",
+        "kind": "species",
+        "removed": [
+          "metalburst",
+          "mirrorcoat"
+        ]
+      }
+    ]
+  },
+  "previous": "m-b",
+  "regulation": "m-c"
+}

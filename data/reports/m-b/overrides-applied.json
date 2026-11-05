@@ -1,0 +1,143 @@
+{
+  "game": [],
+  "ko": [
+    {
+      "checked": "2026-11-04",
+      "field": "ko",
+      "id": "eelevate",
+      "kind": "abilities",
+      "source": "https://pokemonkorea.co.kr/pokedex/view/770 (포켓몬코리아 공식 도감 메가저리더프 특성)",
+      "value": "천정부지"
+    },
+    {
+      "checked": "2026-11-04",
+      "field": "ko",
+      "id": "firemane",
+      "kind": "abilities",
+      "source": "https://pokemonkorea.co.kr/pokedex/view/850 (포켓몬코리아 공식 도감 메가화염레오 특성)",
+      "value": "불꽃의갈기"
+    },
+    {
+      "checked": "2026-11-04",
+      "field": "ko",
+      "id": "arcaninehisui",
+      "kind": "species",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=59&snumber2=59&word=59 (포켓몬코리아 공식 도감 폼 표기)",
+      "value": "윈디(히스이의 모습)"
+    },
+    {
+      "checked": "2026-11-04",
+      "field": "ko",
+      "id": "avalugghisui",
+      "kind": "species",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=713&snumber2=713&word=713 (포켓몬코리아 공식 도감 폼 표기)",
+      "value": "크레베이스(히스이의 모습)"
+    },
+    {
+      "checked": "2026-11-04",
+      "field": "ko",
+      "id": "basculegionf",
+      "kind": "species",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=902&snumber2=902&word=902 (포켓몬코리아 공식 도감 폼 표기)",
+      "value": "대쓰여너(암컷의 모습)"
+    },
+    {
+      "checked": "2026-11-04",
+      "field": "ko",
+      "id": "decidueyehisui",
+      "kind": "species",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=724&snumber2=724&word=724 (포켓몬코리아 공식 도감 폼 표기)",
+      "value": "모크나이퍼(히스이의 모습)"
+    },
+    {
+      "checked": "2026-11-04",
+      "field": "ko",
+      "id": "goodrahisui",
+      "kind": "species",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=706&snumber2=706&word=706 (포켓몬코리아 공식 도감 폼 표기)",
+      "value": "미끄래곤(히스이의 모습)"
+    },
+    {
+      "checked": "2026-11-04",
+      "field": "ko",
+      "id": "mausholdfour",
+      "kind": "species",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=925&snumber2=925&word=925 (포켓몬코리아 공식 도감 폼 표기)",
+      "value": "파밀리쥐(네 식구)"
+    },
+    {
+      "checked": "2026-11-04",
+      "field": "koLabel",
+      "id": "meowsticfmega",
+      "kind": "species",
+      "source": "공식명이 수컷·암컷 모두 메가냐오닉스라 구분 라벨을 붙인다(PRD F7). 성별은 Showdown 폼 Meowstic-F-Mega 기준",
+      "value": "암컷"
+    },
+    {
+      "checked": "2026-11-04",
+      "field": "koLabel",
+      "id": "meowsticmmega",
+      "kind": "species",
+      "source": "공식명이 수컷·암컷 모두 메가냐오닉스라 구분 라벨을 붙인다(PRD F7). 성별은 Showdown 폼 Meowstic-M-Mega 기준",
+      "value": "수컷"
+    },
+    {
+      "checked": "2026-11-04",
+      "field": "ko",
+      "id": "polteageistantique",
+      "kind": "species",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=855&snumber2=855&word=855 (포켓몬코리아 공식 도감 폼 표기)",
+      "value": "포트데스(진작폼)"
+    },
+    {
+      "checked": "2026-11-04",
+      "field": "ko",
+      "id": "samurotthisui",
+      "kind": "species",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=503&snumber2=503&word=503 (포켓몬코리아 공식 도감 폼 표기)",
+      "value": "대검귀(히스이의 모습)"
+    },
+    {
+      "checked": "2026-11-04",
+      "field": "ko",
+      "id": "taurospaldeaaqua",
+      "kind": "species",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=128&snumber2=128&word=128 (포켓몬코리아 공식 도감 폼 표기)",
+      "value": "켄타로스(팔데아의 모습 워터종)"
+    },
+    {
+      "checked": "2026-11-04",
+      "field": "ko",
+      "id": "taurospaldeablaze",
+      "kind": "species",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=128&snumber2=128&word=128 (포켓몬코리아 공식 도감 폼 표기)",
+      "value": "켄타로스(팔데아의 모습 블레이즈종)"
+    },
+    {
+      "checked": "2026-11-04",
+      "field": "ko",
+      "id": "taurospaldeacombat",
+      "kind": "species",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=128&snumber2=128&word=128 (포켓몬코리아 공식 도감 폼 표기)",
+      "value": "켄타로스(팔데아의 모습 컴뱃종)"
+    },
+    {
+      "checked": "2026-11-04",
+      "field": "ko",
+      "id": "typhlosionhisui",
+      "kind": "species",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=157&snumber2=157&word=157 (포켓몬코리아 공식 도감 폼 표기)",
+      "value": "블레이범(히스이의 모습)"
+    },
+    {
+      "checked": "2026-11-04",
+      "field": "ko",
+      "id": "zoroarkhisui",
+      "kind": "species",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=571&snumber2=571&word=571 (포켓몬코리아 공식 도감 폼 표기)",
+      "value": "조로아크(히스이의 모습)"
+    }
+  ],
+  "koSourceConflicts": [],
+  "regulation": "m-b"
+}

@@ -1,0 +1,83 @@
+{
+  "abilitySlots": [
+    {
+      "engineAbilities": [
+        "limber"
+      ],
+      "id": "hawluchamega",
+      "snapshotAbilities": [
+        "noguard"
+      ]
+    },
+    {
+      "engineAbilities": [
+        "keeneye"
+      ],
+      "id": "skarmorymega",
+      "snapshotAbilities": [
+        "stalwart"
+      ]
+    }
+  ],
+  "comparedMoveFlags": [
+    "bite",
+    "bullet",
+    "contact",
+    "pulse",
+    "punch",
+    "slicing",
+    "sound",
+    "wind"
+  ],
+  "engine": "@smogon/calc@0.12.0 gen0",
+  "items": {
+    "onlyEngine": [],
+    "onlySnapshot": []
+  },
+  "moves": [
+    {
+      "engine": "Normal",
+      "field": "type",
+      "id": "growth",
+      "snapshot": "Grass"
+    }
+  ],
+  "regulation": "m-c",
+  "species": [],
+  "unsupported": {
+    "abilities": [
+      "battlebond"
+    ],
+    "items": [],
+    "moves": [
+      "beatup",
+      "comeuppance",
+      "counter",
+      "endeavor",
+      "fissure",
+      "guillotine",
+      "horndrill",
+      "metalburst",
+      "mirrorcoat",
+      "pound",
+      "sheercold",
+      "spitup",
+      "superfang"
+    ],
+    "species": []
+  },
+  "zeroPowerUnimplemented": [
+    "beatup",
+    "comeuppance",
+    "counter",
+    "endeavor",
+    "fissure",
+    "guillotine",
+    "horndrill",
+    "metalburst",
+    "mirrorcoat",
+    "sheercold",
+    "spitup",
+    "superfang"
+  ]
+}

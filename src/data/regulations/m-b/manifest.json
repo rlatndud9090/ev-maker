@@ -1,0 +1,71 @@
+{
+  "engineUnsupported": {
+    "abilities": [
+      "battlebond"
+    ],
+    "items": [],
+    "moves": [
+      "beatup",
+      "comeuppance",
+      "counter",
+      "endeavor",
+      "fissure",
+      "guillotine",
+      "horndrill",
+      "metalburst",
+      "mirrorcoat",
+      "pound",
+      "sheercold",
+      "spitup",
+      "superfang"
+    ],
+    "species": []
+  },
+  "overridesApplied": 17,
+  "regulation": {
+    "id": "m-b",
+    "name": "레귤레이션 M-B"
+  },
+  "rules": {
+    "end": "2026-09-09T01:59:00Z",
+    "level": 50,
+    "spMaxPerStat": 32,
+    "spTotal": 66,
+    "start": "2026-06-17T02:00:00Z"
+  },
+  "schemaVersion": 1,
+  "source": {
+    "gameData": {
+      "integrity": {
+        "@pkmn/dex": "sha512-M04rp7Hwfglw8rCCkM2lf1NyqrAsDFbRdtdPRo9zixbNjyO9Cx0T3RNm4MlWndGZ8iPKrJEC8cLpSRdPwYdbXg==",
+        "@pkmn/mods": "sha512-GEVy/UeLoxLPYV2MURXBR7/YhYxU69tFZ4REuBHdtfsbjfRi8YpodBNpjqdhUMt8YNneNcBib59+iy4NqZdmfg=="
+      },
+      "mode": "championsregmb",
+      "packages": {
+        "@pkmn/dex": "0.10.13",
+        "@pkmn/mods": "0.10.13"
+      },
+      "showdownCommitRef": "4148c1187ae723ecf84697c75e0b226bffdb6c81",
+      "sourceTime": "2026-11-03T00:13:57.422Z"
+    },
+    "ko": {
+      "files": {
+        "abilities.csv": "74c3588ad48e08e54ff01f432899a4028c3e91508bbd53201df85e1f6b9e9ef3",
+        "ability_names.csv": "8acb80c42210f86ae747dc3347b060d69cd2574a9dbfaf74774ae632ca6348da",
+        "item_names.csv": "c4ad0b446e395c378d8ba75d6900f051cc9ebb99431d4000adeac35f492852f0",
+        "items.csv": "f08cd6dc30b447cb91cbe9232c79052e8521f32f6105bb1489b5bfabf4ca3241",
+        "languages.csv": "fbb60019a6a461783d5671a995d5f590db61792a273e90faa0ed630d102a19b8",
+        "move_names.csv": "99e23ee38ea53d1473474d463b87651deac3cd4928750f8186feae66da45c147",
+        "moves.csv": "8aafd37bf78f19471495c05b201545180f50f0a08a2a2a844d69f9837dd39ac9",
+        "nature_names.csv": "94d7d6adbfe4c8207f7896dd64dc1490f83d3bf7744beac83e6e03cd459ed70b",
+        "natures.csv": "3536990f6adeaa1735551a6afe798649d22426e161c937da09d3ae9a5381309c",
+        "pokemon_form_names.csv": "f496066d02fab12c18d10cce0af2f748d09cb7e296ecc784cc8682f8c4da8625",
+        "pokemon_forms.csv": "99bf8f7ad4dc1f2e291357a090cef6a575623ec3cbf9030d0e33656e6e608ae2",
+        "pokemon_species.csv": "e66e2eeb25fd3836b0ebab6bf87bbf01960aa3c0555e2bac495fa8393c5e0c45",
+        "pokemon_species_names.csv": "820cde17074cdb1c2b0595c997fb8f998e773bd5da3bb525dec85703c86c5fd9"
+      },
+      "pokeapiCommit": "e5b79b2e15d7c50735a945936afd4cd1cfd94eae",
+      "sourceTime": "2026-11-02T06:41:04Z"
+    }
+  }
+}

@@ -1,0 +1,2720 @@
+{
+  "schema": "ev-maker/independent-golden@1",
+  "source": "독립 산술(scripts/golden/compute-independent.mjs)",
+  "formula": {
+    "level": 50,
+    "stats": "HP = 종족값 + SP + 75; 그 외 = floor((종족값 + SP + 20) × 성격)",
+    "damage": "base = floor(floor(floor(2L/5+2)·BP·A/D)/50)+2 → 범위기(더블) pokeRound(×3072/4096) → 난수 floor(×r/100), r=85..100 → 자속 pokeRound(×6144/4096) → 상성 floor(×eff) → 최종보정 pokeRound(×M/4096), 최소 1. 도우미는 위력 보정(6144/4096). 멀티스케일은 최종보정 2048(HP 가득일 때만).",
+    "pokeRound": "소수부 > 0.5면 올림, 아니면 내림(.5 내림)",
+    "ohko": "타별 16난수 전수 조합 중 합계 ≥ HP인 개수 / 16^타수"
+  },
+  "dataSource": {
+    "dex": "@pkmn/dex@0.10.13",
+    "mods": "@pkmn/mods@0.10.13 (champions)"
+  },
+  "cases": [
+    {
+      "id": "a-kingambit-sucker-punch-atk-sweep",
+      "source": "독립 산술(scripts/golden/compute-independent.mjs)",
+      "sweep": {
+        "side": "attacker",
+        "stat": "atk",
+        "range": [
+          0,
+          32
+        ]
+      },
+      "attacker": {
+        "species": "Kingambit",
+        "setSpecies": "Kingambit",
+        "mega": false,
+        "nature": "Hardy",
+        "ability": "Defiant",
+        "item": null,
+        "sp": {
+          "hp": 0,
+          "atk": 0,
+          "def": 0,
+          "spa": 0,
+          "spd": 0,
+          "spe": 0
+        },
+        "types": [
+          "Dark",
+          "Steel"
+        ],
+        "baseStats": {
+          "hp": 100,
+          "atk": 135,
+          "def": 120,
+          "spa": 60,
+          "spd": 85,
+          "spe": 50
+        },
+        "stats": {
+          "hp": 175,
+          "atk": 155,
+          "def": 140,
+          "spa": 80,
+          "spd": 105,
+          "spe": 70
+        }
+      },
+      "defender": {
+        "species": "Delphox-Mega",
+        "setSpecies": "Delphox",
+        "mega": true,
+        "nature": "Hardy",
+        "ability": "Levitate",
+        "item": "Delphoxite",
+        "sp": {
+          "hp": 2,
+          "atk": 0,
+          "def": 0,
+          "spa": 0,
+          "spd": 0,
+          "spe": 0
+        },
+        "types": [
+          "Fire",
+          "Psychic"
+        ],
+        "baseStats": {
+          "hp": 75,
+          "atk": 69,
+          "def": 72,
+          "spa": 159,
+          "spd": 125,
+          "spe": 134
+        },
+        "stats": {
+          "hp": 152,
+          "atk": 89,
+          "def": 92,
+          "spa": 179,
+          "spd": 145,
+          "spe": 154
+        }
+      },
+      "move": {
+        "name": "Sucker Punch",
+        "type": "Dark",
+        "category": "Physical",
+        "basePower": 70,
+        "target": "normal",
+        "multihit": 1
+      },
+      "conditions": {
+        "gameType": "Doubles",
+        "weather": "none",
+        "terrain": "none",
+        "critical": false,
+        "helpingHand": false
+      },
+      "thresholds": {
+        "highRoll": 0.75,
+        "lowRoll": 0.1875
+      },
+      "defenderHp": 152,
+      "cells": [
+        {
+          "sp": 0,
+          "attackStat": 155,
+          "rolls": [
+            134,
+            134,
+            138,
+            138,
+            140,
+            140,
+            144,
+            144,
+            146,
+            146,
+            150,
+            150,
+            152,
+            152,
+            156,
+            158
+          ],
+          "koCount": 4,
+          "koTotal": 16,
+          "ohkoChance": 0.25,
+          "attackBand": "mid-or-lower"
+        },
+        {
+          "sp": 1,
+          "attackStat": 156,
+          "rolls": [
+            134,
+            138,
+            138,
+            140,
+            144,
+            144,
+            146,
+            146,
+            150,
+            150,
+            152,
+            152,
+            156,
+            156,
+            158,
+            162
+          ],
+          "koCount": 6,
+          "koTotal": 16,
+          "ohkoChance": 0.375,
+          "attackBand": "mid-or-lower"
+        },
+        {
+          "sp": 2,
+          "attackStat": 157,
+          "rolls": [
+            134,
+            138,
+            138,
+            140,
+            144,
+            144,
+            146,
+            146,
+            150,
+            150,
+            152,
+            152,
+            156,
+            156,
+            158,
+            162
+          ],
+          "koCount": 6,
+          "koTotal": 16,
+          "ohkoChance": 0.375,
+          "attackBand": "mid-or-lower"
+        },
+        {
+          "sp": 3,
+          "attackStat": 158,
+          "rolls": [
+            134,
+            138,
+            138,
+            140,
+            144,
+            144,
+            146,
+            146,
+            150,
+            150,
+            152,
+            152,
+            156,
+            156,
+            158,
+            162
+          ],
+          "koCount": 6,
+          "koTotal": 16,
+          "ohkoChance": 0.375,
+          "attackBand": "mid-or-lower"
+        },
+        {
+          "sp": 4,
+          "attackStat": 159,
+          "rolls": [
+            138,
+            140,
+            140,
+            144,
+            144,
+            146,
+            150,
+            150,
+            152,
+            152,
+            156,
+            156,
+            158,
+            158,
+            162,
+            164
+          ],
+          "koCount": 8,
+          "koTotal": 16,
+          "ohkoChance": 0.5,
+          "attackBand": "mid-or-lower"
+        },
+        {
+          "sp": 5,
+          "attackStat": 160,
+          "rolls": [
+            138,
+            140,
+            140,
+            144,
+            144,
+            146,
+            150,
+            150,
+            152,
+            152,
+            156,
+            156,
+            158,
+            158,
+            162,
+            164
+          ],
+          "koCount": 8,
+          "koTotal": 16,
+          "ohkoChance": 0.5,
+          "attackBand": "mid-or-lower"
+        },
+        {
+          "sp": 6,
+          "attackStat": 161,
+          "rolls": [
+            138,
+            140,
+            140,
+            144,
+            144,
+            146,
+            150,
+            150,
+            152,
+            152,
+            156,
+            156,
+            158,
+            158,
+            162,
+            164
+          ],
+          "koCount": 8,
+          "koTotal": 16,
+          "ohkoChance": 0.5,
+          "attackBand": "mid-or-lower"
+        },
+        {
+          "sp": 7,
+          "attackStat": 162,
+          "rolls": [
+            140,
+            144,
+            144,
+            146,
+            146,
+            150,
+            150,
+            152,
+            156,
+            156,
+            158,
+            158,
+            162,
+            162,
+            164,
+            168
+          ],
+          "koCount": 9,
+          "koTotal": 16,
+          "ohkoChance": 0.5625,
+          "attackBand": "mid-or-lower"
+        },
+        {
+          "sp": 8,
+          "attackStat": 163,
+          "rolls": [
+            140,
+            144,
+            144,
+            146,
+            146,
+            150,
+            150,
+            152,
+            156,
+            156,
+            158,
+            158,
+            162,
+            162,
+            164,
+            168
+          ],
+          "koCount": 9,
+          "koTotal": 16,
+          "ohkoChance": 0.5625,
+          "attackBand": "mid-or-lower"
+        },
+        {
+          "sp": 9,
+          "attackStat": 164,
+          "rolls": [
+            140,
+            144,
+            144,
+            146,
+            146,
+            150,
+            150,
+            152,
+            156,
+            156,
+            158,
+            158,
+            162,
+            162,
+            164,
+            168
+          ],
+          "koCount": 9,
+          "koTotal": 16,
+          "ohkoChance": 0.5625,
+          "attackBand": "mid-or-lower"
+        },
+        {
+          "sp": 10,
+          "attackStat": 165,
+          "rolls": [
+            144,
+            146,
+            146,
+            150,
+            150,
+            152,
+            152,
+            156,
+            158,
+            158,
+            162,
+            162,
+            164,
+            164,
+            168,
+            170
+          ],
+          "koCount": 11,
+          "koTotal": 16,
+          "ohkoChance": 0.6875,
+          "attackBand": "mid-or-lower"
+        },
+        {
+          "sp": 11,
+          "attackStat": 166,
+          "rolls": [
+            144,
+            146,
+            146,
+            150,
+            150,
+            152,
+            152,
+            156,
+            158,
+            158,
+            162,
+            162,
+            164,
+            164,
+            168,
+            170
+          ],
+          "koCount": 11,
+          "koTotal": 16,
+          "ohkoChance": 0.6875,
+          "attackBand": "mid-or-lower"
+        },
+        {
+          "sp": 12,
+          "attackStat": 167,
+          "rolls": [
+            144,
+            146,
+            146,
+            150,
+            150,
+            152,
+            152,
+            156,
+            158,
+            158,
+            162,
+            162,
+            164,
+            164,
+            168,
+            170
+          ],
+          "koCount": 11,
+          "koTotal": 16,
+          "ohkoChance": 0.6875,
+          "attackBand": "mid-or-lower"
+        },
+        {
+          "sp": 13,
+          "attackStat": 168,
+          "rolls": [
+            146,
+            146,
+            150,
+            152,
+            152,
+            156,
+            156,
+            158,
+            158,
+            162,
+            164,
+            164,
+            168,
+            168,
+            170,
+            174
+          ],
+          "koCount": 13,
+          "koTotal": 16,
+          "ohkoChance": 0.8125,
+          "attackBand": "high-roll-ohko"
+        },
+        {
+          "sp": 14,
+          "attackStat": 169,
+          "rolls": [
+            146,
+            146,
+            150,
+            152,
+            152,
+            156,
+            156,
+            158,
+            158,
+            162,
+            164,
+            164,
+            168,
+            168,
+            170,
+            174
+          ],
+          "koCount": 13,
+          "koTotal": 16,
+          "ohkoChance": 0.8125,
+          "attackBand": "high-roll-ohko"
+        },
+        {
+          "sp": 15,
+          "attackStat": 170,
+          "rolls": [
+            146,
+            146,
+            150,
+            152,
+            152,
+            156,
+            156,
+            158,
+            158,
+            162,
+            164,
+            164,
+            168,
+            168,
+            170,
+            174
+          ],
+          "koCount": 13,
+          "koTotal": 16,
+          "ohkoChance": 0.8125,
+          "attackBand": "high-roll-ohko"
+        },
+        {
+          "sp": 16,
+          "attackStat": 171,
+          "rolls": [
+            150,
+            150,
+            152,
+            152,
+            156,
+            158,
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176
+          ],
+          "koCount": 14,
+          "koTotal": 16,
+          "ohkoChance": 0.875,
+          "attackBand": "high-roll-ohko"
+        },
+        {
+          "sp": 17,
+          "attackStat": 172,
+          "rolls": [
+            150,
+            150,
+            152,
+            152,
+            156,
+            158,
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176
+          ],
+          "koCount": 14,
+          "koTotal": 16,
+          "ohkoChance": 0.875,
+          "attackBand": "high-roll-ohko"
+        },
+        {
+          "sp": 18,
+          "attackStat": 173,
+          "rolls": [
+            150,
+            150,
+            152,
+            152,
+            156,
+            158,
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176
+          ],
+          "koCount": 14,
+          "koTotal": 16,
+          "ohkoChance": 0.875,
+          "attackBand": "high-roll-ohko"
+        },
+        {
+          "sp": 19,
+          "attackStat": 174,
+          "rolls": [
+            152,
+            152,
+            156,
+            156,
+            158,
+            162,
+            162,
+            164,
+            164,
+            168,
+            170,
+            170,
+            174,
+            174,
+            176,
+            180
+          ],
+          "koCount": 16,
+          "koTotal": 16,
+          "ohkoChance": 1,
+          "attackBand": "guaranteed-ohko"
+        },
+        {
+          "sp": 20,
+          "attackStat": 175,
+          "rolls": [
+            152,
+            152,
+            156,
+            156,
+            158,
+            162,
+            162,
+            164,
+            164,
+            168,
+            170,
+            170,
+            174,
+            174,
+            176,
+            180
+          ],
+          "koCount": 16,
+          "koTotal": 16,
+          "ohkoChance": 1,
+          "attackBand": "guaranteed-ohko"
+        },
+        {
+          "sp": 21,
+          "attackStat": 176,
+          "rolls": [
+            152,
+            152,
+            156,
+            156,
+            158,
+            162,
+            162,
+            164,
+            164,
+            168,
+            170,
+            170,
+            174,
+            174,
+            176,
+            180
+          ],
+          "koCount": 16,
+          "koTotal": 16,
+          "ohkoChance": 1,
+          "attackBand": "guaranteed-ohko"
+        },
+        {
+          "sp": 22,
+          "attackStat": 177,
+          "rolls": [
+            152,
+            156,
+            158,
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182
+          ],
+          "koCount": 16,
+          "koTotal": 16,
+          "ohkoChance": 1,
+          "attackBand": "guaranteed-ohko"
+        },
+        {
+          "sp": 23,
+          "attackStat": 178,
+          "rolls": [
+            152,
+            156,
+            158,
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182
+          ],
+          "koCount": 16,
+          "koTotal": 16,
+          "ohkoChance": 1,
+          "attackBand": "guaranteed-ohko"
+        },
+        {
+          "sp": 24,
+          "attackStat": 179,
+          "rolls": [
+            152,
+            156,
+            158,
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182
+          ],
+          "koCount": 16,
+          "koTotal": 16,
+          "ohkoChance": 1,
+          "attackBand": "guaranteed-ohko"
+        },
+        {
+          "sp": 25,
+          "attackStat": 180,
+          "rolls": [
+            156,
+            158,
+            158,
+            162,
+            164,
+            164,
+            168,
+            170,
+            170,
+            174,
+            174,
+            176,
+            180,
+            180,
+            182,
+            186
+          ],
+          "koCount": 16,
+          "koTotal": 16,
+          "ohkoChance": 1,
+          "attackBand": "guaranteed-ohko"
+        },
+        {
+          "sp": 26,
+          "attackStat": 181,
+          "rolls": [
+            156,
+            158,
+            158,
+            162,
+            164,
+            164,
+            168,
+            170,
+            170,
+            174,
+            174,
+            176,
+            180,
+            180,
+            182,
+            186
+          ],
+          "koCount": 16,
+          "koTotal": 16,
+          "ohkoChance": 1,
+          "attackBand": "guaranteed-ohko"
+        },
+        {
+          "sp": 27,
+          "attackStat": 182,
+          "rolls": [
+            156,
+            158,
+            158,
+            162,
+            164,
+            164,
+            168,
+            170,
+            170,
+            174,
+            174,
+            176,
+            180,
+            180,
+            182,
+            186
+          ],
+          "koCount": 16,
+          "koTotal": 16,
+          "ohkoChance": 1,
+          "attackBand": "guaranteed-ohko"
+        },
+        {
+          "sp": 28,
+          "attackStat": 183,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 16,
+          "koTotal": 16,
+          "ohkoChance": 1,
+          "attackBand": "guaranteed-ohko"
+        },
+        {
+          "sp": 29,
+          "attackStat": 184,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 16,
+          "koTotal": 16,
+          "ohkoChance": 1,
+          "attackBand": "guaranteed-ohko"
+        },
+        {
+          "sp": 30,
+          "attackStat": 185,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 16,
+          "koTotal": 16,
+          "ohkoChance": 1,
+          "attackBand": "guaranteed-ohko"
+        },
+        {
+          "sp": 31,
+          "attackStat": 186,
+          "rolls": [
+            162,
+            164,
+            164,
+            168,
+            168,
+            170,
+            174,
+            174,
+            176,
+            180,
+            180,
+            182,
+            186,
+            186,
+            188,
+            192
+          ],
+          "koCount": 16,
+          "koTotal": 16,
+          "ohkoChance": 1,
+          "attackBand": "guaranteed-ohko"
+        },
+        {
+          "sp": 32,
+          "attackStat": 187,
+          "rolls": [
+            162,
+            164,
+            164,
+            168,
+            168,
+            170,
+            174,
+            174,
+            176,
+            180,
+            180,
+            182,
+            186,
+            186,
+            188,
+            192
+          ],
+          "koCount": 16,
+          "koTotal": 16,
+          "ohkoChance": 1,
+          "attackBand": "guaranteed-ohko"
+        }
+      ],
+      "boundaries": [
+        13,
+        19
+      ]
+    },
+    {
+      "id": "b-garchomp-dragon-claw-vs-dragonite-hp-sweep",
+      "source": "독립 산술(scripts/golden/compute-independent.mjs)",
+      "sweep": {
+        "side": "defender",
+        "stat": "hp",
+        "range": [
+          0,
+          32
+        ]
+      },
+      "attacker": {
+        "species": "Garchomp",
+        "setSpecies": "Garchomp",
+        "mega": false,
+        "nature": "Adamant",
+        "ability": "Rough Skin",
+        "item": null,
+        "sp": {
+          "hp": 0,
+          "atk": 32,
+          "def": 0,
+          "spa": 0,
+          "spd": 0,
+          "spe": 0
+        },
+        "types": [
+          "Dragon",
+          "Ground"
+        ],
+        "baseStats": {
+          "hp": 108,
+          "atk": 130,
+          "def": 95,
+          "spa": 80,
+          "spd": 85,
+          "spe": 102
+        },
+        "stats": {
+          "hp": 183,
+          "atk": 200,
+          "def": 115,
+          "spa": 90,
+          "spd": 105,
+          "spe": 122
+        }
+      },
+      "defender": {
+        "species": "Dragonite",
+        "setSpecies": "Dragonite",
+        "mega": false,
+        "nature": "Hardy",
+        "ability": "Inner Focus",
+        "item": null,
+        "sp": {
+          "hp": 0,
+          "atk": 0,
+          "def": 0,
+          "spa": 0,
+          "spd": 0,
+          "spe": 0
+        },
+        "types": [
+          "Dragon",
+          "Flying"
+        ],
+        "baseStats": {
+          "hp": 91,
+          "atk": 134,
+          "def": 95,
+          "spa": 100,
+          "spd": 100,
+          "spe": 80
+        },
+        "stats": {
+          "hp": 166,
+          "atk": 154,
+          "def": 115,
+          "spa": 120,
+          "spd": 120,
+          "spe": 100
+        }
+      },
+      "move": {
+        "name": "Dragon Claw",
+        "type": "Dragon",
+        "category": "Physical",
+        "basePower": 80,
+        "target": "normal",
+        "multihit": 1
+      },
+      "conditions": {
+        "gameType": "Doubles",
+        "weather": "none",
+        "terrain": "none",
+        "critical": false,
+        "helpingHand": false
+      },
+      "thresholds": {
+        "highRoll": 0.75,
+        "lowRoll": 0.1875
+      },
+      "cells": [
+        {
+          "sp": 0,
+          "defenderHp": 166,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 12,
+          "koTotal": 16,
+          "ohkoChance": 0.75,
+          "defenseBand": "mid-or-higher"
+        },
+        {
+          "sp": 1,
+          "defenderHp": 167,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 12,
+          "koTotal": 16,
+          "ohkoChance": 0.75,
+          "defenseBand": "mid-or-higher"
+        },
+        {
+          "sp": 2,
+          "defenderHp": 168,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 12,
+          "koTotal": 16,
+          "ohkoChance": 0.75,
+          "defenseBand": "mid-or-higher"
+        },
+        {
+          "sp": 3,
+          "defenderHp": 169,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 10,
+          "koTotal": 16,
+          "ohkoChance": 0.625,
+          "defenseBand": "mid-or-higher"
+        },
+        {
+          "sp": 4,
+          "defenderHp": 170,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 10,
+          "koTotal": 16,
+          "ohkoChance": 0.625,
+          "defenseBand": "mid-or-higher"
+        },
+        {
+          "sp": 5,
+          "defenderHp": 171,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 8,
+          "koTotal": 16,
+          "ohkoChance": 0.5,
+          "defenseBand": "mid-or-higher"
+        },
+        {
+          "sp": 6,
+          "defenderHp": 172,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 8,
+          "koTotal": 16,
+          "ohkoChance": 0.5,
+          "defenseBand": "mid-or-higher"
+        },
+        {
+          "sp": 7,
+          "defenderHp": 173,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 8,
+          "koTotal": 16,
+          "ohkoChance": 0.5,
+          "defenseBand": "mid-or-higher"
+        },
+        {
+          "sp": 8,
+          "defenderHp": 174,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 8,
+          "koTotal": 16,
+          "ohkoChance": 0.5,
+          "defenseBand": "mid-or-higher"
+        },
+        {
+          "sp": 9,
+          "defenderHp": 175,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 7,
+          "koTotal": 16,
+          "ohkoChance": 0.4375,
+          "defenseBand": "mid-or-higher"
+        },
+        {
+          "sp": 10,
+          "defenderHp": 176,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 7,
+          "koTotal": 16,
+          "ohkoChance": 0.4375,
+          "defenseBand": "mid-or-higher"
+        },
+        {
+          "sp": 11,
+          "defenderHp": 177,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 5,
+          "koTotal": 16,
+          "ohkoChance": 0.3125,
+          "defenseBand": "mid-or-higher"
+        },
+        {
+          "sp": 12,
+          "defenderHp": 178,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 5,
+          "koTotal": 16,
+          "ohkoChance": 0.3125,
+          "defenseBand": "mid-or-higher"
+        },
+        {
+          "sp": 13,
+          "defenderHp": 179,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 5,
+          "koTotal": 16,
+          "ohkoChance": 0.3125,
+          "defenseBand": "mid-or-higher"
+        },
+        {
+          "sp": 14,
+          "defenderHp": 180,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 5,
+          "koTotal": 16,
+          "ohkoChance": 0.3125,
+          "defenseBand": "mid-or-higher"
+        },
+        {
+          "sp": 15,
+          "defenderHp": 181,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 4,
+          "koTotal": 16,
+          "ohkoChance": 0.25,
+          "defenseBand": "mid-or-higher"
+        },
+        {
+          "sp": 16,
+          "defenderHp": 182,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 4,
+          "koTotal": 16,
+          "ohkoChance": 0.25,
+          "defenseBand": "mid-or-higher"
+        },
+        {
+          "sp": 17,
+          "defenderHp": 183,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 2,
+          "koTotal": 16,
+          "ohkoChance": 0.125,
+          "defenseBand": "low-roll-ohko"
+        },
+        {
+          "sp": 18,
+          "defenderHp": 184,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 2,
+          "koTotal": 16,
+          "ohkoChance": 0.125,
+          "defenseBand": "low-roll-ohko"
+        },
+        {
+          "sp": 19,
+          "defenderHp": 185,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 2,
+          "koTotal": 16,
+          "ohkoChance": 0.125,
+          "defenseBand": "low-roll-ohko"
+        },
+        {
+          "sp": 20,
+          "defenderHp": 186,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 2,
+          "koTotal": 16,
+          "ohkoChance": 0.125,
+          "defenseBand": "low-roll-ohko"
+        },
+        {
+          "sp": 21,
+          "defenderHp": 187,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 1,
+          "koTotal": 16,
+          "ohkoChance": 0.0625,
+          "defenseBand": "low-roll-ohko"
+        },
+        {
+          "sp": 22,
+          "defenderHp": 188,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 1,
+          "koTotal": 16,
+          "ohkoChance": 0.0625,
+          "defenseBand": "low-roll-ohko"
+        },
+        {
+          "sp": 23,
+          "defenderHp": 189,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 0,
+          "koTotal": 16,
+          "ohkoChance": 0,
+          "defenseBand": "guaranteed-survive"
+        },
+        {
+          "sp": 24,
+          "defenderHp": 190,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 0,
+          "koTotal": 16,
+          "ohkoChance": 0,
+          "defenseBand": "guaranteed-survive"
+        },
+        {
+          "sp": 25,
+          "defenderHp": 191,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 0,
+          "koTotal": 16,
+          "ohkoChance": 0,
+          "defenseBand": "guaranteed-survive"
+        },
+        {
+          "sp": 26,
+          "defenderHp": 192,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 0,
+          "koTotal": 16,
+          "ohkoChance": 0,
+          "defenseBand": "guaranteed-survive"
+        },
+        {
+          "sp": 27,
+          "defenderHp": 193,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 0,
+          "koTotal": 16,
+          "ohkoChance": 0,
+          "defenseBand": "guaranteed-survive"
+        },
+        {
+          "sp": 28,
+          "defenderHp": 194,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 0,
+          "koTotal": 16,
+          "ohkoChance": 0,
+          "defenseBand": "guaranteed-survive"
+        },
+        {
+          "sp": 29,
+          "defenderHp": 195,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 0,
+          "koTotal": 16,
+          "ohkoChance": 0,
+          "defenseBand": "guaranteed-survive"
+        },
+        {
+          "sp": 30,
+          "defenderHp": 196,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 0,
+          "koTotal": 16,
+          "ohkoChance": 0,
+          "defenseBand": "guaranteed-survive"
+        },
+        {
+          "sp": 31,
+          "defenderHp": 197,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 0,
+          "koTotal": 16,
+          "ohkoChance": 0,
+          "defenseBand": "guaranteed-survive"
+        },
+        {
+          "sp": 32,
+          "defenderHp": 198,
+          "rolls": [
+            158,
+            162,
+            162,
+            164,
+            168,
+            168,
+            170,
+            170,
+            174,
+            176,
+            176,
+            180,
+            182,
+            182,
+            186,
+            188
+          ],
+          "koCount": 0,
+          "koTotal": 16,
+          "ohkoChance": 0,
+          "defenseBand": "guaranteed-survive"
+        }
+      ],
+      "boundaries": [
+        17,
+        23
+      ]
+    },
+    {
+      "id": "c-floette-eternal-timid-vs-garchomp-jolly-speed-sweep",
+      "source": "독립 산술(scripts/golden/compute-independent.mjs)",
+      "sweep": {
+        "side": "attacker",
+        "stat": "spe",
+        "range": [
+          0,
+          32
+        ]
+      },
+      "attacker": {
+        "species": "Floette-Eternal",
+        "setSpecies": "Floette-Eternal",
+        "mega": false,
+        "nature": "Timid",
+        "ability": "Flower Veil",
+        "item": null,
+        "sp": {
+          "hp": 0,
+          "atk": 0,
+          "def": 0,
+          "spa": 0,
+          "spd": 0,
+          "spe": 0
+        },
+        "types": [
+          "Fairy"
+        ],
+        "baseStats": {
+          "hp": 74,
+          "atk": 65,
+          "def": 67,
+          "spa": 125,
+          "spd": 128,
+          "spe": 92
+        },
+        "stats": {
+          "hp": 149,
+          "atk": 76,
+          "def": 87,
+          "spa": 145,
+          "spd": 148,
+          "spe": 123
+        }
+      },
+      "defender": {
+        "species": "Garchomp",
+        "setSpecies": "Garchomp",
+        "mega": false,
+        "nature": "Jolly",
+        "ability": "Rough Skin",
+        "item": null,
+        "sp": {
+          "hp": 0,
+          "atk": 0,
+          "def": 0,
+          "spa": 0,
+          "spd": 0,
+          "spe": 0
+        },
+        "types": [
+          "Dragon",
+          "Ground"
+        ],
+        "baseStats": {
+          "hp": 108,
+          "atk": 130,
+          "def": 95,
+          "spa": 80,
+          "spd": 85,
+          "spe": 102
+        },
+        "stats": {
+          "hp": 183,
+          "atk": 150,
+          "def": 115,
+          "spa": 90,
+          "spd": 105,
+          "spe": 134
+        }
+      },
+      "conditions": {
+        "gameType": "Doubles",
+        "tailwind": false,
+        "weather": "none",
+        "trickRoom": false
+      },
+      "cells": [
+        {
+          "sp": 0,
+          "attackerSpeed": 123,
+          "defenderSpeed": 134,
+          "order": "second"
+        },
+        {
+          "sp": 1,
+          "attackerSpeed": 124,
+          "defenderSpeed": 134,
+          "order": "second"
+        },
+        {
+          "sp": 2,
+          "attackerSpeed": 125,
+          "defenderSpeed": 134,
+          "order": "second"
+        },
+        {
+          "sp": 3,
+          "attackerSpeed": 126,
+          "defenderSpeed": 134,
+          "order": "second"
+        },
+        {
+          "sp": 4,
+          "attackerSpeed": 127,
+          "defenderSpeed": 134,
+          "order": "second"
+        },
+        {
+          "sp": 5,
+          "attackerSpeed": 128,
+          "defenderSpeed": 134,
+          "order": "second"
+        },
+        {
+          "sp": 6,
+          "attackerSpeed": 129,
+          "defenderSpeed": 134,
+          "order": "second"
+        },
+        {
+          "sp": 7,
+          "attackerSpeed": 130,
+          "defenderSpeed": 134,
+          "order": "second"
+        },
+        {
+          "sp": 8,
+          "attackerSpeed": 132,
+          "defenderSpeed": 134,
+          "order": "second"
+        },
+        {
+          "sp": 9,
+          "attackerSpeed": 133,
+          "defenderSpeed": 134,
+          "order": "second"
+        },
+        {
+          "sp": 10,
+          "attackerSpeed": 134,
+          "defenderSpeed": 134,
+          "order": "tie"
+        },
+        {
+          "sp": 11,
+          "attackerSpeed": 135,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 12,
+          "attackerSpeed": 136,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 13,
+          "attackerSpeed": 137,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 14,
+          "attackerSpeed": 138,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 15,
+          "attackerSpeed": 139,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 16,
+          "attackerSpeed": 140,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 17,
+          "attackerSpeed": 141,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 18,
+          "attackerSpeed": 143,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 19,
+          "attackerSpeed": 144,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 20,
+          "attackerSpeed": 145,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 21,
+          "attackerSpeed": 146,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 22,
+          "attackerSpeed": 147,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 23,
+          "attackerSpeed": 148,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 24,
+          "attackerSpeed": 149,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 25,
+          "attackerSpeed": 150,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 26,
+          "attackerSpeed": 151,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 27,
+          "attackerSpeed": 152,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 28,
+          "attackerSpeed": 154,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 29,
+          "attackerSpeed": 155,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 30,
+          "attackerSpeed": 156,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 31,
+          "attackerSpeed": 157,
+          "defenderSpeed": 134,
+          "order": "first"
+        },
+        {
+          "sp": 32,
+          "attackerSpeed": 158,
+          "defenderSpeed": 134,
+          "order": "first"
+        }
+      ],
+      "boundaries": [
+        10,
+        11
+      ]
+    },
+    {
+      "id": "d-salamence-dual-wingbeat-vs-rillaboom-multihit",
+      "source": "독립 산술(scripts/golden/compute-independent.mjs)",
+      "attacker": {
+        "species": "Salamence",
+        "setSpecies": "Salamence",
+        "mega": false,
+        "nature": "Adamant",
+        "ability": "Intimidate",
+        "item": null,
+        "sp": {
+          "hp": 0,
+          "atk": 32,
+          "def": 0,
+          "spa": 0,
+          "spd": 0,
+          "spe": 0
+        },
+        "types": [
+          "Dragon",
+          "Flying"
+        ],
+        "baseStats": {
+          "hp": 95,
+          "atk": 135,
+          "def": 80,
+          "spa": 110,
+          "spd": 80,
+          "spe": 100
+        },
+        "stats": {
+          "hp": 170,
+          "atk": 205,
+          "def": 100,
+          "spa": 117,
+          "spd": 100,
+          "spe": 120
+        }
+      },
+      "defender": {
+        "species": "Rillaboom",
+        "setSpecies": "Rillaboom",
+        "mega": false,
+        "nature": "Hardy",
+        "ability": "Overgrow",
+        "item": null,
+        "sp": {
+          "hp": 2,
+          "atk": 0,
+          "def": 0,
+          "spa": 0,
+          "spd": 0,
+          "spe": 0
+        },
+        "types": [
+          "Grass"
+        ],
+        "baseStats": {
+          "hp": 100,
+          "atk": 125,
+          "def": 90,
+          "spa": 60,
+          "spd": 70,
+          "spe": 85
+        },
+        "stats": {
+          "hp": 177,
+          "atk": 145,
+          "def": 110,
+          "spa": 80,
+          "spd": 90,
+          "spe": 105
+        }
+      },
+      "move": {
+        "name": "Dual Wingbeat",
+        "type": "Flying",
+        "category": "Physical",
+        "basePower": 40,
+        "target": "normal",
+        "multihit": 2
+      },
+      "conditions": {
+        "gameType": "Doubles",
+        "weather": "none",
+        "terrain": "none",
+        "critical": false,
+        "helpingHand": false
+      },
+      "defenderHp": 177,
+      "hits": 2,
+      "rollsPerHit": [
+        [
+          84,
+          86,
+          86,
+          86,
+          90,
+          90,
+          90,
+          92,
+          92,
+          92,
+          96,
+          96,
+          96,
+          98,
+          98,
+          102
+        ],
+        [
+          84,
+          86,
+          86,
+          86,
+          90,
+          90,
+          90,
+          92,
+          92,
+          92,
+          96,
+          96,
+          96,
+          98,
+          98,
+          102
+        ]
+      ],
+      "min": 168,
+      "max": 204,
+      "minPercent": 94.9,
+      "maxPercent": 115.3,
+      "koCount": 210,
+      "koTotal": 256,
+      "ohkoChance": 0.8203125,
+      "attackBand": "high-roll-ohko",
+      "defenseBand": "mid-or-higher"
+    },
+    {
+      "id": "e-mamoswine-earthquake-helping-hand-vs-incineroar",
+      "source": "독립 산술(scripts/golden/compute-independent.mjs)",
+      "attacker": {
+        "species": "Mamoswine",
+        "setSpecies": "Mamoswine",
+        "mega": false,
+        "nature": "Adamant",
+        "ability": "Oblivious",
+        "item": null,
+        "sp": {
+          "hp": 0,
+          "atk": 32,
+          "def": 0,
+          "spa": 0,
+          "spd": 0,
+          "spe": 0
+        },
+        "types": [
+          "Ice",
+          "Ground"
+        ],
+        "baseStats": {
+          "hp": 110,
+          "atk": 130,
+          "def": 80,
+          "spa": 70,
+          "spd": 60,
+          "spe": 80
+        },
+        "stats": {
+          "hp": 185,
+          "atk": 200,
+          "def": 100,
+          "spa": 81,
+          "spd": 80,
+          "spe": 100
+        }
+      },
+      "defender": {
+        "species": "Incineroar",
+        "setSpecies": "Incineroar",
+        "mega": false,
+        "nature": "Careful",
+        "ability": "Blaze",
+        "item": null,
+        "sp": {
+          "hp": 32,
+          "atk": 0,
+          "def": 2,
+          "spa": 0,
+          "spd": 0,
+          "spe": 0
+        },
+        "types": [
+          "Fire",
+          "Dark"
+        ],
+        "baseStats": {
+          "hp": 95,
+          "atk": 115,
+          "def": 90,
+          "spa": 80,
+          "spd": 90,
+          "spe": 60
+        },
+        "stats": {
+          "hp": 202,
+          "atk": 135,
+          "def": 112,
+          "spa": 90,
+          "spd": 121,
+          "spe": 80
+        }
+      },
+      "move": {
+        "name": "Earthquake",
+        "type": "Ground",
+        "category": "Physical",
+        "basePower": 100,
+        "target": "allAdjacent",
+        "multihit": 1
+      },
+      "conditions": {
+        "gameType": "Doubles",
+        "spreadTargets": 2,
+        "weather": "none",
+        "terrain": "none",
+        "critical": false,
+        "helpingHand": true
+      },
+      "defenderHp": 202,
+      "trace": {
+        "bp": 150,
+        "A": 200,
+        "D": 112,
+        "baseRaw": 119,
+        "base": 89,
+        "stab": 6144,
+        "eff": 2,
+        "finalMod": 4096
+      },
+      "rolls": [
+        224,
+        228,
+        230,
+        234,
+        236,
+        240,
+        240,
+        242,
+        246,
+        248,
+        252,
+        254,
+        258,
+        260,
+        264,
+        266
+      ],
+      "min": 224,
+      "max": 266,
+      "minPercent": 110.9,
+      "maxPercent": 131.7,
+      "koCount": 16,
+      "koTotal": 16,
+      "ohkoChance": 1,
+      "attackBand": "guaranteed-ohko",
+      "defenseBand": "mid-or-higher",
+      "reference": {
+        "helpingHandOff": {
+          "rolls": [
+            152,
+            152,
+            156,
+            156,
+            158,
+            162,
+            162,
+            164,
+            164,
+            168,
+            170,
+            170,
+            174,
+            174,
+            176,
+            180
+          ],
+          "trace": {
+            "bp": 100,
+            "A": 200,
+            "D": 112,
+            "baseRaw": 80,
+            "base": 60,
+            "stab": 6144,
+            "eff": 2,
+            "finalMod": 4096
+          }
+        },
+        "singles": {
+          "rolls": [
+            204,
+            204,
+            206,
+            210,
+            212,
+            216,
+            216,
+            218,
+            222,
+            224,
+            228,
+            228,
+            230,
+            234,
+            236,
+            240
+          ],
+          "trace": {
+            "bp": 100,
+            "A": 200,
+            "D": 112,
+            "baseRaw": 80,
+            "base": 80,
+            "stab": 6144,
+            "eff": 2,
+            "finalMod": 4096
+          }
+        }
+      }
+    },
+    {
+      "id": "f-mamoswine-icicle-crash-vs-multiscale-dragonite",
+      "source": "독립 산술(scripts/golden/compute-independent.mjs)",
+      "attacker": {
+        "species": "Mamoswine",
+        "setSpecies": "Mamoswine",
+        "mega": false,
+        "nature": "Adamant",
+        "ability": "Oblivious",
+        "item": null,
+        "sp": {
+          "hp": 0,
+          "atk": 32,
+          "def": 0,
+          "spa": 0,
+          "spd": 0,
+          "spe": 0
+        },
+        "types": [
+          "Ice",
+          "Ground"
+        ],
+        "baseStats": {
+          "hp": 110,
+          "atk": 130,
+          "def": 80,
+          "spa": 70,
+          "spd": 60,
+          "spe": 80
+        },
+        "stats": {
+          "hp": 185,
+          "atk": 200,
+          "def": 100,
+          "spa": 81,
+          "spd": 80,
+          "spe": 100
+        }
+      },
+      "defender": {
+        "species": "Dragonite",
+        "setSpecies": "Dragonite",
+        "mega": false,
+        "nature": "Hardy",
+        "ability": "Multiscale",
+        "item": null,
+        "sp": {
+          "hp": 32,
+          "atk": 0,
+          "def": 0,
+          "spa": 0,
+          "spd": 0,
+          "spe": 0
+        },
+        "types": [
+          "Dragon",
+          "Flying"
+        ],
+        "baseStats": {
+          "hp": 91,
+          "atk": 134,
+          "def": 95,
+          "spa": 100,
+          "spd": 100,
+          "spe": 80
+        },
+        "stats": {
+          "hp": 198,
+          "atk": 154,
+          "def": 115,
+          "spa": 120,
+          "spd": 120,
+          "spe": 100
+        }
+      },
+      "move": {
+        "name": "Icicle Crash",
+        "type": "Ice",
+        "category": "Physical",
+        "basePower": 85,
+        "target": "normal",
+        "multihit": 1
+      },
+      "conditions": {
+        "gameType": "Doubles",
+        "weather": "none",
+        "terrain": "none",
+        "critical": false,
+        "helpingHand": false,
+        "defenderCurHp": "full"
+      },
+      "defenderHp": 198,
+      "multiscale": {
+        "rolls": [
+          168,
+          170,
+          174,
+          174,
+          176,
+          180,
+          180,
+          182,
+          186,
+          186,
+          188,
+          192,
+          192,
+          194,
+          198,
+          200
+        ],
+        "koCount": 2,
+        "koTotal": 16,
+        "ohkoChance": 0.125,
+        "attackBand": "mid-or-lower",
+        "defenseBand": "low-roll-ohko"
+      },
+      "withoutMultiscale": {
+        "ability": "Inner Focus",
+        "rolls": [
+          336,
+          340,
+          348,
+          348,
+          352,
+          360,
+          360,
+          364,
+          372,
+          372,
+          376,
+          384,
+          384,
+          388,
+          396,
+          400
+        ],
+        "koCount": 16,
+        "koTotal": 16,
+        "ohkoChance": 1,
+        "attackBand": "guaranteed-ohko",
+        "defenseBand": "mid-or-higher"
+      }
+    }
+  ]
+}
