@@ -1,9 +1,9 @@
 ---
 title: "메타 사용률·상대 SP 분포 데이터 수집"
 date: "2026-11-06"
-stage: adr-review
-prd_status: review
-adr_status: proposed
+stage: pre-approved
+prd_status: pre-approved
+adr_status: pre-accepted
 ---
 
 # 작업 단계 원장: 메타 사용률·상대 SP 분포 데이터 수집
@@ -44,7 +44,8 @@ adr_status: proposed
 - 2026-11-06 prd-draft→prd-review: Smogon 1760 컷 월별 통계 원천·출처 구분 확장 구조로 PRD 초안 작성, ADR 필요 판정
 - 2026-11-06 prd-review→adr-draft: adr-helper 진입(PRD ADR 필요 여부 5개 결정)
 - 2026-11-06 adr-draft→adr-review: ADR 결정 1~5 proposed 초안(실측 근거 notes), PRD 수정 5건(사용률 수용값 정정·메가 특성 문구·위반 종류·원천 검증 사유·표본 지표) 반영
-
+- 2026-11-06 adr-review: ADR 리뷰 9건 반영. 사용자가 사전 승인과 함께 기본값을 보정함(기본 매치 방식 Bo1, 0.5% 미만은 커스텀 출처로만·타겟 프리셋은 다음 단위, 메가 원종 특성 가정 감수) → PRD·ADR·notes 반영, 정합 검증 5건(커스텀 가정 대상 키를 로스터 종·폼 id로, 목록 밖 계약 수용 기준화 등) 반영
+- 2026-11-06 pre-approved: 사용자 명시 사전 승인 (harness:approve)
 ## 승인 이벤트
 
 <!-- 이 블록은 `npm run harness:approve`만 기록한다. 사용자의 명시 승인 발화가
@@ -53,4 +54,5 @@ adr_status: proposed
      status의 정합성을 교차검증한다. 손으로 위조하면 여러 아티팩트를 동시에 조작해야
      하며 감사에 드러난다. -->
 
-(아직 사전 승인 없음 — 빌드 진입 불가)
+- PREAPPROVAL prd 2026-11-06 harness:approve :: 사전 승인
+- PREAPPROVAL adr 2026-11-06 harness:approve :: 사전 승인
