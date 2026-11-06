@@ -1,9 +1,9 @@
 ---
 title: "메타 사용률·상대 SP 분포 데이터 수집"
 date: "2026-11-06"
-stage: implementing
-prd_status: pre-approved
-adr_status: pre-accepted
+stage: approved
+prd_status: approved
+adr_status: accepted
 ---
 
 # 작업 단계 원장: 메타 사용률·상대 SP 분포 데이터 수집
@@ -49,7 +49,11 @@ adr_status: pre-accepted
 - 2026-11-06 pre-approved→implementing: feature-develop 진입(초기 실행, 계획 게이트 필요 — architect 계획 → Workflow 구현·테스트·검증)
 - 2026-11-06 implementing: PRD 개정(사용자 확인 "예시 개정") — 수용 기준의 메가 별도 항목 예시를 리자몽 쌍(Bo1 0.036%로 목록 밖)에서 한카리아스·메가한카리아스·메가한카리아스Z로 교체, 리자몽 쌍은 최소값을 낮춘 테스트 입력으로 검증. 규칙 불변.
 - 2026-11-06 implementing: T1~T5 구현 + 4렌즈 리뷰 3회(1·2회 MAJOR 수정), 잔여 MINOR 7·COSMETIC 1 수정 진행
+- 2026-11-06 approved: 사용자 명시 최종 승인 (harness:approve --final)
 ## 승인 이벤트
+
+- APPROVAL prd 2026-11-06 make-pr :: 지금 진행 (Recommended)
+- APPROVAL adr 2026-11-06 make-pr :: 지금 진행 (Recommended)
 
 <!-- 이 블록은 `npm run harness:approve`만 기록한다. 사용자의 명시 승인 발화가
      verbatim으로 남는다. 두 종류: `PREAPPROVAL`(사전 승인 — 빌드 진입 게이트)과
@@ -59,3 +63,7 @@ adr_status: pre-accepted
 
 - PREAPPROVAL prd 2026-11-06 harness:approve :: 사전 승인
 - PREAPPROVAL adr 2026-11-06 harness:approve :: 사전 승인
+
+## 지식 기록
+
+- KNOWLEDGE 2026-11-06 invariants=INV-261106-meta-latest-gamedata-hash,INV-261106-meta-share-no-renormalize,INV-261106-no-ladder-custom-only gotchas=G-261106-node-core-ts-hook via=make-pr

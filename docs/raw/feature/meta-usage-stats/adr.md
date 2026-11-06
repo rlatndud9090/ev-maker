@@ -1,8 +1,8 @@
 ---
 title: "메타 사용률·상대 SP 분포 데이터 수집"
 date: "2026-11-06"
-status: pre-accepted
-approval: "user:2026-11-06:사전 승인"
+status: accepted
+approval: "user:2026-11-06:지금 진행 (Recommended)"
 related_prd: "./prd.md"
 unit_type: feature
 branch: "feature/meta-usage-stats"
