@@ -2,6 +2,9 @@
 import type { Snapshot, StatTable } from '../data/schema'
 import { calcDamage, sweepDamage, type PokemonSet } from '../core'
 import { loadSnapshot } from '../data/loader'
+import { assertMetaSnapshot } from '../data/meta-guard'
+import type { MetaSnapshot } from '../data/meta-schema'
+import { createMetaView, topAssumptions } from '../meta'
 
 const ZERO: StatTable = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }
 
@@ -17,6 +20,8 @@ export interface PerfHook {
   sweep(runs?: number, warmup?: number): Promise<PerfStats>
   /** 고집 맘모꾸리 지진 → 상대 300세트 calcDamage */
   batch(runs?: number, warmup?: number): Promise<PerfStats>
+  /** m-c 2026-10 Bo1 메타 본문 JSON.parse → 검사 → 뷰 → 상위 30 대표 가정 */
+  metaLoad(runs?: number, warmup?: number): Promise<PerfStats>
 }
 
 declare global {
@@ -70,6 +75,20 @@ export function installPerfHook(): void {
       const atk = set(s, { species: 'mamoswine', ability: 'oblivious', nature: 'adamant', moves: ['earthquake'], sp: { atk: 32 } })
       const opponents = batchOpponents(s, 300)
       return measure(() => opponents.forEach((d) => calcDamage(s, atk, d, 'earthquake')), runs, warmup)
+    },
+    async metaLoad(runs = 20, warmup = 3) {
+      const s = await loadSnapshot('m-c')
+      const { default: text } = await import('../data/meta/m-c/2026-10-bo1.json?raw')
+      const sel = { regulation: 'm-c', match: 'bo1', month: '2026-10' } as const
+      return measure(
+        () => {
+          const meta = JSON.parse(text) as MetaSnapshot
+          assertMetaSnapshot(sel, meta)
+          if (topAssumptions(createMetaView(meta, s), 30).length !== 30) throw new Error('상위 30 대표 가정 부족')
+        },
+        runs,
+        warmup,
+      )
     },
   }
 }

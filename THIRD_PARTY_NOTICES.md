@@ -8,10 +8,18 @@
 | --- | --- | --- | --- | --- |
 | PokeAPI CSV | data | e5b79b2e15d7c50735a945936afd4cd1cfd94eae | BSD-3-Clause | 스냅샷의 한국어 명칭 파생 데이터(원본 CSV는 번들하지 않음) |
 | Pokémon Showdown 데이터(@pkmn/mods·@pkmn/dex 패키징) | data | @pkmn/dex@0.10.13, @pkmn/mods@0.10.13 | MIT | 스냅샷의 종·기술·도구·특성·성격·학습 기술 파생 데이터(빌드 시 추출, 패키지 자체는 번들하지 않음) |
+| Smogon University 사용률 통계(chaos JSON, 1760 컷) | data | 2026-10 Bo1(공개 2026-11-01T13:27:17Z) · 2026-10 Bo3(공개 2026-11-01T13:27:17Z) | NOASSERTION | 메타 스냅샷(사용률·분포·대표 세트) 파생 데이터(원본은 번들하지 않음) |
 | @smogon/calc | code | 0.12.0 | MIT | 앱 번들에 포함되는 런타임 코드 |
 | react | code | 19.3.1 | MIT | 앱 번들에 포함되는 런타임 코드 |
 | react-dom | code | 19.3.1 | MIT | 앱 번들에 포함되는 런타임 코드 |
 | scheduler | code | 0.28.0 | MIT | 앱 번들에 포함되는 런타임 코드 |
+
+## 통계 출처
+
+메타 스냅샷의 사용률·분포는 Smogon University 제공 통계(https://www.smogon.com/stats/)에서 파생했다.
+
+- m-c 2026-10 Bo1: `gen9championsvgc2026regmc` https://www.smogon.com/stats/2026-10/chaos/gen9championsvgc2026regmc-1760.json (공개 2026-11-01T13:27:17Z)
+- m-c 2026-10 Bo3: `gen9championsvgc2026regmcbo3` https://www.smogon.com/stats/2026-10/chaos/gen9championsvgc2026regmcbo3-1760.json (공개 2026-11-01T13:27:17Z)
 
 ## 상표
 
@@ -20,6 +28,7 @@ Pokémon and Pokémon character names are trademarks of Nintendo, Creatures Inc.
 ## 테스트 전용 자료(번들하지 않음)
 
 - `docs/raw/feature/champions-calc-data-core/mega-ko-official.tsv`: 메가 82항목 한국어 이름의 테스트 기준값. 앱 번들에 넣지 않는다. 출처: https://pokemonkorea.co.kr/pokedex (포켓몬코리아 공식 도감)
+- `src/data/__fixtures__/meta/gen9championsvgc2026regmc-1760.2026-10.partial.json`: 메타 생성기 테스트 입력(원천 10종 발췌), 앱 번들에 넣지 않음. 출처: https://www.smogon.com/stats/2026-10/chaos/gen9championsvgc2026regmc-1760.json
 
 ## 라이선스 원문
 

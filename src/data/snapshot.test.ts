@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { SNAPSHOT_SCHEMA_VERSION } from './schema'
 import type { SnapshotData } from './schema'
-import { loadRegulationIndexSync, loadSnapshotSync } from './testing'
+import { loadMetaIndexSync, loadRegulationIndexSync, loadSnapshotSync } from './testing'
 
 const ROOT = new URL('../../', import.meta.url)
 const readText = (rel: string) => readFileSync(new URL(rel, ROOT), 'utf8')
@@ -220,11 +220,22 @@ describe('생성 리포트(커밋된 산출물)', () => {
   })
 
   it('라이선스 목록에 불명확 항목이 없다', () => {
-    const lic = readJson<{ entries: Array<{ license: string; id: string }> }>('src/data/licenses.json')
+    const lic = readJson<{ entries: Array<{ license: string; id: string; attributionOnly?: boolean }> }>('src/data/licenses.json')
     const ids = lic.entries.map((e) => e.id)
     expect(ids).toEqual(expect.arrayContaining(['npm:@smogon/calc', 'data:showdown-pkmn', 'data:pokeapi']))
-    for (const e of lic.entries) expect(['MIT', 'BSD-3-Clause', 'ISC', 'Apache-2.0', '0BSD', 'BSD-2-Clause'], e.id).toContain(e.license)
+    for (const e of lic.entries.filter((x) => !x.attributionOnly)) {
+      expect(['MIT', 'BSD-3-Clause', 'ISC', 'Apache-2.0', '0BSD', 'BSD-2-Clause'], e.id).toContain(e.license)
+    }
     const notices = readText('THIRD_PARTY_NOTICES.md')
+    const metaItems = Object.values(loadMetaIndexSync().regulations).flat()
+    expect(metaItems.length).toBeGreaterThan(0)
+    expect(ids).toContain('data:smogon-stats')
+    expect(notices).toContain('https://www.smogon.com/stats/')
+    expect(notices).toContain('2026-10')
+    for (const it of metaItems) {
+      expect(notices).toContain(it.publishedAt)
+      expect(notices).toContain(it.url)
+    }
     expect(notices).toContain('Nintendo')
     expect(notices).toContain('Redistribution and use in source and binary forms')
     expect(notices).toContain('mega-ko-official.tsv')

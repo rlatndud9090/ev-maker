@@ -1,7 +1,7 @@
 ---
 title: "메타 사용률·상대 SP 분포 데이터 수집"
 date: "2026-11-06"
-stage: pre-approved
+stage: implementing
 prd_status: pre-approved
 adr_status: pre-accepted
 ---
@@ -46,6 +46,9 @@ adr_status: pre-accepted
 - 2026-11-06 adr-draft→adr-review: ADR 결정 1~5 proposed 초안(실측 근거 notes), PRD 수정 5건(사용률 수용값 정정·메가 특성 문구·위반 종류·원천 검증 사유·표본 지표) 반영
 - 2026-11-06 adr-review: ADR 리뷰 9건 반영. 사용자가 사전 승인과 함께 기본값을 보정함(기본 매치 방식 Bo1, 0.5% 미만은 커스텀 출처로만·타겟 프리셋은 다음 단위, 메가 원종 특성 가정 감수) → PRD·ADR·notes 반영, 정합 검증 5건(커스텀 가정 대상 키를 로스터 종·폼 id로, 목록 밖 계약 수용 기준화 등) 반영
 - 2026-11-06 pre-approved: 사용자 명시 사전 승인 (harness:approve)
+- 2026-11-06 pre-approved→implementing: feature-develop 진입(초기 실행, 계획 게이트 필요 — architect 계획 → Workflow 구현·테스트·검증)
+- 2026-11-06 implementing: PRD 개정(사용자 확인 "예시 개정") — 수용 기준의 메가 별도 항목 예시를 리자몽 쌍(Bo1 0.036%로 목록 밖)에서 한카리아스·메가한카리아스·메가한카리아스Z로 교체, 리자몽 쌍은 최소값을 낮춘 테스트 입력으로 검증. 규칙 불변.
+- 2026-11-06 implementing: T1~T5 구현 + 4렌즈 리뷰 3회(1·2회 MAJOR 수정), 잔여 MINOR 7·COSMETIC 1 수정 진행
 ## 승인 이벤트
 
 <!-- 이 블록은 `npm run harness:approve`만 기록한다. 사용자의 명시 승인 발화가
