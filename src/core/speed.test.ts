@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { Field, Generations } from '@smogon/calc'
 // 엔진 비공개 스피드 함수는 대조 테스트에서만 쓴다(ADR 결정 4).
-import { getFinalSpeed } from '@smogon/calc/dist/mechanics/util'
+import { checkAirLock, checkItem, getFinalSpeed } from '@smogon/calc/dist/mechanics/util'
 import { MC, cloneSnapshot, goldenCase, goldenSet, mkSet } from './testing'
-import { CoreInputError, compareSpeed, finalSpeed, minSpToOutspeed, validateSet, type BattleConditions, type PokemonSet } from './index'
+import { CoreInputError, calcDamage, compareSpeed, finalSpeed, minSpToOutspeed, sweepSpeed, validateSet, type BattleConditions, type PokemonSet } from './index'
 import { buildEnginePokemon } from './engine'
 import { normalizeConditions } from './conditions'
+
+/** 엔진 calculate와 같은 전처리(서투름 도구 무효·날씨부정)를 거친 뒤의 엔진 스피드 */
+function engineSpeed(gen: ReturnType<typeof Generations.get>, p: ReturnType<typeof buildEnginePokemon>, field: Field): number {
+  checkAirLock(p, field)
+  checkItem(p, field.isMagicRoom)
+  return getFinalSpeed(gen, p, field, field.attackerSide)
+}
 
 const floette = mkSet({ species: 'floetteeternal', ability: 'flowerveil', nature: 'timid', sp: { spe: 32 } })
 
@@ -154,7 +161,7 @@ describe('스냅샷에 있는 추가 스피드 보정(퀵풋·서핑테일·검�
               const set = { ...base, status, boosts: { spe } }
               const conds = normalizeConditions({ terrain, attacker: { tailwind } })
               const field = new Field({ gameType: 'Doubles', terrain: terrain === 'none' ? undefined : terrain, attackerSide: { isTailwind: tailwind } })
-              const engine = getFinalSpeed(gen, buildEnginePokemon(MC, validateSet(MC, set), conds.attacker), field, field.attackerSide)
+              const engine = engineSpeed(gen, buildEnginePokemon(MC, validateSet(MC, set), conds.attacker), field)
               if (engine >= 999) continue
               expect(finalSpeed(MC, set, { terrain, attacker: { tailwind } }), `${set.species} ${status} ${terrain} ${tailwind} ${spe}`).toBe(engine)
               compared++
@@ -222,7 +229,7 @@ describe('자체 스피드 공식 vs 엔진 getFinalSpeed(999 미만 표본)', (
                     if (OUT_OF_SCOPE.has(r.ability)) continue
                     const conds = normalizeConditions({ weather, attacker: { tailwind } })
                     const field = new Field({ gameType: 'Doubles', weather: weather === 'none' ? undefined : weather, attackerSide: { isTailwind: tailwind } })
-                    const engine = getFinalSpeed(gen, buildEnginePokemon(MC, r, conds.attacker), field, field.attackerSide)
+                    const engine = engineSpeed(gen, buildEnginePokemon(MC, r, conds.attacker), field)
                     if (engine >= 999) continue
                     expect(finalSpeed(MC, set, { weather, attacker: { tailwind } }), `${s.id} ${ability}`).toBe(engine)
                     compared++
@@ -235,5 +242,63 @@ describe('자체 스피드 공식 vs 엔진 getFinalSpeed(999 미만 표본)', (
       }
     }
     expect(compared).toBeGreaterThan(5000)
+  })
+})
+
+describe('도구·날씨를 무효화하는 특성(서투름·날씨부정)', () => {
+  const lopunny = mkSet({ species: 'lopunny', ability: 'klutz', item: 'choicescarf' })
+  const otherLopunny = { ...lopunny, ability: MC.data.species.lopunny.abilities.find((a) => a !== 'klutz')! }
+  const beartic = mkSet({ species: 'beartic', ability: 'swiftswim' })
+  const altaria = mkSet({ species: 'altaria', ability: 'cloudnine' })
+  const plainAltaria = { ...altaria, ability: MC.data.species.altaria.abilities.find((a) => a !== 'cloudnine')! }
+  const rain: BattleConditions = { weather: 'Rain' }
+
+  it('스냅샷 합법 조합이다', () => {
+    expect(MC.data.species.lopunny.abilities).toContain('klutz')
+    expect(MC.data.species.beartic.abilities).toContain('swiftswim')
+    expect(MC.data.species.altaria.abilities).toContain('cloudnine')
+  })
+
+  it('서투름이면 구애스카프·검은철구 스피드 보정이 없다', () => {
+    expect(finalSpeed(MC, lopunny)).toBe(125)
+    expect(finalSpeed(MC, { ...lopunny, item: 'ironball' })).toBe(125)
+  })
+
+  it('서투름이 아니면 스카프·검은철구가 정상 적용된다', () => {
+    expect(finalSpeed(MC, otherLopunny)).toBe(187)
+    expect(finalSpeed(MC, { ...otherLopunny, item: 'ironball' })).toBe(62)
+  })
+
+  it('서투름 도구 무효는 순서 비교·추월 역산에도 반영된다', () => {
+    expect(compareSpeed(MC, lopunny, { ...lopunny, item: undefined }).order).toBe('tie')
+    expect(minSpToOutspeed(MC, lopunny, 125)).toEqual({ kind: 'ok', sp: 1 })
+  })
+
+  it('상대에게 날씨부정이 있으면 비가 와도 쓱쓱이 발동하지 않는다', () => {
+    expect(compareSpeed(MC, beartic, altaria, rain)).toMatchObject({ attackerSpeed: 70, defenderSpeed: 100, order: 'second' })
+  })
+
+  it('날씨부정이 자기 쪽(a)에 있어도 날씨가 무효다', () => {
+    expect(compareSpeed(MC, altaria, beartic, rain)).toMatchObject({ attackerSpeed: 100, defenderSpeed: 70, order: 'first' })
+  })
+
+  it('날씨부정이 없으면 기존 동작(비에서 쓱쓱 ×2)을 유지한다', () => {
+    expect(finalSpeed(MC, beartic, rain)).toBe(140)
+    expect(compareSpeed(MC, beartic, plainAltaria, rain)).toMatchObject({ attackerSpeed: 140, defenderSpeed: 100, order: 'first' })
+    expect(minSpToOutspeed(MC, beartic, plainAltaria, rain)).toEqual({ kind: 'ok', sp: 0 })
+  })
+
+  it('minSpToOutspeed(세트 목표)와 sweepSpeed도 같은 유효 날씨를 쓴다', () => {
+    // 쓱쓱 무효면 툰베어(SP 0~32: 70~102)는 파비코리(100)를 SP 31에서야 넘는다
+    expect(minSpToOutspeed(MC, beartic, altaria, rain)).toEqual({ kind: 'ok', sp: 31 })
+    const s = sweepSpeed(MC, beartic, altaria, rain)
+    expect(s.cells[0]).toMatchObject({ kind: 'ok', category: 'second' })
+    expect(s.boundaries).toEqual([30, 31])
+  })
+
+  it('스피드 의존 대미지(자이로볼)도 서투름 스카프를 엔진과 같게 무효로 본다', () => {
+    expect(MC.data.species.golurk.abilities).toContain('klutz')
+    const golurk = mkSet({ species: 'golurk', ability: 'klutz', item: 'choicescarf', moves: ['gyroball'] })
+    expect(calcDamage(MC, golurk, lopunny, 'gyroball').kind).toBe('damage')
   })
 })

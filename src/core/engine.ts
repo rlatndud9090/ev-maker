@@ -6,7 +6,7 @@ import type { ResolvedSet } from './set'
 import type { NormalizedConditions, NormalizedSide } from './conditions'
 import { coreError } from './errors'
 import { STAT_IDS, statTable } from './stats'
-import { speedOf } from './speed'
+import { speedOf, withEffectiveWeather } from './speed'
 
 const gen = Generations.get(0)
 type EngineKind = 'species' | 'moves' | 'items' | 'abilities' | 'natures'
@@ -142,7 +142,8 @@ export function engineDamage(
     buildField(c),
   )
   if (SPEED_DEPENDENT_MOVES.includes(move.id) || SPEED_DEPENDENT_ATTACKER_ABILITIES.includes(attacker.ability)) {
-    assertEngineSpeedMatches(result.attacker.stats.spe, speedOf(attacker, c, 'attacker'), result.defender.stats.spe, speedOf(defender, c, 'defender'), move.id)
+    const sc = withEffectiveWeather(c, attacker, defender)
+    assertEngineSpeedMatches(result.attacker.stats.spe, speedOf(attacker, sc, 'attacker'), result.defender.stats.spe, speedOf(defender, sc, 'defender'), move.id)
   }
   return normalizeRolls(result.damage)
 }

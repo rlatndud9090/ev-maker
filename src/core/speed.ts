@@ -16,6 +16,10 @@ const CONDITIONAL_DOUBLE_ABILITY: Record<string, (weather: Weather, terrain: Ter
 }
 const QUICK_FEET = 'quickfeet'
 const ITEM_MOD: Record<string, number> = { choicescarf: 6144, ironball: 2048 }
+/** 지닌 도구 효과를 무효화하는 특성 */
+const ITEM_NEGATING_ABILITIES = ['klutz']
+/** 필드의 날씨 효과를 무효화하는 특성 */
+const WEATHER_NEGATING_ABILITIES = ['cloudnine', 'airlock']
 /** 게임에서 스피드를 바꾸지만 이 모듈이 구현하지 않은 보정. 조용히 무시하지 않고 거부한다. */
 const UNSUPPORTED_SPEED_ABILITIES = ['slowstart', 'protosynthesis', 'quarkdrive']
 const UNSUPPORTED_SPEED_ITEMS = ['machobrace', 'poweranklet', 'powerband', 'powerbelt', 'powerbracer', 'powerlens', 'powerweight', 'quickpowder']
@@ -35,7 +39,15 @@ export function boostedStat(stat: number, stage: number): number {
   return stage >= 0 ? Math.floor((stat * (2 + stage)) / 2) : Math.floor((stat * 2) / (2 - stage))
 }
 
-/** 앱 최종 스피드. 대미지 래퍼도 엔진 스피드 대조에 이 값을 쓴다. */
+/**
+ * 유효 날씨: 주어진 세트 중 날씨 무효화 특성이 있으면 날씨 없음. 스피드 경로는 모두 이 규칙을 쓴다.
+ * 더블에서 주어지지 않은 필드의 다른 포켓몬 특성은 알 수 없어 반영하지 못한다.
+ */
+export function withEffectiveWeather(c: NormalizedConditions, ...sets: ResolvedSet[]): NormalizedConditions {
+  return c.weather !== 'none' && sets.some((r) => WEATHER_NEGATING_ABILITIES.includes(r.ability)) ? { ...c, weather: 'none' } : c
+}
+
+/** 앱 최종 스피드. c는 유효 날씨(withEffectiveWeather)를 적용한 조건이어야 한다. 대미지 래퍼도 엔진 스피드 대조에 이 값을 쓴다. */
 export function speedOf(r: ResolvedSet, c: NormalizedConditions, side: 'attacker' | 'defender'): number {
   if (UNSUPPORTED_SPEED_ABILITIES.includes(r.ability)) {
     throw new CoreInputError('ability', `${r.ability}의 스피드 보정은 지원하지 않는다`)
@@ -50,7 +62,7 @@ export function speedOf(r: ResolvedSet, c: NormalizedConditions, side: 'attacker
   const quickFeet = r.ability === QUICK_FEET && r.status !== 'none'
   if (CONDITIONAL_DOUBLE_ABILITY[r.ability]?.(c.weather, c.terrain)) mods.push(8192)
   else if (quickFeet) mods.push(6144)
-  if (r.item !== undefined && ITEM_MOD[r.item] !== undefined) mods.push(ITEM_MOD[r.item])
+  if (r.item !== undefined && ITEM_MOD[r.item] !== undefined && !ITEM_NEGATING_ABILITIES.includes(r.ability)) mods.push(ITEM_MOD[r.item])
   speed = pokeRound((speed * chainMods(mods)) / 4096)
   if (r.status === 'par' && !quickFeet) speed = Math.floor((speed * 50) / 100)
   return speed
@@ -65,7 +77,10 @@ function assertOrderBySpeed(r: ResolvedSet, field: string): void {
   }
 }
 
-/** side는 conditions의 어느 쪽 순풍을 적용할지 정한다(기본 attacker). */
+/**
+ * side는 conditions의 어느 쪽 순풍을 적용할지 정한다(기본 attacker).
+ * 상대를 모르므로 유효 날씨는 자기 특성만 보고 정한다(상대 날씨부정은 compareSpeed로).
+ */
 export function finalSpeed(
   snapshot: Snapshot,
   set: PokemonSet,
@@ -73,7 +88,8 @@ export function finalSpeed(
   side: 'attacker' | 'defender' = 'attacker',
 ): number {
   if (side !== 'attacker' && side !== 'defender') throw new CoreInputError('side', `attacker|defender여야 한다(받은 값: ${String(side)})`)
-  return speedOf(validateSet(snapshot, set), normalizeConditions(conditions), side)
+  const r = validateSet(snapshot, set)
+  return speedOf(r, withEffectiveWeather(normalizeConditions(conditions), r), side)
 }
 
 export function speedOrder(a: number, b: number): SpeedOrder {
@@ -91,7 +107,7 @@ export function compareSpeed(snapshot: Snapshot, a: PokemonSet, b: PokemonSet, c
   const rb = validateSet(snapshot, b)
   assertOrderBySpeed(ra, 'a')
   assertOrderBySpeed(rb, 'b')
-  const c = normalizeConditions(conditions)
+  const c = withEffectiveWeather(normalizeConditions(conditions), ra, rb)
   const attackerSpeed = speedOf(ra, c, 'attacker')
   const defenderSpeed = speedOf(rb, c, 'defender')
   const out: SpeedResult = { attackerSpeed, defenderSpeed, order: speedOrder(attackerSpeed, defenderSpeed) }
@@ -104,7 +120,7 @@ export function compareSpeed(snapshot: Snapshot, a: PokemonSet, b: PokemonSet, c
 
 /**
  * set(attacker 쪽 조건 적용)이 목표를 엄격히 앞지르는 최소 스피드 SP. 성격·도구·조건은 고정한다.
- * 목표가 세트면 defender 쪽 조건으로 그 최종 스피드를 구한다.
+ * 목표가 세트면 defender 쪽 조건으로 그 최종 스피드를 구한다. 유효 날씨는 양측(수치 목표면 set만) 특성으로 정한다.
  */
 export function minSpToOutspeed(
   snapshot: Snapshot,
@@ -112,16 +128,20 @@ export function minSpToOutspeed(
   target: number | PokemonSet,
   conditions?: BattleConditions,
 ): OutspeedResult {
-  const c = normalizeConditions(conditions)
+  const raw = normalizeConditions(conditions)
   const r = validateSet(snapshot, set)
+  let c: NormalizedConditions
   let targetSpeed: number
   if (typeof target === 'number') {
     if (!Number.isInteger(target) || target < 0) throw new CoreInputError('target', `0 이상 정수여야 한다(받은 값: ${target})`)
+    c = withEffectiveWeather(raw, r)
     targetSpeed = target
   } else if (!isPlainObject(target)) {
     throw new CoreInputError('target', `스피드 수치 또는 세트여야 한다(받은 값: ${String(target)})`)
   } else {
-    targetSpeed = speedOf(validateSet(snapshot, target), c, 'defender')
+    const rt = validateSet(snapshot, target)
+    c = withEffectiveWeather(raw, r, rt)
+    targetSpeed = speedOf(rt, c, 'defender')
   }
   const max = snapshot.manifest.rules.spMaxPerStat
   const remaining = remainingBudget(snapshot, set, 'spe')
