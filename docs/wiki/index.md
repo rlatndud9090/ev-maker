@@ -28,3 +28,7 @@ authoring_rules: 위키 구조·영역(area)/섹션(section) 작성 규칙은 �
 ### 게임 데이터
 
 - `2026-11-04` **챔피언스 계산 코어(SP 어댑터·스피드 엔진)와 게임 데이터·한국어 매핑** — [PRD](../raw/feature/champions-calc-data-core/prd.md) · [ADR](../raw/feature/champions-calc-data-core/adr.md) · [Notes](../raw/feature/champions-calc-data-core/notes.md) _(현재)_
+
+### 메타 통계
+
+- `2026-11-06` **메타 사용률·상대 SP 분포 데이터 수집** — [PRD](../raw/feature/meta-usage-stats/prd.md) · [ADR](../raw/feature/meta-usage-stats/adr.md) · [Notes](../raw/feature/meta-usage-stats/notes.md)
