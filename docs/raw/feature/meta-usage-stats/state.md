@@ -1,7 +1,7 @@
 ---
 title: "메타 사용률·상대 SP 분포 데이터 수집"
 date: "2026-11-06"
-stage: prd-review
+stage: adr-review
 prd_status: review
 adr_status: proposed
 ---
@@ -42,6 +42,8 @@ adr_status: proposed
 
 - 2026-11-06 kickoff: raw 골격 생성
 - 2026-11-06 prd-draft→prd-review: Smogon 1760 컷 월별 통계 원천·출처 구분 확장 구조로 PRD 초안 작성, ADR 필요 판정
+- 2026-11-06 prd-review→adr-draft: adr-helper 진입(PRD ADR 필요 여부 5개 결정)
+- 2026-11-06 adr-draft→adr-review: ADR 결정 1~5 proposed 초안(실측 근거 notes), PRD 수정 5건(사용률 수용값 정정·메가 특성 문구·위반 종류·원천 검증 사유·표본 지표) 반영
 
 ## 승인 이벤트
 
