@@ -1,0 +1,114 @@
+{
+  "abilities": {
+    "auraguard": {
+      "checked": "2026-11-04",
+      "ko": "파동의방호",
+      "source": "https://www.gameple.co.kr/news/articleView.html?idxno=216426"
+    },
+    "eelevate": {
+      "checked": "2026-11-04",
+      "ko": "천정부지",
+      "source": "https://pokemonkorea.co.kr/pokedex/view/770 (포켓몬코리아 공식 도감 메가저리더프 특성)"
+    },
+    "firemane": {
+      "checked": "2026-11-04",
+      "ko": "불꽃의갈기",
+      "source": "https://pokemonkorea.co.kr/pokedex/view/850 (포켓몬코리아 공식 도감 메가화염레오 특성)"
+    }
+  },
+  "items": {},
+  "moves": {},
+  "natures": {},
+  "species": {
+    "arcaninehisui": {
+      "ko": "윈디(히스이의 모습)",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=59&snumber2=59&word=59 (포켓몬코리아 공식 도감 폼 표기)",
+      "checked": "2026-11-04"
+    },
+    "avalugghisui": {
+      "ko": "크레베이스(히스이의 모습)",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=713&snumber2=713&word=713 (포켓몬코리아 공식 도감 폼 표기)",
+      "checked": "2026-11-04"
+    },
+    "basculegionf": {
+      "ko": "대쓰여너(암컷의 모습)",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=902&snumber2=902&word=902 (포켓몬코리아 공식 도감 폼 표기)",
+      "checked": "2026-11-04"
+    },
+    "decidueyehisui": {
+      "ko": "모크나이퍼(히스이의 모습)",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=724&snumber2=724&word=724 (포켓몬코리아 공식 도감 폼 표기)",
+      "checked": "2026-11-04"
+    },
+    "goodrahisui": {
+      "ko": "미끄래곤(히스이의 모습)",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=706&snumber2=706&word=706 (포켓몬코리아 공식 도감 폼 표기)",
+      "checked": "2026-11-04"
+    },
+    "mausholdfour": {
+      "ko": "파밀리쥐(네 식구)",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=925&snumber2=925&word=925 (포켓몬코리아 공식 도감 폼 표기)",
+      "checked": "2026-11-04"
+    },
+    "meowsticfmega": {
+      "checked": "2026-11-04",
+      "koLabel": "암컷",
+      "source": "공식명이 수컷·암컷 모두 메가냐오닉스라 구분 라벨을 붙인다(PRD F7). 성별은 Showdown 폼 Meowstic-F-Mega 기준"
+    },
+    "meowsticmmega": {
+      "checked": "2026-11-04",
+      "koLabel": "수컷",
+      "source": "공식명이 수컷·암컷 모두 메가냐오닉스라 구분 라벨을 붙인다(PRD F7). 성별은 Showdown 폼 Meowstic-M-Mega 기준"
+    },
+    "polteageistantique": {
+      "ko": "포트데스(진작폼)",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=855&snumber2=855&word=855 (포켓몬코리아 공식 도감 폼 표기)",
+      "checked": "2026-11-04"
+    },
+    "samurotthisui": {
+      "ko": "대검귀(히스이의 모습)",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=503&snumber2=503&word=503 (포켓몬코리아 공식 도감 폼 표기)",
+      "checked": "2026-11-04"
+    },
+    "squawkabillyblue": {
+      "ko": "시비꼬(블루 페더)",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=931&snumber2=931&word=931 (포켓몬코리아 공식 도감 폼 표기)",
+      "checked": "2026-11-04"
+    },
+    "squawkabillywhite": {
+      "ko": "시비꼬(화이트 페더)",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=931&snumber2=931&word=931 (포켓몬코리아 공식 도감 폼 표기)",
+      "checked": "2026-11-04"
+    },
+    "squawkabillyyellow": {
+      "ko": "시비꼬(옐로 페더)",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=931&snumber2=931&word=931 (포켓몬코리아 공식 도감 폼 표기)",
+      "checked": "2026-11-04"
+    },
+    "taurospaldeaaqua": {
+      "ko": "켄타로스(팔데아의 모습 워터종)",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=128&snumber2=128&word=128 (포켓몬코리아 공식 도감 폼 표기)",
+      "checked": "2026-11-04"
+    },
+    "taurospaldeablaze": {
+      "ko": "켄타로스(팔데아의 모습 블레이즈종)",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=128&snumber2=128&word=128 (포켓몬코리아 공식 도감 폼 표기)",
+      "checked": "2026-11-04"
+    },
+    "taurospaldeacombat": {
+      "ko": "켄타로스(팔데아의 모습 컴뱃종)",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=128&snumber2=128&word=128 (포켓몬코리아 공식 도감 폼 표기)",
+      "checked": "2026-11-04"
+    },
+    "typhlosionhisui": {
+      "ko": "블레이범(히스이의 모습)",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=157&snumber2=157&word=157 (포켓몬코리아 공식 도감 폼 표기)",
+      "checked": "2026-11-04"
+    },
+    "zoroarkhisui": {
+      "ko": "조로아크(히스이의 모습)",
+      "source": "https://pokemonkorea.co.kr/pokedex?snumber=571&snumber2=571&word=571 (포켓몬코리아 공식 도감 폼 표기)",
+      "checked": "2026-11-04"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "default": "m-c",
+  "regulations": [
+    {
+      "frozen": true,
+      "id": "m-b",
+      "mode": "championsregmb",
+      "name": "레귤레이션 M-B"
+    },
+    {
+      "frozen": false,
+      "id": "m-c",
+      "mode": "champions",
+      "name": "레귤레이션 M-C"
+    }
+  ],
+  "schemaVersion": 1
+}

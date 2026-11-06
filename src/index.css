@@ -1,0 +1,242 @@
+:root {
+  --bg: #f7f7f5;
+  --panel: #fff;
+  --text: #1d1d1b;
+  --muted: #5d5d58;
+  --line: #d6d6d0;
+  --accent: #2456a6;
+  --boundary: #fff1c2;
+  --over: #ececec;
+  --error-bg: #fdecec;
+  --error: #9b1c1c;
+  color-scheme: light;
+  font-family: system-ui, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 1rem;
+  overflow-wrap: anywhere;
+}
+
+main {
+  max-width: 80rem;
+  margin: 0 auto;
+  display: grid;
+  gap: 1rem;
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin: 0 0 0.25rem;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.5rem;
+}
+
+h3 {
+  font-size: 1rem;
+  margin: 0.75rem 0 0.25rem;
+}
+
+.layout {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.75rem;
+  min-width: 0;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.9rem;
+  min-width: 0;
+}
+
+label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+input,
+select {
+  font: inherit;
+  width: 100%;
+  min-width: 0;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  color: inherit;
+}
+
+input[type='checkbox'] {
+  width: auto;
+}
+
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+fieldset {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  margin: 0.75rem 0 0;
+  padding: 0.5rem;
+  min-width: 0;
+}
+
+legend {
+  font-size: 0.9rem;
+  padding: 0 0.25rem;
+}
+
+.fields {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+}
+
+.grid6 {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
+}
+
+.grid2 {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+}
+
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0.25rem 0;
+}
+
+.result {
+  margin-top: 0.75rem;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.2rem 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.kv dt {
+  color: var(--muted);
+}
+
+.kv dd {
+  margin: 0;
+  min-width: 0;
+}
+
+@media (max-width: 30rem) {
+  .kv {
+    grid-template-columns: 1fr;
+  }
+  .kv dd {
+    margin-bottom: 0.3rem;
+  }
+}
+
+.rolls {
+  margin: 0.2rem 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.85rem;
+}
+
+caption {
+  text-align: left;
+  font-weight: 600;
+  padding-bottom: 0.25rem;
+}
+
+th,
+td {
+  border: 1px solid var(--line);
+  padding: 0.25rem 0.4rem;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+table.stats td,
+table.stats th {
+  text-align: center;
+}
+
+table.sweep {
+  min-width: 32rem;
+}
+
+tr.boundary {
+  background: var(--boundary);
+  font-weight: 600;
+}
+
+tr.over {
+  background: var(--over);
+  color: var(--muted);
+}
+
+td.src {
+  overflow-wrap: anywhere;
+}
+
+.errors {
+  background: var(--error-bg);
+  color: var(--error);
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.errors ul {
+  margin: 0.25rem 0 0;
+  padding-left: 1.2rem;
+}

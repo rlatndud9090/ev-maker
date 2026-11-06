@@ -1,0 +1,34 @@
+{
+  "engine": {
+    "species": {
+      "aegislash": "aegislashshield"
+    }
+  },
+  "pokeapi": {
+    "duplicates": {
+      "items": {
+        "roseliberry": "prefer-ko"
+      }
+    },
+    "identifiers": {
+      "items": {
+        "leek": "stick"
+      },
+      "species": {
+        "basculegionf": { "identifier": "basculegion-female", "table": "pokemon_forms" },
+        "floetteeternal": { "identifier": "floette-eternal", "table": "pokemon_forms" },
+        "indeedeef": { "identifier": "indeedee-female", "table": "pokemon_forms" },
+        "mausholdfour": { "identifier": "maushold-family-of-four", "table": "pokemon_forms" },
+        "meowsticf": { "identifier": "meowstic-female", "table": "pokemon_forms" },
+        "meowsticfmega": { "identifier": "meowstic-female-mega", "table": "pokemon_forms" },
+        "meowsticmmega": { "identifier": "meowstic-male-mega", "table": "pokemon_forms" },
+        "squawkabillyblue": { "identifier": "squawkabilly-blue-plumage", "table": "pokemon_forms" },
+        "squawkabillywhite": { "identifier": "squawkabilly-white-plumage", "table": "pokemon_forms" },
+        "squawkabillyyellow": { "identifier": "squawkabilly-yellow-plumage", "table": "pokemon_forms" },
+        "taurospaldeaaqua": { "identifier": "tauros-paldea-aqua-breed", "table": "pokemon_forms" },
+        "taurospaldeablaze": { "identifier": "tauros-paldea-blaze-breed", "table": "pokemon_forms" },
+        "taurospaldeacombat": { "identifier": "tauros-paldea-combat-breed", "table": "pokemon_forms" }
+      }
+    }
+  }
+}

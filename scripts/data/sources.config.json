@@ -1,0 +1,100 @@
+{
+  "default": "m-c",
+  "engine": {
+    "gen": 0,
+    "integrity": "sha512-rNkdYV/ZGIugxD+hZlHdDaZLdGPYRIm+AaMFM18X2T2Pf8jpuuro9aoeiaZh51zcRR4tN3NRjSPoEXZ5ZDTuuA==",
+    "package": "@smogon/calc",
+    "publishedAt": "2026-09-18T19:02:43.981Z",
+    "version": "0.12.0"
+  },
+  "gameData": {
+    "packages": {
+      "@pkmn/dex": {
+        "integrity": "sha512-M04rp7Hwfglw8rCCkM2lf1NyqrAsDFbRdtdPRo9zixbNjyO9Cx0T3RNm4MlWndGZ8iPKrJEC8cLpSRdPwYdbXg==",
+        "publishedAt": "2026-11-03T00:13:44.229Z",
+        "version": "0.10.13"
+      },
+      "@pkmn/mods": {
+        "integrity": "sha512-GEVy/UeLoxLPYV2MURXBR7/YhYxU69tFZ4REuBHdtfsbjfRi8YpodBNpjqdhUMt8YNneNcBib59+iy4NqZdmfg==",
+        "publishedAt": "2026-11-03T00:13:57.422Z",
+        "version": "0.10.13"
+      }
+    },
+    "publishedAtSource": "npm view <pkg> time (2026-11-04 조회)",
+    "showdownCommitRef": {
+      "committedAt": "2026-11-02T14:18:22Z",
+      "repo": "smogon/pokemon-showdown",
+      "sha": "4148c1187ae723ecf84697c75e0b226bffdb6c81"
+    }
+  },
+  "ko": {
+    "baseUrl": "https://raw.githubusercontent.com/PokeAPI/pokeapi/{commit}/",
+    "commit": "e5b79b2e15d7c50735a945936afd4cd1cfd94eae",
+    "committedAt": "2026-11-02T06:41:04Z",
+    "csvDir": "data/v2/csv/",
+    "files": {
+      "abilities.csv": "74c3588ad48e08e54ff01f432899a4028c3e91508bbd53201df85e1f6b9e9ef3",
+      "ability_names.csv": "8acb80c42210f86ae747dc3347b060d69cd2574a9dbfaf74774ae632ca6348da",
+      "item_names.csv": "c4ad0b446e395c378d8ba75d6900f051cc9ebb99431d4000adeac35f492852f0",
+      "items.csv": "f08cd6dc30b447cb91cbe9232c79052e8521f32f6105bb1489b5bfabf4ca3241",
+      "languages.csv": "fbb60019a6a461783d5671a995d5f590db61792a273e90faa0ed630d102a19b8",
+      "move_names.csv": "99e23ee38ea53d1473474d463b87651deac3cd4928750f8186feae66da45c147",
+      "moves.csv": "8aafd37bf78f19471495c05b201545180f50f0a08a2a2a844d69f9837dd39ac9",
+      "nature_names.csv": "94d7d6adbfe4c8207f7896dd64dc1490f83d3bf7744beac83e6e03cd459ed70b",
+      "natures.csv": "3536990f6adeaa1735551a6afe798649d22426e161c937da09d3ae9a5381309c",
+      "pokemon_form_names.csv": "f496066d02fab12c18d10cce0af2f748d09cb7e296ecc784cc8682f8c4da8625",
+      "pokemon_forms.csv": "99bf8f7ad4dc1f2e291357a090cef6a575623ec3cbf9030d0e33656e6e608ae2",
+      "pokemon_species.csv": "e66e2eeb25fd3836b0ebab6bf87bbf01960aa3c0555e2bac495fa8393c5e0c45",
+      "pokemon_species_names.csv": "820cde17074cdb1c2b0595c997fb8f998e773bd5da3bb525dec85703c86c5fd9"
+    },
+    "license": {
+      "path": "LICENSE.md",
+      "sha256": "1c04595dc662981c20956ae4251dfa7b62b475c345eddf98bc9b904cb2373f2c"
+    },
+    "repo": "PokeAPI/pokeapi"
+  },
+  "regulations": [
+    {
+      "frozen": true,
+      "id": "m-b",
+      "mode": "championsregmb",
+      "name": "레귤레이션 M-B",
+      "period": {
+        "estimated": true,
+        "note": "날짜(2026-06-17 ~ 2026-09-09)는 Serebii 기준. 시각은 공식 발표가 없어 M-C 공식 기간(UTC 02:00 시작, 01:59 종료)과 같은 전환 시각으로 추정했다. 종료는 M-C 시작 직전 분이다.",
+        "sources": [
+          "https://www.serebii.net/pokemonchampions/rankedbattle/regulationm-b.shtml",
+          "https://asia-press.portal-pokemon.com/press-release/pokemon-champions_20260830/"
+        ]
+      },
+      "rules": {
+        "end": "2026-09-09T01:59:00Z",
+        "level": 50,
+        "spMaxPerStat": 32,
+        "spTotal": 66,
+        "start": "2026-06-17T02:00:00Z"
+      }
+    },
+    {
+      "frozen": false,
+      "id": "m-c",
+      "mode": "champions",
+      "name": "레귤레이션 M-C",
+      "period": {
+        "estimated": false,
+        "note": "공식 보도자료의 UTC 기간",
+        "sources": [
+          "https://asia-press.portal-pokemon.com/press-release/pokemon-champions_20260830/",
+          "https://www.serebii.net/pokemonchampions/rankedbattle/regulationm-c.shtml"
+        ]
+      },
+      "rules": {
+        "end": "2026-12-02T01:59:00Z",
+        "level": 50,
+        "spMaxPerStat": 32,
+        "spTotal": 66,
+        "start": "2026-09-09T02:00:00Z"
+      }
+    }
+  ]
+}

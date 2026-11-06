@@ -1,0 +1,10 @@
+// 계산 코어 공개 API. 모든 함수는 로드된 Snapshot을 명시 인자로 받는 동기 순수 함수다.
+export * from './types'
+export { CoreInputError } from './errors'
+export { STAT_IDS, statValue, natureMultiplier, type NatureMultiplier } from './stats'
+export { validateSet, computeStats, spNoGainCells, type ResolvedSet } from './set'
+export { DEFAULT_GAME_TYPE } from './conditions'
+export { calcDamage } from './damage'
+export { DEFAULT_THRESHOLDS, attackBand, defenseBand } from './bands'
+export { finalSpeed, compareSpeed, minSpToOutspeed } from './speed'
+export { sweep, sweepDamage, sweepSpeed, type CellJudgement, type DamageSweepTarget } from './sweep'
