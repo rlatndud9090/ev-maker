@@ -1,0 +1,23 @@
+{
+  "regulations": {
+    "m-c": [
+      {
+        "file": "m-c/2026-10-bo1.json",
+        "format": "gen9championsvgc2026regmc",
+        "match": "bo1",
+        "month": "2026-10",
+        "publishedAt": "2026-11-01T13:27:17Z",
+        "url": "https://www.smogon.com/stats/2026-10/chaos/gen9championsvgc2026regmc-1760.json"
+      },
+      {
+        "file": "m-c/2026-10-bo3.json",
+        "format": "gen9championsvgc2026regmcbo3",
+        "match": "bo3",
+        "month": "2026-10",
+        "publishedAt": "2026-11-01T13:27:17Z",
+        "url": "https://www.smogon.com/stats/2026-10/chaos/gen9championsvgc2026regmcbo3-1760.json"
+      }
+    ]
+  },
+  "schemaVersion": 1
+}

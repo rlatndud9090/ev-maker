@@ -1,4 +1,5 @@
 import type { SnapshotData } from '../../../src/data/schema'
+import type { MatchType, MetaIndex } from '../../../src/data/meta-schema'
 
 export class PipelineError extends Error {}
 
@@ -74,3 +75,31 @@ export function compareWithEngine(
 
 export function stableStringify(value: unknown): string
 export function readProjectJson<T = unknown>(rel: string): T
+
+export interface LicenseEntry {
+  id: string
+  kind: 'code' | 'data'
+  name: string
+  version: string
+  license: string
+  source: string | null
+  usage: string
+  noticeSource: string
+  /** true면 라이선스 문구 없이 출처 표기만 하는 항목(license 'NOASSERTION') */
+  attributionOnly?: boolean
+  months?: Array<{ regulation: string; month: string; match: MatchType; format: string; url: string; publishedAt: string }>
+}
+
+export interface Licenses {
+  entries: LicenseEntry[]
+  trademark: string
+  testOnly: Array<{ path: string; source: string; usage: string }>
+}
+
+/** root: 입력 루트(node_modules 기준). metaIndex: 커밋된 메타 인덱스. */
+export function buildLicenses(
+  root: string,
+  config: unknown,
+  pokeapiLicenseText: string,
+  metaIndex: MetaIndex,
+): { licenses: Licenses; notices: string }

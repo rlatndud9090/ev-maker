@@ -1,0 +1,40 @@
+{
+  "cutoff": 1760,
+  "params": {
+    "itemMin": 0.001,
+    "minUsage": 0.005,
+    "moveMin": 0.005,
+    "spreadMax": 30,
+    "spreadTarget": 0.8,
+    "teammatesTop": 10
+  },
+  "regulations": {
+    "m-c": {
+      "bo1": "gen9championsvgc2026regmc",
+      "bo3": "gen9championsvgc2026regmcbo3"
+    }
+  },
+  "sources": [
+    {
+      "cutoff": 1760,
+      "format": "gen9championsvgc2026regmc",
+      "match": "bo1",
+      "month": "2026-10",
+      "publishedAt": "2026-11-01T13:27:17Z",
+      "regulation": "m-c",
+      "sha256": "6c693b54b5bc52056af8e32e355c715e954491f9d9f5daa901b81de3d4408a5d",
+      "url": "https://www.smogon.com/stats/2026-10/chaos/gen9championsvgc2026regmc-1760.json"
+    },
+    {
+      "cutoff": 1760,
+      "format": "gen9championsvgc2026regmcbo3",
+      "match": "bo3",
+      "month": "2026-10",
+      "publishedAt": "2026-11-01T13:27:17Z",
+      "regulation": "m-c",
+      "sha256": "8a8b678d980a3c71851d1e1b1392253f547ea70686cfb9580cc1a6ce23e8392c",
+      "url": "https://www.smogon.com/stats/2026-10/chaos/gen9championsvgc2026regmcbo3-1760.json"
+    }
+  ],
+  "urlTemplate": "https://www.smogon.com/stats/{month}/chaos/{format}-{cutoff}.json"
+}

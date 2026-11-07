@@ -15,6 +15,7 @@ import { PipelineError, cmp, deepEqual, isIsoInstant, stableStringify } from './
 export { diffSnapshots } from './reports.mjs'
 export { stableStringify, PipelineError } from './util.mjs'
 export { compareWithEngine, loadEngine } from './engine.mjs'
+export { buildLicenses } from './licenses.mjs'
 
 export const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 
@@ -213,7 +214,8 @@ export async function buildAll(opts = {}) {
     default: config.default,
     regulations: config.regulations.map((r) => ({ id: r.id, name: r.name, mode: r.mode, frozen: r.frozen })),
   })
-  const { licenses, notices } = buildLicenses(root, config, pokeapi.license.text)
+  const metaIndex = readJson(join(root, 'src/data/meta/index.json'))
+  const { licenses, notices } = buildLicenses(root, config, pokeapi.license.text, metaIndex)
   put(paths(outRoot, '').licenses, licenses)
   put(paths(outRoot, '').notices, notices)
 

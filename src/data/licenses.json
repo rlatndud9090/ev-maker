@@ -21,6 +21,35 @@
       "version": "@pkmn/dex@0.10.13, @pkmn/mods@0.10.13"
     },
     {
+      "attributionOnly": true,
+      "id": "data:smogon-stats",
+      "kind": "data",
+      "license": "NOASSERTION",
+      "months": [
+        {
+          "format": "gen9championsvgc2026regmc",
+          "match": "bo1",
+          "month": "2026-10",
+          "publishedAt": "2026-11-01T13:27:17Z",
+          "regulation": "m-c",
+          "url": "https://www.smogon.com/stats/2026-10/chaos/gen9championsvgc2026regmc-1760.json"
+        },
+        {
+          "format": "gen9championsvgc2026regmcbo3",
+          "match": "bo3",
+          "month": "2026-10",
+          "publishedAt": "2026-11-01T13:27:17Z",
+          "regulation": "m-c",
+          "url": "https://www.smogon.com/stats/2026-10/chaos/gen9championsvgc2026regmcbo3-1760.json"
+        }
+      ],
+      "name": "Smogon University 사용률 통계(chaos JSON, 1760 컷)",
+      "noticeSource": "공식 이용 조건 문구 없음, 관례적 출처 표기",
+      "source": "https://www.smogon.com/stats/",
+      "usage": "메타 스냅샷(사용률·분포·대표 세트) 파생 데이터(원본은 번들하지 않음)",
+      "version": "2026-10 Bo1(공개 2026-11-01T13:27:17Z) · 2026-10 Bo3(공개 2026-11-01T13:27:17Z)"
+    },
+    {
       "id": "npm:@smogon/calc",
       "kind": "code",
       "license": "MIT",
@@ -66,6 +95,11 @@
       "path": "docs/raw/feature/champions-calc-data-core/mega-ko-official.tsv",
       "source": "https://pokemonkorea.co.kr/pokedex (포켓몬코리아 공식 도감)",
       "usage": "메가 82항목 한국어 이름의 테스트 기준값. 앱 번들에 넣지 않는다."
+    },
+    {
+      "path": "src/data/__fixtures__/meta/gen9championsvgc2026regmc-1760.2026-10.partial.json",
+      "source": "https://www.smogon.com/stats/2026-10/chaos/gen9championsvgc2026regmc-1760.json",
+      "usage": "메타 생성기 테스트 입력(원천 10종 발췌), 앱 번들에 넣지 않음."
     }
   ],
   "trademark": "Pokémon and Pokémon character names are trademarks of Nintendo, Creatures Inc. and GAME FREAK inc. 포켓몬스터·포켓몬 및 등장 캐릭터 이름은 Nintendo·Creatures·GAME FREAK의 상표다. 이 프로젝트는 비공식이며 이들과 관계없다."

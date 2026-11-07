@@ -314,10 +314,13 @@ describe('수용 기준: 배포 산출물(자동 확인 가능한 부분)', () =
   })
 
   it('AC-U5 번들한 데이터·코드의 라이선스·출처 목록이 있고 불명확 항목이 0개', () => {
-    const lic = readJson<{ entries: Array<{ id: string; license: string; source: string; version?: string }> }>('src/data/licenses.json')
+    const lic = readJson<{ entries: Array<{ id: string; license: string; source: string; version?: string; attributionOnly?: boolean }> }>(
+      'src/data/licenses.json',
+    )
     expect(lic.entries.length).toBeGreaterThan(0)
     for (const e of lic.entries) {
-      expect(['MIT', 'BSD-3-Clause', 'ISC', 'Apache-2.0'], e.id).toContain(e.license)
+      if (e.attributionOnly) expect(e.license, e.id).toBe('NOASSERTION')
+      else expect(['MIT', 'BSD-3-Clause', 'ISC', 'Apache-2.0'], e.id).toContain(e.license)
       expect(e.source, e.id).toMatch(/^(https?:\/\/|github:|npm:)\S+/)
     }
     const ids = lic.entries.map((e) => e.id)

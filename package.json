@@ -14,7 +14,8 @@
     "test": "vitest",
     "test:run": "vitest run --passWithNoTests",
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
-    "gen:snapshot": "node scripts/data/build-snapshot.mjs"
+    "gen:snapshot": "node scripts/data/build-snapshot.mjs",
+    "gen:meta": "node scripts/data/build-meta.mjs"
   },
   "dependencies": {
     "@smogon/calc": "0.12.0",

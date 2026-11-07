@@ -1,6 +1,7 @@
 // 번들되는 코드·데이터의 라이선스·출처 목록과 고지 파일.
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { META_SCHEMA_VERSION } from '../../../src/data/meta-schema.ts'
 import { PipelineError, cmp } from './util.mjs'
 
 const KNOWN_LICENSES = new Set(['MIT', 'BSD-3-Clause', 'ISC', 'Apache-2.0', '0BSD', 'BSD-2-Clause'])
@@ -76,7 +77,31 @@ export const TRADEMARK =
   'Pokémon and Pokémon character names are trademarks of Nintendo, Creatures Inc. and GAME FREAK inc. ' +
   '포켓몬스터·포켓몬 및 등장 캐릭터 이름은 Nintendo·Creatures·GAME FREAK의 상표다. 이 프로젝트는 비공식이며 이들과 관계없다.'
 
-export function buildLicenses(root, config, pokeapiLicenseText) {
+const SMOGON_STATS = 'https://www.smogon.com/stats/'
+const MATCH_LABEL = { bo1: 'Bo1', bo3: 'Bo3' }
+
+/** 메타 인덱스의 스냅샷 목록. 정렬: 레귤레이션·월·매치. */
+function metaMonths(metaIndex) {
+  if (metaIndex?.schemaVersion !== META_SCHEMA_VERSION) {
+    throw new PipelineError(`메타 인덱스 schemaVersion ${metaIndex?.schemaVersion} (기대 ${META_SCHEMA_VERSION})`)
+  }
+  const months = []
+  for (const [regulation, items] of Object.entries(metaIndex.regulations ?? {})) {
+    for (const it of items) {
+      for (const k of ['month', 'match', 'format', 'url', 'publishedAt']) {
+        if (typeof it[k] !== 'string') throw new PipelineError(`메타 인덱스 ${regulation}: ${k} 누락`)
+      }
+      if (!MATCH_LABEL[it.match]) throw new PipelineError(`메타 인덱스 ${regulation}: 매치 ${it.match}`)
+      if (!it.url.startsWith(SMOGON_STATS)) throw new PipelineError(`메타 인덱스 ${regulation}: Smogon 통계 URL 아님(${it.url})`)
+      months.push({ regulation, month: it.month, match: it.match, format: it.format, url: it.url, publishedAt: it.publishedAt })
+    }
+  }
+  return months.sort((a, b) => cmp(a.regulation, b.regulation) || cmp(a.month, b.month) || cmp(a.match, b.match))
+}
+
+/** metaIndex: 입력 루트에 커밋된 src/data/meta/index.json. 스냅샷이 있으면 Smogon 출처 항목을 넣는다. */
+export function buildLicenses(root, config, pokeapiLicenseText, metaIndex) {
+  const months = metaMonths(metaIndex)
   const entries = []
   const texts = []
   for (const name of runtimePackages(root)) {
@@ -124,7 +149,21 @@ export function buildLicenses(root, config, pokeapiLicenseText) {
     noticeSource: `${config.ko.repo}/${config.ko.license.path} @ ${config.ko.commit}`,
   })
   texts.push({ title: `PokeAPI @ ${config.ko.commit} (BSD-3-Clause)`, text: pokeapiLicenseText.replace(/\r\n/g, '\n').trimEnd() + '\n' })
-  for (const e of entries) if (!KNOWN_LICENSES.has(e.license)) throw new PipelineError(`${e.id}: 라이선스 불명확`)
+  if (months.length) {
+    entries.push({
+      id: 'data:smogon-stats',
+      kind: 'data',
+      name: 'Smogon University 사용률 통계(chaos JSON, 1760 컷)',
+      version: months.map((m) => `${m.month} ${MATCH_LABEL[m.match]}(공개 ${m.publishedAt})`).join(' · '),
+      license: 'NOASSERTION',
+      attributionOnly: true,
+      source: SMOGON_STATS,
+      usage: '메타 스냅샷(사용률·분포·대표 세트) 파생 데이터(원본은 번들하지 않음)',
+      noticeSource: '공식 이용 조건 문구 없음, 관례적 출처 표기',
+      months,
+    })
+  }
+  for (const e of entries) if (!e.attributionOnly && !KNOWN_LICENSES.has(e.license)) throw new PipelineError(`${e.id}: 라이선스 불명확`)
   const licenses = {
     entries: entries.sort((a, b) => cmp(a.id, b.id)),
     trademark: TRADEMARK,
@@ -134,12 +173,17 @@ export function buildLicenses(root, config, pokeapiLicenseText) {
         source: 'https://pokemonkorea.co.kr/pokedex (포켓몬코리아 공식 도감)',
         usage: '메가 82항목 한국어 이름의 테스트 기준값. 앱 번들에 넣지 않는다.',
       },
+      {
+        path: 'src/data/__fixtures__/meta/gen9championsvgc2026regmc-1760.2026-10.partial.json',
+        source: 'https://www.smogon.com/stats/2026-10/chaos/gen9championsvgc2026regmc-1760.json',
+        usage: '메타 생성기 테스트 입력(원천 10종 발췌), 앱 번들에 넣지 않음.',
+      },
     ],
   }
-  return { licenses, notices: renderNotices(licenses, texts) }
+  return { licenses, notices: renderNotices(licenses, texts, months) }
 }
 
-function renderNotices(licenses, texts) {
+function renderNotices(licenses, texts, months) {
   const lines = [
     '# Third-Party Notices',
     '',
@@ -151,6 +195,12 @@ function renderNotices(licenses, texts) {
     '| --- | --- | --- | --- | --- |',
   ]
   for (const e of licenses.entries) lines.push(`| ${e.name} | ${e.kind} | ${e.version} | ${e.license} | ${e.usage} |`)
+  if (months.length) {
+    lines.push('', '## 통계 출처', '', `메타 스냅샷의 사용률·분포는 Smogon University 제공 통계(${SMOGON_STATS})에서 파생했다.`, '')
+    for (const m of months) {
+      lines.push(`- ${m.regulation} ${m.month} ${MATCH_LABEL[m.match]}: \`${m.format}\` ${m.url} (공개 ${m.publishedAt})`)
+    }
+  }
   lines.push('', '## 상표', '', licenses.trademark, '', '## 테스트 전용 자료(번들하지 않음)', '')
   for (const t of licenses.testOnly) lines.push(`- \`${t.path}\`: ${t.usage} 출처: ${t.source}`)
   lines.push('', '## 라이선스 원문', '')

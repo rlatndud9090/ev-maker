@@ -1,0 +1,132 @@
+{
+  "blankMoves": {
+    "species": 273,
+    "weight": 84.4819
+  },
+  "format": "gen9championsvgc2026regmc",
+  "match": "bo1",
+  "mega": {
+    "abilityOutsideForm": [],
+    "checked": 81,
+    "listed": 27,
+    "stoneNotTop": []
+  },
+  "month": "2026-10",
+  "regulation": "m-c",
+  "retention": {
+    "exhausted": 0,
+    "exhaustedSpecies": [],
+    "hitMax": 25,
+    "keptShareMean": 0.7698,
+    "keptShareMin": 0.4385,
+    "reachedTarget": 54,
+    "spreadMax": 30,
+    "spreadTarget": 0.8
+  },
+  "size": 637313,
+  "sizeLimit": 1000000,
+  "species": {
+    "listed": 79,
+    "source": 277
+  },
+  "unlinkedAboveMin": [],
+  "url": "https://www.smogon.com/stats/2026-10/chaos/gen9championsvgc2026regmc-1760.json",
+  "violationDetails": [
+    {
+      "kind": "illegal-ability",
+      "share": 0.031,
+      "species": "meowstic",
+      "value": "competitive",
+      "weight": 0.2769
+    },
+    {
+      "kind": "illegal-ability",
+      "share": 0.0193,
+      "species": "squawkabilly",
+      "value": "sheerforce",
+      "weight": 0.1801
+    },
+    {
+      "kind": "illegal-ability",
+      "share": 0.0599,
+      "species": "toxtricity",
+      "value": "minus",
+      "weight": 1.6543
+    },
+    {
+      "kind": "illegal-move",
+      "share": 0,
+      "species": "meowstic",
+      "value": "futuresight",
+      "weight": 0
+    },
+    {
+      "kind": "illegal-move",
+      "share": 0.002,
+      "species": "toxtricity",
+      "value": "magneticflux",
+      "weight": 0.054
+    },
+    {
+      "kind": "illegal-move",
+      "share": 0.0124,
+      "species": "toxtricity",
+      "value": "paraboliccharge",
+      "weight": 0.3422
+    }
+  ],
+  "violations": {
+    "illegal-ability": {
+      "count": 3,
+      "weight": 2.1113
+    },
+    "illegal-move": {
+      "count": 3,
+      "weight": 0.3962
+    },
+    "item-not-in-roster": {
+      "count": 0,
+      "weight": 0
+    },
+    "sp-over-max": {
+      "count": 0,
+      "weight": 0
+    },
+    "sp-over-total": {
+      "count": 0,
+      "weight": 0
+    },
+    "species-not-in-roster": {
+      "count": 0,
+      "weight": 0
+    },
+    "teammate-not-in-roster": {
+      "count": 0,
+      "weight": 0
+    },
+    "unknown-nature": {
+      "count": 0,
+      "weight": 0
+    },
+    "unlinked-ability": {
+      "count": 0,
+      "weight": 0
+    },
+    "unlinked-item": {
+      "count": 0,
+      "weight": 0
+    },
+    "unlinked-move": {
+      "count": 0,
+      "weight": 0
+    },
+    "unlinked-species": {
+      "count": 0,
+      "weight": 0
+    },
+    "unlinked-teammate": {
+      "count": 0,
+      "weight": 0
+    }
+  }
+}
