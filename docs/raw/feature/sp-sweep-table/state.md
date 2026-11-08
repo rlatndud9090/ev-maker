@@ -1,7 +1,7 @@
 ---
 title: "SP 구간 판정 표 화면(메타 카드 리스트)"
 date: "2026-11-07"
-stage: adr-draft
+stage: adr-review
 prd_status: review
 adr_status: proposed
 ---
@@ -44,6 +44,7 @@ adr_status: proposed
 - 2026-11-08 prd-draft→prd-review: 사용자 인터뷰 2회(카드 내용·배분 묶음·변화 없음 제외·통계 기반 랭크·순풍 토글) 반영 PRD 초안, ADR 필요(디자인 결정 레인 포함) 판정
 - 2026-11-08 prd-review: 리뷰 BLOCKER 3(사용자 결정 4건 추가 인터뷰)·MAJOR 6·MINOR 7, 재검증 2렌즈(BLOCKER 1·MAJOR 8·MINOR 9) 반영
 - 2026-11-08 prd-review→adr-draft: adr-helper 진입(결정 1 화면 배치는 디자인 결정 레인, 2~4는 architect)
+- 2026-11-08 adr-draft→adr-review: 결정 2~4(architect, 실측), 결정 1 = 사용자 3단계 선택(전체 layout A 좌 사이드바 / 설정 C SP 슬라이더 / 상대 목록 D 변형 압축 목록+아래 아코디언 상세), PRD 정합 개정
 
 ## 승인 이벤트
 
