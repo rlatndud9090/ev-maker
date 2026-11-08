@@ -32,3 +32,7 @@ authoring_rules: 위키 구조·영역(area)/섹션(section) 작성 규칙은 �
 ### 메타 통계
 
 - `2026-11-06` **메타 사용률·상대 SP 분포 데이터 수집** — [PRD](../raw/feature/meta-usage-stats/prd.md) · [ADR](../raw/feature/meta-usage-stats/adr.md) · [Notes](../raw/feature/meta-usage-stats/notes.md) _(현재)_
+
+### SP 구간 표
+
+- `2026-11-07` **SP 구간 판정 표 화면(메타 카드 리스트)** — [PRD](../raw/feature/sp-sweep-table/prd.md) · [ADR](../raw/feature/sp-sweep-table/adr.md) · [Notes](../raw/feature/sp-sweep-table/notes.md)

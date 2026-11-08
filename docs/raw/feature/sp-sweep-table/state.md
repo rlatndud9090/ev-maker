@@ -1,8 +1,8 @@
 ---
 title: "SP 구간 판정 표 화면(메타 카드 리스트)"
 date: "2026-11-07"
-stage: kickoff
-prd_status: draft
+stage: prd-review
+prd_status: review
 adr_status: proposed
 ---
 
@@ -41,6 +41,8 @@ adr_status: proposed
 ## 단계 로그 (append-only)
 
 - 2026-11-07 kickoff: raw 골격 생성
+- 2026-11-08 prd-draft→prd-review: 사용자 인터뷰 2회(카드 내용·배분 묶음·변화 없음 제외·통계 기반 랭크·순풍 토글) 반영 PRD 초안, ADR 필요(디자인 결정 레인 포함) 판정
+- 2026-11-08 prd-review: 리뷰 BLOCKER 3(사용자 결정 4건 추가 인터뷰)·MAJOR 6·MINOR 7, 재검증 2렌즈(BLOCKER 1·MAJOR 8·MINOR 9) 반영
 
 ## 승인 이벤트
 
