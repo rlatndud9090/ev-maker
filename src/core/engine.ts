@@ -17,8 +17,8 @@ type EngineTypes = Pokemon['types']
 const ENGINE_ALIASES = aliasesJson.engine as Record<string, Record<string, string> | undefined>
 const SPREAD_TARGETS = ['allAdjacent', 'allAdjacentFoes']
 /** 엔진 대미지 경로가 엔진 자체 스피드(gen 0에 999 상한)로 위력·순서를 정하는 기술과 특성 */
-const SPEED_DEPENDENT_MOVES = ['electroball', 'gyroball', 'payback']
-const SPEED_DEPENDENT_ATTACKER_ABILITIES = ['analytic']
+export const SPEED_DEPENDENT_MOVES: readonly string[] = ['electroball', 'gyroball', 'payback']
+export const SPEED_DEPENDENT_ATTACKER_ABILITIES: readonly string[] = ['analytic']
 
 /** 스냅샷 id → 엔진 표시명. 엔진에 없으면 ENGINE_UNSUPPORTED(매니페스트 기록이 빠진 경우의 방어선). */
 function engineName(kind: EngineKind, id: string): string {
@@ -26,6 +26,16 @@ function engineName(kind: EngineKind, id: string): string {
   const entry = gen[kind].get(toID(eid))
   if (!entry) throw coreError('ENGINE_UNSUPPORTED', kind, `${id}은 계산 엔진 데이터에 없다`)
   return entry.name
+}
+
+/** 엔진 기술 데이터의 능력치 대체 표시(바디프레스 offensiveStat 'def', 속임수 offensivePokemon 'target', 사이코쇼크 defensiveStat 'def'). */
+export function engineMoveOverrides(moveId: string): { defensiveStat?: string; offensiveStat?: string; offensivePokemon?: string } {
+  const m = gen.moves.get(toID(engineName('moves', moveId)))
+  const out: { defensiveStat?: string; offensiveStat?: string; offensivePokemon?: string } = {}
+  if (m?.overrideDefensiveStat) out.defensiveStat = m.overrideDefensiveStat
+  if (m?.overrideOffensiveStat) out.offensiveStat = m.overrideOffensiveStat
+  if (m?.overrideOffensivePokemon) out.offensivePokemon = m.overrideOffensivePokemon
+  return out
 }
 
 /** 엔진은 overrides.types를 배열 깊은 병합하고 clone()마다 재병합하므로, 인스턴스와 그 사본에 타입을 다시 고정한다. */

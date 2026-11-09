@@ -1,7 +1,7 @@
 import { useId } from 'react'
 import type { GameType, Terrain, Weather } from '../core'
 import type { ConditionsDraft, SideDraft } from './draft'
-import { GAME_TYPE_LABEL, TERRAIN_LABEL, WEATHER_LABEL, keysOf } from './labels'
+import { GAME_TYPE_LABEL, TERRAIN_LABEL, WEATHER_LABEL, keysOf } from '../ui/labels'
 
 interface Props {
   draft: ConditionsDraft

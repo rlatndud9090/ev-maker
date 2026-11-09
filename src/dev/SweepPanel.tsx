@@ -9,8 +9,8 @@ import {
   type SpeedResult,
   type SweepResult,
 } from '../core'
-import { CATEGORY_LABEL, ORDER_LABEL, STAT_LABEL, attempt, damagePercent, percent } from './labels'
-import { Errors } from './Errors'
+import { CATEGORY_LABEL, ORDER_LABEL, STAT_LABEL, attempt, damagePercent, percent } from '../ui/labels'
+import { Errors } from '../ui/Errors'
 
 type Target = { kind: 'damage'; side: 'attacker' | 'defender'; stat: StatId } | { kind: 'speed' }
 

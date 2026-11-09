@@ -1,8 +1,8 @@
 import { useId } from 'react'
 import type { Snapshot } from '../data/schema'
 import { compareSpeed, minSpToOutspeed, type BattleConditions, type OutspeedResult, type PokemonSet } from '../core'
-import { ORDER_LABEL, attempt } from './labels'
-import { Errors } from './Errors'
+import { ORDER_LABEL, attempt } from '../ui/labels'
+import { Errors } from '../ui/Errors'
 
 interface Props {
   snapshot: Snapshot

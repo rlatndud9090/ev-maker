@@ -200,7 +200,7 @@ supersedes:
 - **e2e·성능 훅**
   - 기존 dev 스펙의 진입 helper를 `/#/dev`로 바꾼다.
   - 오프라인 스펙은 제품 화면과 dev 페이지 모두 외부 요청 0건을 확인한다.
-  - `window.__perf` 훅은 `src/dev/perf.ts`에서 `src/dev` 밖(`src/app/perf.ts`)으로 옮겨, 진입과 무관하게 지금처럼 설치한다. 제품 반응성 측정 함수를 더한다(결정 3 검증). `e2e/perf.spec.ts`의 훅 위치 주석도 갱신한다.
+  - `window.__perf` 훅은 `src/dev/perf.ts`에서 `src/dev` 밖(`src/app/perf.ts`)으로 옮겨, 진입과 무관하게 지금처럼 설치한다. 제품 반응성(결정 3 검증)은 훅에 함수를 더하지 않고 e2e(`e2e/product-perf.spec.ts`)가 페이지 계측(Long Task·탭 패널 data 속성 변화 시각)으로 잰다. `e2e/perf.spec.ts`의 훅 위치 주석도 갱신한다.
 - **제품 상태 소유:** 제품 루트 컴포넌트의 `useReducer` 하나가 소유한다. 상태 타입·초기 상태(예시 포켓몬)·리듀서·입력 변환은 React 없는 순수 모듈(`src/app/state.ts`)로 두어 단위 테스트한다.
   - 상태 항목: 레귤레이션, 메타 선택(매치 방식·월), 내 세트 초안(입력 문자열), 조건(내·상대 순풍), 활성 탭, 표시 기준 4개, 필터(상위 N·선택 종), 목록 밖 타겟(종, 필수 기술 목록, 탭·분류·프리셋별 편집값).
   - 카드 펼침, 드래그 중 슬라이더 값, 목록 밖 추가 패널의 입력 중 값(종·기술 칩) 같은 표시 국소 상태는 그 컴포넌트 자신의 상태로 둔다.
@@ -344,7 +344,7 @@ supersedes:
 - [ ] 코어 확장: 예산 무시 평가 옵션, `sweepDamage`·`sweepSpeed` 예산 밖 판정 옵션, 기술 참조 능력치 조회(엔진 이름 분기 목록 상수 포함), 대미지 스윕 허용 능력치 합집합, 추가 export(`judgeDamage`·`judgeSpeed`·`checkSpeedSupport`·`engineMoveOverrides`·스피드 의존 상수, 메타 `parseSpreadKey`). 기존 코어 테스트 무변경 통과와, dev SweepPanel의 기존 5개 스윕 대상이 그대로 동작함을 확인한다.
 - [ ] `src/cards/`: 계획·행 작업(양 끝·극단·스윕)·조립(표시용 현재 SP, 갱신 대기)·일괄, 묶음, 정렬, 극단 필터, 랭크 수단·반응 데이터 상수, 스카프 행, 목록 밖 프리셋, 관여 능력치 캐시 키.
 - [ ] `src/app/`: 상태 리듀서, 단계·시간 분할 실행기와 외부 저장소, 제품 화면, `perf.ts`(dev에서 이동). `src/ui/`로 공용 라벨·이름·초안·`Errors`·`Licenses` 이동, 제품 화면 하단 데이터 출처·라이선스 고지.
-- [ ] `src/main.tsx` 해시 진입, dev 지연 로드, e2e helper `/#/dev` 전환, `e2e/perf.spec.ts` 주석 갱신, 제품 perf 측정 함수.
+- [ ] `src/main.tsx` 해시 진입, dev 지연 로드, e2e helper `/#/dev` 전환, `e2e/perf.spec.ts` 주석 갱신, 제품 반응성 e2e 계측(`e2e/product-perf.spec.ts`).
 - [ ] 수용 기준의 고정 입력(판정이 바뀌는 조합)을 코어로 찾아 테스트·notes에 고정한다.
 - [ ] 반응성 측정 결과(환경·방법·10회 중앙값·최대 긴 태스크)를 notes에 기록한다.
 

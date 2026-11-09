@@ -5,3 +5,4 @@ dist/
 .cache/
 playwright-report/
 test-results/
+.playwright-cli/

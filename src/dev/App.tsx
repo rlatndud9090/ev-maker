@@ -1,25 +1,17 @@
 import { useEffect, useState } from 'react'
 import type { RegulationIndex, Snapshot } from '../data/schema'
 import { loadRegulationIndex, loadSnapshot } from '../data/loader'
-import {
-  INITIAL_ATTACKER,
-  INITIAL_CONDITIONS,
-  INITIAL_DEFENDER,
-  moveIdOf,
-  toConditions,
-  toPokemonSet,
-  type ConditionsDraft,
-  type SetDraft,
-} from './draft'
-import { namesOf } from './names'
-import { errorLines } from './labels'
-import { Errors } from './Errors'
+import { INITIAL_ATTACKER, INITIAL_CONDITIONS, INITIAL_DEFENDER, toConditions, type ConditionsDraft } from './draft'
+import { moveIdOf, toPokemonSet, type SetDraft } from '../ui/setDraft'
+import { namesOf } from '../ui/names'
+import { errorLines } from '../ui/labels'
+import { Errors } from '../ui/Errors'
 import { SetEditor } from './SetEditor'
 import { ConditionsEditor } from './ConditionsEditor'
 import { DamagePanel } from './DamagePanel'
 import { SpeedPanel } from './SpeedPanel'
 import { SweepPanel } from './SweepPanel'
-import { Licenses } from './Licenses'
+import { Licenses } from '../ui/Licenses'
 
 type Loaded = { status: 'loading' } | { status: 'ok'; snapshot: Snapshot } | { status: 'error'; errors: string[] }
 

@@ -1,4 +1,5 @@
-// 개발용 브라우저 성능 측정 훅(window.__perf). e2e가 호출한다. 코어 공개 API를 그대로 부른다.
+// 브라우저 성능 측정 훅(window.__perf). 진입(제품·dev)과 무관하게 설치되고 e2e가 호출한다. 코어 공개 API를 그대로 부른다.
+// 제품 반응성은 여기 없고 e2e/product-perf.spec.ts가 페이지 계측으로 잰다.
 import type { Snapshot, StatTable } from '../data/schema'
 import { calcDamage, sweepDamage, type PokemonSet } from '../core'
 import { loadSnapshot } from '../data/loader'

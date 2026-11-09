@@ -1,9 +1,9 @@
 import { useId } from 'react'
 import type { Snapshot } from '../data/schema'
 import { DEFAULT_THRESHOLDS, calcDamage, type BattleConditions, type DamageResultOk, type PokemonSet } from '../core'
-import { namesOf } from './names'
-import { ATTACK_BAND_LABEL, DEFENSE_BAND_LABEL, attempt, damagePercent, percent } from './labels'
-import { Errors } from './Errors'
+import { namesOf } from '../ui/names'
+import { ATTACK_BAND_LABEL, DEFENSE_BAND_LABEL, attempt, damagePercent, percent } from '../ui/labels'
+import { Errors } from '../ui/Errors'
 
 interface Props {
   snapshot: Snapshot

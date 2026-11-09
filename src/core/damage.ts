@@ -1,6 +1,6 @@
 // 대미지 판정. 엔진의 몇 타 판정은 쓰지 않고, 타별 난수 분포를 합성해 1타 확률을 직접 낸다.
 import type { MoveEntry, Snapshot } from '../data/schema'
-import type { BandThresholds, BattleConditions, DamageResult, PokemonSet } from './types'
+import type { BandThresholds, BattleConditions, DamageResult, EvalOptions, PokemonSet } from './types'
 import { normalizeConditions, type NormalizedConditions } from './conditions'
 import { CoreInputError, coreError } from './errors'
 import { assertMoveUsable, validateSet, type ResolvedSet } from './set'
@@ -72,9 +72,10 @@ export function calcDamage(
   moveId: string,
   conditions?: BattleConditions,
   thresholds?: Partial<BandThresholds>,
+  options?: EvalOptions,
 ): DamageResult {
-  const atk = validateSet(snapshot, attacker)
-  const def = validateSet(snapshot, defender)
+  const atk = validateSet(snapshot, attacker, options)
+  const def = validateSet(snapshot, defender, options)
   const move = snapshot.data.moves[assertMoveUsable(snapshot, atk, moveId)]
   const c = normalizeConditions(conditions)
   const t = normalizeThresholds(thresholds)

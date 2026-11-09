@@ -1,6 +1,6 @@
 // 스피드 엔진(자체 구현). 엔진 비공개 getFinalSpeed와 같은 4096 체인·반올림이되, 999 상한은 두지 않는다. 트릭룸은 다루지 않는다.
 import type { Snapshot } from '../data/schema'
-import type { BattleConditions, OutspeedResult, PokemonSet, SpeedOrder, SpeedResult, Terrain, Weather } from './types'
+import type { BattleConditions, EvalOptions, OutspeedResult, PokemonSet, SpeedOrder, SpeedResult, Terrain, Weather } from './types'
 import { normalizeConditions, type NormalizedConditions } from './conditions'
 import { CoreInputError, isPlainObject } from './errors'
 import { remainingBudget, validateSet, type ResolvedSet } from './set'
@@ -68,12 +68,14 @@ export function speedOf(r: ResolvedSet, c: NormalizedConditions, side: 'attacker
   return speed
 }
 
-function assertOrderBySpeed(r: ResolvedSet, field: string): void {
+/** prefix가 있으면 오류 field를 `${prefix}.ability`처럼 붙인다. */
+function assertOrderBySpeed(r: ResolvedSet, prefix?: string): void {
+  const field = (k: string) => (prefix === undefined ? k : `${prefix}.${k}`)
   if (ORDER_ABILITIES.includes(r.ability)) {
-    throw new CoreInputError(`${field}.ability`, `${r.ability}은 스피드와 별개로 행동 순서를 바꾸므로 순서 비교를 지원하지 않는다`)
+    throw new CoreInputError(field('ability'), `${r.ability}은 스피드와 별개로 행동 순서를 바꾸므로 순서 비교를 지원하지 않는다`)
   }
   if (r.item !== undefined && ORDER_ITEMS.includes(r.item)) {
-    throw new CoreInputError(`${field}.item`, `${r.item}은 스피드와 별개로 행동 순서를 바꾸므로 순서 비교를 지원하지 않는다`)
+    throw new CoreInputError(field('item'), `${r.item}은 스피드와 별개로 행동 순서를 바꾸므로 순서 비교를 지원하지 않는다`)
   }
 }
 
@@ -102,9 +104,15 @@ function firstMovePriority(snapshot: Snapshot, r: ResolvedSet): number | undefin
 }
 
 /** 행동 순서는 스피드만으로 정한다. 우선도는 각 세트 첫 기술의 값을 별도 정보로 돌려준다. */
-export function compareSpeed(snapshot: Snapshot, a: PokemonSet, b: PokemonSet, conditions?: BattleConditions): SpeedResult {
-  const ra = validateSet(snapshot, a)
-  const rb = validateSet(snapshot, b)
+export function compareSpeed(
+  snapshot: Snapshot,
+  a: PokemonSet,
+  b: PokemonSet,
+  conditions?: BattleConditions,
+  options?: EvalOptions,
+): SpeedResult {
+  const ra = validateSet(snapshot, a, options)
+  const rb = validateSet(snapshot, b, options)
   assertOrderBySpeed(ra, 'a')
   assertOrderBySpeed(rb, 'b')
   const c = withEffectiveWeather(normalizeConditions(conditions), ra, rb)
@@ -116,6 +124,16 @@ export function compareSpeed(snapshot: Snapshot, a: PokemonSet, b: PokemonSet, c
   if (ap !== undefined) out.attackerPriority = ap
   if (dp !== undefined) out.defenderPriority = dp
   return out
+}
+
+/**
+ * 한 세트가 스피드 비교에 쓰일 수 있는지. 세트 오류는 CoreError, 미구현 스피드 보정·행동 순서 특성/도구는
+ * CoreInputError(field 'ability' | 'item')로 던진다.
+ */
+export function checkSpeedSupport(snapshot: Snapshot, set: PokemonSet, options?: EvalOptions): void {
+  const r = validateSet(snapshot, set, options)
+  speedOf(r, withEffectiveWeather(normalizeConditions(undefined), r), 'attacker')
+  assertOrderBySpeed(r)
 }
 
 /**

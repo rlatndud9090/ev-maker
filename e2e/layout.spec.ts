@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { combo, openPage, region } from './helpers'
+import { combo, findOverlaps, openPage, region } from './helpers'
 
 test('@layout 가로 넘침 없음, 입력 컨트롤이 서로 겹치지 않음', async ({ page }) => {
   await openPage(page)
@@ -8,24 +8,7 @@ test('@layout 가로 넘침 없음, 입력 컨트롤이 서로 겹치지 않음'
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
   expect(overflow).toBeLessThanOrEqual(0)
 
-  const overlaps = await page.evaluate(() => {
-    const out: string[] = []
-    const boxes = [...document.querySelectorAll('section label, section h2, section legend')].map((el) => ({
-      el,
-      r: el.getBoundingClientRect(),
-    }))
-    for (let i = 0; i < boxes.length; i++) {
-      for (let j = i + 1; j < boxes.length; j++) {
-        const a = boxes[i]
-        const b = boxes[j]
-        if (a.el.contains(b.el) || b.el.contains(a.el)) continue
-        const x = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left)
-        const y = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top)
-        if (x > 1 && y > 1) out.push(`${a.el.textContent?.slice(0, 20)} ↔ ${b.el.textContent?.slice(0, 20)}`)
-      }
-    }
-    return out
-  })
+  const overlaps = await findOverlaps(page, 'section label, section h2, section legend')
   expect(overlaps).toEqual([])
 
   // 넓은 표는 자기 스크롤 영역 안에서만 넘친다.

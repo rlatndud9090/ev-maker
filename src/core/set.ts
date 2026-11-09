@@ -1,6 +1,6 @@
 // 세트 검증·메가 해석·실능치. 엔진의 조용한 무시에 기대지 않고 스냅샷 기준으로 전부 판정한다.
 import type { NatureEntry, Snapshot, SpeciesEntry, StatId, StatTable } from '../data/schema'
-import { CoreError, type CoreErrorDetail, type PokemonSet, type Status } from './types'
+import { CoreError, type CoreErrorDetail, type EvalOptions, type PokemonSet, type Status } from './types'
 import { CoreInputError, assertKnownKeys, hasOwn, integerInRange, isPlainObject, oneOf } from './errors'
 import { STAT_IDS, statTable, statValue, natureMultiplier } from './stats'
 
@@ -41,7 +41,8 @@ export function assertRegulation(snapshot: Snapshot, set: PokemonSet): void {
   }
 }
 
-function checkSp(snapshot: Snapshot, sp: unknown, errors: CoreErrorDetail[]): void {
+/** ignoreTotal이면 SP_TOTAL_EXCEEDED만 건너뛴다. */
+function checkSp(snapshot: Snapshot, sp: unknown, errors: CoreErrorDetail[], ignoreTotal: boolean): void {
   const { spMaxPerStat, spTotal } = snapshot.manifest.rules
   if (!isPlainObject(sp)) {
     errors.push({ code: 'INVALID_SP', field: 'sp', message: 'SP 표가 객체가 아니다' })
@@ -63,7 +64,7 @@ function checkSp(snapshot: Snapshot, sp: unknown, errors: CoreErrorDetail[]): vo
       total += v
     }
   }
-  if (allValid && total > spTotal) {
+  if (!ignoreTotal && allValid && total > spTotal) {
     errors.push({ code: 'SP_TOTAL_EXCEEDED', field: 'sp', message: `SP 합계 ${total}이 상한 ${spTotal}을 넘는다` })
   }
 }
@@ -146,7 +147,7 @@ export function assertMoveUsable(snapshot: Snapshot, r: ResolvedSet, moveId: unk
  * 세트를 스냅샷 기준으로 검증하고 해석한다. 세트 필드 위반은 모아서 CoreError 하나로,
  * 그다음 상태이상·랭크·현재 HP 위반은 CoreInputError로 던진다.
  */
-export function validateSet(snapshot: Snapshot, set: PokemonSet): ResolvedSet {
+export function validateSet(snapshot: Snapshot, set: PokemonSet, options?: EvalOptions): ResolvedSet {
   assertRegulation(snapshot, set)
   // 실능치 공식과 엔진 모두 레벨 50 고정이다.
   if (snapshot.manifest.rules.level !== FIXED_LEVEL) {
@@ -189,7 +190,7 @@ export function validateSet(snapshot: Snapshot, set: PokemonSet): ResolvedSet {
   const nature = lookup(data.natures, raw.nature)
   if (!nature) errors.push({ code: 'UNKNOWN_NATURE', field: 'nature', message: `성격 ${String(raw.nature)}이 없다` })
 
-  checkSp(snapshot, raw.sp, errors)
+  checkSp(snapshot, raw.sp, errors, options?.ignoreSpTotal === true)
   if (base) checkMoves(snapshot, base, raw.moves, errors)
 
   if (raw.mega !== undefined && typeof raw.mega !== 'boolean') {

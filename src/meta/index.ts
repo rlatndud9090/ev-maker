@@ -5,6 +5,7 @@ export {
   ladderSource,
   representativeAssumption,
   observedSpreadAssumption,
+  parseSpreadKey,
   resolveAssumption,
   setDisplayNames,
   topAssumptions,

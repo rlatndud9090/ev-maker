@@ -1,10 +1,10 @@
 import { useId } from 'react'
 import type { Snapshot, StatId } from '../data/schema'
 import { STAT_IDS, validateSet, type Status } from '../core'
-import { BOOST_STATS, MOVE_SLOTS, parseNumber, toPokemonSet, type BoostStat, type SetDraft } from './draft'
-import { learnsetOptions, namesOf, pickSpecies } from './names'
-import { STAT_LABEL, STATUS_LABEL, attempt, keysOf } from './labels'
-import { Errors } from './Errors'
+import { BOOST_STATS, MOVE_SLOTS, parseNumber, toPokemonSet, type BoostStat, type SetDraft } from '../ui/setDraft'
+import { learnsetOptions, namesOf, pickSpecies } from '../ui/names'
+import { STAT_LABEL, STATUS_LABEL, attempt, keysOf } from '../ui/labels'
+import { Errors } from '../ui/Errors'
 
 interface Props {
   title: string
