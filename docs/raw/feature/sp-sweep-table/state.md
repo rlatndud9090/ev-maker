@@ -1,9 +1,9 @@
 ---
 title: "SP 구간 판정 표 화면(메타 카드 리스트)"
 date: "2026-11-07"
-stage: adr-review
-prd_status: review
-adr_status: proposed
+stage: pre-approved
+prd_status: pre-approved
+adr_status: pre-accepted
 ---
 
 # 작업 단계 원장: SP 구간 판정 표 화면(메타 카드 리스트)
@@ -45,7 +45,7 @@ adr_status: proposed
 - 2026-11-08 prd-review: 리뷰 BLOCKER 3(사용자 결정 4건 추가 인터뷰)·MAJOR 6·MINOR 7, 재검증 2렌즈(BLOCKER 1·MAJOR 8·MINOR 9) 반영
 - 2026-11-08 prd-review→adr-draft: adr-helper 진입(결정 1 화면 배치는 디자인 결정 레인, 2~4는 architect)
 - 2026-11-08 adr-draft→adr-review: 결정 2~4(architect, 실측), 결정 1 = 사용자 3단계 선택(전체 layout A 좌 사이드바 / 설정 C SP 슬라이더 / 상대 목록 D 변형 압축 목록+아래 아코디언 상세), PRD 정합 개정
-
+- 2026-11-09 pre-approved: 사용자 명시 사전 승인 (harness:approve)
 ## 승인 이벤트
 
 <!-- 이 블록은 `npm run harness:approve`만 기록한다. 사용자의 명시 승인 발화가
@@ -54,4 +54,5 @@ adr_status: proposed
      status의 정합성을 교차검증한다. 손으로 위조하면 여러 아티팩트를 동시에 조작해야
      하며 감사에 드러난다. -->
 
-(아직 사전 승인 없음 — 빌드 진입 불가)
+- PREAPPROVAL prd 2026-11-09 harness:approve :: 사전 승인
+- PREAPPROVAL adr 2026-11-09 harness:approve :: 사전 승인

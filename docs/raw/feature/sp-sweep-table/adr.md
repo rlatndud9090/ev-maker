@@ -1,8 +1,8 @@
 ---
 title: "SP 구간 판정 표 화면(메타 카드 리스트)"
 date: "2026-11-07"
-status: proposed # proposed | pre-accepted | accepted | deprecated | superseded
-approval:
+status: pre-accepted
+approval: "user:2026-11-09:사전 승인"
 related_prd: "./prd.md"
 unit_type: feature
 branch: "feature/sp-sweep-table"
