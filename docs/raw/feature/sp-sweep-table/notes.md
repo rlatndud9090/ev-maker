@@ -114,8 +114,9 @@ Status: draft
   - 두 전략의 표시 카드 수가 다섯 세트 모두 같았다(양 끝 판정이 같은데 중간이 다른 행 0). 어흥염 세트는 기술 합법성 문제로 측정에서 빠졌다.
   - 해석: 33칸 전부를 사용률 순으로 계산하면 첫 표시 카드까지 탭의 최대 약 80%(엘풍 60/76)를 계산한다. 내 랭크 수단 행이 붙는 최악은 브라우저 약 0.76s 환산으로 500ms를 넘을 수 있어, ADR 결정 3에 양 끝 선판정 순서를 넣었다.
 - **랭크 변화 수단 초기 목록(카드 모델 데이터 상수의 초안, ADR 결정 2에서 이동)**
-  - 상대 하락: 위협(특성, A−1), 막말내뱉기(A−1·C−1), 애교부리기·깃털댄스(A−2), 덤벼들기(A−1), 바크아웃·매지컬플레임·소울크래시·벌레의저항(C−1), 싫은소리(B−2), 거짓울음·금속음(D−2), 얼어붙은바람·일렉트릭네트·암석봉인·땅고르기·달려들기(S−1), 겁나는얼굴(S−2).
+  - 상대 하락: 위협(특성, A−1), 막말내뱉기(A−1·C−1), 애교부리기·깃털댄스(A−2), 덤벼들기(A−1), 바크아웃·매지컬플레임·소울크래시·벌레의저항(C−1), 싫은소리(B−2), 거짓울음(`faketears`)·금속음(D−2), 얼어붙은바람·일렉트릭네트·암석봉인·땅고르기·달려들기(S−1), 겁나는얼굴(S−2).
   - 자기 상승: 칼춤(A+2), 나쁜음모(C+2), 철벽(B+2), 망각술(D+2), 고속이동(S+2), 용의춤(A+1·S+1), 명상(C+1·D+1), 벌크업·똬리틀기(A+1·B+1), 나비춤(C+1·D+1·S+1), 껍질깨기(A·C·S +2, B·D −1), 소울비트(A·B·C·D·S +1), 저주(고스트 타입이 아닌 사용자만, A+1·B+1·S−1), 정리정돈(A+1·S+1), 성장(A+1·C+1, 날씨 없음 기준), 멀리짖기(A+1), 플레어송(C+1), 니트로차지·개척하기·아쿠아스텝(S+1), 가속(특성, S+1).
+  - 스냅샷 id 대조(2026-11-09 1차 구현 뒤 정정): 거짓울음은 `faketears`이고 스냅샷에 있으며 `RANK_MEANS`에 들어 있다. 앞서 "`fakecry`는 스냅샷에 없음"이라 적은 것은 잘못된 id로 찾은 결과였다.
   - 반응
     - 모든 하락 차단: 클리어바디·하얀연기·미러아머(반사 없이 차단만)
     - 괴력집게 A 하락 차단, 부풀린가슴 B 하락 차단
@@ -349,9 +350,13 @@ export interface ErrorReason {
 
 export type TabStatus = { kind: 'ok' } | { kind: 'my-set-error'; reasons: readonly ErrorReason[] }
 
-/** 행·카드가 되지 않는 기술의 안내(분류가 능력치에 따라 바뀌는 기술 — 셸암즈). 요약·외 k행에 세지 않는다 */
+/**
+ * 행·카드가 되지 않는 기술의 안내. 요약·외 k행에 세지 않는다.
+ * category-varies: 분류가 능력치에 따라 바뀌는 기술(셸암즈, 내 것·상대 것).
+ * attacker-hp-dependent: 대미지가 내 HP로 정해지는 기술(목숨걸기, 공격 탭 내 기술만 — 상대 것은 묶음 키에 상대 H를 넣어 계산한다).
+ */
 export interface MoveNotice {
-  kind: 'category-varies'
+  kind: 'category-varies' | 'attacker-hp-dependent'
   moveId: string
   owner: 'me' | 'opponent'
 }
@@ -507,7 +512,7 @@ export interface TabPlan {
   fixed: Readonly<Record<string, FixedSpec>>
   /** 메타 목록 안에 있어 목록 밖 타겟으로 받지 않은 rosterId */
   customTargetConflicts: readonly string[]
-  /** 내 기술의 분류 가변 안내(탭 안내) */
+  /** 내 기술의 계산하지 않음 안내(분류 가변·내 HP 의존, 탭 안내) */
   notices: readonly MoveNotice[]
 }
 
@@ -651,7 +656,7 @@ export interface TabView {
   /** 3단계까지 완료(false면 요약에 "확인 중") */
   complete: boolean
   customTargetConflicts: readonly string[]
-  /** 내 기술의 분류 가변 안내(탭 안내) */
+  /** 내 기술의 계산하지 않음 안내(분류 가변·내 HP 의존, 탭 안내) */
   notices: readonly MoveNotice[]
 }
 ```
@@ -780,6 +785,7 @@ export function toCardInput(state: AppState, game: Snapshot, view: MetaView): Ca
   - `calcDamage`·`compareSpeed`가 두 세트 모두 `validateSet(…, options)`. `minSpToOutspeed`·`finalSpeed`·`computeStats`·`spNoGainCells`는 그대로.
   - `sweep.ts`: 기존 내부 `run`을 `judgeDamage`로 승격(범주 규칙 단일 출처), `judgeSpeed`도 같은 방식. `sweep`은 `judgeOverBudget`이면 기준 세트를 `ignoreSpTotal`로 검증하고 `sp > remaining` 칸도 judge(세 번째 인자 true)해 `{ kind: 'ok', …, overBudget: true }`. `boundariesOf`는 그대로(ok 칸끼리 비교하므로 예산 밖 칸 포함).
   - 허용 능력치: 공격측 `['atk','spa','def']`, 방어측 `['hp','def','spd','atk']`.
+  - 기존 `src/core/sweep.test.ts`의 "방어측 atk 거부" 단언(약 131행)은 방어측 atk 허용 계약(상대 속임수)과 충돌해 1차 구현에서 대상을 `'atk'` → `'spa'`(여전히 거부)로 바꿨다. "기존 테스트 무변경"의 유일한 예외다.
   - `engine.ts`: `SPEED_DEPENDENT_MOVES`·`SPEED_DEPENDENT_ATTACKER_ABILITIES` export, `engineMoveOverrides(moveId: string): { defensiveStat?: string; offensiveStat?: string; offensivePokemon?: string }` 추가(`engineName('moves', id)` → `gen.moves.get(toID(...))`의 `overrideDefensiveStat`·`overrideOffensiveStat`·`overrideOffensivePokemon`).
   - `moveRefs.ts`: 방어 쪽 = `engineMoveOverrides(id).defensiveStat === 'def'`면 def, 아니면 분류(Physical → def, Special → spd). 공격 쪽은 엔진이 기술 이름으로 분기(`@smogon/calc 0.12.0 mechanics/champions` `move.named('Foul Play')`·`move.named('Body Press')`)하므로 export 상수 `OFFENSE_BY_NAME = { foulplay: { owner: 'target', stat: 'atk' }, bodypress: { owner: 'self', stat: 'def' } }`, 없으면 분류(Physical → atk, Special → spa). `CATEGORY_VARIES = ['shellsidearm']`(엔진 `move.named('Shell Side Arm')`). `speedDependent = SPEED_DEPENDENT_MOVES.includes(id)`. `attackerStats`·`defenderStats`는 위에서 파생하고, 사용자 HP로 대미지가 정해지는 기술(목숨걸기 `finalgambit` 등 — 섭동 테스트로 확정)은 `attackerStats`에 hp, `speedDependent`면 양쪽에 spe. 분류 가변이면 양쪽에 atk·spa·def·spd를 넣어 보수적으로.
   - `checkSpeedSupport`: `validateSet(…, options)` → 기본 조건으로 `speedOf` → 행동 순서 특성·도구 검사(`assertOrderBySpeed`와 같은 목록, field 'ability'/'item').
@@ -798,7 +804,7 @@ export function toCardInput(state: AppState, game: Snapshot, view: MetaView): Ca
 - `planTab(input, tab)` 규칙
   1. **내 세트:** `validateSet(game, mySet)` 실패 → `status: my-set-error`(이유 = `CoreError.details` 각각, `CoreInputError`는 `{code:'INPUT', field, message}`), 카드 없음. 스피드 탭은 `checkSpeedSupport(game, mySet)`도. 내 세트 boosts는 0.
   2. **상대 목록:** `filters.selected`가 비지 않으면 `view.ranking` 중 그 id만(사용률 순), 비면 `view.ranking.slice(0, topN)`. 목록 밖 타겟은 `view.entry(rosterId)`가 있으면 `customTargetConflicts`로 보내고 건너뛴다.
-  3. **참조·분류:** 기술마다 `moveStatRefs`, 변화기는 건너뛴다. 분류 = `refs.defense === 'def' ? 'physical' : 'special'`. `categoryVaries`(셸암즈)면 카드·행·필터를 만들지 않고 `MoveNotice{kind:'category-varies'}`만 남긴다: 내 기술 → `TabPlan.notices`(탭 안내), 상대 기술(방어 탭) → 그 상대의 모든 카드 `notices`(카드 머리). 방어 탭 상위 5기 자리는 다음 순위로 채우지 않는다. 요약·k에 세지 않는다(§6 결정 5).
+  3. **참조·분류:** 기술마다 `moveStatRefs`, 변화기는 건너뛴다. 분류 = `refs.defense === 'def' ? 'physical' : 'special'`. `categoryVaries`(셸암즈)면 카드·행·필터를 만들지 않고 `MoveNotice{kind:'category-varies'}`만 남긴다: 내 기술 → `TabPlan.notices`(탭 안내), 상대 기술(방어 탭) → 그 상대의 모든 카드 `notices`(카드 머리). 방어 탭 상위 5기 자리는 다음 순위로 채우지 않는다. 요약·k에 세지 않는다(§6 결정 5). 공격 탭의 내 기술 중 대미지가 내 HP로 정해지는 기술(`refs.offense.owner === 'self'`이고 `attackerStats`에 hp — 목숨걸기)도 같은 방식으로 `MoveNotice{kind:'attacker-hp-dependent', owner:'me'}`만 남긴다(§6 결정 12).
   4. **탭별 행**
      - 공격 탭: 내 세트 기술(슬롯 순). `offense.owner === 'target'`(내 속임수)은 행 없이 그 분류 카드에 `FixedSpec`. 그 밖은 기본 행 `sweep: {side:'attacker', stat: offense.stat}`(바디프레스 def), attacker = 내 세트, defender = 카드 대표.
      - 방어 탭: 상대 `entry.moves.shares`를 점유율 내림(동률 id 순), 스냅샷 분류 Status를 뺀 상위 5개(부족하면 있는 만큼). 스냅샷에 없는 기술은 그 자리 오류 행(다음 순위로 채우지 않음). 배울 수 없음·엔진 미지원은 판정 시 오류로 행에 담긴다(T2b). 기술 × 묶음마다 `ExtremeSpec{stats: ['hp', refs.defense]}`와, 그 필터를 `gate`로 둔 H 행(`sweep: {side:'defender', stat:'hp'}`)·B/D 행. 상대 속임수 행의 `dependsOn`에 내 atk 포함(`relevantStats`가 자동으로 낸다). 목록 밖 타겟은 상위 5 대신 `CustomTarget.moves`의 공격기(지정 순서)가 상대 기술이다.
@@ -806,7 +812,7 @@ export function toCardInput(state: AppState, game: Snapshot, view: MetaView): Ca
      - conditions(전 탭 공통): `{ attacker: { tailwind: <공격측이 나면 myTailwind, 아니면 opponentTailwind> }, defender: { tailwind: <반대> } }`. 그 밖은 코어 기본값.
   5. **묶음(`bundlesOf`):** 키 능력치 = 공격 탭 `['hp', 상대 방어 능력치]`, 방어 탭 = 그 분류 기술들의 `offense.owner === 'self'`인 `offense.stat` 합집합(속임수 제외, 비면 키 없음 = "배분 무관" 묶음 1개), 스피드 탭 `['spe']`. `entry.spreads.kept` 각 배분을 `parseSpreadKey`로 풀어 (SP, `natureMultiplier` → plus/neutral/minus) 튜플로 묶어 점유율 합산. 대표 = 묶음 안 점유율 최대(동률 키 순) 보존 배분 인덱스 → `observedSpreadAssumption(view, id, idx)` → `resolveAssumption`(불가면 카드 `state:'error'`). 정렬 = 점유율 내림 → 대표 배분 키 순. `share >= bundleShareMin`인 것을 분류당 `cardsPerCategory`장까지, 없으면 최대 묶음 1장 `minority: true`. `retention = entry.spreads.keptShare`. 스피드 의존 기술은 대표의 S로 계산(키에 S 없음).
   6. **랭크 행(`rank.ts`·`rankMeans.ts`)**
-     - 데이터 상수 = 이 notes "랭크 변화 수단 초기 목록"의 하락·상승·반응 전부(스냅샷 id). 스냅샷에 없는 id(현재 확인: 특성 `simple`, 기술 `fakecry`)는 넣지 않고, 테스트가 "상수의 모든 id가 스냅샷에 있다"를 단언한다. 저주는 사용자 타입에 ghost가 없을 때만, 성장은 날씨 없음 기준 A+1·C+1.
+     - 데이터 상수 = 이 notes "랭크 변화 수단 초기 목록"의 하락·상승·반응 전부(스냅샷 id). 스냅샷에 없는 id(현재 확인: 특성 `simple`)는 넣지 않고, 테스트가 "상수의 모든 id가 스냅샷에 있다"를 단언한다. 저주는 사용자 타입에 ghost가 없을 때만, 성장은 날씨 없음 기준 A+1·C+1.
      - 수단 후보: 상대 = `entry.abilities`·`entry.moves.shares`에서 점유율 ≥ `rankShareMin`이고 상수에 있는 것(메가 항목 특성 분포는 메가 폼 기준). 나 = 내 세트 기술 + 계산 특성(메가면 메가 폼 특성) 중 상수에 있는 것(`share` 없음). 목록 밖 타겟(상대) = 그 프리셋 세트의 기술(`CustomTarget.moves`) + 계산 특성 중 상수에 있는 것을 점유율 기준 없이(`owner: 'opponent'`, `share` 없음 = "사용자 지정").
      - `applyMeans` 순서: 효과 대상의 계산 특성·도구로 ① 차단(클리어바디·하얀연기·미러아머 = 상대가 낮춘 하락 전부 차단·반사 없음, 괴력집게 A 하락·부풀린가슴 B 하락 차단, 정신력·마이페이스·둔감·배짱 = 위협만 차단) → ② 변환(심술꾸러기 부호 반전, 자기 기술 포함) → ③ 반응(오기 A+2·승기 C+2는 상대가 낮춘 하락이 실제 적용될 때 수단당 1회, 파수견은 위협을 받으면 하락 대신 A+1, 주눅은 위협을 받으면 S+1, 하양허브는 적용 후 음수인 능력치를 0으로 하고 소비) → ④ −6~+6 자르기. 자기 기술의 자기 하락은 오기·승기를 부르지 않는다. 기준은 Showdown 동작, 테스트로 고정(위협×오기 = A+1, 위협×클리어바디 = 효과 없음 → null, 껍질깨기×하양허브 = B·D 0, 심술꾸러기 칼춤 = A−2, 위협×파수견 = A+1).
      - 적용 탭 규칙: 반응 후 랭크가 바뀐 능력치가 그 카드 참조 능력치(공격 탭: 내 공격·상대 방어, 방어 탭: 상대 공격·내 방어, 스피드 탭: 양쪽 S)에 하나라도 들면 그 카드 기본 행마다 랭크 행 1개(수단 하나 = 행 하나, 반복·조합 없음). 확률 부가효과·메테오빔/일렉트로빔 특공 상승·순풍은 수단이 아니다. 하양허브가 소비됐고 그 행 기술이 연속기(스냅샷 `multihit` 있음)면 행 `error: WHITE_HERB_MULTIHIT`. 방어 탭 랭크 행은 자기 극단 필터를 따로 가진다.
@@ -859,7 +865,7 @@ export function toCardInput(state: AppState, game: Snapshot, view: MetaView): Ca
   - `setDisplaySp`: 활성 탭만 `assembleTab(plan, results, sp)` → notify. `setActiveTab`: 우선순위만 바꾸고 그 탭 뷰가 있으면 바로 notify.
   - 예상 밖 예외: 루프를 try/catch로 감싸 그 탭을 `fatal`로 두고 나머지 탭은 계속(`console.error` 1회).
   - `getSnapshot`은 바뀔 때만 새 객체(`useSyncExternalStore` 무한 렌더 방지).
-  - `createBrowserScheduler`: `globalThis.scheduler?.yield`가 함수면 그것, 아니면 MessageChannel 한 번 왕복 Promise. `useExecutor`: `useState(() => createExecutor({ scheduler: createBrowserScheduler() }))` + 언마운트 dispose + `useSyncExternalStore`.
+  - `createBrowserScheduler`: MessageChannel 한 번 왕복 Promise(매크로태스크). 처음엔 `scheduler.yield`가 있으면 그것을 썼으나 계산 중 프레임이 약 9fps로 떨어져 1차 구현 뒤 MessageChannel만 쓰도록 바꿨다("반응성 측정" 절, ADR 결정 3 개정). `useExecutor`: `useState(() => createExecutor({ scheduler: createBrowserScheduler() }))` + 언마운트 dispose + `useSyncExternalStore`.
 - 테스트(가짜 scheduler·now, 실제 데이터 소형 입력): 우선순위(활성 탭 1·2단계가 먼저), 시간 예산을 넘기면 양보, 세대 변경 후 이전 세대 결과 비혼입, superseded 유지 → 첫 카드 사건 후 교체, 최종 뷰 = `buildTabView`, 활성 탭 변경 시 우선순위 전환, `setDisplaySp`가 작업 없이 뷰만 바꿈, 내부 예외 → fatal.
 - 위험: 실제 브라우저에서 조각 + 조립 + React 렌더 합이 100ms를 넘지 않는지는 T5가 측정한다.
 
@@ -950,7 +956,7 @@ export function toCardInput(state: AppState, game: Snapshot, view: MetaView): Ca
 | 9 | 접힌 줄 대표 행·외 k행·갱신 중/계산 불가, 펼친 상세 | assemble | product | T2b·T4b·T5 |
 | 10 | 상위 N 10·선택 2마리·커스텀 유지 | plan·acceptance | product | T2a·T5 |
 | 11 | 목록 밖 추가 패널(기술 필수·[추가] 비활성)·워시로토무 3장(방어 탭은 기술 분류마다)·변화 없음 행 유지·SP/기술 편집 갱신·마지막 기술 유지·점유율 미표시 | presets·plan·state·acceptance(F6·F10) | product | T2a·T4b·T5 |
-| 11a | 셸암즈는 카드·행이 되지 않고 안내 문구로만 | plan·acceptance(F8) | — | T2a·T6b |
+| 11a | 셸암즈·공격 탭 내 목숨걸기는 카드·행이 되지 않고 안내 문구로만 | plan·acceptance(F8, 목숨걸기는 인라인 루카리오 세트) | — | T2a·T6b |
 | 12 | 오류 격리(행·카드·탭) | plan·assemble·acceptance(F7·F8) | product(탭 안내) | T2a·T2b·T6b |
 | 13 | Bo3·월 변경 → 그 스냅샷·출처 | acceptance(합성 인덱스) | product(Bo3) | T6b·T5 |
 | 14 | 규칙 위반 한국어 안내·한국어 부분 검색 | koErrors·search | product | T4b·T5 |
@@ -978,7 +984,7 @@ git diff --stat package.json                             # 무변경
 npm run test:e2e                                         # 빌드 선행 + preview: dev·제품·레이아웃·성능·번들·오프라인
 ```
 
-### 6. 결정됨 — 빌드 중 개정 11건 (2026-11-09 사용자 확인, PRD/ADR 본문 반영 완료)
+### 6. 결정됨 — 빌드 중 개정 11건 + 1차 구현 뒤 1건 (2026-11-09 사용자 확인, PRD/ADR 본문 반영 완료)
 
 1. **관여 능력치의 S 축소(ADR 결정 3 캐시 키).** S는 스피드 의존 기술(`MoveStatRefs.speedDependent`)이거나 공격측 계산 특성이 `SPEED_DEPENDENT_ATTACKER_ABILITIES`일 때만 양쪽에 넣는다. 캐시 키와 드래그 "갱신 대기"가 같은 `relevance.ts relevantStats`를 쓴다. 누락은 속성 테스트(T2b)와 F11로 지킨다.
 2. **Long Task 측정 창(PRD 반응성).** 판정은 계산 구간(`cards:compute-start` mark ~ 탭 완료)에만 적용한다. 부트스트랩(스냅샷·메타 로드·첫 렌더) Long Task는 따로 기록·보고하고 100ms를 넘으면 원인을 표기한다(T3 mark, T5 측정).
@@ -991,6 +997,7 @@ npm run test:e2e                                         # 빌드 선행 + previ
 9. **세대 교체 표시(ADR 결정 3 취소).** 새 세대 첫 카드 사건 전까지 이전 뷰를 흐리게 + "갱신 중"(`superseded`, DOM `data-superseded`).
 10. **특성 원인 숨은 의존(ADR 결정 2 메모).** 테스트가 찾으면 `relevance.ts`에 특성 규칙을 더한다.
 11. **export 추가(ADR 결정 2 코어 확장).** `judgeDamage`·`judgeSpeed`·`checkSpeedSupport`·`engineMoveOverrides`·스피드 의존 상수, 메타 `parseSpreadKey` 승인.
+12. **내 목숨걸기(2026-11-09 1차 구현 뒤 사용자 결정, PRD 카드 단위·ADR 결정 2).** 공격 탭에서 A/C로 스윕하면 33칸이 같아 "항상 …"으로 잘못 요약되므로, 셸암즈처럼 카드·행을 만들지 않고 탭 안내(`MoveNotice.kind: 'attacker-hp-dependent'`)로만 남긴다. 기준은 코어 `moveStatRefs`의 `attackerStats`(hp, 목록 `ATTACKER_HP_MOVES`)이고 코어 계약은 그대로다. 상대 목숨걸기(방어 탭)는 상대 H를 묶음 키에 넣어 계산한다.
 
 ## 수용 기준 고정 입력 (T6a, 2026-11-09)
 
@@ -1028,21 +1035,26 @@ npm run test:e2e                                         # 빌드 선행 + previ
   - 계산 구간 Long Task = 그 세대 `cards:compute-start` mark(`detail.generation`) ~ 그 탭 완료와 겹친 Long Task. 부트스트랩 = 첫 mark 전 Long Task(단계는 엔트리 평가·데이터 청크·메타 뷰 준비·첫 렌더로 시각 구분).
   - 계측 자체 확인: 측정 뒤 페이지 `setTimeout` 안의 120ms 바쁜 루프가 Long Task(≥110ms)로 잡히는지 단언한다. Long Tasks API는 50ms 이상만 보고하므로 아래 0ms는 "50ms 이상 작업 없음"이다.
   - 예시 세트는 SP 합계 66/66(잔여 0)이라 +4가 모두 막힌다: A 32→28, S 32→28, H는 2라 −4가 0에서 멈춰 **2→0(−2)**로 쟀다.
-- **결과(10회, ms):**
+- **결과(10회, ms, 2026-11-09 양보 수단을 MessageChannel로 바꾼 뒤 `npm run test:e2e` 전체 실행 1회분):**
 
   | 시나리오 | 첫 카드 중앙값 (≤ 500) | 전체 완료 중앙값 (≤ 3000) | 계산 구간 최대 Long Task (≤ 100, 10회 모두) | 부트스트랩 최대 Long Task |
   |---|---|---|---|---|
-  | 공격 탭 처음 열기 | 114 (109~165) | 848 (839~920) | 0 | 0 |
-  | 방어 탭 처음 열기 | 108 (107~111) | 310 (308~324) | 0 | 0 |
-  | 스피드 탭 처음 열기 | 15 (14~16) | 182 (181~195) | 0 | 0 |
-  | 공격 A 32→28 놓기 | 26 (24~29) | 46 (41~49) | 0 | — |
-  | 방어 H 2→0 놓기 | 45 (43~45) | 138 (136~142) | 0 | — |
-  | 스피드 S 32→28 놓기 | 32 (31~33) | 52 (51~56) | 0 | — |
+  | 공격 탭 처음 열기 | 117 (105~169) | 882 (855~963) | 0 | 0 |
+  | 방어 탭 처음 열기 | 111 (109~114) | 321 (318~337) | 0 | 0 |
+  | 스피드 탭 처음 열기 | 15 (14~16) | 192 (190~204) | 0 | 0 |
+  | 공격 A 32→28 놓기 | 26 (26~32) | 47 (46~48) | 0 | — |
+  | 방어 H 2→0 놓기 | 44 (38~46) | 147 (143~152) | 0 | — |
+  | 스피드 S 32→28 놓기 | 31 (30~32) | 50 (48~51) | 0 | — |
 
   - 판정: 6개 시나리오 모두 목표 충족. 부트스트랩 Long Task도 50ms 이상이 한 번도 없어 원인 표기 대상 없음.
-  - 보조(계산 중 입력): 공격 탭 계산 중(첫 mark 뒤·공격 탭 완료 전) 실제 마우스(CDP 입력)로 방어 탭을 누를 때 입력 발생 → click 처리 시작 지연 중앙값 8ms, 최대 13ms(10회, ≤ 100ms 단언).
+  - 보조(계산 중 입력): 공격 탭 계산 중(첫 mark 뒤·공격 탭 완료 전) 실제 마우스(CDP 입력)로 방어 탭을 누를 때 입력 발생 → click 처리 시작 지연 중앙값 8ms, 최대 14ms(10회, ≤ 100ms 단언).
 - **관찰(목표 밖, 후속 판단용):**
-  - 계산 중에는 렌더 프레임이 약 115ms 간격으로만 나온다(rAF 간격 탐색 실측 101~119ms, 공격 탭 첫 로드 1.1초 동안 19프레임). 실행기가 `scheduler.yield()`로 조각을 이어 가는데, 그 이어달리기가 일반 우선순위 작업과 렌더 기회보다 앞서 Chromium의 렌더 기아 방지(약 100ms)가 걸릴 때만 프레임이 나오는 것으로 보인다. 입력 이벤트는 위처럼 바로 처리되지만, 입력 뒤 화면 반영과 일반 작업(setTimeout·CDP 평가 등)은 계산이 끝나거나 다음 기아 방지 프레임까지 밀린다. Long Task 판정(≤ 100ms)에는 걸리지 않으나 PRD "계산 중에도 입력·스크롤·탭 전환이 멈추지 않는다"의 체감(약 9fps)과는 거리가 있어 T3(`src/app/scheduler.ts`) 담당 판단이 필요하다. 같은 이유로 측정 스크립트는 "공격 첫 카드 직후 클릭"을 테스트 쪽 대기(CDP)로 만들 수 없어(실측 약 0.9초 지연, 그 사이 다른 탭이 이미 완료돼 2ms로 잘못 잡혔다) 페이지 안 MutationObserver 콜백에서 누른다.
-  - 400px 결과 영역을 스크롤하면 sticky 툴바 위쪽 몇 px 틈으로 카드 문구가 비친다(`test-results/…/product-400-scrolled.png`). 겹침 검사 대상은 아니며 T4b CSS 판단.
+  - 계산 중 렌더 프레임과 400px sticky 틈은 아래 "계산 중 프레임 개선"에서 해결했다(1차 측정 때 관찰).
+- **계산 중 프레임 개선(2026-11-09, 1차 구현 뒤):**
+  - 측정: `e2e/product-perf.spec.ts` "반응성 보조: 공격 탭 계산 중 렌더 프레임 간격"이 공격 탭 첫 로드의 계산 구간(compute-start mark ~ 공격 탭 완료)에서 rAF 간격 회차 중앙값을 10회 재고 모두 ≤ 34ms(대략 30fps 이상)를 단언한다. 같은 구간에서 연달아 건 `setTimeout(0)`의 예약 → 실행 지연도 기록한다.
+  - 전: 실행기가 `scheduler.yield()`로 조각을 이어 갔을 때 rAF 간격 회차 중앙값 100~117ms(약 9fps), 회차 최대 117ms, `setTimeout(0)` 지연 회차 최대 857~889ms. `scheduler.yield` 이어달리기가 렌더 기회·일반 작업보다 앞서, Chromium 렌더 기아 방지(약 100ms)가 걸릴 때만 프레임이 나왔다.
+  - 후: `src/app/scheduler.ts`가 MessageChannel 왕복(매크로태스크)만 쓴다(ADR 결정 3 개정). rAF 간격 회차 중앙값·최대 모두 17ms(약 60fps), `setTimeout(0)` 지연 회차 최대 34~40ms. 첫 카드·완료·Long Task는 위 표대로 목표 안이고, 공격 탭 완료 중앙값은 848 → 882ms(+4%)로 렌더 몫만큼 늘었다.
+  - 측정 스크립트가 "공격 첫 카드 직후 클릭"을 페이지 안 MutationObserver 콜백에서 누르는 방식은 그대로 둔다(CDP 왕복 지연 없이 "직후"를 만든다).
+  - 400px sticky 틈: sticky 배경이 반투명(`rgba(…, 0.97)`)이라 스크롤된 카드 문구가 비쳤다. `--sticky-bg`를 불투명 `var(--bg)`로 바꾸고 안전 영역 위쪽을 `box-shadow`로 덮었다. `e2e/product-layout.spec.ts`가 400·1280px에서, sticky 줄이 화면 맨 위에 붙은 상태로 그 줄 높이까지 `elementFromPoint`에 결과 패널 요소가 없고 배경이 불투명함을 단언한다.
 - **측정하지 않은 것:** CPU 스로틀(저사양 기기), Firefox·WebKit, 상위 N 기본값 외 설정. 측정 기기가 고성능(M4 Pro)이라 저사양에서 여유는 이 값으로 보장되지 않는다.
 - **e2e 그 밖(T5):** `e2e/bundle.spec.ts`의 dev 고유 문자열은 브리핑의 `스윕 대상` 대신 `SP 스윕`을 쓴다 — `스윕 대상`은 카드 모델 오류 문구("행 …에 스윕 대상이 없다", `src/cards/{assemble,rowTask,key}.ts`)로 엔트리 번들에도 들어 있어 dev 고유가 아니다.

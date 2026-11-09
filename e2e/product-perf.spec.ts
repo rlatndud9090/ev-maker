@@ -40,7 +40,7 @@ declare global {
 /**
  * 페이지 스크립트보다 먼저 계측을 건다. 시각은 모두 performance.now()(navigation start = 0).
  * clickTab이 있으면 공격 탭 첫 카드 사건을 본 MutationObserver 콜백 안에서 바로 그 탭을 누른다.
- * 계산 중에는 CDP 평가가 계산 조각 뒤로 밀려(실측 약 0.9초) 테스트 쪽 대기로는 "직후"를 만들 수 없다.
+ * 테스트 쪽 대기는 CDP 왕복만큼 늦어 "직후"가 흐려지므로 페이지 안에서 누른다.
  */
 function installProbe(clickTab: string | null) {
   const probe: Probe = { panel: [], panelAppearedAt: null, longTasks: [], pointerup: [], clickedAt: null }
@@ -266,4 +266,67 @@ test(`반응성 보조: 공격 탭 계산 중 실제 마우스 클릭의 입력 
   console.log(`[product-perf] chromium ${browser.version()} ${line}`)
   test.info().annotations.push({ type: 'perf', description: line })
   expect(Math.max(...delays)).toBeLessThanOrEqual(LONG_TASK_LIMIT_MS)
+})
+
+interface FrameProbe {
+  frames: number[]
+  /** 0ms setTimeout을 연달아 걸어 잰 예약 → 실행 지연 */
+  timers: { at: number; lag: number }[]
+  attackCompleteAt: number | null
+}
+
+/** 계산 중에도 대략 30fps 이상 */
+const FRAME_INTERVAL_MEDIAN_LIMIT_MS = 34
+
+test(`반응성 보조: 공격 탭 계산 중 렌더 프레임 간격 중앙값 ≤ ${FRAME_INTERVAL_MEDIAN_LIMIT_MS}ms (${RUNS}회)`, async ({ page, browser }) => {
+  test.setTimeout(120_000)
+  await page.addInitScript(() => {
+    const probe: FrameProbe = { frames: [], timers: [], attackCompleteAt: null }
+    ;(window as unknown as { __frames: FrameProbe }).__frames = probe
+    const frame = (t: number) => {
+      probe.frames.push(t)
+      if (probe.attackCompleteAt === null) requestAnimationFrame(frame)
+    }
+    requestAnimationFrame(frame)
+    const timer = () => {
+      const at = performance.now()
+      setTimeout(() => {
+        probe.timers.push({ at, lag: performance.now() - at })
+        if (probe.attackCompleteAt === null) timer()
+      }, 0)
+    }
+    timer()
+    new MutationObserver(() => {
+      const el = document.querySelector('[data-testid="tab-panel"][data-tab="attack"][data-complete="true"]')
+      if (el && probe.attackCompleteAt === null) probe.attackCompleteAt = performance.now()
+    }).observe(document, { subtree: true, childList: true, attributes: true })
+  })
+  const medians: number[] = []
+  const maxima: number[] = []
+  const timerMaxima: number[] = []
+  for (let i = 0; i < RUNS; i++) {
+    await page.goto('/')
+    await waitComplete(page)
+    const { probe, markAt } = await page.evaluate(
+      (mark) => ({
+        probe: (window as unknown as { __frames: FrameProbe }).__frames,
+        markAt: performance.getEntriesByName(mark, 'mark')[0]?.startTime ?? Infinity,
+      }),
+      COMPUTE_START_MARK,
+    )
+    const end = probe.attackCompleteAt ?? Infinity
+    // rAF 시각은 프레임 시작 시각이라 mark 직전 프레임 하나를 경계로 포함한다.
+    const inCompute = probe.frames.filter((t, j) => t <= end && (t >= markAt || (probe.frames[j + 1] ?? Infinity) >= markAt))
+    expect(inCompute.length).toBeGreaterThanOrEqual(3)
+    const gaps = inCompute.slice(1).map((t, j) => t - inCompute[j])
+    medians.push(median(gaps))
+    maxima.push(Math.max(...gaps))
+    timerMaxima.push(Math.max(0, ...probe.timers.filter((x) => x.at <= end && x.at + x.lag >= markAt).map((x) => x.lag)))
+  }
+  const line =
+    `계산 중 rAF 간격: 회차 중앙값 [${medians.map(fmt).join(',')}] · 회차 최대 [${maxima.map(fmt).join(',')}]` +
+    ` · setTimeout(0) 지연 회차 최대 [${timerMaxima.map(fmt).join(',')}]`
+  console.log(`[product-perf] chromium ${browser.version()} ${line}`)
+  test.info().annotations.push({ type: 'perf', description: line })
+  expect(Math.max(...medians)).toBeLessThanOrEqual(FRAME_INTERVAL_MEDIAN_LIMIT_MS)
 })

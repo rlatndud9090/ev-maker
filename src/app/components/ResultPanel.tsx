@@ -9,7 +9,7 @@ import type { TabViewState } from '../executor'
 import type { AppAction } from '../state'
 import { CardItem } from './CardItem'
 import { NoChangeSummary } from './NoChangeSummary'
-import { categoryVariesText } from './text'
+import { moveNoticeText } from './text'
 
 interface Props {
   game: Snapshot
@@ -86,8 +86,8 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
             </div>
           )}
           {view.notices.map((n) => (
-            <p key={`${n.owner}:${n.moveId}`} className="tab-notice" data-testid="tab-notice">
-              {categoryVariesText(game, n.moveId)}
+            <p key={JSON.stringify([n.kind, n.owner, n.moveId])} className="tab-notice" data-testid="tab-notice">
+              {moveNoticeText(game, n)}
             </p>
           ))}
           {view.customTargetConflicts.length > 0 && (

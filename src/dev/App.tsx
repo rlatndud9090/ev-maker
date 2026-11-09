@@ -91,7 +91,9 @@ export function App() {
           setSlot={setSlot}
         />
       )}
-      <Licenses snapshot={snapshot} />
+      <footer>
+        <Licenses snapshot={snapshot} />
+      </footer>
     </main>
   )
 }

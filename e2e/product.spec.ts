@@ -45,9 +45,13 @@ test.describe('제품 화면', () => {
     await expect(cards(page).first()).toBeVisible()
     await expect(page.locator('footer').getByTestId('licenses')).toContainText('Smogon University')
     await expect(page.locator('footer').getByTestId('licenses')).toContainText('@smogon/calc')
+    // 라이선스 고지는 footer 하나 안에 있다(footer 중첩 없음).
+    await expect(page.locator('footer')).toHaveCount(1)
 
     await page.goto('/#/dev')
     await expect(region(page, '공격측').locator('table.stats')).toBeVisible()
+    await expect(page.locator('footer')).toHaveCount(1)
+    await expect(page.locator('footer')).toContainText('@smogon/calc')
     await expect(page.locator('main[data-app="product"]')).toHaveCount(0)
   })
 

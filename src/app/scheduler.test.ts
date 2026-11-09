@@ -10,15 +10,7 @@ afterEach(() => {
 })
 
 describe('createBrowserScheduler', () => {
-  it('scheduler.yield가 있으면 그것을 쓴다', async () => {
-    const native = { yield: vi.fn(() => Promise.resolve()) }
-    g.scheduler = native
-    await createBrowserScheduler().yield()
-    expect(native.yield).toHaveBeenCalledTimes(1)
-  })
-
-  it('없으면 MessageChannel 왕복으로 매크로태스크 뒤에 풀린다', async () => {
-    delete g.scheduler
+  it('MessageChannel 왕복으로 매크로태스크 뒤에 풀린다', async () => {
     const order: string[] = []
     const p = createBrowserScheduler()
       .yield()
@@ -29,8 +21,11 @@ describe('createBrowserScheduler', () => {
     expect(order).toEqual(['microtask', 'yield'])
   })
 
-  it('yield가 함수가 아니면 대체 경로를 쓴다', async () => {
-    g.scheduler = { yield: 'nope' }
-    await expect(createBrowserScheduler().yield()).resolves.toBeUndefined()
+  // scheduler.yield 이어달리기는 렌더·일반 작업보다 앞서 계산 중 프레임을 굶긴다.
+  it('scheduler.yield가 있어도 쓰지 않는다', async () => {
+    const native = { yield: vi.fn(() => Promise.resolve()) }
+    g.scheduler = native
+    await createBrowserScheduler().yield()
+    expect(native.yield).not.toHaveBeenCalled()
   })
 })

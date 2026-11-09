@@ -173,6 +173,15 @@ describe('planTab: 공격 탭', () => {
     expect(p.cards.every((c) => c.category === 'physical')).toBe(true)
   })
 
+  it('내 목숨걸기(대미지 = 내 HP) → 행·카드 없이 탭 안내', () => {
+    const p = planTab(input({ mySet: mk('lucario', 'justified', ['finalgambit', 'closecombat'], { nature: 'adamant' }) }), 'attack')
+    expect(p.notices).toEqual([{ kind: 'attacker-hp-dependent', moveId: 'finalgambit', owner: 'me' }])
+    expect(Object.values(p.rows).some((r) => r.moveId === 'finalgambit')).toBe(false)
+    expect(Object.values(p.fixed).some((f) => f.moveId === 'finalgambit')).toBe(false)
+    expect(p.cards.length).toBeGreaterThan(0)
+    expect(p.cards.every((c) => c.category === 'physical')).toBe(true)
+  })
+
   it('하양허브를 소비한 랭크 행의 연속기는 계산 불가 행, 다른 기술은 그대로', () => {
     const mine = mk('barbaracle', 'toughclaws', ['shellsmash', 'rockblast', 'stoneedge'], { item: 'whiteherb', nature: 'adamant' })
     const p = planTab(input({ mySet: mine }), 'attack')

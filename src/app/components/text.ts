@@ -1,6 +1,6 @@
 // 탭 뷰의 id 값 → 화면 문구(이름 색인 사용). 판정은 하지 않는다.
 import type { BoostTable } from '../../core'
-import type { MetaSourceView, RankBasis, RowView, ScarfBasis, Tab } from '../../cards'
+import type { MetaSourceView, MoveNotice, RankBasis, RowView, ScarfBasis, Tab } from '../../cards'
 import type { MatchType } from '../../data/meta-schema'
 import type { Snapshot } from '../../data/schema'
 import { NO_ITEM } from '../../data/meta-schema'
@@ -60,8 +60,13 @@ export function rowRefsNote(game: Snapshot, tab: Tab, row: Pick<RowView, 'moveId
   return refsNote(game.data.moves[row.moveId].category, row.refs, tab === 'defense' ? 'opponent' : 'me')
 }
 
-export const categoryVariesText = (game: Snapshot, moveId: string): string =>
-  `${namesOf(game).moves.label(moveId)}: 분류가 능력치에 따라 바뀌어 계산하지 않습니다`
+const NOTICE_REASON: Record<MoveNotice['kind'], string> = {
+  'category-varies': '분류가 능력치에 따라 바뀌어 계산하지 않습니다',
+  'attacker-hp-dependent': '대미지가 내 HP로 정해져 계산하지 않습니다',
+}
+
+export const moveNoticeText = (game: Snapshot, n: Pick<MoveNotice, 'kind' | 'moveId'>): string =>
+  `${namesOf(game).moves.label(n.moveId)}: ${NOTICE_REASON[n.kind]}`
 
 export const MATCH_LABEL: Record<MatchType, string> = { bo1: 'Bo1', bo3: 'Bo3' }
 

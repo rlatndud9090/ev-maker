@@ -48,6 +48,7 @@ adr_status: pre-accepted
 - 2026-11-09 pre-approved: 사용자 명시 사전 승인 (harness:approve)
 - 2026-11-09 pre-approved→implementing: feature-develop 진입(초기 실행, role 체인 + Workflow)
 - 2026-11-09 implementing: 빌드 중 PRD/ADR 개정 11건(S 관여 축소·목록 밖 추가 패널+기술 필수·셸암즈 안내·슬라이더 클램프·superseded 표시 등) — 사용자 개별 확인
+- 2026-11-09 implementing: 1차 구현·자체 리뷰 반영 후 개정 2건 — 내 목숨걸기는 공격 탭 계산 불가 안내(코어 계약 유지), ADR 반응성 측정 주체 문구(e2e 페이지 계측) 유지 — 사용자 확인
 ## 승인 이벤트
 
 <!-- 이 블록은 `npm run harness:approve`만 기록한다. 사용자의 명시 승인 발화가

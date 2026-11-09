@@ -250,7 +250,10 @@ td.src {
   --mid-bg: #fbefc6;
   --bad: #9b1c1c;
   --bad-bg: #f8dede;
-  --sticky-bg: rgba(247, 247, 245, 0.97);
+  /* 불투명: 반투명이면 sticky 줄 뒤로 스크롤된 카드 문구가 비친다 */
+  --sticky-bg: var(--bg);
+  /* sticky 줄 위 안전 영역(노치)까지 같은 배경으로 덮는다 */
+  --sticky-cover: 0 calc(-1 * env(safe-area-inset-top, 0px)) 0 var(--sticky-bg);
   max-width: 96rem;
 }
 
@@ -496,6 +499,7 @@ td.src {
   top: env(safe-area-inset-top, 0px);
   z-index: 10;
   background: var(--sticky-bg);
+  box-shadow: var(--sticky-cover);
   border-bottom: 1px solid var(--line);
   padding-block: 0.4rem;
   display: grid;
@@ -1025,6 +1029,7 @@ td.src {
     top: env(safe-area-inset-top, 0px);
     z-index: 10;
     background: var(--sticky-bg);
+    box-shadow: var(--sticky-cover);
     border-bottom: 1px solid var(--line);
     padding-block: 0.4rem;
   }

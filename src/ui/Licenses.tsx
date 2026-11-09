@@ -1,10 +1,11 @@
 import type { Snapshot } from '../data/schema'
 import licenses from '../data/licenses.json'
 
+/** 랜드마크(footer)는 감싸는 화면이 정한다. */
 export function Licenses({ snapshot }: { snapshot: Snapshot | undefined }) {
   const src = snapshot?.manifest.source
   return (
-    <footer className="panel wide">
+    <section className="panel wide">
       <h2>라이선스·출처</h2>
       {src && (
         <p>
@@ -41,6 +42,6 @@ export function Licenses({ snapshot }: { snapshot: Snapshot | undefined }) {
         </table>
       </div>
       <p className="hint">{licenses.trademark}</p>
-    </footer>
+    </section>
   )
 }

@@ -125,7 +125,7 @@ class PlanBuilder {
     return this.input.game
   }
 
-  /** 공격 탭: 내 기술 슬롯. 분류 가변 기술은 tabNotices로, 변화기는 건너뛴다. */
+  /** 공격 탭: 내 기술 슬롯. 분류 가변 기술·내 HP 의존 기술은 tabNotices로, 변화기는 건너뛴다. */
   myAttackSlots(tabNotices: MoveNotice[]): MoveSlot[] {
     const out: MoveSlot[] = []
     for (const moveId of this.me.set.moves) {
@@ -133,6 +133,10 @@ class PlanBuilder {
       if (!refs.offense || !refs.defense) continue
       if (refs.categoryVaries) {
         tabNotices.push({ kind: 'category-varies', moveId, owner: 'me' })
+        continue
+      }
+      if (refs.offense.owner === 'self' && refs.attackerStats.includes('hp')) {
+        tabNotices.push({ kind: 'attacker-hp-dependent', moveId, owner: 'me' })
         continue
       }
       out.push({ moveId, refs })

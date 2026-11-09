@@ -81,9 +81,13 @@ export interface ErrorReason {
 
 export type TabStatus = { kind: 'ok' } | { kind: 'my-set-error'; reasons: readonly ErrorReason[] }
 
-/** 행·카드가 되지 않는 기술의 안내(분류가 능력치에 따라 바뀌는 기술 — 셸암즈). 요약·외 k행에 세지 않는다 */
+/**
+ * 행·카드가 되지 않는 기술의 안내. 요약·외 k행에 세지 않는다.
+ * category-varies: 분류가 능력치에 따라 바뀌는 기술(셸암즈, 내 것·상대 것).
+ * attacker-hp-dependent: 대미지가 내 HP로 정해지는 기술(목숨걸기, 공격 탭 내 기술만 — 상대 것은 묶음 키에 상대 H를 넣어 계산한다).
+ */
 export interface MoveNotice {
-  kind: 'category-varies'
+  kind: 'category-varies' | 'attacker-hp-dependent'
   moveId: string
   owner: 'me' | 'opponent'
 }
@@ -239,7 +243,7 @@ export interface TabPlan {
   fixed: Readonly<Record<string, FixedSpec>>
   /** 메타 목록 안에 있어 목록 밖 타겟으로 받지 않은 rosterId */
   customTargetConflicts: readonly string[]
-  /** 내 기술의 분류 가변 안내(탭 안내) */
+  /** 내 기술의 계산하지 않음 안내(분류 가변·내 HP 의존, 탭 안내) */
   notices: readonly MoveNotice[]
 }
 
@@ -383,6 +387,6 @@ export interface TabView {
   /** 3단계까지 완료(false면 요약에 "확인 중") */
   complete: boolean
   customTargetConflicts: readonly string[]
-  /** 내 기술의 분류 가변 안내(탭 안내) */
+  /** 내 기술의 계산하지 않음 안내(분류 가변·내 HP 의존, 탭 안내) */
   notices: readonly MoveNotice[]
 }

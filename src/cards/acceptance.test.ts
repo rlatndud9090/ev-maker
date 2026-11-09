@@ -14,7 +14,6 @@ import {
   type PokemonSet,
   type SweepResult,
 } from '../core'
-// eslint-disable-next-line no-restricted-imports -- 테스트 전용: 월 변경을 앱과 같은 로더 경로(합성 인덱스)로 확인한다
 import { createMetaLoader } from '../data/meta-loader'
 import type { MetaEntry, MetaIndex, MetaSnapshot } from '../data/meta-schema'
 import type { StatId } from '../data/schema'
@@ -742,6 +741,24 @@ describe('AC11a 셸암즈는 카드·행이 되지 않고 안내로만', () => {
     // 화면에 닿는 유일한 경로는 탭 뷰다: 그 상대의 표시 카드 머리에 안내가 있어야 한다.
     const shown = tv.cards.filter((c) => c.opponent.id === F8.opponentShellSideArm)
     expect(shown.some((c) => c.notices.some((n) => n.moveId === 'shellsidearm' && n.owner === 'opponent'))).toBe(true)
+  })
+})
+
+describe('AC11a 내 목숨걸기는 공격 탭에서 계산하지 않고 안내로만', () => {
+  const lucario: PokemonSet = {
+    regulation: 'm-c',
+    species: 'lucario',
+    ability: 'justified',
+    nature: 'adamant',
+    sp: { hp: 32, atk: 32, def: 0, spa: 0, spd: 0, spe: 0 },
+    moves: ['finalgambit', 'closecombat'],
+  }
+
+  it('공격 탭: 탭 안내만, 목숨걸기 행·요약 없음', () => {
+    const { view } = run('finalgambit-me', top(lucario), 'attack')
+    expect(view.notices).toEqual([{ kind: 'attacker-hp-dependent', moveId: 'finalgambit', owner: 'me' }])
+    expect(view.cards.flatMap((c) => c.rows).some((r) => r.moveId === 'finalgambit')).toBe(false)
+    expect(view.noChange.items.some((i) => i.moveId === 'finalgambit')).toBe(false)
   })
 })
 

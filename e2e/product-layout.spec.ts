@@ -35,6 +35,28 @@ for (const width of [400, 1280]) {
       await tabPanel(page).evaluate((el) => el.scrollIntoView({ block: 'center' }))
       expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
       await page.screenshot({ path: test.info().outputPath(`product-${width}-scrolled.png`) })
+
+      // sticky 탭 줄 위쪽(화면 맨 위 ~ 탭 줄 아래 변)에는 결과 카드가 보이지 않는다(틈으로 비침 없음).
+      const leak = await page.evaluate(() => {
+        // 탭 패널 머리를 화면 맨 위로 올려 sticky 줄이 카드 위에 고정된 상태를 만든다.
+        const panel = document.querySelector('[data-testid="tab-panel"]')!
+        window.scrollBy(0, panel.getBoundingClientRect().top + 120)
+        let sticky = document.querySelector('[role="tablist"]')
+        while (sticky && getComputedStyle(sticky).position !== 'sticky') sticky = sticky.parentElement
+        if (!sticky) return '탭 목록을 감싼 sticky 요소 없음'
+        const r = sticky.getBoundingClientRect()
+        if (r.top < 0 || r.top > 1) return `sticky가 화면 위에 붙지 않았다: top ${r.top}`
+        for (let y = 0; y < r.bottom; y++) {
+          for (let x = 0; x < window.innerWidth; x += 8) {
+            const el = document.elementFromPoint(x, y)
+            if (el && panel.contains(el)) return `(${x}, ${y})에 ${el.tagName}.${el.className}`
+          }
+        }
+        const bg = getComputedStyle(sticky).backgroundColor
+        if (bg.startsWith('rgba(')) return `배경이 반투명: ${bg}`
+        return null
+      })
+      expect(leak).toBeNull()
     })
 
     test(`${width}px: 긴 한국어 이름(폼 이름)을 내 종·선택 칩에 넣어도 겹침·가로 스크롤 없음`, async ({ page }) => {

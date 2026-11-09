@@ -7,7 +7,7 @@ import { koReason } from '../../ui/koErrors'
 import type { AppAction } from '../state'
 import { CustomEditor } from './CustomEditor'
 import { RowDetail } from './RowDetail'
-import { categoryVariesText, rowTitle } from './text'
+import { moveNoticeText, rowTitle } from './text'
 
 interface Props {
   game: Snapshot
@@ -95,8 +95,8 @@ export const CardItem = memo(function CardItem({ game, tab, card, expanded, onTo
         )}
       </button>
       {card.notices.map((n) => (
-        <p key={`${n.owner}:${n.moveId}`} className="card-notice" data-testid="card-notice">
-          {categoryVariesText(game, n.moveId)}
+        <p key={JSON.stringify([n.kind, n.owner, n.moveId])} className="card-notice" data-testid="card-notice">
+          {moveNoticeText(game, n)}
         </p>
       ))}
       <div id={detailId} className="card-detail" hidden={!expanded}>
