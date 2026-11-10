@@ -38,8 +38,29 @@ export const statCell = (page: Page, side: '공격측' | '방어측', stat: stri
 export async function findOverlaps(page: Page, selector: string): Promise<string[]> {
   return page.evaluate((sel) => {
     const out: string[] = []
-    const boxes = [...document.querySelectorAll(sel)]
+    // 보이는 부분만 비교한다: 스크롤 박스(overflow가 visible이 아닌 조상) 밖으로 잘린 부분은 겹침이 아니다.
+    const stuck = [...document.querySelectorAll('*')]
+      .filter((el) => getComputedStyle(el).position === 'sticky')
       .map((el) => ({ el, r: el.getBoundingClientRect() }))
+      .filter(({ r }) => window.scrollY > 0 && r.top <= 1 && r.top >= -1)
+    const visibleRect = (el: Element) => {
+      const r = el.getBoundingClientRect()
+      let { left, top, right, bottom } = r
+      for (let p = el.parentElement; p; p = p.parentElement) {
+        const cs = getComputedStyle(p)
+        if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue
+        const c = p.getBoundingClientRect()
+        left = Math.max(left, c.left)
+        top = Math.max(top, c.top)
+        right = Math.min(right, c.right)
+        bottom = Math.min(bottom, c.bottom)
+      }
+      // 화면 위에 붙은 sticky 줄 뒤로 스크롤되어 가려진 부분도 보이지 않는다.
+      for (const st of stuck) if (!st.el.contains(el) && st.r.left < right && st.r.right > left) top = Math.max(top, st.r.bottom)
+      return { left, top, right, bottom, width: right - left, height: bottom - top }
+    }
+    const boxes = [...document.querySelectorAll(sel)]
+      .map((el) => ({ el, r: visibleRect(el) }))
       .filter(({ r }) => r.width > 0 && r.height > 0)
     for (let i = 0; i < boxes.length; i++) {
       for (let j = i + 1; j < boxes.length; j++) {

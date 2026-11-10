@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test'
-import { cards, combo, findOverlaps, mySet, openProduct, selectTab, tabPanel, waitComplete } from './helpers'
+import type { Page } from '@playwright/test'
+import { cards, combo, findOverlaps, mySet, openProduct, selectTab, waitComplete } from './helpers'
+
+const listBox = (page: Page) => page.getByTestId('result-box')
+const listScroll = (page: Page) => page.getByTestId('result-scroll')
 
 // AC18: 폭 400px·1280px에서 본문 가로 스크롤 없음(0~32 띠 .band-scroll만 자체 스크롤), 라벨·컨트롤 겹침 없음.
 const CONTROLS = 'main[data-app="product"] :is(label, h1, h2, legend, button, [role="tab"], select, input, [data-testid="meta-source"], [data-testid="sp-remaining"])'
@@ -31,32 +35,69 @@ for (const width of [400, 1280]) {
       expect(await findOverlaps(page, CONTROLS)).toEqual([])
       await page.screenshot({ path: test.info().outputPath(`product-${width}.png`), fullPage: true })
 
-      // 결과 영역을 스크롤해도 겹침이 생기지 않는다(sticky 툴바는 패널 위에 고정).
-      await tabPanel(page).evaluate((el) => el.scrollIntoView({ block: 'center' }))
+      // 목록 박스 안을 스크롤해도 겹침·가로 스크롤이 생기지 않는다.
+      await listScroll(page).evaluate((el) => (el.scrollTop = 400))
+      await listBox(page).evaluate((el) => el.scrollIntoView({ block: 'end' }))
       expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
+      expect(await findOverlaps(page, CONTROLS)).toEqual([])
       await page.screenshot({ path: test.info().outputPath(`product-${width}-scrolled.png`) })
 
-      // sticky 탭 줄 위쪽(화면 맨 위 ~ 탭 줄 아래 변)에는 결과 카드가 보이지 않는다(틈으로 비침 없음).
+      // 목록 박스 밖(탭 줄·툴바 포함, 화면 맨 위 ~ 박스 위 변)에는 결과 카드가 보이지 않는다(목록 위로 비침 없음).
       const leak = await page.evaluate(() => {
-        // 탭 패널 머리를 화면 맨 위로 올려 sticky 줄이 카드 위에 고정된 상태를 만든다.
         const panel = document.querySelector('[data-testid="tab-panel"]')!
-        window.scrollBy(0, panel.getBoundingClientRect().top + 120)
-        let sticky = document.querySelector('[role="tablist"]')
-        while (sticky && getComputedStyle(sticky).position !== 'sticky') sticky = sticky.parentElement
-        if (!sticky) return '탭 목록을 감싼 sticky 요소 없음'
-        const r = sticky.getBoundingClientRect()
-        if (r.top < 0 || r.top > 1) return `sticky가 화면 위에 붙지 않았다: top ${r.top}`
-        for (let y = 0; y < r.bottom; y++) {
+        const box = document.querySelector('[data-testid="result-box"]')!.getBoundingClientRect()
+        const tabs = document.querySelector('[role="tablist"]')!.getBoundingClientRect()
+        if (tabs.bottom > box.top + 1) return `탭 줄(${tabs.bottom})이 목록 박스(${box.top}) 위에 있지 않다`
+        for (let y = 0; y < box.top; y++) {
           for (let x = 0; x < window.innerWidth; x += 8) {
             const el = document.elementFromPoint(x, y)
-            if (el && panel.contains(el)) return `(${x}, ${y})에 ${el.tagName}.${el.className}`
+            if (el && panel.contains(el)) return `박스 밖 (${x}, ${y})에 ${el.tagName}.${el.className}`
           }
         }
-        const bg = getComputedStyle(sticky).backgroundColor
-        if (bg.startsWith('rgba(')) return `배경이 반투명: ${bg}`
+        // 박스 아래(화면 끝까지)도 마찬가지.
+        for (let y = Math.ceil(box.bottom) + 1; y < window.innerHeight; y++) {
+          for (let x = 0; x < window.innerWidth; x += 8) {
+            const el = document.elementFromPoint(x, y)
+            if (el && panel.contains(el)) return `박스 아래 (${x}, ${y})에 ${el.tagName}.${el.className}`
+          }
+        }
+        // 좁은 화면은 페이지 스크롤 중 탭 줄이 sticky로 붙는다: 화면 위에 붙고 배경이 불투명해야 한다.
+        let sticky = document.querySelector('[role="tablist"]') as Element | null
+        while (sticky && getComputedStyle(sticky).position !== 'sticky') sticky = sticky.parentElement
+        if (sticky) {
+          const r = sticky.getBoundingClientRect()
+          if (window.scrollY > 0 && (r.top < 0 || r.top > 1)) return `sticky가 화면 위에 붙지 않았다: top ${r.top}`
+          const bg = getComputedStyle(sticky).backgroundColor
+          if (bg.startsWith('rgba(')) return `배경이 반투명: ${bg}`
+        }
         return null
       })
       expect(leak).toBeNull()
+    })
+
+    test(`${width}px: 상대 목록은 뷰포트 높이에 맞춘 자체 스크롤 박스`, async ({ page }) => {
+      await openProduct(page)
+      await selectTab(page, '방어')
+      await waitComplete(page)
+      await cards(page).first().locator('button[aria-expanded]').first().click()
+      const m = await listScroll(page).evaluate((el) => ({
+        overflowY: getComputedStyle(el).overflowY,
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+        boxHeight: el.parentElement!.getBoundingClientRect().height,
+        docOverflowY: document.documentElement.scrollHeight - window.innerHeight,
+        viewport: window.innerHeight,
+      }))
+      expect(m.overflowY).toBe('auto')
+      expect(m.scrollHeight).toBeGreaterThan(m.clientHeight)
+      if (width >= 1280) expect(m.docOverflowY).toBeLessThanOrEqual(0)
+      else expect(m.boxHeight).toBeGreaterThanOrEqual(m.viewport * 0.6)
+      // 라이선스 고지는 목록 박스 맨 끝에서 박스 스크롤만으로 닿는다.
+      const footer = listScroll(page).locator('footer')
+      await expect(footer.getByTestId('licenses')).toHaveCount(1)
+      await listScroll(page).evaluate((el) => (el.scrollTop = el.scrollHeight))
+      await expect(footer.locator('tbody tr').last()).toBeInViewport()
+      if (width >= 1280) expect(await page.evaluate(() => window.scrollY)).toBe(0)
     })
 
     test(`${width}px: 긴 한국어 이름(폼 이름)을 내 종·선택 칩에 넣어도 겹침·가로 스크롤 없음`, async ({ page }) => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
 import { TABS, type ErrorReason, type MetaSourceView } from '../cards'
 import type { SpTable } from '../core'
 import type { RegulationIndex, Snapshot } from '../data/schema'
@@ -16,6 +16,7 @@ import { initialState, reducer } from './state'
 import { useExecutor } from './useExecutor'
 import { CustomTargetPanel } from './components/CustomTargetPanel'
 import { MySetPanel } from './components/MySetPanel'
+import { ResultBox } from './components/ResultBox'
 import { ResultPanel } from './components/ResultPanel'
 import { Toolbar } from './components/Toolbar'
 
@@ -58,6 +59,14 @@ export function ProductApp() {
   }, [])
 
   const game = loaded.status === 'ok' ? loaded.boot.game : undefined
+  // 작업 화면에서는 라이선스 고지를 상대 목록 박스 맨 끝에 둔다(페이지 스크롤 없이 닿게).
+  const footer = (
+    <footer className="product-footer">
+      <div data-testid="licenses">
+        <Licenses snapshot={game} />
+      </div>
+    </footer>
+  )
   return (
     <main data-app="product" className="product">
       <header className="product-header">
@@ -74,23 +83,29 @@ export function ProductApp() {
         </p>
       )}
       {loaded.status === 'error' && <Errors title="데이터를 불러오지 못했습니다" lines={loaded.errors} />}
-      {loaded.status === 'ok' && <Workspace boot={loaded.boot} />}
-      <footer className="product-footer">
-        <div data-testid="licenses">
-          <Licenses snapshot={game} />
-        </div>
-      </footer>
+      {loaded.status === 'ok' ? <Workspace boot={loaded.boot} footer={footer} /> : footer}
     </main>
   )
 }
 
-function Workspace({ boot }: { boot: Boot }) {
+function Workspace({ boot, footer }: { boot: Boot; footer: ReactNode }) {
   const { game } = boot
   const regulation = game.manifest.regulation.id
   const [state, dispatch] = useReducer(reducer, regulation, initialState)
   const { executor, snapshot } = useExecutor()
   const [customOpen, setCustomOpen] = useState(false)
   const customButton = useRef<HTMLButtonElement>(null)
+  const results = useRef<HTMLDivElement>(null)
+
+  // 좁은 화면의 목록 박스 높이(100dvh - 탭 줄)를 위해 탭 줄 높이를 CSS 변수로 알린다.
+  useEffect(() => {
+    const host = results.current
+    const row = host?.querySelector<HTMLElement>('.tabs-row')
+    if (!host || !row) return
+    const ro = new ResizeObserver(() => host.style.setProperty('--tabs-row-h', `${row.offsetHeight}px`))
+    ro.observe(row)
+    return () => ro.disconnect()
+  }, [])
 
   const selection = useMemo(() => {
     const sel = resolveMetaSelection(boot.metaIndex, boot.regIndex, { regulation, ...(state.meta ?? {}) })
@@ -175,7 +190,7 @@ function Workspace({ boot }: { boot: Boot }) {
       <aside className="sidebar">
         <MySetPanel game={game} draft={draft} dispatch={dispatch} reasons={reasons} onDisplaySp={onDisplaySp} />
       </aside>
-      <div className="results">
+      <div className="results" ref={results}>
         <Toolbar
           game={game}
           view={meta.view}
@@ -203,17 +218,20 @@ function Workspace({ boot }: { boot: Boot }) {
           />
         )}
         {metaError && <Errors title="메타 통계를 불러오지 못했습니다" lines={metaError} />}
-        <ResultPanel
-          game={game}
-          tab={tab}
-          tabId={tabIdOf(tab)}
-          panelId={panelId}
-          state={active}
-          generation={generation}
-          mySet={mySet}
-          customTargets={customTargets}
-          dispatch={dispatch}
-        />
+        <ResultBox>
+          <ResultPanel
+            game={game}
+            tab={tab}
+            tabId={tabIdOf(tab)}
+            panelId={panelId}
+            state={active}
+            generation={generation}
+            mySet={mySet}
+            customTargets={customTargets}
+            dispatch={dispatch}
+          />
+          {footer}
+        </ResultBox>
       </div>
     </div>
   )

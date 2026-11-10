@@ -1,19 +1,120 @@
+/*
+ * 테마 토큰 — PokeQuiz(poke-battle-quiz) 팔레트 기반 2층 구조.
+ * raw 팔레트(--mb-*)는 순수 색값, 컴포넌트는 그 아래 역할 토큰(--bg/--card/--accent …)만 쓴다.
+ * 다크는 prefers-color-scheme로만 적용한다(토글 없음). 공식 포켓몬 UI·로고는 흉내 내지 않는다.
+ */
 :root {
-  --bg: #f7f7f5;
-  --panel: #fff;
-  --text: #1d1d1b;
-  --muted: #5d5d58;
-  --line: #d6d6d0;
-  --accent: #2456a6;
-  --boundary: #fff1c2;
-  --over: #ececec;
-  --error-bg: #fdecec;
-  --error: #9b1c1c;
+  /* ── raw 팔레트 ── */
+  --mb-red: #ee1515; /* 브랜드 빨강 — 큰 면·보더 한정, 본문 텍스트 금지 */
+  --mb-ink: #222224;
+  --mb-lavender: #7b64c2;
+  --mb-lavender-deep: #6a4fb0;
+  --mb-lavender-dark: #a091db;
+  --mb-lavender-bright: #b3a6e4;
+  --mb-lavender-ink: #1e1633;
+  --mb-white: #ffffff;
+  --mb-grey-100: #f4f4f5;
+  --mb-grey-200: #e4e4e7;
+  --mb-grey-500: #8a8a90;
+  --mb-grey-600: #64646b;
+  --mb-danger-light: #c0392b;
+  --mb-danger-dark: #ff6b66;
+  /* 판정 파스텔(PokeQuiz tier) — 위 글자는 항상 --tier-ink(대비 ≥ 4.5:1) */
+  --mb-tier-super: #d1ebd6;
+  --mb-tier-neutral: #f4e7b0;
+  --mb-tier-weak: #f8dcc0;
+  --mb-tier-none: #f2ccc8;
+  --mb-tier-on-dark: #3a2e22;
+
+  /* ── 역할 토큰(라이트) ── */
   color-scheme: light;
-  font-family: system-ui, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --bg: #f7f7f8;
+  --bg-gradient:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.9), transparent 26%),
+    linear-gradient(180deg, #fafafa 0%, #f2f2f4 100%);
+  --card: var(--mb-white);
+  --input: var(--mb-grey-100);
+  --surface: var(--mb-grey-100);
+  --text: #2b2b30;
+  --text-strong: #131315;
+  --muted: var(--mb-grey-600);
+  --border: var(--mb-grey-200);
+  --control-border: var(--mb-grey-500);
+  --accent: var(--mb-lavender);
+  --accent-soft: rgba(123, 100, 194, 0.12);
+  --accent-strong: var(--mb-lavender-deep);
+  --on-accent: var(--mb-white);
+  --danger: var(--mb-danger-light);
+  --danger-soft: rgba(192, 57, 43, 0.1);
+  --danger-border: rgba(192, 57, 43, 0.45);
+  --shadow:
+    0 20px 40px rgba(17, 17, 17, 0.08),
+    0 6px 16px rgba(17, 17, 17, 0.08);
+  --shadow-card:
+    0 1px 2px rgba(17, 17, 17, 0.05),
+    0 3px 10px rgba(17, 17, 17, 0.04);
+  --scroll-shade: rgba(17, 17, 17, 0.16);
+  /* 판정 색: 면(파스텔)·면 위 글자·카드 위 글자 */
+  --tier-good: var(--mb-tier-super);
+  --tier-mid: var(--mb-tier-neutral);
+  --tier-warn: var(--mb-tier-weak);
+  --tier-bad: var(--mb-tier-none);
+  --tier-ink: var(--mb-tier-on-dark);
+  --tier-ink-muted: #5c4f42;
+  --good: #22693a;
+  --mid: #7a5a00;
+  --bad: #b1352a;
+  /* dev 표 강조(경계 행·예산 밖 행) */
+  --boundary: var(--mb-tier-neutral);
+  --over: var(--surface);
+
+  font-family: system-ui, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
   line-height: 1.45;
   color: var(--text);
-  background: var(--bg);
+  background: var(--bg-gradient), var(--bg);
+  background-attachment: fixed;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --mb-ink: #3a3a42;
+    --bg: #121212;
+    --bg-gradient:
+      radial-gradient(circle at top left, rgba(255, 255, 255, 0.04), transparent 26%),
+      linear-gradient(180deg, #161616 0%, #101010 100%);
+    --card: #1e1e20;
+    --input: #1a1a1c;
+    --surface: #232326;
+    --text: #e8e8ea;
+    --text-strong: #f4f4f6;
+    --muted: #9a9aa2;
+    --border: #33333a;
+    --control-border: #6e6e75;
+    --accent: var(--mb-lavender-dark);
+    --accent-soft: rgba(160, 145, 219, 0.18);
+    --accent-strong: var(--mb-lavender-bright);
+    --on-accent: var(--mb-lavender-ink);
+    --danger: var(--mb-danger-dark);
+    --danger-soft: rgba(255, 107, 102, 0.12);
+    --danger-border: rgba(255, 107, 102, 0.45);
+    --shadow:
+      0 20px 40px rgba(0, 0, 0, 0.5),
+      0 6px 16px rgba(0, 0, 0, 0.4);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --scroll-shade: rgba(0, 0, 0, 0.6);
+    /* 다크에서도 판정 면은 밝은 파스텔 + 어두운 잉크(대비 유지), 살짝 무광 */
+    --tier-good: #bfe3c8;
+    --tier-mid: #ecdaa4;
+    --tier-warn: #eccfb6;
+    --tier-bad: #e6c2be;
+    --tier-ink: #2a201a;
+    --tier-ink-muted: #4f4236;
+    --good: #7fd29a;
+    --mid: #e3c56a;
+    --bad: #ff8a80;
+    --boundary: rgba(236, 218, 164, 0.22);
+  }
 }
 
 * {
@@ -55,9 +156,9 @@ h3 {
 }
 
 .panel {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
   padding: 0.75rem;
   min-width: 0;
 }
@@ -86,9 +187,9 @@ select {
   width: 100%;
   min-width: 0;
   padding: 0.3rem 0.4rem;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: #fff;
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  background: var(--input);
   color: inherit;
 }
 
@@ -103,8 +204,8 @@ select:focus-visible {
 }
 
 fieldset {
-  border: 1px solid var(--line);
-  border-radius: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   margin: 0.75rem 0 0;
   padding: 0.5rem;
   min-width: 0;
@@ -199,7 +300,7 @@ caption {
 
 th,
 td {
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   padding: 0.25rem 0.4rem;
   text-align: left;
   font-variant-numeric: tabular-nums;
@@ -229,9 +330,9 @@ td.src {
 }
 
 .errors {
-  background: var(--error-bg);
-  color: var(--error);
-  border-radius: 4px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-radius: 8px;
   padding: 0.5rem 0.75rem;
   margin-top: 0.75rem;
 }
@@ -244,12 +345,6 @@ td.src {
 /* ---------- 제품 화면(main[data-app='product']) ---------- */
 
 .product {
-  --good: #1e6b3a;
-  --good-bg: #dcf1e2;
-  --mid: #7a5a00;
-  --mid-bg: #fbefc6;
-  --bad: #9b1c1c;
-  --bad-bg: #f8dede;
   /* 불투명: 반투명이면 sticky 줄 뒤로 스크롤된 카드 문구가 비친다 */
   --sticky-bg: var(--bg);
   /* sticky 줄 위 안전 영역(노치)까지 같은 배경으로 덮는다 */
@@ -278,9 +373,9 @@ td.src {
 .product button {
   font: inherit;
   padding: 0.3rem 0.6rem;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: #fff;
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  background: var(--card);
   color: inherit;
   cursor: pointer;
 }
@@ -298,17 +393,27 @@ td.src {
 .product button.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .product button.danger {
-  color: var(--error);
+  color: var(--danger);
   border-color: currentColor;
   justify-self: start;
 }
 
+.product button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.product button.primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
 .product-header h1 {
   margin: 0;
+  color: var(--text-strong);
 }
 
 .product-layout {
@@ -318,16 +423,32 @@ td.src {
   align-items: start;
 }
 
+/*
+ * 넓은 화면: 페이지는 뷰포트 높이에 고정(문서 세로 스크롤 없음).
+ * 사이드바와 상대 목록 박스가 각자 스크롤한다(사용자 피드백 2026-11-10).
+ */
 @media (min-width: 60rem) {
+  .product {
+    height: calc(100dvh - 2rem);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
   .product-layout {
     grid-template-columns: minmax(20rem, 24rem) minmax(0, 1fr);
+    align-items: stretch;
+    min-height: 0;
   }
   .sidebar {
-    position: sticky;
-    top: env(safe-area-inset-top, 0px);
-    max-height: 100vh;
     min-height: 0;
     overflow-y: auto;
+    border-radius: 12px;
+  }
+  .results {
+    min-height: 0;
+    /* 추가 패널이 아주 길 때만 열 전체가 스크롤하는 안전장치 */
+    overflow-y: auto;
+  }
+  .result-box {
+    min-height: 14rem;
   }
   .my-set .collapse-btn {
     display: none;
@@ -335,9 +456,10 @@ td.src {
 }
 
 .my-set {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
   padding: 0.75rem;
   min-width: 0;
 }
@@ -393,10 +515,10 @@ td.src {
   list-style: none;
   max-height: 16rem;
   overflow-y: auto;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
 }
 
 .combo-list li {
@@ -407,15 +529,15 @@ td.src {
 
 .combo-list li.active,
 .combo-list li:hover {
-  background: #e8eefa;
+  background: var(--accent-soft);
 }
 
 .field-alert {
   margin: 0.2rem 0 0;
   padding: 0.2rem 0.4rem;
-  border-radius: 4px;
-  background: var(--error-bg);
-  color: var(--error);
+  border-radius: 8px;
+  background: var(--danger-soft);
+  color: var(--danger);
   font-size: 0.82rem;
 }
 
@@ -490,20 +612,81 @@ td.src {
 /* 결과 영역 */
 .results {
   min-width: 0;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 0.6rem;
 }
 
+.results > * {
+  flex: none;
+}
+
+/* 넓은 화면의 툴바는 목록 박스 밖에 있어 sticky가 필요 없다(좁은 화면은 아래에서 탭 줄만 고정). */
 .toolbar {
-  position: sticky;
-  top: env(safe-area-inset-top, 0px);
-  z-index: 10;
-  background: var(--sticky-bg);
-  box-shadow: var(--sticky-cover);
-  border-bottom: 1px solid var(--line);
-  padding-block: 0.4rem;
+  padding-block: 0.1rem 0.2rem;
   display: grid;
   gap: 0.4rem;
+}
+
+/* 상대 목록 박스: 남은 높이를 채우는 자체 스크롤 영역(테두리·배경·안쪽 여백·스크롤 그림자) */
+.result-box {
+  position: relative;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.results > .result-box {
+  flex: 1 1 auto;
+}
+
+.result-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 0.6rem 0.75rem;
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+  scrollbar-gutter: stable;
+}
+
+.result-box::before,
+.result-box::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0.9rem;
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.result-box::before {
+  top: 0;
+  background: radial-gradient(farthest-side at 50% 0, var(--scroll-shade), transparent);
+}
+
+.result-box::after {
+  bottom: 0;
+  background: radial-gradient(farthest-side at 50% 100%, var(--scroll-shade), transparent);
+}
+
+.result-box[data-shade-top='true']::before,
+.result-box[data-shade-bottom='true']::after {
+  opacity: 1;
+}
+
+.result-scroll > footer .panel {
+  background: var(--card);
 }
 
 .tabs-row {
@@ -527,7 +710,7 @@ td.src {
 .product .tabs [role='tab'][aria-selected='true'] {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .meta-source {
@@ -579,7 +762,7 @@ td.src {
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;
-  background: #e8eefa;
+  background: var(--accent-soft);
   border-radius: 999px;
   padding: 0.05rem 0.2rem 0.05rem 0.6rem;
   font-size: 0.85rem;
@@ -597,9 +780,9 @@ td.src {
 }
 
 .custom-panel {
-  background: var(--panel);
+  background: var(--card);
   border: 1px solid var(--accent);
-  border-radius: 6px;
+  border-radius: 12px;
   padding: 0.75rem;
   display: grid;
   gap: 0.5rem;
@@ -629,15 +812,15 @@ td.src {
   flex-direction: row;
   align-items: center;
   gap: 0.3rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-radius: 999px;
   padding: 0.15rem 0.6rem;
   font-size: 0.85rem;
-  background: #fff;
+  background: var(--card);
 }
 
 .chip-check.on {
-  background: #e8eefa;
+  background: var(--accent-soft);
   border-color: var(--accent);
 }
 
@@ -668,6 +851,12 @@ td.src {
 }
 
 .panel-status {
+  /* 목록 박스 안에서 진행 줄은 위에 붙어 있는다(불투명 배경) */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
+  padding-block: 0.5rem 0.3rem;
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
@@ -677,17 +866,17 @@ td.src {
 }
 
 .updating-badge {
-  background: var(--mid-bg);
-  color: var(--mid);
-  border-radius: 4px;
+  background: var(--tier-mid);
+  color: var(--tier-ink);
+  border-radius: 999px;
   padding: 0.05rem 0.4rem;
   font-weight: 600;
 }
 
 .tab-error {
-  background: var(--error-bg);
-  color: var(--error);
-  border-radius: 4px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-radius: 8px;
   padding: 0.5rem 0.75rem;
 }
 
@@ -704,17 +893,17 @@ td.src {
 .card-notice {
   margin: 0;
   padding: 0.3rem 0.5rem;
-  background: #eef2f8;
-  border-radius: 4px;
+  background: var(--accent-soft);
+  border-radius: 8px;
   font-size: 0.85rem;
 }
 
 .empty {
   margin: 0;
   padding: 0.75rem;
-  background: var(--panel);
-  border: 1px dashed var(--line);
-  border-radius: 6px;
+  background: var(--card);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
 }
 
 .product .no-change > button {
@@ -736,8 +925,8 @@ td.src {
   flex-wrap: wrap;
   gap: 0.2rem 0.5rem;
   padding: 0.2rem 0.4rem;
-  background: var(--panel);
-  border-radius: 4px;
+  background: var(--card);
+  border-radius: 8px;
 }
 
 .nc-name {
@@ -753,14 +942,15 @@ td.src {
 }
 
 .card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
   min-width: 0;
 }
 
 .card.card-error {
-  border-color: #e6b4b4;
+  border-color: var(--danger-border);
 }
 
 .product .card-line {
@@ -787,16 +977,16 @@ td.src {
 .cat {
   font-size: 0.78rem;
   padding: 0 0.35rem;
-  border-radius: 4px;
-  background: #eceae4;
+  border-radius: 999px;
+  background: var(--surface);
 }
 
 .cat-physical {
-  background: #f6e2d6;
+  background: var(--tier-warn); color: var(--tier-ink);
 }
 
 .cat-special {
-  background: #dde6f6;
+  background: var(--accent-soft);
 }
 
 .card-bundle {
@@ -810,7 +1000,7 @@ td.src {
 }
 
 .badge-error {
-  color: var(--error);
+  color: var(--danger);
   font-weight: 700;
   font-size: 0.85rem;
 }
@@ -825,7 +1015,7 @@ td.src {
 }
 
 .headline.error {
-  color: var(--error);
+  color: var(--danger);
 }
 
 .headline.fixed {
@@ -842,7 +1032,7 @@ td.src {
 }
 
 .card-detail {
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--border);
   padding: 0.5rem 0.6rem;
   display: grid;
   gap: 0.5rem;
@@ -871,8 +1061,8 @@ td.src {
 
 .row-kind {
   font-size: 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
   padding: 0 0.3rem;
   color: var(--muted);
 }
@@ -891,7 +1081,7 @@ td.src {
 }
 
 .row-error {
-  color: var(--error);
+  color: var(--danger);
 }
 
 .badge-stale {
@@ -941,20 +1131,21 @@ td.src {
   font-size: 0.72rem;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
-  border-radius: 2px;
-  color: var(--text);
+  border-radius: 4px;
+  /* 파스텔 판정 면 위 글자는 라이트·다크 모두 어두운 잉크(대비 ≥ 4.5:1) */
+  color: var(--tier-ink);
 }
 
 .band .cell.tone-good {
-  background-color: var(--good-bg);
+  background-color: var(--tier-good);
 }
 
 .band .cell.tone-mid {
-  background-color: var(--mid-bg);
+  background-color: var(--tier-mid);
 }
 
 .band .cell.tone-bad {
-  background-color: var(--bad-bg);
+  background-color: var(--tier-bad);
 }
 
 .band .cell.over {
@@ -962,13 +1153,13 @@ td.src {
 }
 
 .band .cell.current {
-  outline: 2px solid var(--text);
+  outline: 2px solid var(--tier-ink);
   outline-offset: -2px;
   font-weight: 700;
 }
 
 .cell-sp {
-  color: var(--muted);
+  color: var(--tier-ink-muted);
 }
 
 .cell-sym {
@@ -977,7 +1168,7 @@ td.src {
 
 .cell-need {
   font-size: 0.55rem;
-  color: var(--muted);
+  color: var(--tier-ink-muted);
 }
 
 .band-legend {
@@ -1030,7 +1221,15 @@ td.src {
     z-index: 10;
     background: var(--sticky-bg);
     box-shadow: var(--sticky-cover);
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--border);
     padding-block: 0.4rem;
+  }
+  /* 좁은 화면: 목록 박스는 탭 줄을 뺀 화면 높이(최소 60dvh)의 자체 스크롤 박스.
+     페이지 스크롤과 공존하므로 끝에 닿으면 페이지로 스크롤이 이어진다. */
+  .result-box {
+    height: max(60dvh, calc(100dvh - var(--tabs-row-h, 3.5rem) - 1rem));
+  }
+  .result-scroll {
+    overscroll-behavior: auto;
   }
 }
