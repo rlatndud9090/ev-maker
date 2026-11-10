@@ -127,3 +127,26 @@ for (const width of [400, 1280]) {
     })
   })
 }
+
+test('넓은 모니터(1920px): 작업 영역·푸터 폭을 76rem 이하로 제한하고 가운데 정렬', async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1000 })
+  await openProduct(page)
+  const m = await page.evaluate(() => {
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize)
+    const box = (sel: string) => document.querySelector(sel)!.getBoundingClientRect()
+    const main = box('main[data-app="product"]')
+    const footer = box('footer.product-footer')
+    return {
+      max: 76 * rem,
+      main: main.width,
+      footer: footer.width,
+      leftGap: main.left,
+      rightGap: window.innerWidth - main.right,
+      overflow: document.documentElement.scrollWidth - window.innerWidth,
+    }
+  })
+  expect(m.main).toBeLessThanOrEqual(m.max)
+  expect(m.footer).toBeLessThanOrEqual(m.max)
+  expect(Math.abs(m.leftGap - m.rightGap)).toBeLessThanOrEqual(1)
+  expect(m.overflow).toBeLessThanOrEqual(0)
+})

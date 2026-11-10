@@ -372,12 +372,17 @@ td.src {
 
 /* ---------- 제품 화면(main[data-app='product']) ---------- */
 
+/* 넓은 모니터에서 줄이 너무 길어지지 않게 작업 영역·푸터 폭을 제한하고 가운데 정렬 */
+:root {
+  --page-max: 76rem;
+}
+
 .product {
   /* 불투명: 반투명이면 sticky 줄 뒤로 스크롤된 카드 문구가 비친다 */
   --sticky-bg: var(--bg);
   /* sticky 줄 위 안전 영역(노치)까지 같은 배경으로 덮는다 */
   --sticky-cover: 0 calc(-1 * env(safe-area-inset-top, 0px)) 0 var(--sticky-bg);
-  max-width: 96rem;
+  max-width: var(--page-max);
 }
 
 /* hidden 속성이 아래 display 지정에 지지 않게 */
@@ -821,7 +826,7 @@ td.src {
 
 /* 페이지 푸터: 뷰포트에 맞춘 작업 영역 아래, 경계선으로 구분 */
 .product-footer {
-  max-width: 96rem;
+  max-width: var(--page-max);
   margin: 1.5rem auto 0;
   padding-top: 1rem;
   border-top: 1px solid var(--border);
