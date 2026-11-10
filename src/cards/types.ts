@@ -1,5 +1,5 @@
 // 카드 모델 공유 계약. React·브라우저 API를 import하지 않는다.
-import type { BattleConditions, BoostTable, CoreErrorCode, MoveStatRefs, PokemonSet, SpTable } from '../core'
+import type { BattleConditions, BoostTable, CoreErrorCode, KoLabel, MoveStatRefs, PokemonSet, SpTable } from '../core'
 import type { MatchType } from '../data/meta-schema'
 import type { Snapshot, StatId } from '../data/schema'
 import type { MetaView } from '../meta'
@@ -254,6 +254,20 @@ export type RowTask =
   | { kind: 'sweep'; rowId: string; stage: 2 | 3 }
   | { kind: 'extreme'; filterId: string }
   | { kind: 'fixed'; fixedId: string }
+  /** 방어 탭: 극단 필터(= 같은 기술·랭크 조건의 H행·B/D행 쌍)의 H·B/D 최소 조합 */
+  | { kind: 'pair'; filterId: string }
+
+/**
+ * 방어 2축 최소 조합 한 점. atLeast 이상 판정을 내는 (H, B/D) 중 SP 합이 최소, 동률이면 H가 큰 것.
+ * label은 그 점의 실제 판정(atLeast보다 좋을 수 있다). 예산 무시 평가.
+ */
+export interface PairPoint {
+  atLeast: KoLabel
+  label: KoLabel
+  hp: number
+  /** 극단 필터 stats[1](def 또는 spd)의 SP */
+  defense: number
+}
 
 /** 예산 무시 판정만 담은 축약 칸. 예산 밖 표시는 담지 않는다(조립이 계산). 난수 배열 없음 */
 export interface CompactCell {
@@ -274,6 +288,8 @@ export type RowTaskResult =
   | { kind: 'sweep'; rowId: string; cells: readonly CompactCell[] }
   | { kind: 'extreme'; filterId: string; low: CompactCell; high: CompactCell }
   | { kind: 'fixed'; fixedId: string; cell: CompactCell }
+  /** points: 방어 판정 순위(나쁨 → 좋음) 중 SP 0~최대 안에서 가능한 것만, 순위 순 */
+  | { kind: 'pair'; filterId: string; points: readonly PairPoint[] }
   | { kind: 'error'; task: RowTask; reason: ErrorReason }
 
 /** 키 = taskKey(task). sweep은 stage와 무관하게 같은 키 */
@@ -286,11 +302,16 @@ export interface PendingTasks {
   stage2: readonly RowTask[]
   /** 양 끝 판정이 같은 행의 확인 스윕 */
   stage3: readonly RowTask[]
+  /** 방어 쌍 최소 조합(필터 통과·두 행 스윕 완료·둘 중 하나라도 변화 있는 쌍) */
+  stage4: readonly RowTask[]
 }
 
+/** 캐시 값. 키에 작업 종류가 들어가 pair 키에는 PairPoint[], 그 밖에는 CompactCell[]만 담긴다 */
+export type CachedJudgement = readonly CompactCell[] | readonly PairPoint[]
+
 export interface JudgementCache {
-  get(key: string): readonly CompactCell[] | undefined
-  set(key: string, cells: readonly CompactCell[]): void
+  get(key: string): CachedJudgement | undefined
+  set(key: string, value: CachedJudgement): void
   clear(): void
   readonly size: number
 }
@@ -330,6 +351,22 @@ export interface RowView {
   current: { sp: number; category?: string }
   boundaries: readonly BoundaryView[]
   nearest: { up?: BoundaryView; down?: BoundaryView }
+  /** "<label>: 최소 <stats> 필요". 변화 있는 ok/stale 행만, 방어 탭은 쌍 결과가 나온 뒤에만 */
+  target?: TargetView
+}
+export interface TargetStat {
+  stat: StatId
+  sp: number
+}
+export interface TargetView {
+  /** 그 최소 SP의 실제 판정. 공격·방어 탭 KoLabel, 스피드 탭 SpeedOrder */
+  label: string
+  /** better: 현재보다 한 단계 이상 위. keep: 이미 최상위이거나 위가 SP 0~최대에서 불가능해 현재 판정 유지 최소값 */
+  goal: 'better' | 'keep'
+  /** 공격·스피드 탭은 스윕 능력치 하나, 방어 탭은 [hp, def|spd] */
+  stats: readonly TargetStat[]
+  /** 다른 능력치에서 빼야 할 SP n = (stats SP 합 − 현재 그 능력치 SP 합) − 잔여 예산. 0이면 붙이지 않음 */
+  need: number
 }
 export type Headline =
   | { kind: 'row'; rowId: string }

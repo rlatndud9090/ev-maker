@@ -9,7 +9,7 @@ import { calcAbility } from './key'
 import { planTab } from './plan'
 import { relevantStats } from './relevance'
 import { computeRowTask } from './rowTask'
-import { pendingTasks, taskKey } from './schedule'
+import { nextStage, pendingTasks, taskKey } from './schedule'
 import { cardInput, realData } from './testing'
 import { TABS } from './types'
 import type { CardInput, RowSpec, RowTask, RowTaskResult, TabPlan } from './types'
@@ -38,8 +38,7 @@ const inputs: CardInput[] = [garchomp, delphox].map((mySet) => cardInput({ mySet
 
 function runAll(plan: TabPlan, results: Map<string, RowTaskResult>): void {
   for (;;) {
-    const p = pendingTasks(plan, results)
-    const stage = p.stage1.length > 0 ? p.stage1 : p.stage2.length > 0 ? p.stage2 : p.stage3
+    const stage = nextStage(pendingTasks(plan, results))
     if (stage.length === 0) return
     for (const t of stage) results.set(taskKey(t), computeRowTask(plan, t))
   }

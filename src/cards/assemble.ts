@@ -2,6 +2,7 @@
 import type { SpTable } from '../core'
 import type { StatId } from '../data/schema'
 import { cardPending, filterState, pendingTasks, taskKey } from './schedule'
+import { cellLabel, pairTarget, singleTarget } from './target'
 import type {
   BoundaryView,
   CardSpec,
@@ -18,6 +19,7 @@ import type {
   TabPlan,
   TabStatus,
   TabView,
+  TargetView,
 } from './types'
 
 const KIND_RANK: Readonly<Record<RowKind, number>> = { base: 0, rank: 1, scarf: 2, 'non-scarf': 2 }
@@ -88,6 +90,20 @@ function bareRow(ctx: Ctx, head: RowHead, status: RowView['status'], extra: { er
   return row
 }
 
+/** 방어 탭(필터가 있는 행)은 쌍 결과, 그 밖은 그 행 33칸에서 목표를 낸다. */
+function targetOf(ctx: Ctx, spec: RowSpec, stat: StatId, views: readonly CellView[], at: CellView | undefined): TargetView | undefined {
+  const { plan } = ctx
+  if (spec.judge === 'speed') return singleTarget('speed', stat, views, ctx.displaySp[stat])
+  if (plan.mySide === 'attacker') return singleTarget('attack', stat, views, ctx.displaySp[stat])
+  if (spec.gate === undefined) return singleTarget('defense', stat, views, ctx.displaySp[stat])
+  const pair = ctx.results.get(taskKey({ kind: 'pair', filterId: spec.gate }))
+  const label = at === undefined ? undefined : cellLabel('defense', at)
+  if (pair?.kind !== 'pair' || label === undefined) return undefined
+  const defStat = plan.filters[spec.gate].stats[1]
+  const current = { hp: ctx.displaySp.hp, defense: ctx.displaySp[defStat] }
+  return pairTarget(pair.points, label, defStat, current, plan.spTotal - ctx.spSum)
+}
+
 function sweptRow(ctx: Ctx, spec: RowSpec, stat: StatId, cells: readonly CompactCell[], noChange: boolean): RowView {
   const views = cellViews(ctx, cells, stat)
   const sp = ctx.displaySp[stat]
@@ -96,7 +112,10 @@ function sweptRow(ctx: Ctx, spec: RowSpec, stat: StatId, cells: readonly Compact
   const current: RowView['current'] = { sp }
   const at = views.find((c) => c.sp === sp)
   if (at !== undefined) current.category = at.category
-  return { ...headOf(spec), status: stale ? 'stale' : 'ok', noChange, cells: views, current, boundaries, nearest: nearestOf(boundaries) }
+  const row: RowView = { ...headOf(spec), status: stale ? 'stale' : 'ok', noChange, cells: views, current, boundaries, nearest: nearestOf(boundaries) }
+  const target = noChange ? undefined : targetOf(ctx, spec, stat, views, at)
+  if (target !== undefined) row.target = target
+  return row
 }
 
 const SWEEP_STAT_RANK: Readonly<Partial<Record<StatId, number>>> = { hp: 0 }
@@ -236,7 +255,7 @@ function buildCard(ctx: Ctx, card: CardSpec): CardBuild {
   rows.sort((a, b) => a.order - b.order)
   const pending = cardPending(plan, card, results)
   const settled = pending.stage1.length === 0 && pending.stage2.length === 0
-  const allDone = settled && pending.stage3.length === 0
+  const allDone = settled && pending.stage3.length === 0 && pending.stage4.length === 0
   const shown = rows.filter((r) => !r.noChange).length
   const view: CardView = {
     ...base,
@@ -275,7 +294,7 @@ function progressCount(plan: TabPlan, results: ResultMap): number {
   const has = (key: string) => (results.has(key) ? 1 : 0)
   for (const card of plan.cards) {
     if (card.state === 'error') continue
-    for (const filterId of card.filterIds) done += has(taskKey({ kind: 'extreme', filterId }))
+    for (const filterId of card.filterIds) done += has(taskKey({ kind: 'extreme', filterId })) + has(taskKey({ kind: 'pair', filterId }))
     for (const rowId of card.rowIds) {
       done += has(taskKey({ kind: 'ends', rowId })) + has(taskKey({ kind: 'sweep', rowId, stage: 2 }))
     }
@@ -291,9 +310,9 @@ export function assembleTab(plan: TabPlan, results: ResultMap, displaySp: SpTabl
   const shell = {
     tab: plan.tab,
     source: plan.source,
-    progress: { done, total: done + pending.stage1.length + pending.stage2.length + pending.stage3.length },
+    progress: { done, total: done + pending.stage1.length + pending.stage2.length + pending.stage3.length + pending.stage4.length },
     stage12Done: pending.stage1.length === 0 && pending.stage2.length === 0,
-    complete: pending.stage1.length === 0 && pending.stage2.length === 0 && pending.stage3.length === 0,
+    complete: pending.stage1.length === 0 && pending.stage2.length === 0 && pending.stage3.length === 0 && pending.stage4.length === 0,
     customTargetConflicts: plan.customTargetConflicts,
     notices: plan.notices,
   }

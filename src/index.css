@@ -581,24 +581,24 @@ td.src {
   height: 1.25rem;
 }
 
-.move-slot[data-type='normal'] { --slot-type: var(--type-normal); }
-.move-slot[data-type='fire'] { --slot-type: var(--type-fire); }
-.move-slot[data-type='water'] { --slot-type: var(--type-water); }
-.move-slot[data-type='electric'] { --slot-type: var(--type-electric); }
-.move-slot[data-type='grass'] { --slot-type: var(--type-grass); }
-.move-slot[data-type='ice'] { --slot-type: var(--type-ice); }
-.move-slot[data-type='fighting'] { --slot-type: var(--type-fighting); }
-.move-slot[data-type='poison'] { --slot-type: var(--type-poison); }
-.move-slot[data-type='ground'] { --slot-type: var(--type-ground); }
-.move-slot[data-type='flying'] { --slot-type: var(--type-flying); }
-.move-slot[data-type='psychic'] { --slot-type: var(--type-psychic); }
-.move-slot[data-type='bug'] { --slot-type: var(--type-bug); }
-.move-slot[data-type='rock'] { --slot-type: var(--type-rock); }
-.move-slot[data-type='ghost'] { --slot-type: var(--type-ghost); }
-.move-slot[data-type='dragon'] { --slot-type: var(--type-dragon); }
-.move-slot[data-type='dark'] { --slot-type: var(--type-dark); }
-.move-slot[data-type='steel'] { --slot-type: var(--type-steel); }
-.move-slot[data-type='fairy'] { --slot-type: var(--type-fairy); }
+:is(.move-slot, .move-chip)[data-type='normal'] { --slot-type: var(--type-normal); }
+:is(.move-slot, .move-chip)[data-type='fire'] { --slot-type: var(--type-fire); }
+:is(.move-slot, .move-chip)[data-type='water'] { --slot-type: var(--type-water); }
+:is(.move-slot, .move-chip)[data-type='electric'] { --slot-type: var(--type-electric); }
+:is(.move-slot, .move-chip)[data-type='grass'] { --slot-type: var(--type-grass); }
+:is(.move-slot, .move-chip)[data-type='ice'] { --slot-type: var(--type-ice); }
+:is(.move-slot, .move-chip)[data-type='fighting'] { --slot-type: var(--type-fighting); }
+:is(.move-slot, .move-chip)[data-type='poison'] { --slot-type: var(--type-poison); }
+:is(.move-slot, .move-chip)[data-type='ground'] { --slot-type: var(--type-ground); }
+:is(.move-slot, .move-chip)[data-type='flying'] { --slot-type: var(--type-flying); }
+:is(.move-slot, .move-chip)[data-type='psychic'] { --slot-type: var(--type-psychic); }
+:is(.move-slot, .move-chip)[data-type='bug'] { --slot-type: var(--type-bug); }
+:is(.move-slot, .move-chip)[data-type='rock'] { --slot-type: var(--type-rock); }
+:is(.move-slot, .move-chip)[data-type='ghost'] { --slot-type: var(--type-ghost); }
+:is(.move-slot, .move-chip)[data-type='dragon'] { --slot-type: var(--type-dragon); }
+:is(.move-slot, .move-chip)[data-type='dark'] { --slot-type: var(--type-dark); }
+:is(.move-slot, .move-chip)[data-type='steel'] { --slot-type: var(--type-steel); }
+:is(.move-slot, .move-chip)[data-type='fairy'] { --slot-type: var(--type-fairy); }
 
 .combo {
   position: relative;
@@ -1120,8 +1120,24 @@ td.src {
   border: 1px solid var(--border);
 }
 
+/* 배분 묶음 라벨 "A32↑ 56.3%": 한 라벨 안에 묶음(본문색)과 비중(작은 회색) */
 .card-bundle {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
   font-size: 0.85rem;
+  padding: 0 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.bundle-stats {
+  font-weight: 600;
+}
+
+.bundle-share {
+  font-size: 0.75rem;
   color: var(--muted);
 }
 
@@ -1139,6 +1155,62 @@ td.src {
 .card-headline {
   flex: 1 1 16rem;
   min-width: 0;
+}
+
+.headline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.45rem;
+  max-width: 100%;
+}
+
+/* 간단행 기술 라벨: 내 기술 칸처럼 타입색 테두리 + 연한 타입색 배경. [아이콘][랭크][기술명][그 밖의 랭크] */
+.move-chip {
+  --slot-type: var(--border);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  padding: 0.05rem 0.45rem 0.05rem 0.25rem;
+  border: 1px solid var(--slot-type);
+  border-radius: 8px;
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.move-chip[data-type] {
+  background: color-mix(in srgb, var(--slot-type) 20%, var(--card));
+}
+
+.move-chip .type-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.move-name {
+  overflow-wrap: anywhere;
+}
+
+.move-boosts {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.headline-target {
+  font-size: 0.9rem;
+}
+
+.target-main,
+.target-need {
+  white-space: nowrap;
+}
+
+.target-need {
+  font-size: 0.8rem;
+  color: var(--muted);
 }
 
 .headline.updating {
@@ -1203,7 +1275,7 @@ td.src {
   color: var(--accent);
 }
 
-/* 간단행: 대표 행이 랭크·스카프 행이면 그 근거를 기술명 앞에 */
+/* 간단행: 대표 행이 스카프 행이면 그 도구(구애스카프 등)를 기술 라벨 앞에 */
 .basis-tag {
   font-size: 0.78rem;
   padding: 0 0.4rem;

@@ -7,10 +7,10 @@ const ladderCards = (page: Page) => cards(page).and(page.locator('[data-origin="
 const customCards = (page: Page) => cards(page).and(page.locator('[data-origin="custom"]'))
 const cardLine = (card: Locator) => card.locator('button[aria-expanded]').first()
 
-/** 래더 카드의 "#순위" 목록(대표 문구 버튼의 순위 표기). */
+/** 래더 카드의 사용률 순위 목록(화면에는 보이지 않고 카드 data-rank로만 싣는다). */
 async function ladderRanks(page: Page): Promise<{ opponent: string; rank: number }[]> {
   return ladderCards(page).evaluateAll((els) =>
-    els.map((el) => ({ opponent: (el as HTMLElement).dataset.opponent ?? '', rank: Number(el.querySelector('.rank')?.textContent?.replace('#', '')) })),
+    els.map((el) => ({ opponent: (el as HTMLElement).dataset.opponent ?? '', rank: Number((el as HTMLElement).dataset.rank) })),
   )
 }
 
@@ -60,7 +60,7 @@ test.describe('제품 화면', () => {
     await waitComplete(page)
     const withMore = cards(page).filter({ has: page.getByTestId('card-more') }).first()
     await expect(withMore.getByTestId('card-more')).toHaveText(/^외 \d+행$/)
-    await expect(cards(page).first().getByTestId('card-headline')).toHaveText(/(까지 줄여도|부터) .+\([+−±]\d+/)
+    await expect(cards(page).first().getByTestId('headline-target')).toHaveText(/^\S+: 최소 A\d+ 필요( \(다른 능력치에서 \d+ 필요\))?$/)
 
     // 방어 탭 H 행: 내 H는 2, 잔여 0이라 3 이상은 예산 밖.
     await selectTab(page, '방어')
@@ -80,7 +80,11 @@ test.describe('제품 화면', () => {
     // 띠가 자체 가로 스크롤 컨테이너 안에 있다.
     await expect(row.locator('.band-scroll .band')).toHaveCount(1)
     // 판정은 색만이 아니라 텍스트 라벨로도 보인다(AC19).
-    await expect(row.locator('.row-judge')).toHaveText(/현재 H\d+ (확정 버팀|저난수 1타|중난수 이상)/)
+    // 현재 판정은 목표 문구와 같은 4단 라벨(한 줄 한 어휘).
+    await expect(row.locator('.row-judge')).toHaveText(/현재 H\d+ (확정1타|중고난수1타|저난수1타|확정견딤) · /)
+    // 상세 행도 경계 문구 대신 H·B/D 함께 조정한 최소 조합 목표.
+    await expect(row.getByTestId('row-target')).toHaveText(/^ · \S+: 최소 H\d+ [BD]\d+ 필요( \(다른 능력치에서 \d+ 필요\))?$/)
+    await expect(row.locator('.row-judge')).not.toContainText(/까지 줄여도|부터/)
     await expect(cells.first()).toHaveAttribute('title', /^0: (확정 버팀|저난수 1타|중난수 이상)/)
     await expect(row.locator('.band-legend .span').first()).toHaveText(/\d+(~\d+)? (확정 버팀|저난수 1타|중난수 이상)/)
   })
@@ -184,7 +188,7 @@ test.describe('제품 화면', () => {
     await openProduct(page)
     await waitComplete(page)
     // 공격 탭(내 기술 전부 물리): 상대 H·B만.
-    for (const text of await ladderCards(page).locator('.card-bundle').allTextContents()) expect(text).toMatch(/^(H\d+[↑↓]?)?( ?B\d+[↑↓]?)? · /)
+    for (const text of await ladderCards(page).locator('.card-bundle').allTextContents()) expect(text).toMatch(/^(H\d+[↑↓]?)?( ?B\d+[↑↓]?)? (\d+\.\d%|소수 배분)$/)
 
     // 방어 탭 상대 랭크 수단(칼춤 등)의 랭크 행: 열어 보며 첫 랭크 행을 찾는다.
     await selectTab(page, '방어')
@@ -201,7 +205,7 @@ test.describe('제품 화면', () => {
 
     await selectTab(page, '스피드')
     await waitComplete(page)
-    for (const text of await ladderCards(page).locator('.card-bundle').allTextContents()) expect(text).toMatch(/^S\d+[↑↓]? · /)
+    for (const text of await ladderCards(page).locator('.card-bundle').allTextContents()) expect(text).toMatch(/^S\d+[↑↓]? (\d+\.\d%|소수 배분)$/)
   })
 
   test('세대 교체 중 이전 뷰는 data-superseded·"갱신 중"으로 표시된다(ADR 결정 3)', async ({ page }) => {
@@ -255,15 +259,83 @@ test.describe('제품 화면', () => {
     await expect(page.getByText('메타 통계를 불러오지 못했습니다')).toHaveCount(0)
   })
 
-  test('간단행의 대표 행이 랭크 행이면 근거 태그(상대 칼춤 A+2 등)를 보인다', async ({ page }) => {
+  test('간단행의 대표 행이 랭크 행이면 기술 라벨에 랭크를 합친다(대도각참 칼춤 → "+2 아이언헤드")', async ({ page }) => {
     await openProduct(page)
     await selectTab(page, '방어')
     await waitComplete(page)
+    // 랭크 행 대표면 근거는 기술 라벨 안의 랭크로 보이고, 별도 근거 태그는 스카프 행에만 남는다.
+    await expect(tabPanel(page).getByTestId('headline-basis').and(page.locator('[data-row-kind="rank"]'))).toHaveCount(0)
+    const gambit = cards(page).filter({ hasText: '대도각참' }).getByTestId('move-label').filter({ hasText: '아이언헤드' }).filter({ has: page.getByTestId('move-rank') })
+    await expect(gambit.first()).toContainText('+2 아이언헤드')
+    await expect(gambit.first().getByTestId('move-rank')).toHaveText('+2')
+    await expect(gambit.first()).toHaveAttribute('data-type', 'steel')
+    await expect(gambit.first().locator('img[data-type-icon="steel"]')).toHaveCount(1)
+    // 아이콘 → 랭크 → 기술명 순서.
+    const order = await gambit.first().evaluate((el) => [...el.children].map((c) => c.getAttribute('data-type-icon') ?? c.className))
+    expect(order.filter((c) => c !== 'sr-only')).toEqual(['steel', 'move-rank num', 'move-name'])
+
+    // 스카프·비스카프(도구) 행 대표 카드는 기술 라벨 앞에 도구 태그를 유지한다(결정 C: "구애스카프" 등).
+    // 예시 세트 스피드 탭에는 비스카프 행 대표(생명의구슬)가 있다. 같은 분기라 태그가 사라지면 여기서 잡힌다.
+    await selectTab(page, '스피드')
+    await waitComplete(page)
     const tags = tabPanel(page).getByTestId('headline-basis')
-    await expect(tags.first()).toBeVisible()
-    for (const t of await tags.and(page.locator('[data-row-kind="rank"]')).allTextContents()) expect(t).toMatch(/^(내|상대) \S+/)
-    const gambit = cards(page).filter({ hasText: '대도각참' }).getByTestId('headline-basis').filter({ hasText: '칼춤' })
-    await expect(gambit.first()).toHaveText('상대 칼춤 A+2')
+    expect(await tags.count()).toBeGreaterThan(0)
+    for (const el of await tags.all()) {
+      const kind = await el.getAttribute('data-row-kind')
+      expect(['scarf', 'non-scarf']).toContain(kind)
+      const text = (await el.textContent()) ?? ''
+      if (kind === 'scarf') expect(text).toBe('구애스카프')
+      else expect(text).not.toMatch(/^(구애스카프)?$/)
+      // 태그 → 기술 라벨 순서(같은 간단행 안에서 태그가 라벨보다 앞).
+      const before = await el.evaluate((tag) => {
+        const label = tag.parentElement?.querySelector('[data-testid="move-label"]')
+        return label !== null && label !== undefined && (tag.compareDocumentPosition(label) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+      })
+      expect(before).toBe(true)
+    }
+    await expect(tabPanel(page).locator('[data-testid="headline-basis"][data-row-kind="rank"]')).toHaveCount(0)
+  })
+
+  test('간단행: 순위·사용률·보존·판정 기호 없음, 배분 라벨 + 비중, 타입 기술 라벨, "최소 … 필요" 목표(사용자 피드백 2026-11-10)', async ({ page }) => {
+    await openProduct(page)
+    for (const [tab, target] of [
+      ['공격', /^\S+: 최소 A\d+ 필요( \(다른 능력치에서 \d+ 필요\))?$/],
+      ['방어', /^\S+: 최소 H\d+ [BD]\d+ 필요( \(다른 능력치에서 \d+ 필요\))?$/],
+      ['스피드', /^\S+: 최소 S\d+ 필요( \(다른 능력치에서 \d+ 필요\))?$/],
+    ] as const) {
+      await selectTab(page, tab)
+      await waitComplete(page)
+      const lines = await ladderCards(page).locator('.card-line').allTextContents()
+      expect(lines.length).toBeGreaterThan(0)
+      for (const text of lines) {
+        expect(text).not.toMatch(/#\d|\d+\.\d\d%|보존|[◎△×]|까지 줄여도|부터 /)
+      }
+      for (const text of await ladderCards(page).getByTestId('card-bundle').allTextContents()) expect(text).toMatch(/^[HABCDS]\d+[↑↓]?( [HABCDS]\d+[↑↓]?)* (\d+\.\d%|소수 배분)$/)
+      // 비중은 묶음보다 작은 회색(muted) 글씨.
+      const look = await ladderCards(page).first().getByTestId('card-bundle').evaluate((el) => {
+        const [stats, share] = [el.querySelector('.bundle-stats')!, el.querySelector('.bundle-share')!].map((e) => getComputedStyle(e))
+        const muted = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim()
+        return { smaller: parseFloat(share.fontSize) < parseFloat(stats.fontSize), differs: share.color !== stats.color, muted: muted !== '' }
+      })
+      expect(look).toEqual({ smaller: true, differs: true, muted: true })
+      const targets = await tabPanel(page).getByTestId('headline-target').allTextContents()
+      expect(targets.length).toBeGreaterThan(0)
+      // 행 대표 카드(기술 라벨이 있는 카드)마다 목표 문구가 하나씩 있다("모든 목록에서", 방어 탭은 랭크 필터 쌍 포함).
+      const headlines = tabPanel(page).getByTestId('card-headline')
+      const withLabel = headlines.filter({ has: page.getByTestId('move-label') })
+      expect(await withLabel.count()).toBeGreaterThan(0)
+      await expect(withLabel.filter({ hasNot: page.getByTestId('headline-target') })).toHaveCount(0)
+      for (const t of targets) expect(t).toMatch(target)
+      if (tab !== '스피드') {
+        const labels = tabPanel(page).getByTestId('move-label')
+        await expect(labels.first()).toBeVisible()
+        for (const el of await labels.all()) {
+          const type = await el.getAttribute('data-type')
+          expect(type).toMatch(/^[a-z]+$/)
+          await expect(el.locator(`img[data-type-icon="${type}"]`)).toHaveCount(1)
+        }
+      }
+    }
   })
 
   test('성격은 능력치 줄의 +/− 토글: +·− 각각 한 줄만, −는 고르지 않으면 자동', async ({ page }) => {
@@ -398,10 +470,15 @@ test.describe('제품 화면', () => {
     await expect(garchomp.getByTestId('ko-badge')).toHaveText('저난수1타')
     await expect(garchomp.getByTestId('ko-badge')).toHaveAttribute('data-tone', 'yellow')
 
-    // 스피드 탭은 1타 확률이 없어 배지가 없다.
+    // 스피드 탭은 1타 확률이 없어 결과 배지 대신 행동 순서 배지(선공·동속·후공)를 글자로 보인다(AC19, 판정 기호 제거 뒤).
     await selectTab(page, '스피드')
     await waitComplete(page)
     await expect(tabPanel(page).getByTestId('ko-badge')).toHaveCount(0)
+    const rowCards = ladderCards(page).filter({ has: page.getByTestId('move-label') })
+    const rowCount = await rowCards.count()
+    expect(rowCount).toBeGreaterThan(0)
+    await expect(rowCards.getByTestId('order-badge')).toHaveCount(rowCount)
+    for (const text of await rowCards.getByTestId('order-badge').allTextContents()) expect(['선공', '동속', '후공']).toContain(text)
   })
 
   test('키보드만으로 탭 전환·필터·카드 펼치기(AC18)', async ({ page }) => {

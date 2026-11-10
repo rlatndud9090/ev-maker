@@ -41,29 +41,38 @@ export function shareText(share: number, digits = 1): string {
   return `${(share * 100).toFixed(digits)}%`
 }
 
-/** 원천 사용률(0~1) → "12.34%" */
-export const usageText = (usage: number): string => shareText(usage, 2)
-
 const signed = (delta: number): string => (delta > 0 ? `+${delta}` : delta < 0 ? `${MINUS}${-delta}` : '±0')
 
-export interface BoundaryLike {
-  sp: number
-  to: string
-  delta: number
+/** 랭크 변화 "+2"·"−1" */
+export const rankText = (stage: number): string => signed(stage)
+
+/** 판정 라벨(공격·방어 KoLabel은 결과 배지 문구, 스피드는 행동 순서) → 한국어 */
+export function judgementText(label: string): string {
+  if (Object.prototype.hasOwnProperty.call(KO_BADGE, label)) return KO_BADGE[label as KoLabel].label
+  return categoryLabel(label)
+}
+
+export interface TargetLike {
+  label: string
+  stats: readonly { stat: StatId; sp: number }[]
   need: number
 }
 
-/** 위쪽 경계 "A28부터 확정 1타(+8)", 아래쪽 경계 "H12까지 줄여도 확정 버팀(−4)". n이 있으면 "다른 능력치에서 n 필요"를 붙인다. */
-export function boundaryText(stat: StatId, b: BoundaryLike): string {
-  const need = b.need > 0 ? `, 다른 능력치에서 ${b.need} 필요` : ''
-  const label = categoryLabel(b.to)
-  const head = b.delta > 0 ? `${STAT_SHORT[stat]}${b.sp}부터 ${label}` : `${STAT_SHORT[stat]}${b.sp}까지 줄여도 ${label}`
-  return `${head}(${signed(b.delta)}${need})`
+/** 목표 문구 조각: main "확정견딤: 최소 H4 B12 필요", n이 있으면 need "(다른 능력치에서 n 필요)". 좁은 화면 줄바꿈 단위. */
+export function targetParts(t: TargetLike): { main: string; need?: string } {
+  const main = `${judgementText(t.label)}: 최소 ${t.stats.map((s) => `${STAT_SHORT[s.stat]}${s.sp}`).join(' ')} 필요`
+  return t.need > 0 ? { main, need: `(다른 능력치에서 ${t.need} 필요)` } : { main }
 }
 
-/** "현재 A32 확정 1타" */
-export function currentText(stat: StatId, sp: number, category: string | undefined): string {
-  return category === undefined ? `현재 ${STAT_SHORT[stat]}${sp}` : `현재 ${STAT_SHORT[stat]}${sp} ${categoryLabel(category)}`
+/** 목표 문구 "확정1타: 최소 A30 필요", "확정견딤: 최소 H4 B12 필요 (다른 능력치에서 4 필요)" */
+export function targetText(t: TargetLike): string {
+  const { main, need } = targetParts(t)
+  return need === undefined ? main : `${main} ${need}`
+}
+
+/** "현재 A32 확정1타". label은 목표 문구와 같은 판정 라벨(공격·방어 KoLabel, 스피드 행동 순서) — 한 줄에 같은 어휘만 쓴다. */
+export function currentText(stat: StatId, sp: number, label: string | undefined): string {
+  return label === undefined ? `현재 ${STAT_SHORT[stat]}${sp}` : `현재 ${STAT_SHORT[stat]}${sp} ${judgementText(label)}`
 }
 
 export const fixedText = (category: string): string => `항상 ${categoryLabel(category)}`
@@ -139,6 +148,15 @@ export function koBadge(side: KoSide, cell: KoCellLike | undefined): KoBadge | u
   if (cell.immune) return { label: '무효', tone: 'gray' }
   if (cell.ohkoChance === undefined) return undefined
   return KO_BADGE[koLabel(side, cell.ohkoChance)]
+}
+
+const ORDER_TONE: Record<keyof typeof ORDER_LABEL, KoBadgeTone> = { first: 'green', tie: 'yellow', second: 'red' }
+
+/** 스피드 탭 대표 칸 → 행동 순서 배지("선공"·"동속"·"후공"). 결과 배지가 없는 탭에서 현재 판정을 글자로 보인다. 그 밖 범주·칸 없음은 배지 없음. */
+export function orderBadge(cell: { category: string } | undefined): KoBadge | undefined {
+  if (cell === undefined || !Object.prototype.hasOwnProperty.call(ORDER_TONE, cell.category)) return undefined
+  const order = cell.category as keyof typeof ORDER_LABEL
+  return { label: ORDER_LABEL[order], tone: ORDER_TONE[order] }
 }
 
 export function progressText(done: number, total: number, complete: boolean): string {

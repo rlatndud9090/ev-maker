@@ -165,6 +165,8 @@ const keyOf = (r: RowTaskResult): string => {
       return taskKey({ kind: 'extreme', filterId: r.filterId })
     case 'fixed':
       return taskKey({ kind: 'fixed', fixedId: r.fixedId })
+    case 'pair':
+      return taskKey({ kind: 'pair', filterId: r.filterId })
     case 'error':
       return taskKey(r.task)
   }

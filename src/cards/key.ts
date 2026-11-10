@@ -62,7 +62,7 @@ function partsOf(plan: TabPlan, task: RowTask): KeyParts {
       conditions: spec.conditions,
     }
   }
-  if (task.kind === 'extreme') {
+  if (task.kind === 'extreme' || task.kind === 'pair') {
     const spec = plan.filters[task.filterId]
     if (spec === undefined) throw new Error(`극단 필터 ${task.filterId}가 계획에 없다`)
     return {
@@ -94,7 +94,7 @@ function partsOf(plan: TabPlan, task: RowTask): KeyParts {
 
 /**
  * 세트 moves는 키에 넣지 않는다: 합법성 검증은 계획 단계(내 세트 validateSet, 상대 resolveAssumption)에서 끝났다는 전제다.
- * 스윕·양 끝·극단 판정은 덮어쓰는 능력치 SP를 빼고, 고정 판정은 관여 SP를 그대로 넣는다.
+ * 스윕·양 끝·극단·쌍 판정은 덮어쓰는 능력치 SP를 빼고, 고정 판정은 관여 SP를 그대로 넣는다.
  */
 export function judgementKey(plan: TabPlan, task: RowTask): string {
   const p = partsOf(plan, task)

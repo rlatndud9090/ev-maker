@@ -1,5 +1,5 @@
 // 세 탭의 행 작업을 시간 조각으로 나눠 계산하고 탭 뷰를 외부 저장소로 내는 실행기(React 없음).
-import { TABS, assembleTab, computeRowTask, createLruCache, pendingTasks, planTab, taskKey } from '../cards'
+import { TABS, assembleTab, computeRowTask, createLruCache, mayUnlockPair, pendingTasks, planTab, taskKey } from '../cards'
 import type { CardInput, JudgementCache, PendingTasks, RowTask, RowTaskResult, Tab, TabPlan, TabView } from '../cards'
 import type { SpTable } from '../core'
 import type { Scheduler } from './scheduler'
@@ -41,16 +41,16 @@ export interface ExecutorDeps {
 export const DEFAULT_SLICE_MS = 12
 export const COMPUTE_START_MARK = 'cards:compute-start'
 
-type Stage = 0 | 1 | 2
-const STAGE_KEYS = ['stage1', 'stage2', 'stage3'] as const
+type Stage = 0 | 1 | 2 | 3
+const STAGE_KEYS = ['stage1', 'stage2', 'stage3', 'stage4'] as const
 
 interface TabRun {
   plan: TabPlan | null
   results: Map<string, RowTaskResult>
   /** 마지막 pendingTasks 결과와 단계별 소비 위치 */
   queue: PendingTasks
-  pos: [number, number, number]
-  /** extreme·ends 결과가 대기열을 바꿨을 수 있음 */
+  pos: [number, number, number, number]
+  /** extreme·ends 결과나 쌍의 마지막 행 sweep 결과가 대기열을 바꿨을 수 있음 */
   dirty: boolean
   fatal: boolean
   /** 결과가 늘 때마다 +1 */
@@ -67,14 +67,14 @@ interface Run {
 
 type Unit = { tab: Tab; kind: 'plan' } | { tab: Tab; kind: 'task'; task: RowTask }
 
-const EMPTY_QUEUE: PendingTasks = { stage1: [], stage2: [], stage3: [] }
+const EMPTY_QUEUE: PendingTasks = { stage1: [], stage2: [], stage3: [], stage4: [] }
 const IDLE: TabViewState = { kind: 'idle' }
 
 function newTabRun(): TabRun {
-  return { plan: null, results: new Map(), queue: EMPTY_QUEUE, pos: [0, 0, 0], dirty: false, fatal: false, version: 0, assembled: null }
+  return { plan: null, results: new Map(), queue: EMPTY_QUEUE, pos: [0, 0, 0, 0], dirty: false, fatal: false, version: 0, assembled: null }
 }
 
-/** 활성 탭 1·2단계 → 나머지 탭(TABS 순) 1·2단계 → 모든 탭 3단계(활성 탭 먼저). */
+/** 활성 탭 1·2단계 → 나머지 탭(TABS 순) 1·2단계 → 활성 탭 3·4단계 → 나머지 탭 3·4단계. */
 function priority(active: Tab): ReadonlyArray<readonly [Tab, Stage]> {
   const others = TABS.filter((t) => t !== active)
   return [
@@ -82,14 +82,15 @@ function priority(active: Tab): ReadonlyArray<readonly [Tab, Stage]> {
     [active, 1],
     ...others.flatMap((t) => [[t, 0] as const, [t, 1] as const]),
     [active, 2],
-    ...others.map((t) => [t, 2] as const),
+    [active, 3],
+    ...others.flatMap((t) => [[t, 2] as const, [t, 3] as const]),
   ]
 }
 
 function refresh(t: TabRun): void {
   if (t.plan === null) return
   t.queue = pendingTasks(t.plan, t.results)
-  t.pos = [0, 0, 0]
+  t.pos = [0, 0, 0, 0]
   t.dirty = false
 }
 
@@ -113,7 +114,7 @@ function take(t: TabRun, stage: Stage): RowTask | null {
 function flags(t: TabRun): { stage12Done: boolean; complete: boolean } {
   if (t.dirty) refresh(t)
   const stage12Done = remaining(t, 0) === 0 && remaining(t, 1) === 0
-  return { stage12Done, complete: stage12Done && remaining(t, 2) === 0 }
+  return { stage12Done, complete: stage12Done && remaining(t, 2) === 0 && remaining(t, 3) === 0 }
 }
 
 function messageOf(e: unknown): string {
@@ -230,7 +231,7 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
       if (t.plan === null) throw new Error(`${unit.tab} 탭 계획 없이 작업이 나왔다`)
       t.results.set(taskKey(unit.task), computeRowTask(t.plan, unit.task, cache))
       t.version++
-      if (unit.task.kind === 'ends' || unit.task.kind === 'extreme') t.dirty = true
+      if (unit.task.kind === 'ends' || unit.task.kind === 'extreme' || mayUnlockPair(t.plan, t.results, unit.task)) t.dirty = true
     } catch (e) {
       fail(run, unit.tab, e)
     }

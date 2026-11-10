@@ -1,11 +1,11 @@
 // 탭 뷰의 id 값 → 화면 문구(이름 색인 사용). 판정은 하지 않는다.
-import type { BoostTable } from '../../core'
+import type { BoostTable, MoveStatRefs } from '../../core'
 import type { MetaSourceView, MoveNotice, RankBasis, RowView, ScarfBasis, Tab } from '../../cards'
 import type { MatchType } from '../../data/meta-schema'
 import type { Snapshot } from '../../data/schema'
 import { NO_ITEM } from '../../data/meta-schema'
 import { namesOf } from '../../ui/names'
-import { STAT_SHORT, refsNote, shareText } from '../../ui/format'
+import { STAT_SHORT, rankText, refsNote, shareText } from '../../ui/format'
 
 export const TAB_LABEL: Record<Tab, string> = { attack: '공격', defense: '방어', speed: '스피드' }
 
@@ -46,15 +46,27 @@ export function basisText(game: Snapshot, basis: RankBasis | ScarfBasis): string
   return parts.join(' · ')
 }
 
-/** 간단행 태그(점유율·반응 생략): "상대 칼춤 A+2", "내 위협 상대 A−1", "구애스카프" */
-export function basisShortText(game: Snapshot, basis: RankBasis | ScarfBasis): string {
-  if (basis.kind !== 'rank') return itemKeyLabel(game, basis.item)
-  const owner = basis.owner === 'me' ? '내' : '상대'
-  // 수단 주인 쪽 변화는 접두어 없이("상대 칼춤 A+2"), 반대쪽만 "상대 A−1"처럼 붙인다.
-  const [own, other] = basis.owner === 'me' ? [basis.myBoosts, basis.opponentBoosts] : [basis.opponentBoosts, basis.myBoosts]
-  const ownText = boostsText('', own).trim().replace(/ {2,}/g, ' ')
-  const otherText = boostsText(basis.owner === 'me' ? '상대' : '내', other)
-  return [`${owner} ${meansLabel(game, basis.means)}`, ownText, otherText].filter((t) => t !== '').join(' ')
+/**
+ * 기술 라벨의 랭크: 기술 사용자의 공격 능력치 랭크는 부호만(own "+2"), 그 밖의 랭크는 rest "내 B+2 상대 S−1".
+ * 기술 사용자는 탭으로 정해진다(공격·스피드 탭은 나, 방어 탭은 상대). 공격 능력치는 행 refs.offense(사용자 쪽일 때만).
+ */
+export function moveRankParts(tab: Tab, row: Pick<RowView, 'basis'> & { refs?: Pick<MoveStatRefs, 'offense'> }): { own?: string; rest: string } {
+  const basis = row.basis
+  if (basis === undefined || basis.kind !== 'rank') return { rest: '' }
+  const mine: BoostTable = { ...basis.myBoosts }
+  const theirs: BoostTable = { ...basis.opponentBoosts }
+  const offense = row.refs?.offense
+  let own: string | undefined
+  if (offense?.owner === 'self') {
+    const user = tab === 'defense' ? theirs : mine
+    const stage = user[offense.stat]
+    if (stage !== undefined && stage !== 0) {
+      own = rankText(stage)
+      delete user[offense.stat]
+    }
+  }
+  const rest = [boostsText('내', mine), boostsText('상대', theirs)].filter((t) => t !== '').join(' ')
+  return { own, rest }
 }
 
 /** 행 제목: "지진", "H · 인파이트", "스피드 비교" */

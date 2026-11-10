@@ -261,6 +261,13 @@ checkSpeedSupport(snapshot: Snapshot, set: PokemonSet, options?: EvalOptions): v
 /** 1타 확률 → 카드 줄 결과 배지 라벨(사용자 피드백 2026-11-10). attackBand·defenseBand와 같은 normalizeThresholds·검증. 공격: 1 / ≥highRoll / 그 아래 / 0, 방어: 1 / >lowRoll / ≤lowRoll / 0 */
 koLabel(side: 'attack' | 'defense', ohkoChance: number, thresholds?): 'guaranteed-ohko' | 'high-roll-ohko' | 'mid-low-roll-ohko' | 'mid-high-roll-ohko' | 'low-roll-ohko' | 'guaranteed-survive'
 export { SPEED_DEPENDENT_MOVES, SPEED_DEPENDENT_ATTACKER_ABILITIES } // engine.ts 상수 그대로 export
+/** 판정 순서(나쁨 → 좋음, 2026-11-10 "최소 필요" 목표). attack: 확정견딤 → 중저난수1타 → 고난수1타 → 확정1타, defense: 확정1타 → 중고난수1타 → 저난수1타 → 확정견딤, speed: second → tie → first */
+JUDGEMENT_ORDER: { attack: readonly KoLabel[]; defense: readonly KoLabel[]; speed: readonly SpeedOrder[] }
+type JudgementSide = KoSide | 'speed'
+/** 0 = 가장 나쁨. 그 관점에 없는 판정·관점은 CoreInputError */
+judgementRank(side: JudgementSide, label: string): number
+/** 한 단계 위 판정, 최상위면 null */
+nextBetter(side: JudgementSide, label: string): string | null
 ```
 
 - 대미지 스윕 허용 능력치: `side: 'attacker'` → `atk`·`spa`·`def`, `side: 'defender'` → `hp`·`def`·`spd`·`atk`. 그 밖은 지금처럼 `CoreInputError('target.stat')`.
@@ -525,6 +532,20 @@ export type RowTask =
   | { kind: 'sweep'; rowId: string; stage: 2 | 3 }
   | { kind: 'extreme'; filterId: string }
   | { kind: 'fixed'; fixedId: string }
+  /** 방어 탭: 극단 필터(= 같은 기술·랭크 조건의 H행·B/D행 쌍)의 H·B/D 최소 조합 */
+  | { kind: 'pair'; filterId: string }
+
+/**
+ * 방어 2축 최소 조합 한 점. atLeast 이상 판정을 내는 (H, B/D) 중 SP 합이 최소, 동률이면 H가 큰 것.
+ * label은 그 점의 실제 판정(atLeast보다 좋을 수 있다). 예산 무시 평가.
+ */
+export interface PairPoint {
+  atLeast: KoLabel
+  label: KoLabel
+  hp: number
+  /** 극단 필터 stats[1](def 또는 spd)의 SP */
+  defense: number
+}
 
 /** 예산 무시 판정만 담은 축약 칸. 예산 밖 표시는 담지 않는다(조립이 계산). 난수 배열 없음 */
 export interface CompactCell {
@@ -545,6 +566,8 @@ export type RowTaskResult =
   | { kind: 'sweep'; rowId: string; cells: readonly CompactCell[] }
   | { kind: 'extreme'; filterId: string; low: CompactCell; high: CompactCell }
   | { kind: 'fixed'; fixedId: string; cell: CompactCell }
+  /** points: 방어 판정 순위(나쁨 → 좋음) 중 SP 0~최대 안에서 가능한 것만, 순위 순 */
+  | { kind: 'pair'; filterId: string; points: readonly PairPoint[] }
   | { kind: 'error'; task: RowTask; reason: ErrorReason }
 
 /** 키 = taskKey(task). sweep은 stage와 무관하게 같은 키 */
@@ -557,11 +580,16 @@ export interface PendingTasks {
   stage2: readonly RowTask[]
   /** 양 끝 판정이 같은 행의 확인 스윕 */
   stage3: readonly RowTask[]
+  /** 방어 쌍 최소 조합(필터 통과·두 행 스윕 완료·둘 중 하나라도 변화 있는 쌍) */
+  stage4: readonly RowTask[]
 }
 
+/** 캐시 값. 키에 작업 종류가 들어가 pair 키에는 PairPoint[], 그 밖에는 CompactCell[]만 담긴다 */
+export type CachedJudgement = readonly CompactCell[] | readonly PairPoint[]
+
 export interface JudgementCache {
-  get(key: string): readonly CompactCell[] | undefined
-  set(key: string, cells: readonly CompactCell[]): void
+  get(key: string): CachedJudgement | undefined
+  set(key: string, value: CachedJudgement): void
   clear(): void
   readonly size: number
 }
@@ -601,6 +629,22 @@ export interface RowView {
   current: { sp: number; category?: string }
   boundaries: readonly BoundaryView[]
   nearest: { up?: BoundaryView; down?: BoundaryView }
+  /** "<label>: 최소 <stats> 필요". 변화 있는 ok/stale 행만, 방어 탭은 쌍 결과가 나온 뒤에만 */
+  target?: TargetView
+}
+export interface TargetStat {
+  stat: StatId
+  sp: number
+}
+export interface TargetView {
+  /** 그 최소 SP의 실제 판정. 공격·방어 탭 KoLabel, 스피드 탭 SpeedOrder */
+  label: string
+  /** better: 현재보다 한 단계 이상 위. keep: 이미 최상위이거나 위가 SP 0~최대에서 불가능해 현재 판정 유지 최소값 */
+  goal: 'better' | 'keep'
+  /** 공격·스피드 탭은 스윕 능력치 하나, 방어 탭은 [hp, def|spd] */
+  stats: readonly TargetStat[]
+  /** 다른 능력치에서 빼야 할 SP n = (stats SP 합 − 현재 그 능력치 SP 합) − 잔여 예산. 0이면 붙이지 않음 */
+  need: number
 }
 export type Headline =
   | { kind: 'row'; rowId: string }
@@ -655,7 +699,7 @@ export interface TabView {
   progress: { done: number; total: number }
   /** 1·2단계 완료(잠정 빈 상태 판정 기준) */
   stage12Done: boolean
-  /** 3단계까지 완료(false면 요약에 "확인 중") */
+  /** 4단계(방어 쌍)까지 완료(false면 요약에 "확인 중") */
   complete: boolean
   customTargetConflicts: readonly string[]
   /** 내 기술의 계산하지 않음 안내(분류 가변·내 HP 의존, 탭 안내) */
@@ -673,7 +717,8 @@ export interface TabView {
 | `rankMeans.ts` | `RANK_MEANS`·`REACTIONS`(데이터 상수), `applyMeans(game: Snapshot, means: { kind: 'ability' \| 'move'; id: string }, user: ResolvedSet, target: ResolvedSet): { userBoosts: BoostTable; targetBoosts: BoostTable; reactions: string[]; whiteHerbConsumed: boolean } \| null`(효과 없으면 null), `myMeansNotes(game: Snapshot, set: PokemonSet): Array<{ means: { kind: 'ability' \| 'move'; id: string }; tabs: Tab[] }>`(설정 칩 알림용) | T2a |
 | `presets.ts` | `presetAssumption(game: Snapshot, rosterId: string, moves: readonly string[], tab: Tab, category: Category \| null, preset: PresetIndex, edit?: PresetEdit): Assumption`(`moves`가 세트 기술) | T2a |
 | `plan.ts` | `planTab(input: CardInput, tab: Tab): TabPlan` | T2a |
-| `schedule.ts` | `taskKey(task: RowTask): string`, `pendingTasks(plan: TabPlan, results: ResultMap): PendingTasks` | T2b |
+| `schedule.ts` | `taskKey(task: RowTask): string`, `pendingTasks(plan: TabPlan, results: ResultMap): PendingTasks`, `nextStage(p: PendingTasks): readonly RowTask[]`(1 → 2 → 3 → 4 중 처음 비지 않은 단계), `mayUnlockPair(plan, results, task): boolean`(방금 끝난 sweep이 그 필터의 마지막 행이라 4단계 작업이 생길 수 있음 — 실행기 대기열 갱신 기준) | T2b |
+| `target.ts` | `cellLabel(side: JudgementSide, cell: CompactCell): string \| undefined`(대미지 칸 `koLabel`, 스피드 칸 범주, 코어가 낸 칸이 아니면 undefined), `singleTarget(side, stat, cells: readonly CellView[], currentSp): TargetView \| undefined`, `minPairPoints(judge: (hp, defense) => KoLabel, max): PairPoint[]`(두 SP 단조 가정, 순위마다 계단 경계를 H 0 → max로 따라가며 각 H의 최소 B/D, 평가 메모 공유 — 실측 쌍당 2~64회), `pairTarget(points, currentLabel, defenseStat, current: { hp; defense }, remaining): TargetView \| undefined` | 2026-11-10 |
 | `key.ts` | `judgementKey(plan: TabPlan, task: RowTask): string` | T2b |
 | `cache.ts` | `createLruCache(limit?: number): JudgementCache`(기본 5000) | T2b |
 | `rowTask.ts` | `computeRowTask(plan: TabPlan, task: RowTask, cache?: JudgementCache): RowTaskResult` | T2b |
@@ -769,7 +814,7 @@ export function toCardInput(state: AppState, game: Snapshot, view: MetaView): Ca
 - 탭 패널 `[role="tabpanel"][data-testid="tab-panel"][data-tab][data-generation][data-first-card="true|false"][data-complete="true|false"]`. `data-first-card`는 현재 세대 뷰(superseded 아님)에서 `cards.length > 0 || (stage12Done && cards.length === 0)`일 때 true. 진행 `[data-testid="progress"]`, 탭 오류 `[data-testid="tab-error"]`, 탭 안내(내 기술 분류 가변) `[data-testid="tab-notice"]`, 잠정 빈 상태 `[data-testid="empty-provisional"]`, 이전 세대 뷰 표시 중이면 패널에 `data-superseded="true"`와 "갱신 중".
 - 하단 `footer [data-testid="licenses"]`(데이터 출처·라이선스).
 - 변화 없음 요약·카드 안 "변화 없음 k행"은 렌더하지 않는다(`no-change-summary` 없음 — 사용자 피드백 2026-11-10, 모델 `TabView.noChange`·`hiddenNoChangeRows`는 그대로).
-- 카드 `li[data-testid="card"][data-card-id][data-opponent][data-category][data-origin="ladder|custom"][data-state]`(물리/특수 라벨은 렌더하지 않고 `data-category`만 남김), 결과 배지 `[data-testid="ko-badge"][data-tone="red|orange|yellow|green|gray"]`(공격·방어 탭, 대표 행 현재 칸 `ohkoChance` → 코어 `koLabel` → `src/ui/format` `koBadge`, 계산 불가·갱신 중·스피드 탭은 없음), 펼침 `button[aria-expanded]`, 대표 문구 `[data-testid="card-headline"]`, `[data-testid="card-more"]`(k가 0이면 없음), 카드 머리 안내 `[data-testid="card-notice"]`(상대 분류 가변 기술). 커스텀 카드 상세 안 타겟 기술 편집은 `group "타겟 기술"`(마지막 1개의 해제 컨트롤은 `disabled`).
+- 카드 `li[data-testid="card"][data-card-id][data-opponent][data-category][data-origin="ladder|custom"][data-state][data-rank]`(물리/특수 라벨은 렌더하지 않고 `data-category`만 남김. `data-rank`는 래더 카드의 사용률 순위 — 화면에는 순위·사용률을 보이지 않으므로 e2e가 여기서 읽는다, 2026-11-10), 결과 배지 `[data-testid="ko-badge"][data-tone="red|orange|yellow|green|gray"]`(공격·방어 탭, 대표 행 현재 칸 `ohkoChance` → 코어 `koLabel` → `src/ui/format` `koBadge`, 계산 불가·갱신 중·스피드 탭은 없음), 펼침 `button[aria-expanded]`, 대표 문구 `[data-testid="card-headline"]`(안에 기술 라벨 `[data-testid="move-label"][data-type=<타입 slug>]` — `img[data-type-icon]` → `[data-testid="move-rank"]`(사용자 공격 랭크 부호, 있을 때만) → `.move-name` → `[data-testid="move-boosts"]`(그 밖의 랭크, 있을 때만), 목표 `[data-testid="headline-target"]`, 스카프 행이면 앞에 `[data-testid="headline-basis"]` 도구 태그), 배분 라벨 `[data-testid="card-bundle"]`(`.bundle-stats` + `.bundle-share` 작은 회색), 상세 행 목표 `[data-testid="row-target"]`, `[data-testid="card-more"]`(k가 0이면 없음), 카드 머리 안내 `[data-testid="card-notice"]`(상대 분류 가변 기술). 커스텀 카드 상세 안 타겟 기술 편집은 `group "타겟 기술"`(마지막 1개의 해제 컨트롤은 `disabled`).
 - 행 `[data-testid="row"][data-row-kind][data-status]`, 띠 칸 `[data-testid="band-cell"][data-sp][data-category][data-over-budget="true|false"]`, 현재 칸 `aria-current="true"`, 띠 컨테이너 class `band-scroll`(자체 가로 스크롤).
 
 ### 3. 태스크 브리핑
@@ -923,8 +968,8 @@ export function toCardInput(state: AppState, game: Snapshot, view: MetaView): Ca
   - 설정 C: 능력치 6줄 SP 슬라이더(± 버튼, 숫자 입력, 잔여 예산, 큰 실능치 = `computeStats` 성공 시만, 성격 ↑↓), 위쪽 2열 칩(종·메가·특성·도구·성격·기술 4칸, 누르면 그 자리 편집). _(2026-11-10 사용자 피드백으로 개정: 종은 라벨 숨김·메가 폼 이름 검색(스톤 고정), 성격은 능력치 줄 +/− 토글, 기술은 "기술" 라벨 아래 1열 + 타입 아이콘·타입색 — 현재 배치는 ADR 결정 1 참조)_ 종·도구·기술은 combobox + 한국어 부분 일치 후보(`src/ui/search.ts searchNames(index: NameIndex 계열, query: string, limit: number): string[]`). 위반은 원인 칸 옆 `role="alert"`, 문구는 `src/ui/koErrors.ts`가 코드·field를 한국어 이름으로(예: ILLEGAL_MOVE → "한카리아스는 기습을 배울 수 없습니다", SP_TOTAL_EXCEEDED → "SP 합계 70이 상한 66을 넘습니다"). 내 랭크 수단은 칩에 `myMeansNotes` 결과로 "공격 탭 랭크 행 추가"류 짧은 알림.
   - 슬라이더 계약: 드래그 중 값은 컴포넌트 지역 상태, 잔여 예산까지 클램프(최대 = min(32, 현재 값 + 잔여), §6 결정 8), 드래그 중 `executor.setDisplaySp`(rAF 1회로 합침), 놓을 때(`pointerup`, 키보드는 값 확정 시) `commit-sp` + `setDisplaySp(null)`. 숫자 입력은 클램프하지 않는다(초과 → 코어 거부 → 탭 오류 + 칸 옆 안내).
   - 툴바: 탭, 상위 N, 포켓몬 선택(검색 + 선택 칩, 비우기), 목록 밖 포켓몬 추가 버튼 → 툴바 바로 아래 인라인 패널(§6 결정 3): ① 종 검색(로스터, 메타 목록 안 종은 후보에서 제외) → ② 그 종이 배울 수 있는 기술을 칩으로 1~4개 선택(검색 가능, 자동 선택 없음 — 통계 값을 쓰지 않는다) → ③ [취소]/[추가]. 기술 0개면 [추가] `disabled`, 추가 시 `add-custom-target{rosterId, moves}` 후 패널을 닫고 포커스를 버튼으로 돌린다. 패널 입력 중 값은 지역 상태. 내/상대 순풍, 표시 기준(% ↔ 0~1 변환은 ui), 매치 방식·월 select와 출처. 툴바 바로 아래: 탭 단위 "내 세트 계산 불가"(이유), 진행(끝난 수/전체, 확인 중), 목록 밖 타겟 충돌 안내(`customTargetConflicts`).
-  - 목록: 압축 줄(순위·사용률·이름·결과 배지(2026-11-10 분류 라벨 대체, §2.6)·묶음 관련 SP·성격 ↑↓·점유율·보존률 / "소수 배분" / "출처: 사용자 지정" / "계산 불가", 대표 문구, 외 k행), 클릭하면 바로 아래 아코디언 상세(다중 펼침, 펼침 상태는 카드 id 키의 지역 상태): 모든 행(방어 H·B 쌍), 랭크·스카프 행 근거(수단·점유율·반응)(변화 없음 요약·"변화 없음 k행"은 2026-11-10부터 렌더하지 않음), 행마다 0~32 띠(현재값 마커·예산 밖 빗금 + "n 필요"·범주 텍스트 + 기호). 띠는 펼친 카드만 렌더. 커스텀 카드 상세 안에 프리셋 SP·성격·도구·특성 편집(`edit-preset`)과 타겟 기술 목록 편집(`set-custom-moves`, 마지막 1개 해제 컨트롤 비활성). 카드 머리 안내(`notices` — "셸암즈는 분류가 능력치에 따라 바뀌어 계산하지 않습니다"류)와 탭 안내(`TabView.notices`)는 문구만. superseded 뷰는 흐리게 + "갱신 중"(§6 결정 9). 하단 footer에 `Licenses`(데이터 출처·라이선스, §6 결정 7).
-  - 문구 포맷(`src/ui/format.ts`, 순수 + 테스트): 능력치 약자 H/A/B/C/D/S, 범주 라벨은 `src/ui/labels`(`CATEGORY_LABEL`·`ORDER_LABEL`) 재사용, 위쪽 "A28부터 확정 1타(+8)", 아래쪽 "H12까지 줄여도 확정 버팀(−4)", n이 있으면 "(+8, 다른 능력치에서 8 필요)", 스피드 "S20부터 선공(+4)". 컴포넌트는 이 함수 결과만 쓴다.
+  - 목록: 압축 줄(순위·사용률·이름·결과 배지(2026-11-10 분류 라벨 대체, §2.6)·묶음 관련 SP·성격 ↑↓·점유율·보존률 / "소수 배분" / "출처: 사용자 지정" / "계산 불가", 대표 문구, 외 k행 — _2026-11-10 개정: 순위·사용률·보존률·판정 기호 제거, 배분 라벨 "A32↑ 56.3%", 기술 라벨 [아이콘][랭크][기술명], 목표 문구는 §6 결정 14_), 클릭하면 바로 아래 아코디언 상세(다중 펼침, 펼침 상태는 카드 id 키의 지역 상태): 모든 행(방어 H·B 쌍), 랭크·스카프 행 근거(수단·점유율·반응)(변화 없음 요약·"변화 없음 k행"은 2026-11-10부터 렌더하지 않음), 행마다 0~32 띠(현재값 마커·예산 밖 빗금 + "n 필요"·범주 텍스트 + 기호). 띠는 펼친 카드만 렌더. 커스텀 카드 상세 안에 프리셋 SP·성격·도구·특성 편집(`edit-preset`)과 타겟 기술 목록 편집(`set-custom-moves`, 마지막 1개 해제 컨트롤 비활성). 카드 머리 안내(`notices` — "셸암즈는 분류가 능력치에 따라 바뀌어 계산하지 않습니다"류)와 탭 안내(`TabView.notices`)는 문구만. superseded 뷰는 흐리게 + "갱신 중"(§6 결정 9). 하단 footer에 `Licenses`(데이터 출처·라이선스, §6 결정 7).
+  - 문구 포맷(`src/ui/format.ts`, 순수 + 테스트): 능력치 약자 H/A/B/C/D/S, 범주 라벨은 `src/ui/labels`(`CATEGORY_LABEL`·`ORDER_LABEL`) 재사용. _(2026-11-10 사용자 피드백으로 개정: 경계 문구 `boundaryText`("A28부터 확정 1타(+8)"·"H12까지 줄여도 확정 버팀(−4)")는 지우고 `targetText`/`targetParts`로 "<판정>: 최소 A30 필요", 방어 "확정견딤: 최소 H4 B12 필요", n이 있으면 " (다른 능력치에서 n 필요)". 판정 라벨은 `judgementText`(KoLabel은 결과 배지 문구, 스피드는 행동 순서), 랭크 부호 `rankText`. 사용률 문구 `usageText`도 지움.)_ 컴포넌트는 이 함수 결과만 쓴다.
 - 테스트: `state.test.ts`(메타 변경 → 선택 비움·세대 증가, 필터 비우기 → 상위 N, 표시 기준 변경, 드래그 확정 시 세대 증가·같은 값은 무변화, 탭 전환 세대 무변화, 범위 밖 값 무시, 기술 0개·5개 이상 `add-custom-target`/`set-custom-moves` 무시, 이미 있는 타겟 재추가 무시), `format.test.ts`, `koErrors.test.ts`, `search.test.ts`(한국어 부분 일치·메가 폼 이름).
 - 위험: 400px에서 sticky 툴바가 길어져 목록을 가림(툴바 줄바꿈·표시 기준 접기), 카드 150장 렌더 비용(압축 줄 + `memo` + 안정 key, 상세는 펼친 것만), 메타 전환 중 깜빡임(superseded 뷰 유지).
 
@@ -955,7 +1000,7 @@ export function toCardInput(state: AppState, game: Snapshot, view: MetaView): Ca
 | 6 | 래더 변화 없음 행 제외·모델 요약 수 일치(커스텀 제외, 내 SP 무관 1건 = 1행, 처음부터 행 없는 카드도 M). 화면에는 요약·"변화 없음 k행" 없음(2026-11-10) | assemble·acceptance | product(요약 없음) | T2b·T6b |
 | 7 | 스카프 행 10% 경계·스카프 대표 → 스카프 아닌 행·순풍 판정 변화 | plan·acceptance(F4) | — | T2a·T6b |
 | 8 | 위협 랭크 행 10% 경계·오기 차이·수단/점유율·내 칼춤 행 | rank·plan·acceptance(F5) | product(근거 표시) | T2a·T6b |
-| 9 | 접힌 줄 대표 행·외 k행·갱신 중/계산 불가, 분류 라벨 대신 결과 배지(2026-11-10), 펼친 상세 | assemble·bands(`koLabel` 경계)·format(`koBadge`) | product(배지 F9·F3) | T2b·T4b·T5 |
+| 9 | 접힌 줄 대표 행·외 k행·갱신 중/계산 불가, 분류 라벨 대신 결과 배지(2026-11-10), 펼친 상세, 순위·사용률·보존·기호 제거·배분 라벨·기술 라벨·"최소 … 필요" 목표(2026-11-10, §6 결정 13·14) | assemble·bands(`koLabel` 경계·`judgementRank`)·target(33×33 대조)·format(`koBadge`·`targetText`)·text(`moveRankParts`) | product(배지 F9·F3, 간단행 표기, 대도각참 "+2 아이언헤드") | T2b·T4b·T5 |
 | 10 | 상위 N 10·선택 2마리·커스텀 유지 | plan·acceptance | product | T2a·T5 |
 | 11 | 목록 밖 추가 패널(기술 필수·[추가] 비활성)·워시로토무 3장(방어 탭은 기술 분류마다)·변화 없음 행 유지(고정 판정 문구, "변화 없음" 문구 없음)·SP/기술 편집 갱신·마지막 기술 유지·점유율 미표시 | presets·plan·state·acceptance(F6·F10) | product | T2a·T4b·T5 |
 | 11a | 셸암즈·공격 탭 내 목숨걸기는 카드·행이 되지 않고 안내 문구로만 | plan·acceptance(F8, 목숨걸기는 인라인 루카리오 세트) | — | T2a·T6b |
@@ -986,7 +1031,7 @@ git diff --stat package.json                             # 무변경
 npm run test:e2e                                         # 빌드 선행 + preview: dev·제품·레이아웃·성능·번들·오프라인
 ```
 
-### 6. 결정됨 — 빌드 중 개정 11건 + 1차 구현 뒤 1건 (2026-11-09 사용자 확인, PRD/ADR 본문 반영 완료)
+### 6. 결정됨 — 빌드 중 개정 11건 + 1차 구현 뒤 4건 (2026-11-09·11-10 사용자 확인, 1~14는 PRD/ADR 본문 반영 완료)
 
 1. **관여 능력치의 S 축소(ADR 결정 3 캐시 키).** S는 스피드 의존 기술(`MoveStatRefs.speedDependent`)이거나 공격측 계산 특성이 `SPEED_DEPENDENT_ATTACKER_ABILITIES`일 때만 양쪽에 넣는다. 캐시 키와 드래그 "갱신 대기"가 같은 `relevance.ts relevantStats`를 쓴다. 누락은 속성 테스트(T2b)와 F11로 지킨다.
 2. **Long Task 측정 창(PRD 반응성).** 판정은 계산 구간(`cards:compute-start` mark ~ 탭 완료)에만 적용한다. 부트스트랩(스냅샷·메타 로드·첫 렌더) Long Task는 따로 기록·보고하고 100ms를 넘으면 원인을 표기한다(T3 mark, T5 측정).
@@ -1000,6 +1045,8 @@ npm run test:e2e                                         # 빌드 선행 + previ
 10. **특성 원인 숨은 의존(ADR 결정 2 메모).** 테스트가 찾으면 `relevance.ts`에 특성 규칙을 더한다.
 11. **export 추가(ADR 결정 2 코어 확장).** `judgeDamage`·`judgeSpeed`·`checkSpeedSupport`·`engineMoveOverrides`·스피드 의존 상수, 메타 `parseSpreadKey` 승인.
 12. **내 목숨걸기(2026-11-09 1차 구현 뒤 사용자 결정, PRD 카드 단위·ADR 결정 2).** 공격 탭에서 A/C로 스윕하면 33칸이 같아 "항상 …"으로 잘못 요약되므로, 셸암즈처럼 카드·행을 만들지 않고 탭 안내(`MoveNotice.kind: 'attacker-hp-dependent'`)로만 남긴다. 기준은 코어 `moveStatRefs`의 `attackerStats`(hp, 목록 `ATTACKER_HP_MOVES`)이고 코어 계약은 그대로다. 상대 목숨걸기(방어 탭)는 상대 H를 묶음 키에 넣어 계산한다.
+13. **"최소 필요" 목표(2026-11-10 사용자 결정, 카드 모델).** 경계 문구("~까지 줄여도"·"~부터") 대신 `RowView.target`(§2.3 `TargetView`)을 "<판정>: 최소 <능력치><SP> 필요"로 쓴다. 목표 판정 = 현재 배지 판정보다 한 단계 이상 위(코어 `judgementRank` 순위 + 1 이상, 순서는 §2.2 `JUDGEMENT_ORDER`; `nextBetter`는 이 선택에 쓰지 않는다)의 가장 낮은 SP, 최상위이거나 위가 SP 0~최대에서 불가능하면 현재 판정 유지 최소값(현재보다 낮을 수 있다). 한 단계를 건너뛰면 그 칸의 실제 판정을 라벨로 쓴다. 공격·스피드 탭은 그 행 33칸에서, 방어 탭은 극단 필터마다 새 행 작업 `pair`(4단계)로 H·B/D를 함께 조정한 최소 조합(합 최소, 동률 H 큰 쪽, 예산 무시 평가 `judgeDamage` + `koLabel`)을 구해 그 필터의 H행·B/D행 모두에 같은 목표를 싣는다. n = (목표 SP 합 − 현재 그 능력치 SP 합) − 잔여 예산, > 0일 때만. 4단계는 필터 통과·두 행 스윕 완료·한 행이라도 변화 있는 쌍만 내고, 실행기 우선순위는 활성 탭 1·2 → 나머지 탭 1·2 → 활성 탭 3·4 → 나머지 탭 3·4, `TabView.complete`·`progress`에 4단계를 포함한다. 캐시 키는 극단 필터와 같은 정규화(H·B/D SP 제외) + 작업 종류 `pair`. 대표 행 선택 규칙은 그대로이고, 방어 탭 대표 행의 `target.stats`가 쌍(두 개)이다.
+14. **카드 줄 표기(2026-11-10 사용자 피드백, 화면).** (1) 사용률 순위·사용률은 간단행·상세에서 뺀다(정렬은 사용률 순 그대로, 순위는 DOM `data-rank`로만). 목록 밖 포켓몬 추가 목록에 순위·사용률을 붙이는 것은 다음 단위. (2) 배분 라벨 "A32↑ 56.3%" 하나로 묶고 비중은 작은 회색, "보존 80%" 제거(모델 `bundle.retention`은 그대로). (3) 간단행 판정 기호(◎△×) 제거 — 결과 배지가 대신(상세 띠의 기호는 유지). 스피드 탭은 결과 배지가 없어 같은 자리에 행동 순서 배지 `orderBadge`("선공" 초록·"동속" 노랑·"후공" 빨강, `data-testid="order-badge"`)를 둔다(리뷰 반영 2026-11-10: 기호만 지우면 스피드 간단행에 현재 판정이 남지 않아 AC19가 깨짐, 사용자 확인 대상). (4) 대표 행 기술 라벨 `MoveLabel`: [타입 아이콘][랭크][기술명], 내 기술 칸처럼 타입색 테두리·배경(`TypeIcon`·`--type-<slug>` 재사용, `:is(.move-slot, .move-chip)[data-type]`). 랭크는 `text.ts moveRankParts(tab, row)`가 `row.basis.myBoosts`·`opponentBoosts`와 `row.refs.offense`(owner 'self')로 나눈다: 기술 사용자(공격·스피드 탭 나, 방어 탭 상대)의 공격 능력치 랭크는 부호만("+2 아이언헤드"), 그 밖은 작은 회색 "내 B+2"·"상대 S−1"(속임수처럼 대상 능력치로 공격하면 부호만 붙이지 않음). 이전 근거 태그 `basisShortText`("상대 칼춤 A+2")는 지우고, 스카프 행만 도구 태그("구애스카프")를 라벨 앞에 남긴다. (5) 목표 문구 `targetText(row.target)` — 간단행·상세 모두 "~까지 줄여도"·"~부터" 대신. 상세 행은 "현재 H2 저난수1타 · 확정견딤: 최소 H2 B4 필요 (다른 능력치에서 4 필요)" — 현재 판정도 목표와 같은 4단 라벨(`cellLabel` → `judgementText`)로 한 줄 한 어휘. 0~32 띠·범례·칸 title은 3단 구간 라벨 그대로(PRD 구간 계약, 띠 기호·색과 짝). 400px에서는 판정·최소 SP 덩어리와 "(다른 능력치에서 n 필요)" 덩어리가 각각 줄바꿈되지 않는다. 방어 탭은 pair 결과 전(4단계 대기)이면 목표 문구가 비어 있다. 스크린샷: `/Users/nhn/.claude-mine/jobs/5b0bbe4b/tmp/theme/line-1280-attack.png`·`line-1280-defense.png`·`line-400-defense.png`(저장소 밖).
 
 ## 수용 기준 고정 입력 (T6a, 2026-11-09)
 
@@ -1027,6 +1074,8 @@ npm run test:e2e                                         # 빌드 선행 + previ
 - **대조 중 발견(카드 모델, T2b/T6b 확인 필요):** 상대 셸암즈 합성 항목(야도란(가라르의 모습), 남은 공격기 사이코키네시스)은 방어 탭 계획 카드에 `notices`가 붙지만, 남은 기술이 전부 극단 필터에 걸려 래더 카드가 표시되지 않으므로 탭 뷰에서 카드 머리 안내가 보이지 않는다. AC 11a "그 포켓몬 항목의 안내 문구로만 보인다"를 화면에서 만족하려면 안내가 있는 래더 카드를 표시 대상으로 남기거나 요약 쪽에 안내를 옮겨야 한다. → 통합(W2) 때 전자로 해결: `notices`가 있는 래더 카드는 행이 없어도 표시하고(headline `no-change`, `fixed` 빈 배열), 요약 `cards`에 세지 않는다(§2 `assembleTab` 카드 표시 개정).
 
 ## 반응성 측정 (T5, 2026-11-09)
+
+- **재측정(2026-11-10, 방어 쌍 4단계·카드 줄 표기 개정 뒤, `npm run test:e2e` product-perf, chromium 156, 빌드 산출물):** 공격 처음 열기 첫 카드 123ms·완료 936ms, 놓기 27ms·96ms. 방어 처음 열기 127ms·완료 672ms(pair 포함), 놓기 49ms·274ms. 스피드 처음 열기 15ms·233ms, 놓기 32ms·101ms. 모든 회차 계산 구간·부트스트랩 Long Task 0ms, 계산 중 클릭 입력 지연 중앙값 8ms(최대 15ms), rAF 간격 중앙값 17ms. 기준(첫 카드 ≤500ms·완료 ≤3초·Long Task ≤100ms) 모두 통과.
 
 > 정본은 `e2e/product-perf.spec.ts`(콘솔 `[product-perf]` 줄과 test annotation `perf`). 아래 값은 `npm run test:e2e` 전체 실행 1회분이다(단독 실행 2회도 ±10ms 안).
 

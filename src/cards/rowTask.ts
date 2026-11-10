@@ -1,9 +1,10 @@
 // 행 작업 하나를 코어 판정으로 계산한다. 범주는 코어가 낸 값을 그대로 옮긴다.
-import { CoreError, CoreInputError, judgeDamage, judgeSpeed, sweepDamage, sweepSpeed } from '../core'
+import { CoreError, CoreInputError, judgeDamage, judgeSpeed, koLabel, sweepDamage, sweepSpeed } from '../core'
 import type { CellJudgement, DamageResult, PokemonSet, SpeedResult, SweepResult } from '../core'
 import type { StatId } from '../data/schema'
 import { judgementKey } from './key'
-import type { CompactCell, ErrorReason, JudgementCache, RowSpec, RowTask, RowTaskResult, TabPlan } from './types'
+import { minPairPoints } from './target'
+import type { CachedJudgement, CompactCell, ErrorReason, JudgementCache, PairPoint, RowSpec, RowTask, RowTaskResult, TabPlan } from './types'
 
 const IGNORE_TOTAL = { ignoreSpTotal: true } as const
 const OVER_BUDGET = { judgeOverBudget: true } as const
@@ -84,6 +85,18 @@ function computeExtreme(plan: TabPlan, filterId: string): CompactCell[] {
   )
 }
 
+/** 극단 필터와 같은 세트에서 H·B/D를 따로 덮어쓴 판정으로 최소 조합을 찾는다. */
+function computePair(plan: TabPlan, filterId: string): PairPoint[] {
+  const spec = plan.filters[filterId]
+  if (spec === undefined) throw new Error(`극단 필터 ${filterId}가 계획에 없다`)
+  const [hpStat, defStat] = spec.stats
+  return minPairPoints((hp, d) => {
+    const defender = { ...spec.defender, sp: { ...spec.defender.sp, [hpStat]: hp, [defStat]: d } }
+    const v = judgeDamage(plan.game, 'defender', spec.attacker, defender, spec.moveId, spec.conditions, undefined, IGNORE_TOTAL).value
+    return koLabel('defense', v.kind === 'damage' ? v.ohkoChance : 0)
+  }, plan.spMaxPerStat)
+}
+
 /** 내 SP와 무관한 판정이라 칸 sp는 0으로 둔다. */
 function computeFixed(plan: TabPlan, fixedId: string): CompactCell[] {
   const spec = plan.fixed[fixedId]
@@ -91,7 +104,7 @@ function computeFixed(plan: TabPlan, fixedId: string): CompactCell[] {
   return [compactDamage(0, judgeDamage(plan.game, 'attacker', spec.attacker, spec.defender, spec.moveId, spec.conditions))]
 }
 
-function compute(plan: TabPlan, task: RowTask): CompactCell[] {
+function compute(plan: TabPlan, task: RowTask): CachedJudgement {
   switch (task.kind) {
     case 'ends':
       return computeEnds(plan, task.rowId)
@@ -101,10 +114,15 @@ function compute(plan: TabPlan, task: RowTask): CompactCell[] {
       return computeExtreme(plan, task.filterId)
     case 'fixed':
       return computeFixed(plan, task.fixedId)
+    case 'pair':
+      return computePair(plan, task.filterId)
   }
 }
 
-function toResult(task: RowTask, cells: readonly CompactCell[]): RowTaskResult {
+/** 캐시 키에 작업 종류가 들어가므로 값 모양은 task.kind로 정해진다. */
+function toResult(task: RowTask, value: CachedJudgement): RowTaskResult {
+  if (task.kind === 'pair') return { kind: 'pair', filterId: task.filterId, points: value as readonly PairPoint[] }
+  const cells = value as readonly CompactCell[]
   switch (task.kind) {
     case 'ends':
       return { kind: 'ends', rowId: task.rowId, low: cells[0], high: cells[1] }
@@ -131,9 +149,9 @@ export function computeRowTask(plan: TabPlan, task: RowTask, cache?: JudgementCa
     const key = cache === undefined ? undefined : judgementKey(plan, task)
     const hit = key === undefined ? undefined : cache?.get(key)
     if (hit !== undefined) return toResult(task, hit)
-    const cells = compute(plan, task)
-    if (key !== undefined) cache?.set(key, cells)
-    return toResult(task, cells)
+    const value = compute(plan, task)
+    if (key !== undefined) cache?.set(key, value)
+    return toResult(task, value)
   } catch (e) {
     if (e instanceof CoreError || e instanceof CoreInputError) return { kind: 'error', task, reason: errorReason(e) }
     throw e

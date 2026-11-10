@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { TABS, assembleTab, buildTabView, computeRowTask, createLruCache, pendingTasks, planTab, taskKey } from '../cards'
+import { TABS, assembleTab, buildTabView, computeRowTask, createLruCache, nextStage, pendingTasks, planTab, taskKey } from '../cards'
 import type { CardInput, JudgementCache, RowTaskResult, Tab, TabView } from '../cards'
 import { cardInput, realData } from '../cards/testing'
 import type { PokemonSet, SpTable } from '../core'
@@ -80,8 +80,7 @@ function runAll(input: CardInput, tab: Tab): { plan: ReturnType<typeof planTab>;
   const plan = planTab(input, tab)
   const results = new Map<string, RowTaskResult>()
   for (;;) {
-    const p = pendingTasks(plan, results)
-    const stage = p.stage1.length > 0 ? p.stage1 : p.stage2.length > 0 ? p.stage2 : p.stage3
+    const stage = nextStage(pendingTasks(plan, results))
     if (stage.length === 0) return { plan, results }
     for (const t of stage) results.set(taskKey(t), computeRowTask(plan, t))
   }

@@ -1,7 +1,7 @@
 import { memo } from 'react'
-import type { CellView, RowView, Tab } from '../../cards'
+import { cellLabel, type CellView, type RowView, type Tab } from '../../cards'
 import type { Snapshot } from '../../data/schema'
-import { boundaryText, categoryLabel, categorySymbol, categoryTone, currentText, fixedText, spanText, spansOf } from '../../ui/format'
+import { categoryLabel, categorySymbol, categoryTone, currentText, fixedText, spanText, spansOf, targetText } from '../../ui/format'
 import { koReason } from '../../ui/koErrors'
 import { ROW_KIND_LABEL, basisText, rowRefsNote, rowTitle } from './text'
 
@@ -42,6 +42,9 @@ export const RowDetail = memo(function RowDetail({ game, tab, row }: Props) {
   const note = rowRefsNote(game, tab, row)
   const stat = row.sweepStat
   const spans = spansOf(row.cells)
+  // 현재 판정은 목표 문구와 같은 판정 라벨(코어 koLabel 4단·행동 순서)로 쓴다. 띠·범례는 3단 구간 그대로.
+  const cur = row.cells.find((c) => c.sp === row.current.sp)
+  const currentLabel = cur === undefined ? undefined : cellLabel(tab, cur)
   return (
     <li className={`row row-${row.status}`} data-testid="row" data-row-kind={row.kind} data-status={row.status}>
       <div className="row-head">
@@ -55,7 +58,7 @@ export const RowDetail = memo(function RowDetail({ game, tab, row }: Props) {
       {row.status === 'stale' && <p className="badge-stale">갱신 대기 — 놓으면 다시 계산합니다</p>}
       {row.noChange && row.current.category !== undefined && (
         <p className="row-fixed">
-<span className={`tone-text tone-${categoryTone(row.current.category)}`}>{categorySymbol(row.current.category)}</span> {fixedText(row.current.category)}
+          <span className={`tone-text tone-${categoryTone(row.current.category)}`}>{categorySymbol(row.current.category)}</span> {fixedText(row.current.category)}
         </p>
       )}
       {stat !== undefined && row.cells.length > 0 && !row.noChange && (
@@ -64,9 +67,13 @@ export const RowDetail = memo(function RowDetail({ game, tab, row }: Props) {
             <span className={`tone-text tone-${categoryTone(row.current.category ?? '')}`} aria-hidden="true">
               {row.current.category !== undefined ? categorySymbol(row.current.category) : ''}
             </span>{' '}
-            {currentText(stat, row.current.sp, row.current.category)}
-            {row.nearest.up && <span className="boundary"> · {boundaryText(stat, row.nearest.up)}</span>}
-            {row.nearest.down && <span className="boundary"> · {boundaryText(stat, row.nearest.down)}</span>}
+            {currentText(stat, row.current.sp, currentLabel)}
+            {row.target !== undefined && (
+              <span className="boundary" data-testid="row-target">
+                {' '}
+                · {targetText(row.target)}
+              </span>
+            )}
           </p>
           <Band cells={row.cells} current={row.current.sp} />
           <p className="band-legend">
