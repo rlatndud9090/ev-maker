@@ -1,10 +1,9 @@
 // 탭 뷰 값 → 표시 문구. 판정·경계·n은 계산하지 않고 받은 값을 문장으로만 만든다.
 import type { StatId } from '../data/schema'
+import { koLabel, type KoLabel, type KoSide } from '../core'
 import { CATEGORY_LABEL, ORDER_LABEL } from './labels'
 
 export const STAT_SHORT: Record<StatId, string> = { hp: 'H', atk: 'A', def: 'B', spa: 'C', spd: 'D', spe: 'S' }
-
-export const CARD_CATEGORY_LABEL: Record<'physical' | 'special', string> = { physical: '물리', special: '특수' }
 
 const MINUS = '−'
 
@@ -113,8 +112,33 @@ export function spansOf(cells: readonly SpanLike[]): Span[] {
 
 export const spanText = (s: Span): string => `${s.from === s.to ? s.from : `${s.from}~${s.to}`} ${categoryLabel(s.category)}`
 
-export function noChangeTitle(rows: number, cards: number): string {
-  return `변화 없음 — 행 ${rows}개(카드 ${cards}장)`
+export type KoBadgeTone = 'red' | 'orange' | 'yellow' | 'green' | 'gray'
+
+export interface KoBadge {
+  label: string
+  tone: KoBadgeTone
+}
+
+const KO_BADGE: Record<KoLabel, KoBadge> = {
+  'guaranteed-ohko': { label: '확정1타', tone: 'red' },
+  'high-roll-ohko': { label: '고난수1타', tone: 'orange' },
+  'mid-high-roll-ohko': { label: '중고난수1타', tone: 'orange' },
+  'mid-low-roll-ohko': { label: '중저난수1타', tone: 'yellow' },
+  'low-roll-ohko': { label: '저난수1타', tone: 'yellow' },
+  'guaranteed-survive': { label: '확정견딤', tone: 'green' },
+}
+
+export interface KoCellLike {
+  immune?: true
+  ohkoChance?: number
+}
+
+/** 대표 칸 → 카드 결과 배지. 무효 칸은 "무효", 1타 확률이 없는 칸(스피드)은 배지 없음. 라벨 규칙은 코어 koLabel. */
+export function koBadge(side: KoSide, cell: KoCellLike | undefined): KoBadge | undefined {
+  if (cell === undefined) return undefined
+  if (cell.immune) return { label: '무효', tone: 'gray' }
+  if (cell.ohkoChance === undefined) return undefined
+  return KO_BADGE[koLabel(side, cell.ohkoChance)]
 }
 
 export function progressText(done: number, total: number, complete: boolean): string {

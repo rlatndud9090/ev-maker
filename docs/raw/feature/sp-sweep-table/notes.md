@@ -258,6 +258,8 @@ sweepSpeed(snapshot, set, opponent, conditions?, options?: SweepOptions): SweepR
 moveStatRefs(snapshot: Snapshot, moveId: string): MoveStatRefs
 /** 한 세트가 스피드 비교에 쓰일 수 있는지. 미구현 스피드 보정·행동 순서 특성/도구면 CoreInputError(field 'ability'|'item') */
 checkSpeedSupport(snapshot: Snapshot, set: PokemonSet, options?: EvalOptions): void
+/** 1타 확률 → 카드 줄 결과 배지 라벨(사용자 피드백 2026-11-10). attackBand·defenseBand와 같은 normalizeThresholds·검증. 공격: 1 / ≥highRoll / 그 아래 / 0, 방어: 1 / >lowRoll / ≤lowRoll / 0 */
+koLabel(side: 'attack' | 'defense', ohkoChance: number, thresholds?): 'guaranteed-ohko' | 'high-roll-ohko' | 'mid-low-roll-ohko' | 'mid-high-roll-ohko' | 'low-roll-ohko' | 'guaranteed-survive'
 export { SPEED_DEPENDENT_MOVES, SPEED_DEPENDENT_ATTACKER_ABILITIES } // engine.ts 상수 그대로 export
 ```
 
@@ -766,8 +768,8 @@ export function toCardInput(state: AppState, game: Snapshot, view: MetaView): Ca
 - 툴바(sticky): `tablist "결과 탭"`의 tab `공격`·`방어`·`스피드`, spinbutton `상위 N`, combobox `포켓몬 선택`, button `목록 밖 포켓몬 추가`(누르면 툴바 바로 아래 `region "목록 밖 포켓몬 추가"` 인라인 패널: combobox `추가할 포켓몬`, 기술 칩 체크박스 그룹 `group "기술"`(최대 4개 선택, 검색 combobox `기술 검색`), button `추가`(기술 0개면 `disabled`)·`취소`), checkbox `내 순풍`·`상대 순풍`, button `표시 기준`(펼치면 spinbutton `묶음 점유율 기준(%)`·`분류당 카드 상한`·`랭크 기준(%)`·`스카프 기준(%)`), select `매치 방식`·`월`, 출처 `[data-testid="meta-source"]`.
 - 탭 패널 `[role="tabpanel"][data-testid="tab-panel"][data-tab][data-generation][data-first-card="true|false"][data-complete="true|false"]`. `data-first-card`는 현재 세대 뷰(superseded 아님)에서 `cards.length > 0 || (stage12Done && cards.length === 0)`일 때 true. 진행 `[data-testid="progress"]`, 탭 오류 `[data-testid="tab-error"]`, 탭 안내(내 기술 분류 가변) `[data-testid="tab-notice"]`, 잠정 빈 상태 `[data-testid="empty-provisional"]`, 이전 세대 뷰 표시 중이면 패널에 `data-superseded="true"`와 "갱신 중".
 - 하단 `footer [data-testid="licenses"]`(데이터 출처·라이선스).
-- 요약 `[data-testid="no-change-summary"][data-confirming="true|false"]`(button으로 펼침).
-- 카드 `li[data-testid="card"][data-card-id][data-opponent][data-category][data-origin="ladder|custom"][data-state]`, 펼침 `button[aria-expanded]`, 대표 문구 `[data-testid="card-headline"]`, `[data-testid="card-more"]`(k가 0이면 없음), 카드 머리 안내 `[data-testid="card-notice"]`(상대 분류 가변 기술). 커스텀 카드 상세 안 타겟 기술 편집은 `group "타겟 기술"`(마지막 1개의 해제 컨트롤은 `disabled`).
+- 변화 없음 요약·카드 안 "변화 없음 k행"은 렌더하지 않는다(`no-change-summary` 없음 — 사용자 피드백 2026-11-10, 모델 `TabView.noChange`·`hiddenNoChangeRows`는 그대로).
+- 카드 `li[data-testid="card"][data-card-id][data-opponent][data-category][data-origin="ladder|custom"][data-state]`(물리/특수 라벨은 렌더하지 않고 `data-category`만 남김), 결과 배지 `[data-testid="ko-badge"][data-tone="red|orange|yellow|green|gray"]`(공격·방어 탭, 대표 행 현재 칸 `ohkoChance` → 코어 `koLabel` → `src/ui/format` `koBadge`, 계산 불가·갱신 중·스피드 탭은 없음), 펼침 `button[aria-expanded]`, 대표 문구 `[data-testid="card-headline"]`, `[data-testid="card-more"]`(k가 0이면 없음), 카드 머리 안내 `[data-testid="card-notice"]`(상대 분류 가변 기술). 커스텀 카드 상세 안 타겟 기술 편집은 `group "타겟 기술"`(마지막 1개의 해제 컨트롤은 `disabled`).
 - 행 `[data-testid="row"][data-row-kind][data-status]`, 띠 칸 `[data-testid="band-cell"][data-sp][data-category][data-over-budget="true|false"]`, 현재 칸 `aria-current="true"`, 띠 컨테이너 class `band-scroll`(자체 가로 스크롤).
 
 ### 3. 태스크 브리핑
@@ -921,7 +923,7 @@ export function toCardInput(state: AppState, game: Snapshot, view: MetaView): Ca
   - 설정 C: 능력치 6줄 SP 슬라이더(± 버튼, 숫자 입력, 잔여 예산, 큰 실능치 = `computeStats` 성공 시만, 성격 ↑↓), 위쪽 2열 칩(종·메가·특성·도구·성격·기술 4칸, 누르면 그 자리 편집). 종·도구·기술은 combobox + 한국어 부분 일치 후보(`src/ui/search.ts searchNames(index: NameIndex 계열, query: string, limit: number): string[]`). 위반은 원인 칸 옆 `role="alert"`, 문구는 `src/ui/koErrors.ts`가 코드·field를 한국어 이름으로(예: ILLEGAL_MOVE → "한카리아스는 기습을 배울 수 없습니다", SP_TOTAL_EXCEEDED → "SP 합계 70이 상한 66을 넘습니다"). 내 랭크 수단은 칩에 `myMeansNotes` 결과로 "공격 탭 랭크 행 추가"류 짧은 알림.
   - 슬라이더 계약: 드래그 중 값은 컴포넌트 지역 상태, 잔여 예산까지 클램프(최대 = min(32, 현재 값 + 잔여), §6 결정 8), 드래그 중 `executor.setDisplaySp`(rAF 1회로 합침), 놓을 때(`pointerup`, 키보드는 값 확정 시) `commit-sp` + `setDisplaySp(null)`. 숫자 입력은 클램프하지 않는다(초과 → 코어 거부 → 탭 오류 + 칸 옆 안내).
   - 툴바: 탭, 상위 N, 포켓몬 선택(검색 + 선택 칩, 비우기), 목록 밖 포켓몬 추가 버튼 → 툴바 바로 아래 인라인 패널(§6 결정 3): ① 종 검색(로스터, 메타 목록 안 종은 후보에서 제외) → ② 그 종이 배울 수 있는 기술을 칩으로 1~4개 선택(검색 가능, 자동 선택 없음 — 통계 값을 쓰지 않는다) → ③ [취소]/[추가]. 기술 0개면 [추가] `disabled`, 추가 시 `add-custom-target{rosterId, moves}` 후 패널을 닫고 포커스를 버튼으로 돌린다. 패널 입력 중 값은 지역 상태. 내/상대 순풍, 표시 기준(% ↔ 0~1 변환은 ui), 매치 방식·월 select와 출처. 툴바 바로 아래: 탭 단위 "내 세트 계산 불가"(이유), 진행(끝난 수/전체, 확인 중), 목록 밖 타겟 충돌 안내(`customTargetConflicts`).
-  - 목록: 압축 줄(순위·사용률·이름·분류·묶음 관련 SP·성격 ↑↓·점유율·보존률 / "소수 배분" / "출처: 사용자 지정" / "계산 불가", 대표 문구, 외 k행), 클릭하면 바로 아래 아코디언 상세(다중 펼침, 펼침 상태는 카드 id 키의 지역 상태): 모든 행(방어 H·B 쌍), 랭크·스카프 행 근거(수단·점유율·반응), "변화 없음 k행", 행마다 0~32 띠(현재값 마커·예산 밖 빗금 + "n 필요"·범주 텍스트 + 기호). 띠는 펼친 카드만 렌더. 커스텀 카드 상세 안에 프리셋 SP·성격·도구·특성 편집(`edit-preset`)과 타겟 기술 목록 편집(`set-custom-moves`, 마지막 1개 해제 컨트롤 비활성). 카드 머리 안내(`notices` — "셸암즈는 분류가 능력치에 따라 바뀌어 계산하지 않습니다"류)와 탭 안내(`TabView.notices`)는 문구만. superseded 뷰는 흐리게 + "갱신 중"(§6 결정 9). 하단 footer에 `Licenses`(데이터 출처·라이선스, §6 결정 7).
+  - 목록: 압축 줄(순위·사용률·이름·결과 배지(2026-11-10 분류 라벨 대체, §2.6)·묶음 관련 SP·성격 ↑↓·점유율·보존률 / "소수 배분" / "출처: 사용자 지정" / "계산 불가", 대표 문구, 외 k행), 클릭하면 바로 아래 아코디언 상세(다중 펼침, 펼침 상태는 카드 id 키의 지역 상태): 모든 행(방어 H·B 쌍), 랭크·스카프 행 근거(수단·점유율·반응)(변화 없음 요약·"변화 없음 k행"은 2026-11-10부터 렌더하지 않음), 행마다 0~32 띠(현재값 마커·예산 밖 빗금 + "n 필요"·범주 텍스트 + 기호). 띠는 펼친 카드만 렌더. 커스텀 카드 상세 안에 프리셋 SP·성격·도구·특성 편집(`edit-preset`)과 타겟 기술 목록 편집(`set-custom-moves`, 마지막 1개 해제 컨트롤 비활성). 카드 머리 안내(`notices` — "셸암즈는 분류가 능력치에 따라 바뀌어 계산하지 않습니다"류)와 탭 안내(`TabView.notices`)는 문구만. superseded 뷰는 흐리게 + "갱신 중"(§6 결정 9). 하단 footer에 `Licenses`(데이터 출처·라이선스, §6 결정 7).
   - 문구 포맷(`src/ui/format.ts`, 순수 + 테스트): 능력치 약자 H/A/B/C/D/S, 범주 라벨은 `src/ui/labels`(`CATEGORY_LABEL`·`ORDER_LABEL`) 재사용, 위쪽 "A28부터 확정 1타(+8)", 아래쪽 "H12까지 줄여도 확정 버팀(−4)", n이 있으면 "(+8, 다른 능력치에서 8 필요)", 스피드 "S20부터 선공(+4)". 컴포넌트는 이 함수 결과만 쓴다.
 - 테스트: `state.test.ts`(메타 변경 → 선택 비움·세대 증가, 필터 비우기 → 상위 N, 표시 기준 변경, 드래그 확정 시 세대 증가·같은 값은 무변화, 탭 전환 세대 무변화, 범위 밖 값 무시, 기술 0개·5개 이상 `add-custom-target`/`set-custom-moves` 무시, 이미 있는 타겟 재추가 무시), `format.test.ts`, `koErrors.test.ts`, `search.test.ts`(한국어 부분 일치·메가 폼 이름).
 - 위험: 400px에서 sticky 툴바가 길어져 목록을 가림(툴바 줄바꿈·표시 기준 접기), 카드 150장 렌더 비용(압축 줄 + `memo` + 안정 key, 상세는 펼친 것만), 메타 전환 중 깜빡임(superseded 뷰 유지).
@@ -949,13 +951,13 @@ export function toCardInput(state: AppState, game: Snapshot, view: MetaView): Ca
 | 2 | 고정 입력 공격 탭 순서·현재 판정·경계 = 코어 직접 호출, n 정의식(잔여 0 / > 0) | acceptance(F1)·assemble | — | T6a·T6b·T2b |
 | 3 | 묶음 합산·기준·상한 3·소수 배분·보존률·관련 능력치만(합성 + 실제 1건) | bundles·plan·acceptance | product(관련 SP만) | T2a·T6b |
 | 4 | 혼합 세트 물리·특수 분리·분류당 3, 사이코쇼크 참조 기준 | plan·acceptance(F2) | — | T2a·T6b |
-| 5 | 방어 극단 필터 세 경우 → 요약, 남은 기술 H·B 행, 상위 5 안 | schedule·assemble·acceptance(F3) | — | T2a·T2b·T6b |
-| 6 | 래더 변화 없음 행 제외·요약 수 일치(커스텀 제외, 내 SP 무관 1건 = 1행, 처음부터 행 없는 카드도 M) | assemble·acceptance | — | T2b·T6b |
+| 5 | 방어 극단 필터 세 경우 → 모델 요약(화면 미표시), 남은 기술 H·B 행, 상위 5 안 | schedule·assemble·acceptance(F3) | — | T2a·T2b·T6b |
+| 6 | 래더 변화 없음 행 제외·모델 요약 수 일치(커스텀 제외, 내 SP 무관 1건 = 1행, 처음부터 행 없는 카드도 M). 화면에는 요약·"변화 없음 k행" 없음(2026-11-10) | assemble·acceptance | product(요약 없음) | T2b·T6b |
 | 7 | 스카프 행 10% 경계·스카프 대표 → 스카프 아닌 행·순풍 판정 변화 | plan·acceptance(F4) | — | T2a·T6b |
 | 8 | 위협 랭크 행 10% 경계·오기 차이·수단/점유율·내 칼춤 행 | rank·plan·acceptance(F5) | product(근거 표시) | T2a·T6b |
-| 9 | 접힌 줄 대표 행·외 k행·갱신 중/계산 불가, 펼친 상세 | assemble | product | T2b·T4b·T5 |
+| 9 | 접힌 줄 대표 행·외 k행·갱신 중/계산 불가, 분류 라벨 대신 결과 배지(2026-11-10), 펼친 상세 | assemble·bands(`koLabel` 경계)·format(`koBadge`) | product(배지 F9·F3) | T2b·T4b·T5 |
 | 10 | 상위 N 10·선택 2마리·커스텀 유지 | plan·acceptance | product | T2a·T5 |
-| 11 | 목록 밖 추가 패널(기술 필수·[추가] 비활성)·워시로토무 3장(방어 탭은 기술 분류마다)·변화 없음 행 유지·SP/기술 편집 갱신·마지막 기술 유지·점유율 미표시 | presets·plan·state·acceptance(F6·F10) | product | T2a·T4b·T5 |
+| 11 | 목록 밖 추가 패널(기술 필수·[추가] 비활성)·워시로토무 3장(방어 탭은 기술 분류마다)·변화 없음 행 유지(고정 판정 문구, "변화 없음" 문구 없음)·SP/기술 편집 갱신·마지막 기술 유지·점유율 미표시 | presets·plan·state·acceptance(F6·F10) | product | T2a·T4b·T5 |
 | 11a | 셸암즈·공격 탭 내 목숨걸기는 카드·행이 되지 않고 안내 문구로만 | plan·acceptance(F8, 목숨걸기는 인라인 루카리오 세트) | — | T2a·T6b |
 | 12 | 오류 격리(행·카드·탭) | plan·assemble·acceptance(F7·F8) | product(탭 안내) | T2a·T2b·T6b |
 | 13 | Bo3·월 변경 → 그 스냅샷·출처 | acceptance(합성 인덱스) | product(Bo3) | T6b·T5 |

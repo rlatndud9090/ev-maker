@@ -8,7 +8,6 @@ import { josa, koReason } from '../../ui/koErrors'
 import type { TabViewState } from '../executor'
 import type { AppAction } from '../state'
 import { CardItem } from './CardItem'
-import { NoChangeSummary } from './NoChangeSummary'
 import { moveNoticeText } from './text'
 
 interface Props {
@@ -97,7 +96,6 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
           )}
           {view.status.kind === 'ok' && (
             <>
-              <NoChangeSummary game={game} summary={view.noChange} confirming={!view.complete} />
               {view.cards.length === 0 && view.stage12Done && !view.complete && (
                 <p className="empty" data-testid="empty-provisional">
                   지금까지 SP로 판정이 바뀌는 카드가 없습니다(확인 중).

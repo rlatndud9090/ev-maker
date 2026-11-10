@@ -7,7 +7,7 @@ import {
   currentText,
   fixedText,
   fromPercentInput,
-  noChangeTitle,
+  koBadge,
   refsNote,
   shareText,
   spanText,
@@ -46,7 +46,23 @@ describe('라벨', () => {
     expect(currentText('atk', 32, 'high-roll-ohko')).toBe('현재 A32 고난수 1타')
     expect(currentText('spe', 4, undefined)).toBe('현재 S4')
     expect(fixedText('second')).toBe('항상 후공')
-    expect(noChangeTitle(3, 1)).toBe('변화 없음 — 행 3개(카드 1장)')
+  })
+  it('결과 배지: 공격 4단', () => {
+    expect(koBadge('attack', { ohkoChance: 1 })).toEqual({ label: '확정1타', tone: 'red' })
+    expect(koBadge('attack', { ohkoChance: 0.75 })).toEqual({ label: '고난수1타', tone: 'orange' })
+    expect(koBadge('attack', { ohkoChance: 0.5 })).toEqual({ label: '중저난수1타', tone: 'yellow' })
+    expect(koBadge('attack', { ohkoChance: 0 })).toEqual({ label: '확정견딤', tone: 'green' })
+  })
+  it('결과 배지: 방어 4단', () => {
+    expect(koBadge('defense', { ohkoChance: 1 })).toEqual({ label: '확정1타', tone: 'red' })
+    expect(koBadge('defense', { ohkoChance: 0.5 })).toEqual({ label: '중고난수1타', tone: 'orange' })
+    expect(koBadge('defense', { ohkoChance: 0.1875 })).toEqual({ label: '저난수1타', tone: 'yellow' })
+    expect(koBadge('defense', { ohkoChance: 0 })).toEqual({ label: '확정견딤', tone: 'green' })
+  })
+  it('결과 배지: 무효는 회색, 1타 확률이 없거나 칸이 없으면 배지 없음', () => {
+    expect(koBadge('attack', { immune: true, ohkoChance: 0 })).toEqual({ label: '무효', tone: 'gray' })
+    expect(koBadge('defense', {})).toBeUndefined()
+    expect(koBadge('attack', undefined)).toBeUndefined()
   })
   it('묶음 SP와 점유율', () => {
     expect(bundleText([{ stat: 'hp', sp: 4, nature: 'neutral' }, { stat: 'def', sp: 12, nature: 'plus' }, { stat: 'spe', sp: 0, nature: 'minus' }])).toBe('H4 B12↑ S0↓')

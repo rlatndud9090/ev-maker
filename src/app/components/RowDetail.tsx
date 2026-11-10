@@ -55,7 +55,7 @@ export const RowDetail = memo(function RowDetail({ game, tab, row }: Props) {
       {row.status === 'stale' && <p className="badge-stale">갱신 대기 — 놓으면 다시 계산합니다</p>}
       {row.noChange && row.current.category !== undefined && (
         <p className="row-fixed">
-          변화 없음 — <span className={`tone-text tone-${categoryTone(row.current.category)}`}>{categorySymbol(row.current.category)}</span> {fixedText(row.current.category)}
+<span className={`tone-text tone-${categoryTone(row.current.category)}`}>{categorySymbol(row.current.category)}</span> {fixedText(row.current.category)}
         </p>
       )}
       {stat !== undefined && row.cells.length > 0 && !row.noChange && (

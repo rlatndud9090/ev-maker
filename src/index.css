@@ -61,6 +61,11 @@
   --tier-bad: var(--mb-tier-none);
   --tier-ink: var(--mb-tier-on-dark);
   --tier-ink-muted: #5c4f42;
+  /* 카드 결과 배지(확정1타·고난수·중저난수·확정견딤) 면 — 글자는 --tier-ink(대비 ≥ 7.7:1) */
+  --badge-red: #f6b8b0;
+  --badge-orange: #f9cc98;
+  --badge-yellow: #f6e58d;
+  --badge-green: #c4e8a8;
   --good: #22693a;
   --mid: #7a5a00;
   --bad: #b1352a;
@@ -110,6 +115,10 @@
     --tier-bad: #e6c2be;
     --tier-ink: #2a201a;
     --tier-ink-muted: #4f4236;
+    --badge-red: #e9a9a1;
+    --badge-orange: #eabf8e;
+    --badge-yellow: #e6d585;
+    --badge-green: #b5da9c;
     --good: #7fd29a;
     --mid: #e3c56a;
     --bad: #ff8a80;
@@ -887,8 +896,7 @@ td.src {
   outline: 2px solid var(--accent);
 }
 
-.tab-panel.superseded .cards,
-.tab-panel.superseded .no-change {
+.tab-panel.superseded .cards {
   opacity: 0.5;
 }
 
@@ -948,33 +956,6 @@ td.src {
   border-radius: 12px;
 }
 
-.product .no-change > button {
-  width: 100%;
-  text-align: left;
-}
-
-.no-change-list {
-  margin: 0.3rem 0 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 0.2rem;
-  font-size: 0.85rem;
-}
-
-.no-change-list li {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.2rem 0.5rem;
-  padding: 0.2rem 0.4rem;
-  background: var(--card);
-  border-radius: 8px;
-}
-
-.nc-name {
-  font-weight: 600;
-}
-
 .cards {
   list-style: none;
   margin: 0;
@@ -1016,19 +997,35 @@ td.src {
   font-weight: 700;
 }
 
-.cat {
+.ko-badge {
   font-size: 0.78rem;
-  padding: 0 0.35rem;
+  font-weight: 700;
+  padding: 0.05rem 0.45rem;
   border-radius: 999px;
+  color: var(--tier-ink);
+  white-space: nowrap;
+}
+
+.ko-red {
+  background: var(--badge-red);
+}
+
+.ko-orange {
+  background: var(--badge-orange);
+}
+
+.ko-yellow {
+  background: var(--badge-yellow);
+}
+
+.ko-green {
+  background: var(--badge-green);
+}
+
+.ko-gray {
   background: var(--surface);
-}
-
-.cat-physical {
-  background: var(--tier-warn); color: var(--tier-ink);
-}
-
-.cat-special {
-  background: var(--accent-soft);
+  color: var(--text);
+  border: 1px solid var(--border);
 }
 
 .card-bundle {

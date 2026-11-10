@@ -1,8 +1,8 @@
 import { memo, type Dispatch } from 'react'
-import type { BoundaryView, CardView, CustomTarget, RowView, Tab } from '../../cards'
+import type { BoundaryView, CardView, CellView, CustomTarget, RowView, Tab } from '../../cards'
 import type { Snapshot } from '../../data/schema'
 import { namesOf } from '../../ui/names'
-import { CARD_CATEGORY_LABEL, boundaryText, bundleText, categorySymbol, categoryTone, fixedText, shareText, usageText } from '../../ui/format'
+import { boundaryText, bundleText, categorySymbol, categoryTone, fixedText, koBadge, shareText, usageText } from '../../ui/format'
 import { koReason } from '../../ui/koErrors'
 import type { AppAction } from '../state'
 import { CustomEditor } from './CustomEditor'
@@ -28,14 +28,31 @@ function closest(row: RowView): BoundaryView | undefined {
   return Math.abs(down.delta) < Math.abs(up.delta) ? down : up
 }
 
-function Headline({ game, card }: { game: Snapshot; card: CardView }) {
+const currentCell = (row: RowView): CellView | undefined => row.cells.find((c) => c.sp === row.current.sp)
+
+/** 카드 줄 배지의 기준 칸: 대표 행의 현재 칸. 전 행 변화 없음 커스텀 카드는 칸이 있는 첫 행. */
+function badgeCell(card: CardView): CellView | undefined {
+  const h = card.headline
+  if (h.kind === 'row') {
+    const row = card.rows.find((r) => r.id === h.rowId)
+    return row === undefined ? undefined : currentCell(row)
+  }
+  if (h.kind !== 'no-change') return undefined
+  for (const row of card.rows) {
+    const cell = currentCell(row)
+    if (cell !== undefined) return cell
+  }
+  return undefined
+}
+
+function Headline({ game, card, badge }: { game: Snapshot; card: CardView; badge: boolean }) {
   const h = card.headline
   if (h.kind === 'updating') return <span className="headline updating">갱신 중</span>
   if (h.kind === 'error') return <span className="headline error">계산 불가: {koReason(game, h.reason)}</span>
   if (h.kind === 'no-change') {
-    // 안내만 있는 래더 카드는 행이 없어 고정 범주도 없다.
-    if (h.fixed.length === 0) return <span className="headline fixed">변화 없음</span>
-    return <span className="headline fixed">변화 없음 — {h.fixed.map(fixedText).join(', ')}</span>
+    // 배지가 고정 판정을 대신한다. 칸 없는 고정 판정 행(극단 필터·내 SP 무관)만 문구로 보인다.
+    if (badge || h.fixed.length === 0) return null
+    return <span className="headline fixed">{h.fixed.map(fixedText).join(', ')}</span>
   }
   const row = card.rows.find((r) => r.id === h.rowId)
   if (row === undefined || row.sweepStat === undefined) return null
@@ -55,6 +72,7 @@ export const CardItem = memo(function CardItem({ game, tab, card, expanded, onTo
   const ladder = card.opponent.source === 'ladder'
   const detailId = `card-detail-${encodeURIComponent(card.id)}`
   const { bundle } = card
+  const badge = tab === 'speed' ? undefined : koBadge(tab, badgeCell(card))
   return (
     <li
       className={`card card-${card.state}${expanded ? ' open' : ''}`}
@@ -76,7 +94,11 @@ export const CardItem = memo(function CardItem({ game, tab, card, expanded, onTo
           )}
         </span>
         <span className="card-name">{names.species.label(card.opponent.id)}</span>
-        {card.category !== null && <span className={`cat cat-${card.category}`}>{CARD_CATEGORY_LABEL[card.category]}</span>}
+        {badge !== undefined && (
+          <span className={`ko-badge ko-${badge.tone}`} data-testid="ko-badge" data-tone={badge.tone}>
+            {badge.label}
+          </span>
+        )}
         <span className="card-bundle num">
           {bundle.stats.length > 0 ? bundleText(bundle.stats) : '관련 SP 없음'}
           {ladder && bundle.share !== undefined && !bundle.minority && <> · {shareText(bundle.share)}</>}
@@ -86,7 +108,7 @@ export const CardItem = memo(function CardItem({ game, tab, card, expanded, onTo
         </span>
         {card.state === 'error' && <span className="badge-error">계산 불가</span>}
         <span className="card-headline" data-testid="card-headline">
-          <Headline game={game} card={card} />
+          <Headline game={game} card={card} badge={badge !== undefined} />
         </span>
         {card.moreRows > 0 && (
           <span className="card-more" data-testid="card-more">
@@ -110,7 +132,6 @@ export const CardItem = memo(function CardItem({ game, tab, card, expanded, onTo
                 ))}
               </ol>
             )}
-            {card.hiddenNoChangeRows > 0 && <p className="hint">변화 없음 {card.hiddenNoChangeRows}행(탭 요약에 있습니다)</p>}
             {target !== undefined && <CustomEditor game={game} tab={tab} card={card} target={target} dispatch={dispatch} />}
           </>
         )}

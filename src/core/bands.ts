@@ -45,3 +45,26 @@ export function defenseBand(ohkoChance: number, thresholds?: Partial<BandThresho
   if (p <= t.lowRoll) return 'low-roll-ohko'
   return 'mid-or-higher'
 }
+
+export type KoSide = 'attack' | 'defense'
+export type KoLabel =
+  | 'guaranteed-ohko'
+  | 'high-roll-ohko'
+  | 'mid-low-roll-ohko'
+  | 'mid-high-roll-ohko'
+  | 'low-roll-ohko'
+  | 'guaranteed-survive'
+
+/**
+ * 1타 확률 → 카드 결과 배지 라벨(구간과 별개인 표시용 6단).
+ * 공격(내가 때림): 1 / highRoll 이상 / 그 아래 / 0. 방어(상대가 때림): 1 / lowRoll 초과 / lowRoll 이하 / 0.
+ */
+export function koLabel(side: KoSide, ohkoChance: number, thresholds?: Partial<BandThresholds>): KoLabel {
+  if (side !== 'attack' && side !== 'defense') throw new CoreInputError('side', `attack 또는 defense여야 한다(받은 값: ${String(side)})`)
+  const p = chance(ohkoChance)
+  const t = normalizeThresholds(thresholds)
+  if (p >= 1) return 'guaranteed-ohko'
+  if (p <= 0) return 'guaranteed-survive'
+  if (side === 'attack') return p >= t.highRoll ? 'high-roll-ohko' : 'mid-low-roll-ohko'
+  return p > t.lowRoll ? 'mid-high-roll-ohko' : 'low-roll-ohko'
+}

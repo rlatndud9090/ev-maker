@@ -5,7 +5,7 @@ export { STAT_IDS, statValue, natureMultiplier, type NatureMultiplier } from './
 export { validateSet, computeStats, spNoGainCells, type ResolvedSet } from './set'
 export { DEFAULT_GAME_TYPE } from './conditions'
 export { calcDamage } from './damage'
-export { DEFAULT_THRESHOLDS, attackBand, defenseBand } from './bands'
+export { DEFAULT_THRESHOLDS, attackBand, defenseBand, koLabel, type KoLabel, type KoSide } from './bands'
 export { finalSpeed, compareSpeed, minSpToOutspeed, checkSpeedSupport } from './speed'
 export { sweep, sweepDamage, sweepSpeed, judgeDamage, judgeSpeed, type CellJudgement, type DamageSweepTarget } from './sweep'
 export { moveStatRefs } from './moveRefs'

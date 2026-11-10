@@ -344,6 +344,55 @@ test.describe('제품 화면', () => {
     await expect(tabPanel(page).getByTestId('tab-error')).toContainText('SP 합계 76')
   })
 
+  test('카드 줄은 분류 라벨 대신 대표 행 현재 칸의 결과 배지, 변화 없음은 표시하지 않는다(사용자 피드백 2026-11-10)', async ({ page }) => {
+    const ATTACK_LABELS = ['확정1타', '고난수1타', '중저난수1타', '확정견딤', '무효']
+    const DEFENSE_LABELS = ['확정1타', '중고난수1타', '저난수1타', '확정견딤', '무효']
+    await openProduct(page)
+    await addCustomTarget(page, '워시로토무', ['하이드로펌프'])
+    await waitComplete(page)
+
+    for (const [tab, labels] of [['공격', ATTACK_LABELS], ['방어', DEFENSE_LABELS]] as const) {
+      if (tab !== '공격') {
+        await selectTab(page, tab)
+        await waitComplete(page)
+      }
+      const badges = tabPanel(page).locator('.card-line [data-testid="ko-badge"]')
+      expect(await badges.count()).toBeGreaterThan(0)
+      for (const text of await badges.allTextContents()) expect(labels).toContain(text)
+      // 물리/특수 분류 배지·변화 없음 요약은 없다(계약 속성 data-category는 남는다).
+      await expect(tabPanel(page).locator('.card-line .cat')).toHaveCount(0)
+      for (const text of await tabPanel(page).locator('.card-line').allTextContents()) expect(text).not.toMatch(/물리|특수/)
+      await expect(tabPanel(page).getByTestId('no-change-summary')).toHaveCount(0)
+      // 커스텀 카드 상세까지 펼쳐도 "변화 없음" 문구가 없다.
+      await cardLine(customCards(page).first()).click()
+      await expect(customCards(page).first().locator('.card-detail')).toBeVisible()
+      await expect(tabPanel(page)).not.toContainText('변화 없음')
+    }
+
+    // F9 공격: 메가리자몽Y quiet:32/0/2/32/0/0 스톤샤워는 A17부터 확정 1타 → 예시 세트 A32는 확정1타(빨강).
+    await selectTab(page, '공격')
+    await waitComplete(page)
+    const charizard = ladderCards(page).and(page.locator('[data-opponent="charizardmegay"]')).filter({ has: page.getByTestId('card-headline').filter({ hasText: '스톤샤워' }) })
+    await expect(charizard.getByTestId('ko-badge')).toHaveText('확정1타')
+    await expect(charizard.getByTestId('ko-badge')).toHaveAttribute('data-tone', 'red')
+    await expect(cardLine(charizard)).toHaveAccessibleName(/확정1타/)
+
+    // F3 통과: 한카리아스 adamant(A32↑) 드래곤클로는 내 H2·B0에서 저난수 1타(B3부터 확정 버팀) → 저난수1타(노랑).
+    await selectTab(page, '방어')
+    await waitComplete(page)
+    const garchomp = ladderCards(page)
+      .and(page.locator('[data-opponent="garchomp"]'))
+      .filter({ has: page.locator('.card-bundle', { hasText: /^A32↑/ }) })
+      .filter({ has: page.getByTestId('card-headline').filter({ hasText: '드래곤클로' }) })
+    await expect(garchomp.getByTestId('ko-badge')).toHaveText('저난수1타')
+    await expect(garchomp.getByTestId('ko-badge')).toHaveAttribute('data-tone', 'yellow')
+
+    // 스피드 탭은 1타 확률이 없어 배지가 없다.
+    await selectTab(page, '스피드')
+    await waitComplete(page)
+    await expect(tabPanel(page).getByTestId('ko-badge')).toHaveCount(0)
+  })
+
   test('키보드만으로 탭 전환·필터·카드 펼치기(AC18)', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
