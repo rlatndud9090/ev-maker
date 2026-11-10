@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { TABS, type ErrorReason, type MetaSourceView } from '../cards'
 import type { SpTable } from '../core'
 import type { RegulationIndex, Snapshot } from '../data/schema'
@@ -59,15 +59,8 @@ export function ProductApp() {
   }, [])
 
   const game = loaded.status === 'ok' ? loaded.boot.game : undefined
-  // 작업 화면에서는 라이선스 고지를 상대 목록 박스 맨 끝에 둔다(페이지 스크롤 없이 닿게).
-  const footer = (
-    <footer className="product-footer">
-      <div data-testid="licenses">
-        <Licenses snapshot={game} />
-      </div>
-    </footer>
-  )
   return (
+    <>
     <main data-app="product" className="product">
       <header className="product-header">
         <h1>SP 구간 판정</h1>
@@ -83,12 +76,19 @@ export function ProductApp() {
         </p>
       )}
       {loaded.status === 'error' && <Errors title="데이터를 불러오지 못했습니다" lines={loaded.errors} />}
-      {loaded.status === 'ok' ? <Workspace boot={loaded.boot} footer={footer} /> : footer}
+      {loaded.status === 'ok' && <Workspace boot={loaded.boot} />}
     </main>
+    {/* 뷰포트에 맞춘 작업 영역 아래, 페이지 스크롤로 닿는 구분된 페이지 푸터 */}
+    <footer className="product-footer">
+      <div data-testid="licenses">
+        <Licenses snapshot={game} />
+      </div>
+    </footer>
+    </>
   )
 }
 
-function Workspace({ boot, footer }: { boot: Boot; footer: ReactNode }) {
+function Workspace({ boot }: { boot: Boot }) {
   const { game } = boot
   const regulation = game.manifest.regulation.id
   const [state, dispatch] = useReducer(reducer, regulation, initialState)
@@ -230,7 +230,6 @@ function Workspace({ boot, footer }: { boot: Boot; footer: ReactNode }) {
             customTargets={customTargets}
             dispatch={dispatch}
           />
-          {footer}
         </ResultBox>
       </div>
     </div>

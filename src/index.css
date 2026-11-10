@@ -685,7 +685,16 @@ td.src {
   opacity: 1;
 }
 
-.result-scroll > footer .panel {
+/* 페이지 푸터: 뷰포트에 맞춘 작업 영역 아래, 경계선으로 구분 */
+.product-footer {
+  max-width: 96rem;
+  margin: 1.5rem auto 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.product-footer .panel {
   background: var(--card);
 }
 

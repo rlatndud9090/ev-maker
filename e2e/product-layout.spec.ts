@@ -85,19 +85,29 @@ for (const width of [400, 1280]) {
         scrollHeight: el.scrollHeight,
         clientHeight: el.clientHeight,
         boxHeight: el.parentElement!.getBoundingClientRect().height,
-        docOverflowY: document.documentElement.scrollHeight - window.innerHeight,
+        mainBottom: document.querySelector('main[data-app="product"]')!.getBoundingClientRect().bottom,
         viewport: window.innerHeight,
       }))
       expect(m.overflowY).toBe('auto')
       expect(m.scrollHeight).toBeGreaterThan(m.clientHeight)
-      if (width >= 1280) expect(m.docOverflowY).toBeLessThanOrEqual(0)
+      // 넓은 화면: 작업 영역(main)이 첫 화면에 꼭 맞는다(페이지 스크롤은 푸터에 닿을 때만).
+      if (width >= 1280) expect(m.mainBottom).toBeLessThanOrEqual(m.viewport)
       else expect(m.boxHeight).toBeGreaterThanOrEqual(m.viewport * 0.6)
-      // 라이선스 고지는 목록 박스 맨 끝에서 박스 스크롤만으로 닿는다.
-      const footer = listScroll(page).locator('footer')
+      // 라이선스 고지는 목록 박스 밖, 작업 영역 아래의 페이지 푸터다.
+      await expect(listScroll(page).locator('footer')).toHaveCount(0)
+      const footer = page.locator('body footer.product-footer')
       await expect(footer.getByTestId('licenses')).toHaveCount(1)
-      await listScroll(page).evaluate((el) => (el.scrollTop = el.scrollHeight))
+      const order = await page.evaluate(() => {
+        const main = document.querySelector('main[data-app="product"]')!
+        const f = document.querySelector('footer.product-footer')!
+        return {
+          outside: !main.contains(f),
+          below: f.getBoundingClientRect().top >= main.getBoundingClientRect().bottom,
+        }
+      })
+      expect(order).toEqual({ outside: true, below: true })
+      await footer.locator('tbody tr').last().scrollIntoViewIfNeeded()
       await expect(footer.locator('tbody tr').last()).toBeInViewport()
-      if (width >= 1280) expect(await page.evaluate(() => window.scrollY)).toBe(0)
     })
 
     test(`${width}px: 긴 한국어 이름(폼 이름)을 내 종·선택 칩에 넣어도 겹침·가로 스크롤 없음`, async ({ page }) => {
