@@ -87,3 +87,16 @@ export function learnsetOptions(snapshot: Snapshot, base: SpeciesEntry | undefin
   const names = namesOf(snapshot).moves
   return base.learnset.map((m) => names.label(m)).sort((a, b) => a.localeCompare(b, 'ko'))
 }
+
+const heldItemCache = new WeakMap<Snapshot, readonly string[]>()
+
+/** 도구 수동 선택 후보: 메가스톤 제외(메가는 메가 폼 종을 고르면 스톤이 자동 고정된다). 스냅샷마다 같은 배열을 돌려준다(검색 색인 캐시 키). */
+export function heldItemIds(snapshot: Snapshot): readonly string[] {
+  let ids = heldItemCache.get(snapshot)
+  if (!ids) {
+    const stones = new Set(snapshot.data.megas.map((m) => m.stone))
+    ids = Object.keys(snapshot.data.items).filter((id) => !stones.has(id))
+    heldItemCache.set(snapshot, ids)
+  }
+  return ids
+}

@@ -255,6 +255,37 @@ test.describe('제품 화면', () => {
     await expect(page.getByText('메타 통계를 불러오지 못했습니다')).toHaveCount(0)
   })
 
+  test('메가는 종 검색에서 메가 폼으로 고르고 도구는 메가스톤으로 고정, 수동 도구 후보에 메가스톤 없음', async ({ page }) => {
+    await openProduct(page)
+    const me = mySet(page)
+    await expect(me.getByRole('checkbox', { name: /메가진화/ })).toHaveCount(0)
+    // '종' 라벨은 화면에 보이지 않는다(접근성 이름은 유지).
+    await expect(me.locator('.combo-label > span.sr-only', { hasText: /^종$/ })).toHaveCount(1)
+
+    const species = combo(me, '종')
+    await species.fill('메가한카리아스Z')
+    await expect(page.getByRole('listbox', { name: '종 후보' }).getByRole('option', { name: '메가한카리아스Z', exact: true })).toBeVisible()
+    await species.press('Enter')
+    await expect(species).toHaveValue('메가한카리아스Z')
+    const lockedItem = me.getByRole('textbox', { name: /^도구/ })
+    await expect(lockedItem).toBeDisabled()
+    await expect(lockedItem).toHaveValue(/나이트/)
+    await expect(me.getByText('메가 폼 고정')).toBeVisible()
+    await waitComplete(page)
+    await expect(tabPanel(page).getByTestId('tab-error')).toHaveCount(0)
+
+    // 일반 폼으로 돌아오면 스톤을 비우고 도구를 다시 고를 수 있다.
+    await species.fill('한카리아스')
+    await species.press('Enter')
+    const item = combo(me, '도구')
+    await expect(item).toBeEnabled()
+    await expect(item).toHaveValue('')
+    await item.fill('나이트')
+    const options = page.getByRole('listbox', { name: '도구 후보' }).getByRole('option')
+    await expect(options.filter({ hasText: /나이트$/ })).toHaveCount(0)
+    await item.press('Escape')
+  })
+
   test('한국어 부분 검색과 한국어 규칙 위반 안내(AC14), 내 세트 오류는 탭 안내(AC12)', async ({ page }) => {
     await openProduct(page)
     const species = combo(mySet(page), '종')

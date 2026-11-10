@@ -3,7 +3,7 @@ import { STAT_IDS } from '../../core'
 import { MAX_CUSTOM_MOVES, presetAssumption, presetKey, type CardView, type CustomTarget, type PresetEdit, type PresetIndex, type Tab } from '../../cards'
 import type { Snapshot } from '../../data/schema'
 import { STAT_LABEL } from '../../ui/labels'
-import { namesOf } from '../../ui/names'
+import { heldItemIds, namesOf } from '../../ui/names'
 import { learnableMoves, searchIndexOf } from '../../ui/search'
 import { STAT_SHORT } from '../../ui/format'
 import type { AppAction } from '../state'
@@ -33,7 +33,7 @@ export function CustomEditor({ game, tab, card, target, dispatch }: Props) {
   const species = Object.prototype.hasOwnProperty.call(game.data.species, set.species) ? game.data.species[set.species] : undefined
   const abilities = species ? [...species.abilities] : []
   if (!abilities.includes(set.ability)) abilities.push(set.ability)
-  const itemIndex = searchIndexOf(game.data.items)
+  const itemIndex = searchIndexOf(game.data.items, heldItemIds(game))
   const learnable = useMemo(() => learnableMoves(game, target.rosterId), [game, target.rosterId])
   const moveIndex = useMemo(() => searchIndexOf(game.data.moves, learnable.filter((m) => !target.moves.includes(m))), [game, learnable, target.moves])
   const lastOne = target.moves.length <= 1

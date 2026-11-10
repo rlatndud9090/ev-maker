@@ -3,7 +3,7 @@ import { CoreError, CoreInputError, STAT_IDS, computeStats, type SpTable } from 
 import { myMeansNotes, type ErrorReason } from '../../cards'
 import type { Snapshot, StatId, StatTable } from '../../data/schema'
 import { STAT_LABEL } from '../../ui/labels'
-import { namesOf, pickSpecies } from '../../ui/names'
+import { heldItemIds, namesOf, pickSpecies } from '../../ui/names'
 import { MOVE_SLOTS, parseNumber, toPokemonSet, type SetDraft } from '../../ui/setDraft'
 import { searchIndexOf } from '../../ui/search'
 import { STAT_SHORT } from '../../ui/format'
@@ -69,7 +69,7 @@ export function MySetPanel({ game, draft, dispatch, reasons, onDisplaySp }: Prop
   const nature = Object.prototype.hasOwnProperty.call(game.data.natures, draft.nature) ? game.data.natures[draft.nature] : undefined
 
   const speciesIndex = searchIndexOf(game.data.species)
-  const itemIndex = searchIndexOf(game.data.items)
+  const itemIndex = searchIndexOf(game.data.items, heldItemIds(game))
   const moveIndex = searchIndexOf(game.data.moves, base?.learnset)
   const notes = useMemo(() => myMeansNotes(game, set), [game, set])
 
@@ -77,13 +77,12 @@ export function MySetPanel({ game, draft, dispatch, reasons, onDisplaySp }: Prop
 
   const onSpecies = (text: string) => {
     const next = pickSpecies(game, text)
-    const patch: Partial<SetDraft> = { species: text }
+    // 메가는 메가 폼 종 이름으로만 고른다(스톤 자동 고정). 메가 폼에서 벗어나면 스톤을 비운다.
+    const patch: Partial<SetDraft> = { species: text, mega: false }
     if (next) {
       if (!next.base.abilities.includes(draft.ability)) patch.ability = next.base.abilities[0]
-      if (next.megaStone !== undefined) {
-        patch.item = names.items.label(next.megaStone)
-        patch.mega = true
-      }
+      if (next.megaStone !== undefined) patch.item = names.items.label(next.megaStone)
+      else if (pick?.megaStone !== undefined) patch.item = ''
     }
     update(patch)
   }
@@ -170,14 +169,8 @@ export function MySetPanel({ game, draft, dispatch, reasons, onDisplaySp }: Prop
         <FieldAlerts game={game} reasons={reasons} field="other" set={set} />
         <div className="chips">
           <div className="chip-field wide-chip">
-            <Combobox label="종" index={speciesIndex} value={draft.species} labelOf={names.species.label} onCommit={onSpecies} />
+            <Combobox label="종" hideLabel index={speciesIndex} value={draft.species} placeholder="포켓몬 검색(메가 폼 포함)" labelOf={names.species.label} onCommit={onSpecies} />
             <FieldAlerts game={game} reasons={reasons} field="species" set={set} />
-          </div>
-          <div className="chip-field">
-            <label className="chip check">
-              <input type="checkbox" checked={megaByName || draft.mega} disabled={megaByName} onChange={(e) => update({ mega: e.target.checked })} />
-              메가진화
-            </label>
             <FieldAlerts game={game} reasons={reasons} field="mega" set={set} />
           </div>
           <div className="chip-field">
@@ -194,7 +187,17 @@ export function MySetPanel({ game, draft, dispatch, reasons, onDisplaySp }: Prop
             <FieldAlerts game={game} reasons={reasons} field="ability" set={set} />
           </div>
           <div className="chip-field">
-            <Combobox label="도구" index={itemIndex} value={draft.item} placeholder="없음" labelOf={names.items.label} onCommit={(text) => update({ item: text })} />
+            {megaByName ? (
+              <label className="chip">
+                도구
+                <input value={draft.item} disabled title="메가 폼은 메가스톤으로 고정됩니다" aria-describedby={`${uid}-mega-item`} />
+                <span id={`${uid}-mega-item`} className="hint">
+                  메가 폼 고정
+                </span>
+              </label>
+            ) : (
+              <Combobox label="도구" index={itemIndex} value={draft.item} placeholder="없음" labelOf={names.items.label} onCommit={(text) => update({ item: text })} />
+            )}
             <FieldAlerts game={game} reasons={reasons} field="item" set={set} />
           </div>
           <div className="chip-field">
