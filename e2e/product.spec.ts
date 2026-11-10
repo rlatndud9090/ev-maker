@@ -255,6 +255,39 @@ test.describe('제품 화면', () => {
     await expect(page.getByText('메타 통계를 불러오지 못했습니다')).toHaveCount(0)
   })
 
+  test('성격은 능력치 줄의 +/− 토글: +·− 각각 한 줄만, −는 고르지 않으면 자동', async ({ page }) => {
+    await openProduct(page)
+    const me = mySet(page)
+    await expect(me.getByRole('combobox', { name: /성격/ })).toHaveCount(0)
+    const plus = (stat: string) => me.getByRole('button', { name: `${stat} 성격 상승`, exact: true })
+    const minus = (stat: string) => me.getByRole('button', { name: new RegExp(`^${stat} 성격 하락`) })
+    const value = (stat: string) => me.getByLabel(`${stat} 실능치`, { exact: true })
+    const pressed = (name: RegExp) => me.getByRole('button', { name, pressed: true })
+    await expect(value('공격')).toHaveText('182')
+
+    await plus('공격').click()
+    await expect(value('공격')).toHaveText('200')
+    await expect(minus('특공')).toHaveAttribute('aria-pressed', 'true')
+    await expect(minus('특공')).toHaveAttribute('data-auto', 'true')
+    await expect(value('특공')).toHaveText('90')
+    await expect(minus('공격')).toBeDisabled()
+
+    await plus('스피드').click()
+    await expect(pressed(/성격 상승$/)).toHaveCount(1)
+    await expect(value('스피드')).toHaveText('169')
+    await expect(value('공격')).toHaveText('182')
+
+    await minus('방어').click()
+    await expect(minus('방어')).toHaveAttribute('aria-pressed', 'true')
+    await expect(minus('방어')).not.toHaveAttribute('data-auto', 'true')
+    await expect(pressed(/성격 하락/)).toHaveCount(1)
+
+    await plus('스피드').click()
+    await expect(pressed(/성격 (상승|하락)/)).toHaveCount(0)
+    await expect(value('스피드')).toHaveText('154')
+    await expect(minus('방어')).toBeDisabled()
+  })
+
   test('메가는 종 검색에서 메가 폼으로 고르고 도구는 메가스톤으로 고정, 수동 도구 후보에 메가스톤 없음', async ({ page }) => {
     await openProduct(page)
     const me = mySet(page)

@@ -4,6 +4,7 @@ import { myMeansNotes, type ErrorReason } from '../../cards'
 import type { Snapshot, StatId, StatTable } from '../../data/schema'
 import { STAT_LABEL } from '../../ui/labels'
 import { heldItemIds, namesOf, pickSpecies } from '../../ui/names'
+import { choiceOf, natureIdFor, refreshAuto, toggleMinus, togglePlus, type NatureChoice, type NatureStat } from '../../ui/natureToggle'
 import { MOVE_SLOTS, parseNumber, toPokemonSet, type SetDraft } from '../../ui/setDraft'
 import { searchIndexOf } from '../../ui/search'
 import { STAT_SHORT } from '../../ui/format'
@@ -73,7 +74,18 @@ export function MySetPanel({ game, draft, dispatch, reasons, onDisplaySp }: Prop
   const moveIndex = searchIndexOf(game.data.moves, base?.learnset)
   const notes = useMemo(() => myMeansNotes(game, set), [game, set])
 
-  const update = (patch: Partial<SetDraft>) => dispatch({ type: 'set-draft', draft: { ...draft, ...patch } })
+  const moveIdsOf = (moves: readonly string[]) => moves.filter((m) => m.trim() !== '').map((m) => names.moves.resolve(m) ?? m)
+  const choice = choiceOf(game, draft.nature, draft.natureMinusAuto === true)
+  const withChoice = (c: NatureChoice): Partial<SetDraft> => ({ nature: natureIdFor(game, c.plus, c.minus), natureMinusAuto: c.minusAuto })
+
+  const update = (patch: Partial<SetDraft>) => {
+    const next = { ...draft, ...patch }
+    // 기술이 바뀌면 자동 하락(−)을 다시 정한다.
+    if (patch.moves !== undefined && patch.nature === undefined) Object.assign(next, withChoice(refreshAuto(game, choice, moveIdsOf(next.moves))))
+    dispatch({ type: 'set-draft', draft: next })
+  }
+  const onPlus = (s: NatureStat) => update(withChoice(togglePlus(game, choice, s, moveIdsOf(draft.moves))))
+  const onMinus = (s: NatureStat) => update(withChoice(toggleMinus(game, choice, s, moveIdsOf(draft.moves))))
 
   const onSpecies = (text: string) => {
     const next = pickSpecies(game, text)
@@ -200,20 +212,6 @@ export function MySetPanel({ game, draft, dispatch, reasons, onDisplaySp }: Prop
             )}
             <FieldAlerts game={game} reasons={reasons} field="item" set={set} />
           </div>
-          <div className="chip-field">
-            <label className="chip">
-              성격
-              <select value={draft.nature} onChange={(e) => update({ nature: e.target.value })}>
-                {Object.values(game.data.natures).map((n) => (
-                  <option key={n.id} value={n.id}>
-                    {names.natures.label(n.id)}
-                    {n.plus && n.minus && n.plus !== n.minus ? ` (${STAT_SHORT[n.plus]}↑ ${STAT_SHORT[n.minus]}↓)` : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <FieldAlerts game={game} reasons={reasons} field="nature" set={set} />
-          </div>
           {Array.from({ length: MOVE_SLOTS }, (_, i) => (
             <div className="chip-field" key={i}>
               <Combobox
@@ -250,6 +248,7 @@ export function MySetPanel({ game, draft, dispatch, reasons, onDisplaySp }: Prop
             </strong>
           </p>
           <FieldAlerts game={game} reasons={reasons} field="sp" set={set} />
+          <FieldAlerts game={game} reasons={reasons} field="nature" set={set} />
           {STAT_IDS.map((s) => {
             const value = spOf(s)
             const sliderValue = Number.isFinite(value) ? Math.max(0, Math.min(spMaxPerStat, value)) : 0
@@ -301,6 +300,33 @@ export function MySetPanel({ game, draft, dispatch, reasons, onDisplaySp }: Prop
                   value={drag?.stat === s ? String(drag.value) : draft.sp[s]}
                   onChange={(e) => update({ sp: { ...draft.sp, [s]: e.target.value } })}
                 />
+                {s === 'hp' ? (
+                  <span className="nat-btns" aria-hidden="true" />
+                ) : (
+                  <span className="nat-btns" role="group" aria-label={`${STAT_LABEL[s]} 성격 보정`}>
+                    <button
+                      type="button"
+                      className="nat-btn plus"
+                      aria-pressed={choice.plus === s}
+                      aria-label={`${STAT_LABEL[s]} 성격 상승`}
+                      onClick={() => onPlus(s)}
+                    >
+                      +
+                    </button>
+                    <button
+                      type="button"
+                      className="nat-btn minus"
+                      aria-pressed={choice.minus === s}
+                      data-auto={choice.minus === s && choice.minusAuto ? 'true' : undefined}
+                      aria-label={`${STAT_LABEL[s]} 성격 하락${choice.minus === s && choice.minusAuto ? ' (자동)' : ''}`}
+                      title={choice.plus === undefined ? '상승(+)을 먼저 고르세요' : choice.minus === s && choice.minusAuto ? '자동 지정(덜 쓰이는 능력치) — 눌러서 직접 지정' : undefined}
+                      disabled={choice.plus === undefined || choice.plus === s}
+                      onClick={() => onMinus(s)}
+                    >
+                      −
+                    </button>
+                  </span>
+                )}
                 <span className="stat-value num" aria-label={`${STAT_LABEL[s]} 실능치`}>
                   {stats ? stats[s] : '—'}
                 </span>

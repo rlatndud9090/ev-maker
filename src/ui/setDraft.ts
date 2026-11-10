@@ -13,6 +13,8 @@ export interface SetDraft {
   ability: string
   item: string
   nature: string
+  /** 성격 하락이 자동 지정인지(제품 화면 +/− 토글). 없으면 false. */
+  natureMinusAuto?: boolean
   sp: Record<StatId, string>
   moves: string[]
   mega: boolean
