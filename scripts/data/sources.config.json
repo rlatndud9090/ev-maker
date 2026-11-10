@@ -1,4 +1,17 @@
 {
+  "assets": [
+    {
+      "commit": "fcbe6978c61c359680bc07636c3f9bdc0f346b43",
+      "copyright": "Copyright (c) 2022 James Watkins",
+      "dir": "src/assets/type-icons",
+      "id": "asset:partywhale-type-icons",
+      "license": "MIT",
+      "licenseFile": "src/assets/type-icons/LICENSE",
+      "name": "Pokémon Type Icons(partywhale)",
+      "repo": "partywhale/pokemon-type-icons",
+      "usage": "기술 타입 아이콘(SVG, 원본 그대로 번들)"
+    }
+  ],
   "default": "m-c",
   "engine": {
     "gen": 0,

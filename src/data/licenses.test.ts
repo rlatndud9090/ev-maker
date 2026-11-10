@@ -81,6 +81,26 @@ describe('buildLicenses 메타 출처', () => {
     for (const e of licensed) expect(KNOWN, e.id).toContain(e.license)
   })
 
+  it('저장소 자산(타입 아이콘)은 asset 항목·고지 원문(저작권 표기 포함)으로 나온다', () => {
+    const { licenses, notices } = buildLicenses(PROJECT_ROOT, config, POKEAPI_TEXT, metaIndex)
+    expect(licenses.entries.find((e) => e.id === 'asset:partywhale-type-icons')).toMatchObject({
+      kind: 'asset',
+      name: 'Pokémon Type Icons(partywhale)',
+      version: 'fcbe6978c61c359680bc07636c3f9bdc0f346b43',
+      license: 'MIT',
+      source: 'https://github.com/partywhale/pokemon-type-icons/tree/fcbe6978c61c359680bc07636c3f9bdc0f346b43',
+      usage: '기술 타입 아이콘(SVG, 원본 그대로 번들)',
+    })
+    const section = notices.split('\n### ').find((s) => s.startsWith('Pokémon Type Icons(partywhale)'))
+    expect(section).toContain('Copyright (c) 2022 James Watkins')
+    expect(section).toContain('Permission is hereby granted')
+  })
+
+  it('자산 고지 원문에 설정의 저작권 표기가 없으면 실패한다', () => {
+    const bad = { ...config as object, assets: [{ ...(config as { assets: object[] }).assets[0], copyright: 'Copyright (c) 1999 Nobody' }] }
+    expect(() => buildLicenses(PROJECT_ROOT, bad, POKEAPI_TEXT, metaIndex)).toThrow(/저작권 표기/)
+  })
+
   it('메타 인덱스 schemaVersion이 다르면 실패한다', () => {
     expect(() => buildLicenses(PROJECT_ROOT, config, POKEAPI_TEXT, { ...metaIndex, schemaVersion: 0 })).toThrow(/schemaVersion/)
   })

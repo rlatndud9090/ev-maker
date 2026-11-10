@@ -2,7 +2,8 @@ import { useEffect, useId, useMemo, useRef, useState, type Dispatch } from 'reac
 import { CoreError, CoreInputError, STAT_IDS, computeStats, type SpTable } from '../../core'
 import { myMeansNotes, type ErrorReason } from '../../cards'
 import type { Snapshot, StatId, StatTable } from '../../data/schema'
-import { STAT_LABEL } from '../../ui/labels'
+import { STAT_LABEL, typeNameOf, typeSlug } from '../../ui/labels'
+import { TypeIcon } from '../../ui/TypeIcon'
 import { heldItemIds, namesOf, pickSpecies } from '../../ui/names'
 import { choiceOf, natureIdFor, refreshAuto, toggleMinus, togglePlus, type NatureChoice, type NatureStat } from '../../ui/natureToggle'
 import { MOVE_SLOTS, parseNumber, toPokemonSet, type SetDraft } from '../../ui/setDraft'
@@ -74,6 +75,10 @@ export function MySetPanel({ game, draft, dispatch, reasons, onDisplaySp }: Prop
   const moveIndex = searchIndexOf(game.data.moves, base?.learnset)
   const notes = useMemo(() => myMeansNotes(game, set), [game, set])
 
+  const moveTypeAt = (i: number) => {
+    const id = names.moves.resolve(draft.moves[i] ?? '')
+    return typeNameOf(id === undefined ? undefined : game.data.moves[id]?.type)
+  }
   const moveIdsOf = (moves: readonly string[]) => moves.filter((m) => m.trim() !== '').map((m) => names.moves.resolve(m) ?? m)
   const choice = choiceOf(game, draft.nature, draft.natureMinusAuto === true)
   const withChoice = (c: NatureChoice): Partial<SetDraft> => ({ nature: natureIdFor(game, c.plus, c.minus), natureMinusAuto: c.minusAuto })
@@ -212,22 +217,36 @@ export function MySetPanel({ game, draft, dispatch, reasons, onDisplaySp }: Prop
             )}
             <FieldAlerts game={game} reasons={reasons} field="item" set={set} />
           </div>
-          {Array.from({ length: MOVE_SLOTS }, (_, i) => (
-            <div className="chip-field" key={i}>
-              <Combobox
-                label={`기술 ${i + 1}`}
-                index={moveIndex}
-                value={draft.moves[i] ?? ''}
-                labelOf={names.moves.label}
-                onCommit={(text) => {
-                  const moves = Array.from({ length: MOVE_SLOTS }, (_, k) => draft.moves[k] ?? '')
-                  moves[i] = text
-                  update({ moves })
-                }}
-              />
-              <FieldAlerts game={game} reasons={reasons} field={`moves[${i}]`} set={set} />
-            </div>
-          ))}
+          <div className="chip-field wide-chip move-fields" role="group" aria-labelledby={`${uid}-moves`}>
+            <span id={`${uid}-moves`} className="field-label">
+              기술
+            </span>
+            {Array.from({ length: MOVE_SLOTS }, (_, i) => {
+              const type = moveTypeAt(i)
+              const typeId = `${uid}-move-type-${i}`
+              return (
+                <div key={i}>
+                  <div className="move-slot" data-type={type ? typeSlug(type) : undefined}>
+                    {type && <TypeIcon type={type} labelId={typeId} />}
+                    <Combobox
+                      label={`기술 ${i + 1}`}
+                      hideLabel
+                      describedBy={type ? typeId : undefined}
+                      index={moveIndex}
+                      value={draft.moves[i] ?? ''}
+                      labelOf={names.moves.label}
+                      onCommit={(text) => {
+                        const moves = Array.from({ length: MOVE_SLOTS }, (_, k) => draft.moves[k] ?? '')
+                        moves[i] = text
+                        update({ moves })
+                      }}
+                    />
+                  </div>
+                  <FieldAlerts game={game} reasons={reasons} field={`moves[${i}]`} set={set} />
+                </div>
+              )
+            })}
+          </div>
         </div>
         <FieldAlerts game={game} reasons={reasons} field="moves" set={set} />
         {notes.length > 0 && (

@@ -1,6 +1,16 @@
 {
   "entries": [
     {
+      "id": "asset:partywhale-type-icons",
+      "kind": "asset",
+      "license": "MIT",
+      "name": "Pokémon Type Icons(partywhale)",
+      "noticeSource": "src/assets/type-icons/LICENSE(partywhale/pokemon-type-icons LICENSE @ fcbe6978c61c359680bc07636c3f9bdc0f346b43 원문)",
+      "source": "https://github.com/partywhale/pokemon-type-icons/tree/fcbe6978c61c359680bc07636c3f9bdc0f346b43",
+      "usage": "기술 타입 아이콘(SVG, 원본 그대로 번들)",
+      "version": "fcbe6978c61c359680bc07636c3f9bdc0f346b43"
+    },
+    {
       "id": "data:pokeapi",
       "kind": "data",
       "license": "BSD-3-Clause",

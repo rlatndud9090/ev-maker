@@ -38,3 +38,15 @@ test('엔트리·선로드 청크에는 dev 고유 문자열이 없고, 지연 �
     .filter((f) => !eager.includes(f))
   for (const s of DEV_ONLY) expect(lazy.filter((f) => read(f).includes(s)), `"${s}"가 든 지연 청크`).not.toHaveLength(0)
 })
+
+test('타입 아이콘 18개는 data URI로 번들되고, 아이콘을 외부 URL로 받는 코드·별도 SVG 파일이 없다', () => {
+  const files = ['index.html', ...readdirSync(join(DIST, 'assets')).map((f) => `assets/${f}`)]
+  expect(files.filter((f) => f.endsWith('.svg'))).toEqual([])
+  const text = files
+    .filter((f) => /\.(js|css|html)$/.test(f))
+    .map(read)
+    .join('\n')
+  expect(text.match(/data:image\/svg\+xml/g)?.length ?? 0).toBeGreaterThanOrEqual(18)
+  expect(text.match(/https?:\/\/[^\s"'`)]*\.svg\b/g) ?? []).toEqual([])
+  expect(text).not.toMatch(/raw\.githubusercontent\.com\/partywhale/)
+})

@@ -78,7 +78,7 @@ export function readProjectJson<T = unknown>(rel: string): T
 
 export interface LicenseEntry {
   id: string
-  kind: 'code' | 'data'
+  kind: 'code' | 'data' | 'asset'
   name: string
   version: string
   license: string

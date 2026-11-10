@@ -6,6 +6,7 @@
 
 | 항목 | 종류 | 버전 | 라이선스 | 용도 |
 | --- | --- | --- | --- | --- |
+| Pokémon Type Icons(partywhale) | asset | fcbe6978c61c359680bc07636c3f9bdc0f346b43 | MIT | 기술 타입 아이콘(SVG, 원본 그대로 번들) |
 | PokeAPI CSV | data | e5b79b2e15d7c50735a945936afd4cd1cfd94eae | BSD-3-Clause | 스냅샷의 한국어 명칭 파생 데이터(원본 CSV는 번들하지 않음) |
 | Pokémon Showdown 데이터(@pkmn/mods·@pkmn/dex 패키징) | data | @pkmn/dex@0.10.13, @pkmn/mods@0.10.13 | MIT | 스냅샷의 종·기술·도구·특성·성격·학습 기술 파생 데이터(빌드 시 추출, 패키지 자체는 번들하지 않음) |
 | Smogon University 사용률 통계(chaos JSON, 1760 컷) | data | 2026-10 Bo1(공개 2026-11-01T13:27:17Z) · 2026-10 Bo3(공개 2026-11-01T13:27:17Z) | NOASSERTION | 메타 스냅샷(사용률·분포·대표 세트) 파생 데이터(원본은 번들하지 않음) |
@@ -207,4 +208,30 @@ Redistribution and use in source and binary forms, with or without modification,
 * Neither the name of PokéAPI nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
 
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+### Pokémon Type Icons(partywhale) @ fcbe6978c61c359680bc07636c3f9bdc0f346b43 (MIT, src/assets/type-icons)
+
+```text
+MIT License
+
+Copyright (c) 2022 James Watkins
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ```

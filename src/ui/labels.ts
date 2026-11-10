@@ -58,6 +58,55 @@ export const STATUS_LABEL: Record<Status, string> = {
   frz: '얼음',
 }
 
+/** 스냅샷 타입 이름(MoveEntry.type·SpeciesEntry.types 값) */
+export type TypeName =
+  | 'Normal'
+  | 'Fire'
+  | 'Water'
+  | 'Electric'
+  | 'Grass'
+  | 'Ice'
+  | 'Fighting'
+  | 'Poison'
+  | 'Ground'
+  | 'Flying'
+  | 'Psychic'
+  | 'Bug'
+  | 'Rock'
+  | 'Ghost'
+  | 'Dragon'
+  | 'Dark'
+  | 'Steel'
+  | 'Fairy'
+
+export const TYPE_LABEL: Record<TypeName, string> = {
+  Normal: '노말',
+  Fire: '불꽃',
+  Water: '물',
+  Electric: '전기',
+  Grass: '풀',
+  Ice: '얼음',
+  Fighting: '격투',
+  Poison: '독',
+  Ground: '땅',
+  Flying: '비행',
+  Psychic: '에스퍼',
+  Bug: '벌레',
+  Rock: '바위',
+  Ghost: '고스트',
+  Dragon: '드래곤',
+  Dark: '악',
+  Steel: '강철',
+  Fairy: '페어리',
+}
+
+/** 18타입 중 하나면 그 이름, 아니면(스텔라·??? 등) undefined */
+export const typeNameOf = (s: string | undefined): TypeName | undefined =>
+  s !== undefined && Object.prototype.hasOwnProperty.call(TYPE_LABEL, s) ? (s as TypeName) : undefined
+
+/** 아이콘 파일명·CSS 토큰(--type-<slug>)·data-type 값 */
+export const typeSlug = (t: TypeName) => t.toLowerCase()
+
 export const keysOf = <K extends string>(r: Record<K, string>): K[] => Object.keys(r) as K[]
 
 /** 오류를 줄 단위 문장으로. 코어 오류는 코드·필드를 함께 보인다. */

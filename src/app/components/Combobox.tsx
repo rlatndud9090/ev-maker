@@ -19,6 +19,8 @@ interface Props {
   hideLabel?: boolean
   className?: string
   disabled?: boolean
+  /** 입력의 aria-describedby(접근명은 label 그대로) */
+  describedBy?: string
 }
 
 /** 한국어 부분 일치 후보가 붙은 입력. IME 조합 중 Enter는 확정으로 보지 않는다. */
@@ -83,6 +85,7 @@ export function Combobox(p: Props) {
           value={p.clearOnCommit && !open ? '' : text}
           placeholder={p.placeholder}
           disabled={p.disabled}
+          aria-describedby={p.describedBy}
           onFocus={(e) => {
             setEditing(p.clearOnCommit ? '' : p.value)
             e.currentTarget.select()

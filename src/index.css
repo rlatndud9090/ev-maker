@@ -25,6 +25,25 @@
   --mb-tier-weak: #f8dcc0;
   --mb-tier-none: #f2ccc8;
   --mb-tier-on-dark: #3a2e22;
+  /* 타입색(partywhale 아이콘 원본 팔레트) — 테두리·연한 배경 섞기용, 글자색 금지 */
+  --type-normal: #828282;
+  --type-fire: #e4613e;
+  --type-water: #3a9de2;
+  --type-electric: #dfbc28;
+  --type-grass: #439837;
+  --type-ice: #47c8c8;
+  --type-fighting: #e49021;
+  --type-poison: #9354cb;
+  --type-ground: #a4733c;
+  --type-flying: #74aad0;
+  --type-psychic: #e96c8c;
+  --type-bug: #9f9f28;
+  --type-rock: #a9a481;
+  --type-ghost: #6f4570;
+  --type-dragon: #576fbc;
+  --type-dark: #4f4747;
+  --type-steel: #77b2cb;
+  --type-fairy: #e18ce1;
 
   /* ── 역할 토큰(라이트) ── */
   color-scheme: light;
@@ -507,6 +526,79 @@ td.src {
 .chip-field label.check {
   padding-top: 1.3rem;
 }
+
+.field-label {
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 0.15rem;
+}
+
+.move-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+/* 기술 칸: 해석된 기술이면 data-type으로 타입색 테두리 + 연한 타입색 배경(글자는 --text) */
+.move-slot {
+  --slot-type: var(--control-border);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0 0 0 0.35rem;
+  border: 1px solid var(--slot-type);
+  border-radius: 8px;
+  background: var(--input);
+}
+
+.move-slot[data-type] {
+  background: color-mix(in srgb, var(--slot-type) 20%, var(--input));
+}
+
+.move-slot:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.move-slot .combo {
+  flex: 1;
+}
+
+.move-slot input {
+  border: 0;
+  background: transparent;
+  padding-left: 0.05rem;
+}
+
+.move-slot input:focus-visible {
+  outline: none;
+}
+
+.type-icon {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.move-slot[data-type='normal'] { --slot-type: var(--type-normal); }
+.move-slot[data-type='fire'] { --slot-type: var(--type-fire); }
+.move-slot[data-type='water'] { --slot-type: var(--type-water); }
+.move-slot[data-type='electric'] { --slot-type: var(--type-electric); }
+.move-slot[data-type='grass'] { --slot-type: var(--type-grass); }
+.move-slot[data-type='ice'] { --slot-type: var(--type-ice); }
+.move-slot[data-type='fighting'] { --slot-type: var(--type-fighting); }
+.move-slot[data-type='poison'] { --slot-type: var(--type-poison); }
+.move-slot[data-type='ground'] { --slot-type: var(--type-ground); }
+.move-slot[data-type='flying'] { --slot-type: var(--type-flying); }
+.move-slot[data-type='psychic'] { --slot-type: var(--type-psychic); }
+.move-slot[data-type='bug'] { --slot-type: var(--type-bug); }
+.move-slot[data-type='rock'] { --slot-type: var(--type-rock); }
+.move-slot[data-type='ghost'] { --slot-type: var(--type-ghost); }
+.move-slot[data-type='dragon'] { --slot-type: var(--type-dragon); }
+.move-slot[data-type='dark'] { --slot-type: var(--type-dark); }
+.move-slot[data-type='steel'] { --slot-type: var(--type-steel); }
+.move-slot[data-type='fairy'] { --slot-type: var(--type-fairy); }
 
 .combo {
   position: relative;
