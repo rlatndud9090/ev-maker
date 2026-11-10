@@ -255,6 +255,17 @@ test.describe('제품 화면', () => {
     await expect(page.getByText('메타 통계를 불러오지 못했습니다')).toHaveCount(0)
   })
 
+  test('간단행의 대표 행이 랭크 행이면 근거 태그(상대 칼춤 A+2 등)를 보인다', async ({ page }) => {
+    await openProduct(page)
+    await selectTab(page, '방어')
+    await waitComplete(page)
+    const tags = tabPanel(page).getByTestId('headline-basis')
+    await expect(tags.first()).toBeVisible()
+    for (const t of await tags.and(page.locator('[data-row-kind="rank"]')).allTextContents()) expect(t).toMatch(/^(내|상대) \S+/)
+    const gambit = cards(page).filter({ hasText: '대도각참' }).getByTestId('headline-basis').filter({ hasText: '칼춤' })
+    await expect(gambit.first()).toHaveText('상대 칼춤 A+2')
+  })
+
   test('성격은 능력치 줄의 +/− 토글: +·− 각각 한 줄만, −는 고르지 않으면 자동', async ({ page }) => {
     await openProduct(page)
     const me = mySet(page)

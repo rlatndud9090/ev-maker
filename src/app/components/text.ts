@@ -46,6 +46,17 @@ export function basisText(game: Snapshot, basis: RankBasis | ScarfBasis): string
   return parts.join(' · ')
 }
 
+/** 간단행 태그(점유율·반응 생략): "상대 칼춤 A+2", "내 위협 상대 A−1", "구애스카프" */
+export function basisShortText(game: Snapshot, basis: RankBasis | ScarfBasis): string {
+  if (basis.kind !== 'rank') return itemKeyLabel(game, basis.item)
+  const owner = basis.owner === 'me' ? '내' : '상대'
+  // 수단 주인 쪽 변화는 접두어 없이("상대 칼춤 A+2"), 반대쪽만 "상대 A−1"처럼 붙인다.
+  const [own, other] = basis.owner === 'me' ? [basis.myBoosts, basis.opponentBoosts] : [basis.opponentBoosts, basis.myBoosts]
+  const ownText = boostsText('', own).trim().replace(/ {2,}/g, ' ')
+  const otherText = boostsText(basis.owner === 'me' ? '상대' : '내', other)
+  return [`${owner} ${meansLabel(game, basis.means)}`, ownText, otherText].filter((t) => t !== '').join(' ')
+}
+
 /** 행 제목: "지진", "H · 인파이트", "스피드 비교" */
 export function rowTitle(game: Snapshot, row: Pick<RowView, 'moveId' | 'sweepStat'>, withStat = true): string {
   const names = namesOf(game)

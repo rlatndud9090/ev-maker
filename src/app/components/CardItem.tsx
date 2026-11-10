@@ -7,7 +7,7 @@ import { koReason } from '../../ui/koErrors'
 import type { AppAction } from '../state'
 import { CustomEditor } from './CustomEditor'
 import { RowDetail } from './RowDetail'
-import { moveNoticeText, rowTitle } from './text'
+import { basisShortText, moveNoticeText, rowTitle } from './text'
 
 interface Props {
   game: Snapshot
@@ -62,6 +62,11 @@ function Headline({ game, card, badge }: { game: Snapshot; card: CardView; badge
       <span className={`tone-text tone-${categoryTone(row.current.category ?? '')}`} aria-hidden="true">
         {row.current.category !== undefined ? categorySymbol(row.current.category) : ''}
       </span>{' '}
+      {row.basis && (
+        <span className="basis-tag" data-testid="headline-basis" data-row-kind={row.kind}>
+          {basisShortText(game, row.basis)}
+        </span>
+      )}{' '}
       {rowTitle(game, row, false)} {b && boundaryText(row.sweepStat, b)}
     </span>
   )

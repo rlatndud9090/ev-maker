@@ -1203,6 +1203,16 @@ td.src {
   color: var(--accent);
 }
 
+/* 간단행: 대표 행이 랭크·스카프 행이면 그 근거를 기술명 앞에 */
+.basis-tag {
+  font-size: 0.78rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  white-space: nowrap;
+}
+
 .row-judge,
 .row-fixed,
 .row-error,
