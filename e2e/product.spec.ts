@@ -440,6 +440,14 @@ test.describe('제품 화면', () => {
         await waitComplete(page)
       }
       const badges = tabPanel(page).locator('.card-line [data-testid="ko-badge"]')
+      // 순서: 포켓몬 → SP 배분 → 기술 → 결과(맨 오른쪽, 줄의 마지막 요소)
+      const order = await tabPanel(page).locator('[data-origin="ladder"] .card-line').first().evaluate((line) => {
+        const last = line.lastElementChild as HTMLElement
+        const right = (sel: string) => line.querySelector(sel)?.getBoundingClientRect().right ?? 0
+        return { last: last.dataset.testid, badgeLeft: last.getBoundingClientRect().left, maxOther: Math.max(right('.card-name'), right('[data-testid="card-bundle"]'), right('[data-testid="card-headline"]')) }
+      })
+      expect(order.last).toBe('ko-badge')
+      expect(order.badgeLeft).toBeGreaterThanOrEqual(order.maxOther)
       expect(await badges.count()).toBeGreaterThan(0)
       for (const text of await badges.allTextContents()) expect(labels).toContain(text)
       // 물리/특수 분류 배지·변화 없음 요약은 없다(계약 속성 data-category는 남는다).

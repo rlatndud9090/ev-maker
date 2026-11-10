@@ -107,11 +107,6 @@ export const CardItem = memo(function CardItem({ game, tab, card, expanded, onTo
           </span>
         )}
         <span className="card-name">{names.species.label(card.opponent.id)}</span>
-        {badge !== undefined && (
-          <span className={`ko-badge ko-${badge.tone}`} data-testid="ko-badge" data-tone={badge.tone}>
-            {badge.label}
-          </span>
-        )}
         {/* 배분 묶음 라벨 "A32↑ 56.3%": 비중(래더)·소수 배분·프리셋(커스텀)은 작은 회색 글씨 */}
         <span className="card-bundle num" data-testid="card-bundle">
           <span className="bundle-stats">{bundle.stats.length > 0 ? bundleText(bundle.stats) : '관련 SP 없음'}</span>
@@ -119,11 +114,6 @@ export const CardItem = memo(function CardItem({ game, tab, card, expanded, onTo
           {ladder && bundle.minority && <> <span className="bundle-share">소수 배분</span></>}
           {!ladder && bundle.presetIndex !== undefined && <> <span className="bundle-share">프리셋 {bundle.presetIndex + 1}</span></>}
         </span>
-        {order !== undefined && (
-          <span className={`ko-badge ko-${order.tone}`} data-testid="order-badge" data-tone={order.tone}>
-            {order.label}
-          </span>
-        )}
         {card.state === 'error' && <span className="badge-error">계산 불가</span>}
         <span className="card-headline" data-testid="card-headline">
           <Headline game={game} tab={tab} card={card} badge={badge !== undefined || order !== undefined} />
@@ -131,6 +121,17 @@ export const CardItem = memo(function CardItem({ game, tab, card, expanded, onTo
         {card.moreRows > 0 && (
           <span className="card-more" data-testid="card-more">
             외 {card.moreRows}행
+          </span>
+        )}
+        {/* 결과 배지는 줄 맨 오른쪽: 포켓몬 → SP 배분 → 기술 → 결과 */}
+        {badge !== undefined && (
+          <span className={`ko-badge ko-${badge.tone}`} data-testid="ko-badge" data-tone={badge.tone}>
+            {badge.label}
+          </span>
+        )}
+        {order !== undefined && (
+          <span className={`ko-badge ko-${order.tone}`} data-testid="order-badge" data-tone={order.tone}>
+            {order.label}
           </span>
         )}
       </button>
