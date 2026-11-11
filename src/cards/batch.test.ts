@@ -5,7 +5,7 @@ import type { StatId } from '../data/schema'
 import { assembleTab } from './assemble'
 import { buildTabView } from './batch'
 import { createLruCache } from './cache'
-import { calcAbility } from './key'
+import { calcAbility, judgementKey } from './key'
 import { planTab } from './plan'
 import { relevantStats } from './relevance'
 import { computeRowTask } from './rowTask'
@@ -13,6 +13,9 @@ import { nextStage, pendingTasks, taskKey } from './schedule'
 import { cardInput, realData } from './testing'
 import { TABS } from './types'
 import type { CardInput, RowSpec, RowTask, RowTaskResult, TabPlan } from './types'
+import { DEFAULT_ROLL_THRESHOLDS } from './types'
+/** 카드 입력과 같은 제품 판정 기준(cardInput 기본값). 코어 직접 호출 기대값도 이 기준으로 낸다 */
+const TH = DEFAULT_ROLL_THRESHOLDS
 
 const { game } = realData()
 const reg = game.manifest.regulation.id
@@ -84,13 +87,104 @@ describe('buildTabView: 실제 데이터', () => {
       for (const row of view.cards.flatMap((c) => c.rows)) {
         const spec = plan.rows[row.id]
         if (row.cells.length === 0 || spec?.sweep === undefined || spec.moveId === undefined) continue
-        const direct = sweepDamage(game, spec.sweep, spec.attacker, spec.defender, spec.moveId, spec.conditions, undefined, { judgeOverBudget: true })
+        const direct = sweepDamage(game, spec.sweep, spec.attacker, spec.defender, spec.moveId, spec.conditions, TH, { judgeOverBudget: true })
         expect(row.cells.map((c) => c.category)).toEqual(direct.cells.map((c) => (c.kind === 'ok' ? c.category : 'over-budget')))
         expect(row.boundaries.map((b) => b.sp)).toEqual(direct.boundaries)
         checked++
       }
       expect(checked).toBeGreaterThan(0)
     }
+  })
+})
+
+describe('판정 기준(thresholds): 계산 전체에 전달되고 캐시 키가 구분한다', () => {
+  const base = inputs[0]
+  const loose: CardInput = { ...base, thresholds: { highRoll: 12 / 16, lowRoll: 2 / 16 } }
+
+  it('고난수 기준을 바꾸면 같은 입력의 띠 범주·판정 키가 달라지고, 되돌리면 같아진다', () => {
+    const a = buildTabView(base, 'attack')
+    const b = buildTabView(loose, 'attack')
+    expect(a.thresholds).toEqual(TH)
+    expect(b.thresholds).toEqual(loose.thresholds)
+    const cats = (v: typeof a) => v.cards.flatMap((c) => c.rows.map((r) => [r.id, r.cells.map((x) => x.category).join(',')]))
+    expect(cats(b)).not.toEqual(cats(a))
+    expect(buildTabView({ ...loose, thresholds: { ...TH } }, 'attack')).toEqual(a)
+
+    const pa = planTab(base, 'attack')
+    const pb = planTab(loose, 'attack')
+    const task = pendingTasks(pa, new Map()).stage1[0]
+    expect(judgementKey(pb, task)).not.toBe(judgementKey(pa, task))
+    expect(judgementKey(planTab({ ...loose, thresholds: { ...TH } }, 'attack'), task)).toBe(judgementKey(pa, task))
+  })
+
+  it('기준 변경은 캐시를 맞히지 않고 재계산하며, 되돌리면 전부 캐시 적중', () => {
+    const cache = createLruCache()
+    let gets = 0
+    let hits = 0
+    const counting = {
+      ...cache,
+      get(key: string) {
+        gets++
+        const v = cache.get(key)
+        if (v !== undefined) hits++
+        return v
+      },
+      set: cache.set,
+      clear: cache.clear,
+      get size() {
+        return cache.size
+      },
+    }
+    const first = buildTabView(base, 'defense', counting)
+    const size = cache.size
+    gets = hits = 0
+    buildTabView({ ...base, thresholds: { highRoll: 14 / 16, lowRoll: 4 / 16 } }, 'defense', counting)
+    expect(hits).toBe(0)
+    expect(cache.size).toBeGreaterThan(size)
+    gets = hits = 0
+    expect(buildTabView(base, 'defense', counting)).toEqual(first)
+    expect(hits).toBe(gets)
+  })
+
+  it('판정이 읽지 않는 기준만 바꾸면 캐시 키가 같아 전부 캐시 적중한다(공격=highRoll만, 방어=lowRoll 쪽, 스피드=없음)', () => {
+    const cache = createLruCache()
+    let gets = 0
+    let hits = 0
+    const counting = {
+      ...cache,
+      get(key: string) {
+        gets++
+        const v = cache.get(key)
+        if (v !== undefined) hits++
+        return v
+      },
+      set: cache.set,
+      clear: cache.clear,
+      get size() {
+        return cache.size
+      },
+    }
+    const attack = buildTabView(base, 'attack', counting)
+    const speed = buildTabView(base, 'speed', counting)
+    gets = hits = 0
+    const lowOnly = { ...base, thresholds: { highRoll: TH.highRoll, lowRoll: 4 / 16 } }
+    expect(buildTabView(lowOnly, 'attack', counting).cards).toEqual(attack.cards)
+    expect(gets).toBeGreaterThan(0)
+    expect(hits).toBe(gets)
+    gets = hits = 0
+    expect(buildTabView({ ...base, thresholds: { highRoll: 12 / 16, lowRoll: 4 / 16 } }, 'speed', counting).cards).toEqual(speed.cards)
+    expect(gets).toBeGreaterThan(0)
+    expect(hits).toBe(gets)
+    // 공격측 판정 키는 highRoll을 구분한다
+    const pa = planTab(base, 'attack')
+    const task = pendingTasks(pa, new Map()).stage1[0]
+    expect(judgementKey(planTab(lowOnly, 'attack'), task)).toBe(judgementKey(pa, task))
+    expect(judgementKey(planTab(loose, 'attack'), task)).not.toBe(judgementKey(pa, task))
+  })
+
+  it('무효 기준은 계획 단계에서 코어 입력 오류', () => {
+    expect(() => planTab({ ...base, thresholds: { highRoll: 0, lowRoll: 0.1 } }, 'attack')).toThrow(CoreInputError)
+    expect(() => planTab({ ...base, thresholds: { highRoll: 0.9, lowRoll: 1 } }, 'attack')).toThrow(CoreInputError)
   })
 })
 
@@ -104,7 +198,7 @@ describe('관여 능력치 속성: 키에서 뺀 능력치를 바꿔도 단건 �
       const j = judgeSpeed(game, a, d, spec.conditions, IGNORE)
       return [j.category, j.value.attackerSpeed, j.value.defenderSpeed]
     }
-    const j = judgeDamage(game, spec.sweep!.side, a, d, spec.moveId!, spec.conditions, undefined, IGNORE)
+    const j = judgeDamage(game, spec.sweep!.side, a, d, spec.moveId!, spec.conditions, TH, IGNORE)
     return [j.category, j.value]
   }
 

@@ -1,5 +1,5 @@
 // 카드 모델 공유 계약. React·브라우저 API를 import하지 않는다.
-import type { BattleConditions, BoostTable, CoreErrorCode, KoLabel, MoveStatRefs, PokemonSet, SpTable } from '../core'
+import type { BandThresholds, BattleConditions, BoostTable, CoreErrorCode, KoLabel, MoveStatRefs, PokemonSet, SpTable } from '../core'
 import type { MatchType } from '../data/meta-schema'
 import type { Snapshot, StatId } from '../data/schema'
 import type { MetaView } from '../meta'
@@ -35,6 +35,11 @@ export interface CardFilters {
 }
 export const DEFAULT_TOP_N = 30
 
+/** 1타 확률 기준의 분모(16단계 난수). 화면 기준 입력은 1~ROLL_STEPS−1의 정수 n으로 n/ROLL_STEPS다 */
+export const ROLL_STEPS = 16
+/** 제품 기본 판정 기준(고난수 14/16 이상, 저난수 2/16 이하). 코어 DEFAULT_THRESHOLDS와 별개로 CardInput에 명시 전달한다 */
+export const DEFAULT_ROLL_THRESHOLDS: Readonly<BandThresholds> = Object.freeze({ highRoll: 14 / ROLL_STEPS, lowRoll: 2 / ROLL_STEPS })
+
 export interface CardConditions {
   myTailwind: boolean
   opponentTailwind: boolean
@@ -66,6 +71,8 @@ export interface CardInput {
   /** 검증 전 그대로. 무효면 탭 상태가 my-set-error */
   mySet: PokemonSet
   conditions: CardConditions
+  /** 배지·목표·극단 필터·0~32 띠 범주·경계가 모두 이 기준으로 판정된다(코어 normalizeThresholds로 검증) */
+  thresholds: BandThresholds
   criteria: DisplayCriteria
   filters: CardFilters
   /** 추가한 순서 */
@@ -234,6 +241,8 @@ export interface TabPlan {
   mySp: SpTable
   /** 이 탭에서 내 세트가 서는 쪽(공격·스피드 탭 attacker, 방어 탭 defender) */
   mySide: 'attacker' | 'defender'
+  /** 정규화한 판정 기준. 모든 행 작업 판정과 캐시 키에 쓴다 */
+  thresholds: BandThresholds
   spTotal: number
   spMaxPerStat: number
   /** 정렬 완료 */
@@ -414,6 +423,8 @@ export interface NoChangeSummary {
 export interface TabView {
   tab: Tab
   status: TabStatus
+  /** 이 뷰를 계산한 판정 기준(결과 배지·현재 판정 라벨이 같은 기준을 쓴다) */
+  thresholds: BandThresholds
   source: MetaSourceView
   /** 정렬 완료, 표시 대상만 */
   cards: readonly CardView[]

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_CRITERIA, DEFAULT_TOP_N } from '../cards'
+import { DEFAULT_CRITERIA, DEFAULT_ROLL_THRESHOLDS, DEFAULT_TOP_N } from '../cards'
 import { realData } from '../cards/testing'
 import { toPokemonSet } from '../ui/setDraft'
 import { EXAMPLE_DRAFT } from './example'
@@ -19,6 +19,8 @@ describe('initialState', () => {
     expect(s.filters).toEqual({ topN: DEFAULT_TOP_N, selected: [] })
     expect(s.conditions).toEqual({ myTailwind: false, opponentTailwind: false })
     expect(s.customTargets).toEqual([])
+    expect(s.thresholds).toEqual({ highRoll: 14 / 16, lowRoll: 2 / 16 })
+    expect(s.thresholds).toEqual(DEFAULT_ROLL_THRESHOLDS)
     expect(s.generation).toBe(0)
   })
 })
@@ -51,6 +53,25 @@ describe('reducer', () => {
       expect(reducer(next, { type: 'set-criteria', criteria })).toBe(next)
     }
     expect(reducer(next, { type: 'set-criteria', criteria: { bundleShareMin: 0.1 } })).toBe(next)
+  })
+
+  it('판정 기준은 1~15 정수 n만 n/16으로 반영하고 세대를 올린다(같은 값·범위 밖·비정수는 그대로)', () => {
+    const s = start()
+    const high = reducer(s, { type: 'set-roll-threshold', key: 'highRoll', steps: 12 })
+    expect(high.thresholds).toEqual({ highRoll: 12 / 16, lowRoll: 2 / 16 })
+    expect(high.generation).toBe(1)
+    const low = reducer(high, { type: 'set-roll-threshold', key: 'lowRoll', steps: 3 })
+    expect(low.thresholds).toEqual({ highRoll: 12 / 16, lowRoll: 3 / 16 })
+    expect(low.generation).toBe(2)
+    expect(reducer(low, { type: 'set-roll-threshold', key: 'lowRoll', steps: 3 })).toBe(low)
+    for (const steps of [0, 16, -1, 2.5, NaN, Infinity]) {
+      expect(reducer(low, { type: 'set-roll-threshold', key: 'highRoll', steps })).toBe(low)
+    }
+    expect(reducer(low, { type: 'set-roll-threshold', key: 'other' as 'highRoll', steps: 4 })).toBe(low)
+    expect(reducer(s, { type: 'set-roll-threshold', key: 'highRoll', steps: 1 }).thresholds.highRoll).toBe(1 / 16)
+    expect(reducer(s, { type: 'set-roll-threshold', key: 'highRoll', steps: 15 }).thresholds.highRoll).toBe(15 / 16)
+    const back = run(low, { type: 'set-roll-threshold', key: 'highRoll', steps: 14 }, { type: 'set-roll-threshold', key: 'lowRoll', steps: 2 })
+    expect(back.thresholds).toEqual(DEFAULT_ROLL_THRESHOLDS)
   })
 
   it('상위 N은 1 이상 정수만', () => {
@@ -127,6 +148,9 @@ describe('toCardInput', () => {
     expect(input.mySet.sp.hp).toBe(10)
     expect(input.filters.topN).toBe(10)
     expect(input.view).toBe(bo1)
+    const strict = run(s, { type: 'set-roll-threshold', key: 'highRoll', steps: 15 })
+    expect(toCardInput(strict, game, bo1).thresholds).toEqual({ highRoll: 15 / 16, lowRoll: 2 / 16 })
+    expect(input.thresholds).toEqual({ highRoll: 14 / 16, lowRoll: 2 / 16 })
     const broken = reducer(s, { type: 'set-draft', draft: { ...s.draft, sp: { ...s.draft.sp, def: '' } } })
     expect(toCardInput(broken, game, bo1).mySet.sp.def).toBeNaN()
   })

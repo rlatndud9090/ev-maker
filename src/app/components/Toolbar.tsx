@@ -1,11 +1,12 @@
 import { useId, useRef, useState, type Dispatch, type KeyboardEvent, type Ref } from 'react'
-import { TABS, type MetaSourceView, type Tab } from '../../cards'
+import { ROLL_STEPS, TABS, type MetaSourceView, type Tab } from '../../cards'
+import type { BandThresholds } from '../../core'
 import type { Snapshot } from '../../data/schema'
 import type { MatchType, MetaIndexItem } from '../../data/meta-schema'
 import type { MetaView } from '../../meta'
 import { namesOf } from '../../ui/names'
 import { searchIndexOf } from '../../ui/search'
-import { fromPercentInput, toPercentInput } from '../../ui/format'
+import { fromPercentInput, parseRollSteps, rollStepsOf, shareText, toPercentInput } from '../../ui/format'
 import type { AppAction, AppState } from '../state'
 import { Combobox } from './Combobox'
 import { NumberField } from './NumberField'
@@ -34,6 +35,58 @@ interface Props {
   customOpen: boolean
   onToggleCustom: () => void
   customButtonRef: Ref<HTMLButtonElement>
+}
+
+const ROLL_FIELD: Record<'attack' | 'defense', { key: keyof BandThresholds; label: string }> = {
+  attack: { key: 'highRoll', label: '고난수 기준' },
+  defense: { key: 'lowRoll', label: '저난수 기준' },
+}
+
+/** "고난수 기준 [n]/16 (87.5%)". 1~ROLL_STEPS−1 정수만 반영하고, 그 밖 입력은 반영하지 않은 채 옆에 안내한다. */
+function RollThresholdField({ tab, thresholds, dispatch }: { tab: 'attack' | 'defense'; thresholds: BandThresholds; dispatch: Dispatch<AppAction> }) {
+  const { key, label } = ROLL_FIELD[tab]
+  const id = useId()
+  const hintId = `${id}-hint`
+  const unitId = `${id}-unit`
+  const [editing, setEditing] = useState<string | null>(null)
+  const committed = rollStepsOf(thresholds[key], ROLL_STEPS)
+  const parsed = editing === null ? committed : parseRollSteps(editing, ROLL_STEPS)
+  const invalid = parsed === undefined
+  return (
+    <div className="roll-field" data-testid="roll-threshold" data-key={key}>
+      <label className="roll-input">
+        {label}
+        <input
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={ROLL_STEPS - 1}
+          step={1}
+          value={editing ?? String(committed)}
+          aria-invalid={invalid}
+          aria-describedby={invalid ? `${unitId} ${hintId}` : unitId}
+          onChange={(e) => {
+            setEditing(e.target.value)
+            const n = parseRollSteps(e.target.value, ROLL_STEPS)
+            if (n !== undefined) dispatch({ type: 'set-roll-threshold', key, steps: n })
+          }}
+          onBlur={() => setEditing(null)}
+        />
+      </label>
+      {/* 단위(/16)와 반영 중인 백분율을 입력의 설명으로 묶어 스크린 리더가 "14, /16 (87.5%)"로 읽게 한다. */}
+      <span id={unitId}>
+        <span className="roll-denom">/{ROLL_STEPS}</span>{' '}
+        <span className="roll-percent num" data-testid="roll-percent">
+          ({shareText(committed / ROLL_STEPS)})
+        </span>
+      </span>
+      {invalid && (
+        <span id={hintId} className="field-hint" data-testid="roll-hint" role="status">
+          1~{ROLL_STEPS - 1} 정수만 반영됩니다
+        </span>
+      )}
+    </div>
+  )
 }
 
 export function Toolbar({ customButtonRef, ...p }: Props) {
@@ -139,6 +192,7 @@ export function Toolbar({ customButtonRef, ...p }: Props) {
         </div>
 
         <div className="tool-group">
+          {state.tab !== 'speed' && <RollThresholdField key={state.tab} tab={state.tab} thresholds={state.thresholds} dispatch={dispatch} />}
           <label className="check">
             <input
               type="checkbox"

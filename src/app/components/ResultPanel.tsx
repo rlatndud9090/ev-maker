@@ -114,6 +114,7 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
                     game={game}
                     tab={tab}
                     card={c}
+                    thresholds={view.thresholds}
                     expanded={expanded.has(c.id)}
                     onToggle={onToggle}
                     target={c.opponent.source === 'custom' ? targetOf(c.opponent.id) : undefined}

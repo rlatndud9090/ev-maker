@@ -54,7 +54,7 @@ function computeEnds(plan: TabPlan, rowId: string): CompactCell[] {
     const a = side === 'attacker' ? withSps(spec.attacker, [stat], sp) : spec.attacker
     const d = side === 'defender' ? withSps(spec.defender, [stat], sp) : spec.defender
     if (spec.judge === 'speed') return compactSpeed(plan, sp, judgeSpeed(plan.game, a, d, spec.conditions, IGNORE_TOTAL))
-    return compactDamage(sp, judgeDamage(plan.game, side, a, d, moveOf(spec), spec.conditions, undefined, IGNORE_TOTAL))
+    return compactDamage(sp, judgeDamage(plan.game, side, a, d, moveOf(spec), spec.conditions, plan.thresholds, IGNORE_TOTAL))
   })
 }
 
@@ -70,7 +70,7 @@ function computeSweep(plan: TabPlan, rowId: string): CompactCell[] {
       compactSpeed(plan, sp, j),
     )
   }
-  const r = sweepDamage(plan.game, spec.sweep, spec.attacker, spec.defender, moveOf(spec), spec.conditions, undefined, OVER_BUDGET)
+  const r = sweepDamage(plan.game, spec.sweep, spec.attacker, spec.defender, moveOf(spec), spec.conditions, plan.thresholds, OVER_BUDGET)
   return compactSweep(r, compactDamage)
 }
 
@@ -80,7 +80,7 @@ function computeExtreme(plan: TabPlan, filterId: string): CompactCell[] {
   return [0, plan.spMaxPerStat].map((sp) =>
     compactDamage(
       sp,
-      judgeDamage(plan.game, 'defender', spec.attacker, withSps(spec.defender, spec.stats, sp), spec.moveId, spec.conditions, undefined, IGNORE_TOTAL),
+      judgeDamage(plan.game, 'defender', spec.attacker, withSps(spec.defender, spec.stats, sp), spec.moveId, spec.conditions, plan.thresholds, IGNORE_TOTAL),
     ),
   )
 }
@@ -92,8 +92,8 @@ function computePair(plan: TabPlan, filterId: string): PairPoint[] {
   const [hpStat, defStat] = spec.stats
   return minPairPoints((hp, d) => {
     const defender = { ...spec.defender, sp: { ...spec.defender.sp, [hpStat]: hp, [defStat]: d } }
-    const v = judgeDamage(plan.game, 'defender', spec.attacker, defender, spec.moveId, spec.conditions, undefined, IGNORE_TOTAL).value
-    return koLabel('defense', v.kind === 'damage' ? v.ohkoChance : 0)
+    const v = judgeDamage(plan.game, 'defender', spec.attacker, defender, spec.moveId, spec.conditions, plan.thresholds, IGNORE_TOTAL).value
+    return koLabel('defense', v.kind === 'damage' ? v.ohkoChance : 0, plan.thresholds)
   }, plan.spMaxPerStat)
 }
 
@@ -101,7 +101,7 @@ function computePair(plan: TabPlan, filterId: string): PairPoint[] {
 function computeFixed(plan: TabPlan, fixedId: string): CompactCell[] {
   const spec = plan.fixed[fixedId]
   if (spec === undefined) throw new Error(`고정 판정 ${fixedId}가 계획에 없다`)
-  return [compactDamage(0, judgeDamage(plan.game, 'attacker', spec.attacker, spec.defender, spec.moveId, spec.conditions))]
+  return [compactDamage(0, judgeDamage(plan.game, 'attacker', spec.attacker, spec.defender, spec.moveId, spec.conditions, plan.thresholds))]
 }
 
 function compute(plan: TabPlan, task: RowTask): CachedJudgement {

@@ -1,8 +1,9 @@
 // 테스트 전용: 손으로 만든 소형 TabPlan과 행 작업 결과. 앱 코드에서 import하지 않는다.
-import type { PokemonSet, SpTable } from '../../core'
+import type { BandThresholds, PokemonSet, SpTable } from '../../core'
 import type { Snapshot, StatId } from '../../data/schema'
 import { realData } from '../testing'
 import { taskKey } from '../schedule'
+import { DEFAULT_ROLL_THRESHOLDS } from '../types'
 import type {
   CardSpec,
   CompactCell,
@@ -87,6 +88,7 @@ export interface CardOpts {
   fixedIds?: readonly string[]
   error?: ErrorReason
   notices?: readonly MoveNotice[]
+  thresholds?: BandThresholds
 }
 
 export function card(o: CardOpts): CardSpec {
@@ -115,6 +117,7 @@ export interface PlanOpts {
   mySp?: SpTable
   mySide?: 'attacker' | 'defender'
   notices?: readonly MoveNotice[]
+  thresholds?: BandThresholds
 }
 
 const byId = <T extends { id: string }>(xs: readonly T[] = []): Record<string, T> => Object.fromEntries(xs.map((x) => [x.id, x]))
@@ -127,6 +130,7 @@ export function plan(o: PlanOpts): TabPlan {
     source: { match: 'bo1', month: '2026-10', cutoff: 1500, format: 'test' },
     mySp: o.mySp ?? sp(),
     mySide: o.mySide ?? 'attacker',
+    thresholds: o.thresholds ?? { ...DEFAULT_ROLL_THRESHOLDS },
     spTotal: game.manifest.rules.spTotal,
     spMaxPerStat: game.manifest.rules.spMaxPerStat,
     cards: o.cards,

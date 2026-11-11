@@ -883,6 +883,35 @@ td.src {
   width: 7rem;
 }
 
+/* 판정 기준 "고난수 기준 [n]/16 (87.5%)": 입력 칸 옆에 분모·백분율·안내를 한 줄로 */
+.roll-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.2rem 0.4rem;
+}
+
+.roll-input {
+  width: 5.5rem;
+}
+
+.roll-denom,
+.roll-percent {
+  font-variant-numeric: tabular-nums;
+  padding-bottom: 0.35rem;
+}
+
+.roll-percent {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.field-hint {
+  color: var(--danger);
+  font-size: 0.8rem;
+  padding-bottom: 0.35rem;
+}
+
 .criteria .num-field {
   width: 10rem;
 }
@@ -1078,10 +1107,10 @@ td.src {
   border: 0;
   background: transparent;
   text-align: left;
-  /* 표처럼 열을 맞춘다: 포켓몬 | 배분 | 기술 | 목표 | 결과 | 외 n행 (모든 카드가 같은 열 폭) */
+  /* 표처럼 열을 맞춘다: 포켓몬 | 배분 | 기술 | 결과 | 외 n행 (모든 카드가 같은 열 폭, 외 n행만 오른쪽 끝) */
   display: grid;
-  grid-template-columns: 8rem 7rem 9.5rem minmax(0, 1fr) 6rem 2.8rem;
-  grid-template-areas: 'name bundle move target result more';
+  grid-template-columns: 8rem 7rem minmax(0, 12rem) 7.5rem minmax(2.8rem, 1fr);
+  grid-template-areas: 'name bundle move result more';
   align-items: center;
   gap: 0.2rem 0.6rem;
   padding: 0.5rem 0.6rem;
@@ -1110,14 +1139,10 @@ td.src {
   min-width: 0;
 }
 
-.card-line .headline-target {
-  grid-area: target;
-  min-width: 0;
-}
-
-/* 갱신 중·계산 불가·고정 판정 문구는 기술~목표 칸을 함께 쓴다 */
+/* 갱신 중·계산 불가·고정 판정 문구는 기술 칸을 쓴다 */
 .card-line .headline:not(.row-headline) {
-  grid-column: move-start / target-end;
+  grid-area: move;
+  min-width: 0;
 }
 
 .card-line > .ko-badge,
@@ -1131,8 +1156,7 @@ td.src {
     grid-template-columns: auto minmax(0, 1fr) auto auto;
     grid-template-areas:
       'name name result more'
-      'bundle move move move'
-      'target target target target';
+      'bundle move move move';
   }
 }
 
@@ -1253,20 +1277,6 @@ td.src {
   font-weight: 400;
   color: var(--muted);
   white-space: nowrap;
-}
-
-.headline-target {
-  font-size: 0.9rem;
-}
-
-.target-main,
-.target-need {
-  white-space: nowrap;
-}
-
-.target-need {
-  font-size: 0.8rem;
-  color: var(--muted);
 }
 
 .headline.updating {

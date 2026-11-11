@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import { cellLabel, type CellView, type RowView, type Tab } from '../../cards'
+import type { BandThresholds } from '../../core'
 import type { Snapshot } from '../../data/schema'
 import { categoryLabel, categorySymbol, categoryTone, currentText, fixedText, spanText, spansOf, targetText } from '../../ui/format'
 import { koReason } from '../../ui/koErrors'
@@ -36,15 +37,16 @@ interface Props {
   game: Snapshot
   tab: Tab
   row: RowView
+  thresholds: BandThresholds
 }
 
-export const RowDetail = memo(function RowDetail({ game, tab, row }: Props) {
+export const RowDetail = memo(function RowDetail({ game, tab, row, thresholds }: Props) {
   const note = rowRefsNote(game, tab, row)
   const stat = row.sweepStat
   const spans = spansOf(row.cells)
   // 현재 판정은 목표 문구와 같은 판정 라벨(코어 koLabel 4단·행동 순서)로 쓴다. 띠·범례는 3단 구간 그대로.
   const cur = row.cells.find((c) => c.sp === row.current.sp)
-  const currentLabel = cur === undefined ? undefined : cellLabel(tab, cur)
+  const currentLabel = cur === undefined ? undefined : cellLabel(tab, cur, thresholds)
   return (
     <li className={`row row-${row.status}`} data-testid="row" data-row-kind={row.kind} data-status={row.status}>
       <div className="row-head">

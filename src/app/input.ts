@@ -11,6 +11,7 @@ export function toCardInput(state: AppState, game: Snapshot, view: MetaView): Ca
     view,
     mySet: toPokemonSet(game, state.draft).set,
     conditions: state.conditions,
+    thresholds: state.thresholds,
     criteria: state.criteria,
     filters: state.filters,
     customTargets: state.customTargets,

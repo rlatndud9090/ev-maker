@@ -6,6 +6,10 @@ import { judgementKey } from './key'
 import { computeRowTask } from './rowTask'
 import { card, filter, fixed, game, plan, row, sp } from './__fixtures__/handPlan'
 import type { JudgementCache, RowSpec, RowTask, TabPlan } from './types'
+import { DEFAULT_ROLL_THRESHOLDS } from './types'
+
+/** 카드 입력과 같은 제품 판정 기준(cardInput 기본값). 코어 직접 호출 기대값도 이 기준으로 낸다 */
+const TH = DEFAULT_ROLL_THRESHOLDS
 
 const reg = game.manifest.regulation.id
 const mk = (species: string, ability: string, s: Partial<SpTable>, extra: Partial<PokemonSet> = {}): PokemonSet => ({
@@ -54,8 +58,8 @@ describe('computeRowTask: 코어 판정 그대로', () => {
   it('ends: 스윕 능력치 0·최대를 ignoreSpTotal로 단건 판정', () => {
     const r = computeRowTask(p, { kind: 'ends', rowId: 'r' })
     if (r.kind !== 'ends') throw new Error(r.kind)
-    const lo = judgeDamage(game, 'attacker', atk(kingambit, 0), delphox, 'suckerpunch', {}, undefined, IGNORE)
-    const hi = judgeDamage(game, 'attacker', atk(kingambit, 32), delphox, 'suckerpunch', {}, undefined, IGNORE)
+    const lo = judgeDamage(game, 'attacker', atk(kingambit, 0), delphox, 'suckerpunch', {}, TH, IGNORE)
+    const hi = judgeDamage(game, 'attacker', atk(kingambit, 32), delphox, 'suckerpunch', {}, TH, IGNORE)
     expect(r.low).toMatchObject({ sp: 0, category: lo.category })
     expect(r.high).toMatchObject({ sp: 32, category: hi.category })
     if (hi.value.kind !== 'damage') throw new Error(hi.value.kind)
@@ -66,13 +70,14 @@ describe('computeRowTask: 코어 판정 그대로', () => {
   it('sweep: sweepDamage(judgeOverBudget) 직접 호출과 칸 범주·값이 같다(예산 밖 칸 포함)', () => {
     const r = computeRowTask(p, { kind: 'sweep', rowId: 'r', stage: 2 })
     if (r.kind !== 'sweep') throw new Error(r.kind)
-    const direct = sweepDamage(game, { side: 'attacker', stat: 'atk' }, kingambit, delphox, 'suckerpunch', {}, undefined, OVER)
+    const direct = sweepDamage(game, { side: 'attacker', stat: 'atk' }, kingambit, delphox, 'suckerpunch', {}, TH, OVER)
     expect(r.cells).toHaveLength(33)
     direct.cells.forEach((c, i) => {
       if (c.kind !== 'ok' || c.value.kind !== 'damage') throw new Error('예상 밖 칸')
       expect(r.cells[i]).toEqual({ sp: c.sp, category: c.category, ohkoChance: c.value.ohkoChance, minPercent: c.value.minPercent, maxPercent: c.value.maxPercent })
     })
-    expect(direct.boundaries).toEqual([13, 19])
+    // 제품 기준(고난수 14/16)의 경계. 코어 기본(0.75)이면 [13, 19]
+    expect(direct.boundaries).toEqual([16, 19])
     expect(direct.cells.some((c) => c.kind === 'ok' && c.overBudget)).toBe(true)
   })
 
@@ -92,15 +97,15 @@ describe('computeRowTask: 코어 판정 그대로', () => {
     const r = computeRowTask(d, { kind: 'extreme', filterId: 'f' })
     if (r.kind !== 'extreme') throw new Error(r.kind)
     const me = d.filters.f.defender
-    const lo = judgeDamage(game, 'defender', delphox, { ...me, sp: { ...me.sp, hp: 0, def: 0 } }, 'flareblitz', {}, undefined, IGNORE)
-    const hi = judgeDamage(game, 'defender', delphox, { ...me, sp: { ...me.sp, hp: 32, def: 32 } }, 'flareblitz', {}, undefined, IGNORE)
+    const lo = judgeDamage(game, 'defender', delphox, { ...me, sp: { ...me.sp, hp: 0, def: 0 } }, 'flareblitz', {}, TH, IGNORE)
+    const hi = judgeDamage(game, 'defender', delphox, { ...me, sp: { ...me.sp, hp: 32, def: 32 } }, 'flareblitz', {}, TH, IGNORE)
     expect([r.low.sp, r.low.category, r.high.sp, r.high.category]).toEqual([0, lo.category, 32, hi.category])
   })
 
   it('fixed: 세트 그대로 공격 관점 단건 판정', () => {
     const r = computeRowTask(p, { kind: 'fixed', fixedId: 'x' })
     if (r.kind !== 'fixed') throw new Error(r.kind)
-    expect(r.cell.category).toBe(judgeDamage(game, 'attacker', kingambit, delphox, 'foulplay').category)
+    expect(r.cell.category).toBe(judgeDamage(game, 'attacker', kingambit, delphox, 'foulplay', undefined, TH).category)
   })
 
   it('코어 도메인 오류는 이유로 담고 캐시하지 않는다, 그 밖 예외는 다시 던진다', () => {

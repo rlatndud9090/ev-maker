@@ -1,5 +1,5 @@
 // 판정 캐시 키. 판정이 의존하는 입력만 남긴 정규화 튜플을 JSON.stringify한다.
-import { DEFAULT_THRESHOLDS, STAT_IDS, moveStatRefs } from '../core'
+import { STAT_IDS, moveStatRefs } from '../core'
 import type { BattleConditions, MoveStatRefs, PokemonSet } from '../core'
 import type { Snapshot, StatId } from '../data/schema'
 import { relevantStats } from './relevance'
@@ -93,6 +93,17 @@ function partsOf(plan: TabPlan, task: RowTask): KeyParts {
 }
 
 /**
+ * 캐시 값이 실제로 읽는 임계값만 고른다(그 밖 임계값을 바꿔도 같은 판정이 캐시 적중하게).
+ * 칸 category는 judgeDamage에 넘긴 측의 구간이다: 공격측 attackBand는 highRoll, 방어측 defenseBand·koLabel('defense')는 lowRoll.
+ * 스윕·양 끝은 스윕 측, 극단·쌍은 방어측, 고정은 rowTask가 공격측으로 판정한다. 스피드는 임계값을 쓰지 않는다.
+ */
+function thresholdPart(plan: TabPlan, task: RowTask, p: KeyParts): unknown {
+  if (p.judge === 'speed') return null
+  const side = task.kind === 'fixed' ? 'attacker' : p.side
+  return side === 'attacker' ? ['highRoll', plan.thresholds.highRoll] : ['lowRoll', plan.thresholds.lowRoll]
+}
+
+/**
  * 세트 moves는 키에 넣지 않는다: 합법성 검증은 계획 단계(내 세트 validateSet, 상대 resolveAssumption)에서 끝났다는 전제다.
  * 스윕·양 끝·극단·쌍 판정은 덮어쓰는 능력치 SP를 빼고, 고정 판정은 관여 SP를 그대로 넣는다.
  */
@@ -111,6 +122,6 @@ export function judgementKey(plan: TabPlan, task: RowTask): string {
     normalizeSet(p.defender, rel.defender, exclude('defender')),
     p.moveId,
     canonical(p.conditions),
-    canonical(DEFAULT_THRESHOLDS),
+    thresholdPart(plan, task, p),
   ])
 }

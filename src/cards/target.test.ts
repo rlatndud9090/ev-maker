@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { JUDGEMENT_ORDER, STAT_IDS, judgeDamage, judgementRank, koLabel } from '../core'
+import { DEFAULT_THRESHOLDS, JUDGEMENT_ORDER, STAT_IDS, judgeDamage, judgementRank, koLabel } from '../core'
 import type { KoLabel, PokemonSet } from '../core'
 import { EXAMPLE_SET, F1, opponentSet } from './__fixtures__/acceptance'
 import { buildTabView } from './batch'
@@ -10,10 +10,15 @@ import { computeRowTask } from './rowTask'
 import { minPairPoints, pairTarget, singleTarget } from './target'
 import { cardInput, realData } from './testing'
 import type { CellView, ExtremeSpec, PairPoint, RowView, TabPlan } from './types'
+import { DEFAULT_ROLL_THRESHOLDS } from './types'
+/** 카드 입력과 같은 제품 판정 기준(cardInput 기본값). 코어 직접 호출 기대값도 이 기준으로 낸다 */
+const TH = DEFAULT_ROLL_THRESHOLDS
 
 const { game, bo1 } = realData()
 const { spTotal, spMaxPerStat } = game.manifest.rules
 const IGNORE_TOTAL = { ignoreSpTotal: true }
+/** 합성 칸 단위 테스트는 코어 기본 기준(0.75·0.1875)으로 단계를 정한다 */
+const T = DEFAULT_THRESHOLDS
 
 /** [[끝 sp, 1타 확률], …] → 0~32 CellView. need = max(0, sp − avail). */
 function damageCells(spans: ReadonlyArray<readonly [number, number]>, avail = 32): CellView[] {
@@ -33,14 +38,14 @@ describe('singleTarget', () => {
       [29, 0.8],
       [32, 1],
     ])
-    expect(singleTarget('attack', 'atk', cells, 12)).toEqual({ label: 'high-roll-ohko', goal: 'better', stats: [{ stat: 'atk', sp: 20 }], need: 0 })
-    expect(singleTarget('attack', 'atk', cells, 0)).toEqual({ label: 'mid-low-roll-ohko', goal: 'better', stats: [{ stat: 'atk', sp: 10 }], need: 0 })
+    expect(singleTarget('attack', 'atk', cells, 12, T)).toEqual({ label: 'high-roll-ohko', goal: 'better', stats: [{ stat: 'atk', sp: 20 }], need: 0 })
+    expect(singleTarget('attack', 'atk', cells, 0, T)).toEqual({ label: 'mid-low-roll-ohko', goal: 'better', stats: [{ stat: 'atk', sp: 10 }], need: 0 })
     const jump = damageCells([
       [14, 0.5],
       [32, 1],
     ])
-    expect(singleTarget('attack', 'atk', jump, 3)?.label).toBe('guaranteed-ohko')
-    expect(singleTarget('attack', 'atk', jump, 3)?.stats).toEqual([{ stat: 'atk', sp: 15 }])
+    expect(singleTarget('attack', 'atk', jump, 3, T)?.label).toBe('guaranteed-ohko')
+    expect(singleTarget('attack', 'atk', jump, 3, T)?.stats).toEqual([{ stat: 'atk', sp: 15 }])
   })
 
   it('최상위면 그 판정 유지 최소값(현재보다 낮을 수 있다), 위가 불가능해도 유지 최소값', () => {
@@ -48,12 +53,12 @@ describe('singleTarget', () => {
       [7, 0.5],
       [32, 1],
     ])
-    expect(singleTarget('attack', 'atk', top, 32)).toEqual({ label: 'guaranteed-ohko', goal: 'keep', stats: [{ stat: 'atk', sp: 8 }], need: 0 })
+    expect(singleTarget('attack', 'atk', top, 32, T)).toEqual({ label: 'guaranteed-ohko', goal: 'keep', stats: [{ stat: 'atk', sp: 8 }], need: 0 })
     const capped = damageCells([
       [4, 0],
       [32, 0.3],
     ])
-    expect(singleTarget('attack', 'atk', capped, 20)).toEqual({ label: 'mid-low-roll-ohko', goal: 'keep', stats: [{ stat: 'atk', sp: 5 }], need: 0 })
+    expect(singleTarget('attack', 'atk', capped, 20, T)).toEqual({ label: 'mid-low-roll-ohko', goal: 'keep', stats: [{ stat: 'atk', sp: 5 }], need: 0 })
   })
 
   it('need는 그 칸 CellView.need 그대로(예산 초과분)', () => {
@@ -64,7 +69,7 @@ describe('singleTarget', () => {
       ],
       20,
     )
-    expect(singleTarget('attack', 'atk', cells, 12)?.need).toBe(6)
+    expect(singleTarget('attack', 'atk', cells, 12, T)?.need).toBe(6)
   })
 
   it('방어 단일 행: 확률이 내려갈수록 좋다', () => {
@@ -73,23 +78,23 @@ describe('singleTarget', () => {
       [12, 0.5],
       [32, 0],
     ])
-    expect(singleTarget('defense', 'hp', cells, 8)).toEqual({ label: 'guaranteed-survive', goal: 'better', stats: [{ stat: 'hp', sp: 13 }], need: 0 })
+    expect(singleTarget('defense', 'hp', cells, 8, T)).toEqual({ label: 'guaranteed-survive', goal: 'better', stats: [{ stat: 'hp', sp: 13 }], need: 0 })
   })
 
   it('스피드: 후공 → 동속 → 선공, 동속 칸이 없으면 선공', () => {
     const speed = (cats: string[]): CellView[] => cats.map((c, sp) => ({ sp, category: c, overBudget: false, need: 0 }))
     const cats = [...Array<string>(10).fill('second'), 'tie', ...Array<string>(22).fill('first')]
-    expect(singleTarget('speed', 'spe', speed(cats), 3)).toEqual({ label: 'tie', goal: 'better', stats: [{ stat: 'spe', sp: 10 }], need: 0 })
-    expect(singleTarget('speed', 'spe', speed(cats), 10)?.stats).toEqual([{ stat: 'spe', sp: 11 }])
-    expect(singleTarget('speed', 'spe', speed(cats), 30)).toMatchObject({ label: 'first', goal: 'keep', stats: [{ stat: 'spe', sp: 11 }] })
+    expect(singleTarget('speed', 'spe', speed(cats), 3, T)).toEqual({ label: 'tie', goal: 'better', stats: [{ stat: 'spe', sp: 10 }], need: 0 })
+    expect(singleTarget('speed', 'spe', speed(cats), 10, T)?.stats).toEqual([{ stat: 'spe', sp: 11 }])
+    expect(singleTarget('speed', 'spe', speed(cats), 30, T)).toMatchObject({ label: 'first', goal: 'keep', stats: [{ stat: 'spe', sp: 11 }] })
     const noTie = [...Array<string>(10).fill('second'), ...Array<string>(23).fill('first')]
-    expect(singleTarget('speed', 'spe', speed(noTie), 0)).toMatchObject({ label: 'first', goal: 'better', stats: [{ stat: 'spe', sp: 10 }] })
+    expect(singleTarget('speed', 'spe', speed(noTie), 0, T)).toMatchObject({ label: 'first', goal: 'better', stats: [{ stat: 'spe', sp: 10 }] })
   })
 
   it('코어가 낸 칸이 아니면(1타 확률 없음·행동 순서 밖 범주) 목표 없음', () => {
     const bare = Array.from({ length: 33 }, (_, sp): CellView => ({ sp, category: 'p', overBudget: false, need: 0 }))
-    expect(singleTarget('attack', 'atk', bare, 0)).toBeUndefined()
-    expect(singleTarget('speed', 'spe', bare, 0)).toBeUndefined()
+    expect(singleTarget('attack', 'atk', bare, 0, T)).toBeUndefined()
+    expect(singleTarget('speed', 'spe', bare, 0, T)).toBeUndefined()
   })
 })
 
@@ -197,8 +202,8 @@ describe('공격 탭 최소 A(F1)', () => {
       const opp = opponentSet(bo1, ref.opponent)
       const labelAt = (a: number) => {
         const set: PokemonSet = { ...mySet, sp: { ...mySet.sp, atk: a } }
-        const v = judgeDamage(game, 'attacker', set, opp, F1.move, undefined, undefined, IGNORE_TOTAL).value
-        return koLabel('attack', v.kind === 'damage' ? v.ohkoChance : 0)
+        const v = judgeDamage(game, 'attacker', set, opp, F1.move, undefined, TH, IGNORE_TOTAL).value
+        return koLabel('attack', v.kind === 'damage' ? v.ohkoChance : 0, TH)
       }
       const current = mySet.sp.atk
       const r = judgementRank('attack', labelAt(current))
@@ -206,8 +211,8 @@ describe('공격 탭 최소 A(F1)', () => {
       while (judgementRank('attack', labelAt(sp)) < r + 1) sp++
       const remaining = spTotal - STAT_IDS.reduce((s, k) => s + mySet.sp[k], 0)
       expect(row.target).toEqual({ label: labelAt(sp), goal: 'better', stats: [{ stat: 'atk', sp }], need: Math.max(0, sp - current - remaining) })
-      // 고정 경계(F1: A20 고난수)와 같다.
-      expect(row.target).toMatchObject({ label: 'high-roll-ohko', stats: [{ stat: 'atk', sp: 20 }], need: ref.need[which][0] })
+      // 고정 경계(F1: 고난수 기준 14/16에서 A27 고난수)와 같다.
+      expect(row.target).toMatchObject({ label: 'high-roll-ohko', stats: [{ stat: 'atk', sp: 27 }], need: ref.need[which][0] })
     })
   }
 })
@@ -218,8 +223,8 @@ describe('방어 탭 H·B 최소 조합(예시 세트)', () => {
   const view = buildTabView(input, 'defense')
   const judgeOf = (spec: ExtremeSpec) => (hp: number, d: number) => {
     const defender = { ...spec.defender, sp: { ...spec.defender.sp, hp, [spec.stats[1]]: d } }
-    const v = judgeDamage(game, 'defender', spec.attacker, defender, spec.moveId, spec.conditions, undefined, IGNORE_TOTAL).value
-    return koLabel('defense', v.kind === 'damage' ? v.ohkoChance : 0)
+    const v = judgeDamage(game, 'defender', spec.attacker, defender, spec.moveId, spec.conditions, TH, IGNORE_TOTAL).value
+    return koLabel('defense', v.kind === 'damage' ? v.ohkoChance : 0, TH)
   }
 
   it('속성: 쌍 결과가 있는 필터 몇 개에서 무차별 33×33과 같다', () => {

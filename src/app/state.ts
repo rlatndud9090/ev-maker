@@ -1,8 +1,11 @@
 // 제품 화면 상태와 리듀서(React 없음). 계산 입력이 바뀔 때만 세대를 올린다.
 import type { StatId } from '../data/schema'
 import type { MatchType } from '../data/meta-schema'
+import type { BandThresholds } from '../core'
 import {
   DEFAULT_CRITERIA,
+  DEFAULT_ROLL_THRESHOLDS,
+  ROLL_STEPS,
   DEFAULT_TOP_N,
   MAX_CUSTOM_MOVES,
   type CardConditions,
@@ -22,6 +25,8 @@ export interface AppState {
   /** 확정된 내 세트 초안(status 'none'·boosts 0 고정) */
   draft: SetDraft
   conditions: CardConditions
+  /** 고난수·저난수 기준. 값은 언제나 n/ROLL_STEPS(n은 1~ROLL_STEPS−1 정수) */
+  thresholds: BandThresholds
   tab: Tab
   criteria: DisplayCriteria
   filters: CardFilters
@@ -37,6 +42,8 @@ export type AppAction =
   | { type: 'set-tab'; tab: Tab }
   | { type: 'set-tailwind'; side: 'me' | 'opponent'; on: boolean }
   | { type: 'set-criteria'; criteria: Partial<DisplayCriteria> }
+  /** steps가 1~ROLL_STEPS−1 정수가 아니면 무시. 기준 = steps/ROLL_STEPS */
+  | { type: 'set-roll-threshold'; key: keyof BandThresholds; steps: number }
   | { type: 'set-top-n'; topN: number }
   | { type: 'set-selected'; ids: readonly string[] }
   /** moves가 1~MAX_CUSTOM_MOVES개가 아니거나 rosterId가 이미 있으면 무시 */
@@ -52,6 +59,7 @@ export function initialState(regulation: string): AppState {
     meta: null,
     draft: EXAMPLE_DRAFT,
     conditions: { myTailwind: false, opponentTailwind: false },
+    thresholds: { ...DEFAULT_ROLL_THRESHOLDS },
     tab: 'attack',
     criteria: { ...DEFAULT_CRITERIA },
     filters: { topN: DEFAULT_TOP_N, selected: [] },
@@ -70,6 +78,7 @@ function bump(state: AppState, patch: Partial<AppState>): AppState {
 
 const isRatio = (v: unknown): boolean => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1
 const isPositiveInt = (v: unknown): boolean => typeof v === 'number' && Number.isInteger(v) && v >= 1
+const isRollSteps = (v: unknown): boolean => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= ROLL_STEPS - 1
 
 function validCriteria(c: Partial<DisplayCriteria>): boolean {
   if (c.bundleShareMin !== undefined && !isRatio(c.bundleShareMin)) return false
@@ -111,6 +120,9 @@ export function reducer(state: AppState, action: AppAction): AppState {
     case 'set-criteria':
       if (!validCriteria(action.criteria)) return state
       return bump(state, { criteria: { ...state.criteria, ...action.criteria } })
+    case 'set-roll-threshold':
+      if (!isRollSteps(action.steps) || (action.key !== 'highRoll' && action.key !== 'lowRoll')) return state
+      return bump(state, { thresholds: { ...state.thresholds, [action.key]: action.steps / ROLL_STEPS } })
     case 'set-top-n':
       if (!isPositiveInt(action.topN)) return state
       return bump(state, { filters: { ...state.filters, topN: action.topN } })

@@ -1,6 +1,6 @@
 // 탭 뷰 값 → 표시 문구. 판정·경계·n은 계산하지 않고 받은 값을 문장으로만 만든다.
 import type { StatId } from '../data/schema'
-import { koLabel, type KoLabel, type KoSide } from '../core'
+import { koLabel, type BandThresholds, type KoLabel, type KoSide } from '../core'
 import { CATEGORY_LABEL, ORDER_LABEL } from './labels'
 
 export const STAT_SHORT: Record<StatId, string> = { hp: 'H', atk: 'A', def: 'B', spa: 'C', spd: 'D', spe: 'S' }
@@ -58,16 +58,10 @@ export interface TargetLike {
   need: number
 }
 
-/** 목표 문구 조각: main "확정견딤: 최소 H4 B12 필요", n이 있으면 need "(다른 능력치에서 n 필요)". 좁은 화면 줄바꿈 단위. */
-export function targetParts(t: TargetLike): { main: string; need?: string } {
-  const main = `${judgementText(t.label)}: 최소 ${t.stats.map((s) => `${STAT_SHORT[s.stat]}${s.sp}`).join(' ')} 필요`
-  return t.need > 0 ? { main, need: `(다른 능력치에서 ${t.need} 필요)` } : { main }
-}
-
 /** 목표 문구 "확정1타: 최소 A30 필요", "확정견딤: 최소 H4 B12 필요 (다른 능력치에서 4 필요)" */
 export function targetText(t: TargetLike): string {
-  const { main, need } = targetParts(t)
-  return need === undefined ? main : `${main} ${need}`
+  const main = `${judgementText(t.label)}: 최소 ${t.stats.map((s) => `${STAT_SHORT[s.stat]}${s.sp}`).join(' ')} 필요`
+  return t.need > 0 ? `${main} (다른 능력치에서 ${t.need} 필요)` : main
 }
 
 /** "현재 A32 확정1타". label은 목표 문구와 같은 판정 라벨(공격·방어 KoLabel, 스피드 행동 순서) — 한 줄에 같은 어휘만 쓴다. */
@@ -142,12 +136,36 @@ export interface KoCellLike {
   ohkoChance?: number
 }
 
-/** 대표 칸 → 카드 결과 배지. 무효 칸은 "무효", 1타 확률이 없는 칸(스피드)은 배지 없음. 라벨 규칙은 코어 koLabel. */
-export function koBadge(side: KoSide, cell: KoCellLike | undefined): KoBadge | undefined {
+/** 0<p<1 1타 확률 → "12.8%". 소수 첫째 자리 반올림 뒤 0.1%~99.9%로 고정해 확정(0·1)과 같은 숫자로 보이지 않게 한다. */
+export function rollChanceText(p: number): string {
+  const v = Math.min(99.9, Math.max(0.1, Math.round(p * 1000) / 10))
+  return `${v.toFixed(1)}%`
+}
+
+/**
+ * 대표 칸 → 카드 결과 배지. 문구는 p=1 "확정1타", p=0 "확정견딤", 그 사이 "난수1타: 12.8%", 무효 칸은 "무효".
+ * 색은 코어 koLabel(thresholds) 단계를 따른다. 1타 확률이 없는 칸(스피드)은 배지 없음.
+ */
+export function koBadge(side: KoSide, cell: KoCellLike | undefined, thresholds: BandThresholds): KoBadge | undefined {
   if (cell === undefined) return undefined
   if (cell.immune) return { label: '무효', tone: 'gray' }
-  if (cell.ohkoChance === undefined) return undefined
-  return KO_BADGE[koLabel(side, cell.ohkoChance)]
+  const p = cell.ohkoChance
+  if (p === undefined) return undefined
+  const { tone } = KO_BADGE[koLabel(side, p, thresholds)]
+  if (p >= 1) return { label: '확정1타', tone }
+  if (p <= 0) return { label: '확정견딤', tone }
+  return { label: `난수1타: ${rollChanceText(p)}`, tone }
+}
+
+/** 판정 기준 비율(n/steps) → 화면 입력 칸의 정수 n */
+export const rollStepsOf = (ratio: number, steps: number): number => Math.round(ratio * steps)
+
+/** 기준 입력 문자열 → 1~steps−1 정수, 그 밖(빈칸·소수·범위 밖·숫자 아님)은 undefined */
+export function parseRollSteps(text: string, steps: number): number | undefined {
+  const t = text.trim()
+  if (!/^\d+$/.test(t)) return undefined
+  const n = Number(t)
+  return n >= 1 && n <= steps - 1 ? n : undefined
 }
 
 const ORDER_TONE: Record<keyof typeof ORDER_LABEL, KoBadgeTone> = { first: 'green', tie: 'yellow', second: 'red' }

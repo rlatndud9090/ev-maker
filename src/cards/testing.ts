@@ -6,7 +6,7 @@ import type { Snapshot } from '../data/schema'
 import type { PokemonSet } from '../core'
 import { createMetaView } from '../meta'
 import type { MetaView } from '../meta'
-import { DEFAULT_CRITERIA, DEFAULT_TOP_N } from './types'
+import { DEFAULT_CRITERIA, DEFAULT_ROLL_THRESHOLDS, DEFAULT_TOP_N } from './types'
 import type { CardInput } from './types'
 
 let cached: { game: Snapshot; bo1: MetaView; bo3: MetaView } | undefined
@@ -37,13 +37,14 @@ export function syntheticView(game: Snapshot, base: MetaSnapshot, entries: MetaE
   return createMetaView({ ...base, entries: ranked }, game)
 }
 
-/** 기본값: 실데이터 Bo1·DEFAULT_CRITERIA·상위 DEFAULT_TOP_N·선택 없음·순풍 off·커스텀 없음. */
+/** 기본값: 실데이터 Bo1·DEFAULT_ROLL_THRESHOLDS·DEFAULT_CRITERIA·상위 DEFAULT_TOP_N·선택 없음·순풍 off·커스텀 없음. */
 export function cardInput(partial: Partial<CardInput> & { mySet: PokemonSet }): CardInput {
   const { game, bo1 } = realData()
   return {
     game,
     view: bo1,
     conditions: { myTailwind: false, opponentTailwind: false },
+    thresholds: { ...DEFAULT_ROLL_THRESHOLDS },
     criteria: { ...DEFAULT_CRITERIA },
     filters: { topN: DEFAULT_TOP_N, selected: [] },
     customTargets: [],

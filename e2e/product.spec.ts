@@ -60,7 +60,10 @@ test.describe('제품 화면', () => {
     await waitComplete(page)
     const withMore = cards(page).filter({ has: page.getByTestId('card-more') }).first()
     await expect(withMore.getByTestId('card-more')).toHaveText(/^외 \d+행$/)
-    await expect(cards(page).first().getByTestId('headline-target')).toHaveText(/^\S+: 최소 A\d+ 필요( \(다른 능력치에서 \d+ 필요\))?$/)
+    // 목표 문구는 간단행에 없고(사용자 피드백 2026-11-11) 펼친 상세 행에만 있다.
+    await expect(tabPanel(page).getByTestId('headline-target')).toHaveCount(0)
+    await cardLine(cards(page).first()).click()
+    await expect(cards(page).first().getByTestId('row-target').first()).toHaveText(/^ · \S+: 최소 A\d+ 필요( \(다른 능력치에서 \d+ 필요\))?$/)
 
     // 방어 탭 H 행: 내 H는 2, 잔여 0이라 3 이상은 예산 밖.
     await selectTab(page, '방어')
@@ -296,7 +299,7 @@ test.describe('제품 화면', () => {
     await expect(tabPanel(page).locator('[data-testid="headline-basis"][data-row-kind="rank"]')).toHaveCount(0)
   })
 
-  test('간단행: 순위·사용률·보존·판정 기호 없음, 배분 라벨 + 비중, 타입 기술 라벨, "최소 … 필요" 목표(사용자 피드백 2026-11-10)', async ({ page }) => {
+  test('간단행: 순위·사용률·보존·판정 기호·목표 문구 없음, 배분 라벨 + 비중, 타입 기술 라벨, 상세에 "최소 … 필요" 목표(사용자 피드백 2026-11-10·11-11)', async ({ page }) => {
     await openProduct(page)
     for (const [tab, target] of [
       ['공격', /^\S+: 최소 A\d+ 필요( \(다른 능력치에서 \d+ 필요\))?$/],
@@ -318,14 +321,17 @@ test.describe('제품 화면', () => {
         return { smaller: parseFloat(share.fontSize) < parseFloat(stats.fontSize), differs: share.color !== stats.color, muted: muted !== '' }
       })
       expect(look).toEqual({ smaller: true, differs: true, muted: true })
-      const targets = await tabPanel(page).getByTestId('headline-target').allTextContents()
-      expect(targets.length).toBeGreaterThan(0)
-      // 행 대표 카드(기술 라벨이 있는 카드)마다 목표 문구가 하나씩 있다("모든 목록에서", 방어 탭은 랭크 필터 쌍 포함).
-      const headlines = tabPanel(page).getByTestId('card-headline')
-      const withLabel = headlines.filter({ has: page.getByTestId('move-label') })
+      // 간단행에는 목표 문구가 없다(사용자 피드백 2026-11-11). 행 대표 카드의 상세 대표 행에 그대로 있다.
+      await expect(tabPanel(page).getByTestId('headline-target')).toHaveCount(0)
+      for (const text of lines) expect(text).not.toMatch(/최소 .*필요/)
+      const withLabel = ladderCards(page).filter({ has: page.getByTestId('move-label') })
       expect(await withLabel.count()).toBeGreaterThan(0)
-      await expect(withLabel.filter({ hasNot: page.getByTestId('headline-target') })).toHaveCount(0)
-      for (const t of targets) expect(t).toMatch(target)
+      const first = withLabel.first()
+      await cardLine(first).click()
+      const targets = await first.getByTestId('row-target').allTextContents()
+      expect(targets.length).toBeGreaterThan(0)
+      for (const t of targets) expect(t.replace(/^ · /, '')).toMatch(target)
+      await cardLine(first).click()
       if (tab !== '스피드') {
         const labels = tabPanel(page).getByTestId('move-label')
         await expect(labels.first()).toBeVisible()
@@ -428,19 +434,20 @@ test.describe('제품 화면', () => {
   })
 
   test('카드 줄은 분류 라벨 대신 대표 행 현재 칸의 결과 배지, 변화 없음은 표시하지 않는다(사용자 피드백 2026-11-10)', async ({ page }) => {
-    const ATTACK_LABELS = ['확정1타', '고난수1타', '중저난수1타', '확정견딤', '무효']
-    const DEFENSE_LABELS = ['확정1타', '중고난수1타', '저난수1타', '확정견딤', '무효']
+    // 배지 문구는 확정·무효만 글자, 그 사이는 1타 확률 백분율(사용자 피드백 2026-11-11). 색은 기준 단계.
+    const BADGE = /^(확정1타|확정견딤|난수1타: \d+\.\d%|무효)$/
+    const TONES = ['red', 'orange', 'yellow', 'green', 'gray']
     await openProduct(page)
     await addCustomTarget(page, '워시로토무', ['하이드로펌프'])
     await waitComplete(page)
 
-    for (const [tab, labels] of [['공격', ATTACK_LABELS], ['방어', DEFENSE_LABELS]] as const) {
+    for (const tab of ['공격', '방어'] as const) {
       if (tab !== '공격') {
         await selectTab(page, tab)
         await waitComplete(page)
       }
       const badges = tabPanel(page).locator('.card-line [data-testid="ko-badge"]')
-      // 표처럼 열 정렬: 포켓몬 | 배분 | 기술 | 목표 | 결과 | 외 n행 — 래더 카드끼리 같은 열은 같은 x에서 시작한다.
+      // 표처럼 열 정렬: 포켓몬 | 배분 | 기술 | 결과 | 외 n행 — 래더 카드끼리 같은 열은 같은 x에서 시작한다.
       const cols = await tabPanel(page)
         .locator('[data-origin="ladder"] .card-line')
         .evaluateAll((lines) =>
@@ -467,7 +474,10 @@ test.describe('제품 화면', () => {
       expect(cols[0].move).toBeLessThan(cols[0].badge)
       for (const c of cols) expect(c.moreRightGap).toBeLessThan(24)
       expect(await badges.count()).toBeGreaterThan(0)
-      for (const text of await badges.allTextContents()) expect(labels).toContain(text)
+      for (const text of await badges.allTextContents()) expect(text).toMatch(BADGE)
+      for (const el of await badges.all()) expect(TONES).toContain(await el.getAttribute('data-tone'))
+      const texts = await badges.allTextContents()
+      expect(texts.some((t) => t.startsWith('난수1타: ')), tab).toBe(true)
       // 물리/특수 분류 배지·변화 없음 요약은 없다(계약 속성 data-category는 남는다).
       await expect(tabPanel(page).locator('.card-line .cat')).toHaveCount(0)
       for (const text of await tabPanel(page).locator('.card-line').allTextContents()) expect(text).not.toMatch(/물리|특수/)
@@ -486,14 +496,14 @@ test.describe('제품 화면', () => {
     await expect(charizard.getByTestId('ko-badge')).toHaveAttribute('data-tone', 'red')
     await expect(cardLine(charizard)).toHaveAccessibleName(/확정1타/)
 
-    // F3 통과: 한카리아스 adamant(A32↑) 드래곤클로는 내 H2·B0에서 저난수 1타(B3부터 확정 버팀) → 저난수1타(노랑).
+    // F3 통과: 한카리아스 adamant(A32↑) 드래곤클로는 내 H2·B0에서 1타 확률 2/16(B3부터 확정 버팀) → 저난수 기준 2/16 이하라 노랑.
     await selectTab(page, '방어')
     await waitComplete(page)
     const garchomp = ladderCards(page)
       .and(page.locator('[data-opponent="garchomp"]'))
       .filter({ has: page.locator('.card-bundle', { hasText: /^A32↑/ }) })
       .filter({ has: page.getByTestId('card-headline').filter({ hasText: '드래곤클로' }) })
-    await expect(garchomp.getByTestId('ko-badge')).toHaveText('저난수1타')
+    await expect(garchomp.getByTestId('ko-badge')).toHaveText('난수1타: 12.5%')
     await expect(garchomp.getByTestId('ko-badge')).toHaveAttribute('data-tone', 'yellow')
 
     // 스피드 탭은 1타 확률이 없어 결과 배지 대신 행동 순서 배지(선공·동속·후공)를 글자로 보인다(AC19, 판정 기호 제거 뒤).
@@ -505,6 +515,57 @@ test.describe('제품 화면', () => {
     expect(rowCount).toBeGreaterThan(0)
     await expect(rowCards.getByTestId('order-badge')).toHaveCount(rowCount)
     for (const text of await rowCards.getByTestId('order-badge').allTextContents()) expect(['선공', '동속', '후공']).toContain(text)
+  })
+
+  test('툴바 판정 기준: 공격 고난수 14/16(87.5%)·방어 저난수 2/16(12.5%), 바꾸면 배지 색 단계가 바뀌고 1~15 밖은 반영하지 않는다(사용자 피드백 2026-11-11)', async ({ page }) => {
+    await openProduct(page)
+    await waitComplete(page)
+    const field = page.getByTestId('roll-threshold')
+    const high = page.getByRole('spinbutton', { name: '고난수 기준', exact: true })
+    await expect(field).toHaveCount(1)
+    await expect(high).toHaveValue('14')
+    await expect(field.getByTestId('roll-percent')).toHaveText('(87.5%)')
+    await expect(field).toContainText('/16')
+    // 스크린 리더가 단위와 반영 백분율을 함께 읽는다(접근 가능한 설명)
+    await expect(high).toHaveAccessibleDescription('/16 (87.5%)')
+
+    await selectTab(page, '스피드')
+    await expect(page.getByTestId('roll-threshold')).toHaveCount(0)
+
+    await selectTab(page, '방어')
+    await waitComplete(page)
+    const low = page.getByRole('spinbutton', { name: '저난수 기준', exact: true })
+    await expect(low).toHaveValue('2')
+    await expect(field.getByTestId('roll-percent')).toHaveText('(12.5%)')
+    // F3 통과 카드: 1타 확률 2/16 — 저난수 기준 2/16에서는 노랑, 1/16로 내리면 중고난수(주황). 문구는 확률 그대로.
+    const garchomp = ladderCards(page)
+      .and(page.locator('[data-opponent="garchomp"]'))
+      .filter({ has: page.locator('.card-bundle', { hasText: /^A32↑/ }) })
+      .filter({ has: page.getByTestId('card-headline').filter({ hasText: '드래곤클로' }) })
+    const badge = garchomp.getByTestId('ko-badge')
+    await expect(badge).toHaveText('난수1타: 12.5%')
+    await expect(badge).toHaveAttribute('data-tone', 'yellow')
+    await low.fill('1')
+    await expect(field.getByTestId('roll-percent')).toHaveText('(6.3%)')
+    await waitComplete(page)
+    await expect(badge).toHaveText('난수1타: 12.5%')
+    await expect(badge).toHaveAttribute('data-tone', 'orange')
+
+    // 범위 밖·비정수는 반영하지 않고 입력 칸 옆에 안내한다(적용 값·배지는 그대로).
+    for (const bad of ['16', '0', '2.5']) {
+      await low.fill(bad)
+      await expect(field.getByTestId('roll-hint')).toHaveText('1~15 정수만 반영됩니다')
+      await expect(low).toHaveAttribute('aria-invalid', 'true')
+      await expect(low).toHaveAccessibleDescription('/16 (6.3%) 1~15 정수만 반영됩니다')
+      await expect(field.getByTestId('roll-percent')).toHaveText('(6.3%)')
+      await expect(badge).toHaveAttribute('data-tone', 'orange')
+    }
+    await low.fill('2')
+    await expect(field.getByTestId('roll-hint')).toHaveCount(0)
+    await waitComplete(page)
+    await expect(badge).toHaveAttribute('data-tone', 'yellow')
+    await low.blur()
+    await expect(low).toHaveValue('2')
   })
 
   test('키보드만으로 탭 전환·필터·카드 펼치기(AC18)', async ({ page }) => {

@@ -1,8 +1,9 @@
 import { memo, type Dispatch } from 'react'
 import type { CardView, CellView, CustomTarget, RowView, Tab } from '../../cards'
+import type { BandThresholds } from '../../core'
 import type { Snapshot } from '../../data/schema'
 import { namesOf } from '../../ui/names'
-import { bundleText, fixedText, koBadge, orderBadge, shareText, targetParts, type TargetLike } from '../../ui/format'
+import { bundleText, fixedText, koBadge, orderBadge, shareText } from '../../ui/format'
 import { koReason } from '../../ui/koErrors'
 import type { AppAction } from '../state'
 import { CustomEditor } from './CustomEditor'
@@ -14,6 +15,8 @@ interface Props {
   game: Snapshot
   tab: Tab
   card: CardView
+  /** 그 탭 뷰를 계산한 판정 기준(배지 색 단계·상세 현재 판정) */
+  thresholds: BandThresholds
   expanded: boolean
   onToggle: (cardId: string) => void
   /** 커스텀 카드면 그 타겟 */
@@ -38,22 +41,6 @@ function badgeCell(card: CardView): CellView | undefined {
   return undefined
 }
 
-/** 목표 문구. 판정·최소 SP와 "(다른 능력치에서 n 필요)"를 각각 한 덩어리로 줄바꿈한다. */
-function TargetText({ target }: { target: TargetLike }) {
-  const { main, need } = targetParts(target)
-  return (
-    <span className="headline-target" data-testid="headline-target">
-      <span className="target-main">{main}</span>
-      {need !== undefined && (
-        <>
-          {' '}
-          <span className="target-need">{need}</span>
-        </>
-      )}
-    </span>
-  )
-}
-
 function Headline({ game, tab, card, badge }: { game: Snapshot; tab: Tab; card: CardView; badge: boolean }) {
   const h = card.headline
   if (h.kind === 'updating') return <span className="headline updating">갱신 중</span>
@@ -65,7 +52,7 @@ function Headline({ game, tab, card, badge }: { game: Snapshot; tab: Tab; card: 
   }
   const row = card.rows.find((r) => r.id === h.rowId)
   if (row === undefined || row.sweepStat === undefined) return null
-  // 판정은 결과 배지가 보이고, 여기는 기술 라벨과 "한 단계 위(또는 유지) 최소 SP" 목표만.
+  // 판정은 결과 배지가 보이고 여기는 기술 라벨만. 목표 문구("최소 … 필요")는 상세 행에만 있다.
   return (
     <span className="headline row-headline">
       <span className="hl-move">
@@ -77,19 +64,18 @@ function Headline({ game, tab, card, badge }: { game: Snapshot; tab: Tab; card: 
           </>
         )}
         <MoveLabel game={game} tab={tab} row={row} />
-      </span>{' '}
-      {row.target !== undefined && <TargetText target={row.target} />}
+      </span>
     </span>
   )
 }
 
-export const CardItem = memo(function CardItem({ game, tab, card, expanded, onToggle, target, dispatch }: Props) {
+export const CardItem = memo(function CardItem({ game, tab, card, thresholds, expanded, onToggle, target, dispatch }: Props) {
   const names = namesOf(game)
   const ladder = card.opponent.source === 'ladder'
   const detailId = `card-detail-${encodeURIComponent(card.id)}`
   const { bundle } = card
   // 공격·방어는 1타 확률 결과 배지, 스피드는 행동 순서 배지. 간단행의 판정 기호는 없고 이 배지가 현재 판정을 글자로 보인다.
-  const badge = tab === 'speed' ? undefined : koBadge(tab, badgeCell(card))
+  const badge = tab === 'speed' ? undefined : koBadge(tab, badgeCell(card), thresholds)
   const order = tab === 'speed' ? orderBadge(badgeCell(card)) : undefined
   return (
     <li
@@ -151,7 +137,7 @@ export const CardItem = memo(function CardItem({ game, tab, card, expanded, onTo
             {card.rows.length > 0 && (
               <ol className="rows">
                 {card.rows.map((r) => (
-                  <RowDetail key={r.id} game={game} tab={tab} row={r} />
+                  <RowDetail key={r.id} game={game} tab={tab} row={r} thresholds={thresholds} />
                 ))}
               </ol>
             )}

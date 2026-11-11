@@ -93,11 +93,11 @@ function bareRow(ctx: Ctx, head: RowHead, status: RowView['status'], extra: { er
 /** 방어 탭(필터가 있는 행)은 쌍 결과, 그 밖은 그 행 33칸에서 목표를 낸다. */
 function targetOf(ctx: Ctx, spec: RowSpec, stat: StatId, views: readonly CellView[], at: CellView | undefined): TargetView | undefined {
   const { plan } = ctx
-  if (spec.judge === 'speed') return singleTarget('speed', stat, views, ctx.displaySp[stat])
-  if (plan.mySide === 'attacker') return singleTarget('attack', stat, views, ctx.displaySp[stat])
-  if (spec.gate === undefined) return singleTarget('defense', stat, views, ctx.displaySp[stat])
+  if (spec.judge === 'speed') return singleTarget('speed', stat, views, ctx.displaySp[stat], plan.thresholds)
+  if (plan.mySide === 'attacker') return singleTarget('attack', stat, views, ctx.displaySp[stat], plan.thresholds)
+  if (spec.gate === undefined) return singleTarget('defense', stat, views, ctx.displaySp[stat], plan.thresholds)
   const pair = ctx.results.get(taskKey({ kind: 'pair', filterId: spec.gate }))
-  const label = at === undefined ? undefined : cellLabel('defense', at)
+  const label = at === undefined ? undefined : cellLabel('defense', at, plan.thresholds)
   if (pair?.kind !== 'pair' || label === undefined) return undefined
   const defStat = plan.filters[spec.gate].stats[1]
   const current = { hp: ctx.displaySp.hp, defense: ctx.displaySp[defStat] }
@@ -309,6 +309,7 @@ export function assembleTab(plan: TabPlan, results: ResultMap, displaySp: SpTabl
   const done = progressCount(plan, results)
   const shell = {
     tab: plan.tab,
+    thresholds: plan.thresholds,
     source: plan.source,
     progress: { done, total: done + pending.stage1.length + pending.stage2.length + pending.stage3.length + pending.stage4.length },
     stage12Done: pending.stage1.length === 0 && pending.stage2.length === 0,

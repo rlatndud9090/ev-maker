@@ -4,6 +4,7 @@ import {
   CoreInputError,
   checkSpeedSupport,
   moveStatRefs,
+  normalizeThresholds,
   validateSet,
   type BattleConditions,
   type BoostTable,
@@ -446,6 +447,7 @@ function planHead(input: CardInput, tab: Tab, mySp: SpTable) {
     source: { match: manifest.match, month: manifest.month, cutoff: manifest.source.cutoff, format: manifest.source.format },
     mySp,
     mySide: tab === 'defense' ? ('defender' as const) : ('attacker' as const),
+    thresholds: normalizeThresholds(input.thresholds),
     spTotal: rules.spTotal,
     spMaxPerStat: rules.spMaxPerStat,
   }

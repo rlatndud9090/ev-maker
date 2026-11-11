@@ -13,6 +13,7 @@ export {
   judgementRank,
   koLabel,
   nextBetter,
+  normalizeThresholds,
   type JudgementSide,
   type KoLabel,
   type KoSide,

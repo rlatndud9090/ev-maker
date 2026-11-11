@@ -1,7 +1,7 @@
 // "최소 <능력치><SP> 필요" 목표. 판정과 순위는 코어(koLabel·judgementRank)만 쓴다.
 // 한 단계 위 = judgementRank 순위 + 1 이상(건너뛴 칸은 실제 판정을 라벨로 쓴다). 코어 nextBetter는 이 규칙에 쓰지 않는다.
 import { JUDGEMENT_ORDER, judgementRank, koLabel } from '../core'
-import type { JudgementSide, KoLabel } from '../core'
+import type { BandThresholds, JudgementSide, KoLabel } from '../core'
 import type { StatId } from '../data/schema'
 import type { CellView, CompactCell, PairPoint, TargetView } from './types'
 
@@ -9,17 +9,23 @@ import type { CellView, CompactCell, PairPoint, TargetView } from './types'
  * 칸의 판정 라벨. 대미지 칸은 koLabel 4단, 스피드 칸은 행동 순서 범주 그대로.
  * 코어가 낸 칸이 아니면(1타 확률 없음·행동 순서 밖 범주) undefined.
  */
-export function cellLabel(side: JudgementSide, cell: CompactCell): string | undefined {
+export function cellLabel(side: JudgementSide, cell: CompactCell, thresholds: BandThresholds): string | undefined {
   if (side === 'speed') return (JUDGEMENT_ORDER.speed as readonly string[]).includes(cell.category) ? cell.category : undefined
-  return cell.ohkoChance === undefined ? undefined : koLabel(side, cell.ohkoChance)
+  return cell.ohkoChance === undefined ? undefined : koLabel(side, cell.ohkoChance, thresholds)
 }
 
 /**
  * 단일 능력치 행: 현재 칸보다 한 단계 이상 위 판정을 내는 가장 낮은 SP, 없으면 현재 판정 이상을 내는 가장 낮은 SP.
  * cells는 0~최대 33칸, need는 그 칸의 CellView.need 그대로다. 라벨을 낼 수 없는 칸이 있으면 목표 없음.
  */
-export function singleTarget(side: JudgementSide, stat: StatId, cells: readonly CellView[], currentSp: number): TargetView | undefined {
-  const labels = cells.map((c) => cellLabel(side, c))
+export function singleTarget(
+  side: JudgementSide,
+  stat: StatId,
+  cells: readonly CellView[],
+  currentSp: number,
+  thresholds: BandThresholds,
+): TargetView | undefined {
+  const labels = cells.map((c) => cellLabel(side, c, thresholds))
   const ci = cells.findIndex((c) => c.sp === currentSp)
   if (ci < 0 || labels.some((l) => l === undefined)) return undefined
   const ranks = labels.map((l) => judgementRank(side, l as string))
