@@ -24,7 +24,7 @@ export const DEFENSE_BAND_LABEL: Record<DefenseBand, string> = {
   'guaranteed-survive': '확정 버팀',
 }
 
-/** 스윕 칸 범주(구간 또는 행동 순서) 라벨 */
+/** 3단 구간 라벨(dev 경로). 제품 5단 판정 이름은 ui/format의 결과 배지 단계명 */
 export const CATEGORY_LABEL: Record<string, string> = { ...ATTACK_BAND_LABEL, ...DEFENSE_BAND_LABEL }
 
 /** 공격측 관점 */

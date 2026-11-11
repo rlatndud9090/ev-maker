@@ -1,13 +1,26 @@
 // 행 작업 하나를 코어 판정으로 계산한다. 범주는 코어가 낸 값을 그대로 옮긴다.
-import { CoreError, CoreInputError, judgeDamage, judgeSpeed, koLabel, sweepDamage, sweepSpeed } from '../core'
-import type { CellJudgement, DamageResult, PokemonSet, SpeedResult, SweepResult } from '../core'
+import { CoreError, CoreInputError, judgeDamage, judgeSpeed, sweepDamage, sweepSpeed } from '../core'
+import type { CellJudgement, DamageResult, PokemonSet, RollTier, SpeedResult, SweepResult } from '../core'
 import type { StatId } from '../data/schema'
 import { judgementKey } from './key'
+import { variantNature, withNature } from './natures'
 import { minPairPoints } from './target'
-import type { CachedJudgement, CompactCell, ErrorReason, JudgementCache, PairPoint, RowSpec, RowTask, RowTaskResult, TabPlan } from './types'
+import type { CachedJudgement, CompactCell, ErrorReason, JudgementCache, NatureVariant, PairPoint, RowSpec, RowTask, RowTaskResult, TabPlan } from './types'
 
 const IGNORE_TOTAL = { ignoreSpTotal: true } as const
 const OVER_BUDGET = { judgeOverBudget: true } as const
+
+/** 내 쪽 세트의 성격을 nature로 바꾼 행 명세(같으면 그대로) */
+export function specWithNature(plan: TabPlan, spec: RowSpec, nature: string): RowSpec {
+  if (plan.mySide === 'attacker') return spec.attacker.nature === nature ? spec : { ...spec, attacker: withNature(spec.attacker, nature) }
+  return spec.defender.nature === nature ? spec : { ...spec, defender: withNature(spec.defender, nature) }
+}
+
+/** 변형 성격 id. 행에 변형이 없으면 오류(계획 버그) */
+export function rowVariantNature(spec: RowSpec, which: NatureVariant): string {
+  if (spec.natures === undefined) throw new Error(`행 ${spec.id}에 성격 변형이 없다`)
+  return variantNature(spec.natures, which)
+}
 
 function withSps(set: PokemonSet, stats: readonly StatId[], sp: number): PokemonSet {
   const next = { ...set.sp }
@@ -46,16 +59,23 @@ function rowSpec(plan: TabPlan, rowId: string): RowSpec & { sweep: NonNullable<R
   return spec as RowSpec & { sweep: NonNullable<RowSpec['sweep']> }
 }
 
-/** 스윕 능력치를 0과 최대로 덮어쓴 두 판정. */
+function endCell(plan: TabPlan, spec: RowSpec & { sweep: NonNullable<RowSpec['sweep']> }, sp: number): CompactCell {
+  const { side, stat } = spec.sweep
+  const a = side === 'attacker' ? withSps(spec.attacker, [stat], sp) : spec.attacker
+  const d = side === 'defender' ? withSps(spec.defender, [stat], sp) : spec.defender
+  if (spec.judge === 'speed') return compactSpeed(plan, sp, judgeSpeed(plan.game, a, d, spec.conditions, IGNORE_TOTAL))
+  return compactDamage(sp, judgeDamage(plan.game, side, a, d, moveOf(spec), spec.conditions, undefined, { ...IGNORE_TOTAL, rollSteps: plan.rollSteps }))
+}
+
+/** [현재 0, 현재 최대, 무보정 0, 상승 최대]. 변형이 현재 성격과 같으면 그 칸을 다시 판정하지 않는다. */
 function computeEnds(plan: TabPlan, rowId: string): CompactCell[] {
   const spec = rowSpec(plan, rowId)
-  const { side, stat } = spec.sweep
-  return [0, plan.spMaxPerStat].map((sp) => {
-    const a = side === 'attacker' ? withSps(spec.attacker, [stat], sp) : spec.attacker
-    const d = side === 'defender' ? withSps(spec.defender, [stat], sp) : spec.defender
-    if (spec.judge === 'speed') return compactSpeed(plan, sp, judgeSpeed(plan.game, a, d, spec.conditions, IGNORE_TOTAL))
-    return compactDamage(sp, judgeDamage(plan.game, side, a, d, moveOf(spec), spec.conditions, plan.thresholds, IGNORE_TOTAL))
-  })
+  const max = plan.spMaxPerStat
+  const low = endCell(plan, spec, 0)
+  const high = endCell(plan, spec, max)
+  const neutral = specWithNature(plan, spec, rowVariantNature(spec, 'neutral')) as typeof spec
+  const plus = specWithNature(plan, spec, rowVariantNature(spec, 'plus')) as typeof spec
+  return [low, high, neutral === spec ? low : endCell(plan, neutral, 0), plus === spec ? high : endCell(plan, plus, max)]
 }
 
 function moveOf(spec: RowSpec): string {
@@ -63,37 +83,47 @@ function moveOf(spec: RowSpec): string {
   return spec.moveId
 }
 
-function computeSweep(plan: TabPlan, rowId: string): CompactCell[] {
-  const spec = rowSpec(plan, rowId)
+function computeSweep(plan: TabPlan, rowId: string, nature?: NatureVariant): CompactCell[] {
+  const base = rowSpec(plan, rowId)
+  const spec = nature === undefined ? base : (specWithNature(plan, base, rowVariantNature(base, nature)) as typeof base)
   if (spec.judge === 'speed') {
     return compactSweep(sweepSpeed(plan.game, spec.attacker, spec.defender, spec.conditions, OVER_BUDGET), (sp, j) =>
       compactSpeed(plan, sp, j),
     )
   }
-  const r = sweepDamage(plan.game, spec.sweep, spec.attacker, spec.defender, moveOf(spec), spec.conditions, plan.thresholds, OVER_BUDGET)
+  const r = sweepDamage(plan.game, spec.sweep, spec.attacker, spec.defender, moveOf(spec), spec.conditions, undefined, { ...OVER_BUDGET, rollSteps: plan.rollSteps })
   return compactSweep(r, compactDamage)
 }
 
+/** 낮은 극단 = H0·B/D0·무보정, 높은 극단 = H최대·B/D최대·상승. */
 function computeExtreme(plan: TabPlan, filterId: string): CompactCell[] {
   const spec = plan.filters[filterId]
   if (spec === undefined) throw new Error(`극단 필터 ${filterId}가 계획에 없다`)
-  return [0, plan.spMaxPerStat].map((sp) =>
+  const ends = [
+    { sp: 0, nature: spec.natures.neutral },
+    { sp: plan.spMaxPerStat, nature: spec.natures.plus },
+  ]
+  return ends.map(({ sp, nature }) =>
     compactDamage(
       sp,
-      judgeDamage(plan.game, 'defender', spec.attacker, withSps(spec.defender, spec.stats, sp), spec.moveId, spec.conditions, plan.thresholds, IGNORE_TOTAL),
+      judgeDamage(plan.game, 'defender', spec.attacker, withSps(withNature(spec.defender, nature), spec.stats, sp), spec.moveId, spec.conditions, undefined, {
+        ...IGNORE_TOTAL,
+        rollSteps: plan.rollSteps,
+      }),
     ),
   )
 }
 
-/** 극단 필터와 같은 세트에서 H·B/D를 따로 덮어쓴 판정으로 최소 조합을 찾는다. */
-function computePair(plan: TabPlan, filterId: string): PairPoint[] {
+/** 극단 필터와 같은 세트(성격만 변형)에서 H·B/D를 따로 덮어쓴 판정으로 최소 조합을 찾는다. */
+function computePair(plan: TabPlan, filterId: string, which: NatureVariant): PairPoint[] {
   const spec = plan.filters[filterId]
   if (spec === undefined) throw new Error(`극단 필터 ${filterId}가 계획에 없다`)
   const [hpStat, defStat] = spec.stats
+  const base = withNature(spec.defender, variantNature(spec.natures, which))
   return minPairPoints((hp, d) => {
-    const defender = { ...spec.defender, sp: { ...spec.defender.sp, [hpStat]: hp, [defStat]: d } }
-    const v = judgeDamage(plan.game, 'defender', spec.attacker, defender, spec.moveId, spec.conditions, plan.thresholds, IGNORE_TOTAL).value
-    return koLabel('defense', v.kind === 'damage' ? v.ohkoChance : 0, plan.thresholds)
+    const defender = { ...base, sp: { ...base.sp, [hpStat]: hp, [defStat]: d } }
+    const options = { ...IGNORE_TOTAL, rollSteps: plan.rollSteps }
+    return judgeDamage(plan.game, 'defender', spec.attacker, defender, spec.moveId, spec.conditions, undefined, options).category as RollTier
   }, plan.spMaxPerStat)
 }
 
@@ -101,7 +131,7 @@ function computePair(plan: TabPlan, filterId: string): PairPoint[] {
 function computeFixed(plan: TabPlan, fixedId: string): CompactCell[] {
   const spec = plan.fixed[fixedId]
   if (spec === undefined) throw new Error(`고정 판정 ${fixedId}가 계획에 없다`)
-  return [compactDamage(0, judgeDamage(plan.game, 'attacker', spec.attacker, spec.defender, spec.moveId, spec.conditions, plan.thresholds))]
+  return [compactDamage(0, judgeDamage(plan.game, 'attacker', spec.attacker, spec.defender, spec.moveId, spec.conditions, undefined, { rollSteps: plan.rollSteps }))]
 }
 
 function compute(plan: TabPlan, task: RowTask): CachedJudgement {
@@ -110,24 +140,28 @@ function compute(plan: TabPlan, task: RowTask): CachedJudgement {
       return computeEnds(plan, task.rowId)
     case 'sweep':
       return computeSweep(plan, task.rowId)
+    case 'variant':
+      return computeSweep(plan, task.rowId, task.nature)
     case 'extreme':
       return computeExtreme(plan, task.filterId)
     case 'fixed':
       return computeFixed(plan, task.fixedId)
     case 'pair':
-      return computePair(plan, task.filterId)
+      return computePair(plan, task.filterId, task.nature)
   }
 }
 
 /** 캐시 키에 작업 종류가 들어가므로 값 모양은 task.kind로 정해진다. */
 function toResult(task: RowTask, value: CachedJudgement): RowTaskResult {
-  if (task.kind === 'pair') return { kind: 'pair', filterId: task.filterId, points: value as readonly PairPoint[] }
+  if (task.kind === 'pair') return { kind: 'pair', filterId: task.filterId, nature: task.nature, points: value as readonly PairPoint[] }
   const cells = value as readonly CompactCell[]
   switch (task.kind) {
     case 'ends':
-      return { kind: 'ends', rowId: task.rowId, low: cells[0], high: cells[1] }
+      return { kind: 'ends', rowId: task.rowId, low: cells[0], high: cells[1], range: { low: cells[2], high: cells[3] } }
     case 'sweep':
       return { kind: 'sweep', rowId: task.rowId, cells }
+    case 'variant':
+      return { kind: 'variant', rowId: task.rowId, nature: task.nature, cells }
     case 'extreme':
       return { kind: 'extreme', filterId: task.filterId, low: cells[0], high: cells[1] }
     case 'fixed':

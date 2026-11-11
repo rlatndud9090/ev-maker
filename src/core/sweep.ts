@@ -15,7 +15,7 @@ import { CoreInputError, oneOf } from './errors'
 import { remainingBudget, validateSet, withSp } from './set'
 import { calcDamage } from './damage'
 import { compareSpeed } from './speed'
-import { attackBand, defenseBand } from './bands'
+import { attackBand, defenseBand, normalizeRollSteps, rollTier } from './bands'
 import { STAT_IDS } from './stats'
 
 export interface CellJudgement<T> {
@@ -68,13 +68,23 @@ export function boundariesOf<T>(cells: SweepCell<T>[]): number[] {
 const ATTACK_STATS: readonly StatId[] = ['atk', 'spa', 'def']
 const DEFENSE_STATS: readonly StatId[] = ['hp', 'def', 'spd', 'atk']
 
+/** rollSteps를 주면 칸 범주가 3단 구간 대신 5단 판정(rollTier)이 된다(공격·방어 같은 척도). */
+export interface DamageCategoryOptions {
+  rollSteps?: number
+}
+
+function categoryOf(side: 'attacker' | 'defender', chance: number, thresholds: Partial<BandThresholds> | undefined, rollSteps: number | undefined): string {
+  if (rollSteps !== undefined) return rollTier(chance, rollSteps)
+  return side === 'attacker' ? attackBand(chance, thresholds) : defenseBand(chance, thresholds)
+}
+
 export interface DamageSweepTarget {
   side: 'attacker' | 'defender'
   stat: StatId
 }
 
 /**
- * 대미지 단건 판정. side 'attacker'는 공격 관점 구간, 'defender'는 방어 관점 구간을 범주로 쓴다.
+ * 대미지 단건 판정. side 'attacker'는 공격 관점 구간, 'defender'는 방어 관점 구간을 범주로 쓴다(options.rollSteps면 5단 판정).
  * 면역은 1타 확률 0의 구간으로 매긴다. 변화기는 판정 대상이 아니라 거부한다.
  */
 export function judgeDamage(
@@ -85,13 +95,14 @@ export function judgeDamage(
   moveId: string,
   conditions?: BattleConditions,
   thresholds?: Partial<BandThresholds>,
-  options?: EvalOptions,
+  options?: EvalOptions & DamageCategoryOptions,
 ): CellJudgement<DamageResult> {
   const s = oneOf(side, ['attacker', 'defender'] as const, 'side')
+  const steps = options?.rollSteps === undefined ? undefined : normalizeRollSteps(options.rollSteps)
   const r = calcDamage(snapshot, attacker, defender, moveId, conditions, thresholds, options)
   if (r.kind === 'status') throw new CoreInputError('move', `${moveId}은 변화기라 대미지 판정을 할 수 없다`)
   const chance = r.kind === 'damage' ? r.ohkoChance : 0
-  return { value: r, category: s === 'attacker' ? attackBand(chance, thresholds) : defenseBand(chance, thresholds) }
+  return { value: r, category: categoryOf(s, chance, thresholds, steps) }
 }
 
 /** 행동 순서(first/tie/second) 단건 판정. set이 a(attacker 쪽 조건)다. */
@@ -115,14 +126,16 @@ export function sweepDamage(
   moveId: string,
   conditions?: BattleConditions,
   thresholds?: Partial<BandThresholds>,
-  options?: SweepOptions,
+  options?: SweepOptions & DamageCategoryOptions,
 ): SweepResult<DamageResult> {
   const side = oneOf(target?.side, ['attacker', 'defender'] as const, 'target.side')
   const allowed = side === 'attacker' ? ATTACK_STATS : DEFENSE_STATS
   const stat = oneOf(target.stat, allowed, 'target.stat')
+  const tier: DamageCategoryOptions = options?.rollSteps === undefined ? {} : { rollSteps: normalizeRollSteps(options.rollSteps) }
+  const opts = (over: boolean): EvalOptions & DamageCategoryOptions => ({ ...cellOptions(over), ...tier })
   return side === 'attacker'
-    ? sweep(snapshot, attacker, stat, (a, _sp, over) => judgeDamage(snapshot, side, a, defender, moveId, conditions, thresholds, cellOptions(over)), options)
-    : sweep(snapshot, defender, stat, (d, _sp, over) => judgeDamage(snapshot, side, attacker, d, moveId, conditions, thresholds, cellOptions(over)), options)
+    ? sweep(snapshot, attacker, stat, (a, _sp, over) => judgeDamage(snapshot, side, a, defender, moveId, conditions, thresholds, opts(over)), options)
+    : sweep(snapshot, defender, stat, (d, _sp, over) => judgeDamage(snapshot, side, attacker, d, moveId, conditions, thresholds, opts(over)), options)
 }
 
 /** set의 스피드 SP를 스윕하며 opponent와의 행동 순서(first/tie/second)를 범주로 쓴다. */

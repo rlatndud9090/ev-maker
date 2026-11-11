@@ -13,9 +13,9 @@ import { nextStage, pendingTasks, taskKey } from './schedule'
 import { cardInput, realData } from './testing'
 import { TABS } from './types'
 import type { CardInput, RowSpec, RowTask, RowTaskResult, TabPlan } from './types'
-import { DEFAULT_ROLL_THRESHOLDS } from './types'
-/** 카드 입력과 같은 제품 판정 기준(cardInput 기본값). 코어 직접 호출 기대값도 이 기준으로 낸다 */
-const TH = DEFAULT_ROLL_THRESHOLDS
+import { DEFAULT_ROLL_STEPS } from './types'
+/** 카드 입력과 같은 제품 고난수 기준(cardInput 기본값). 코어 직접 호출 기대값도 이 기준의 5단 판정으로 낸다 */
+const N = DEFAULT_ROLL_STEPS
 
 const { game } = realData()
 const reg = game.manifest.regulation.id
@@ -87,7 +87,7 @@ describe('buildTabView: 실제 데이터', () => {
       for (const row of view.cards.flatMap((c) => c.rows)) {
         const spec = plan.rows[row.id]
         if (row.cells.length === 0 || spec?.sweep === undefined || spec.moveId === undefined) continue
-        const direct = sweepDamage(game, spec.sweep, spec.attacker, spec.defender, spec.moveId, spec.conditions, TH, { judgeOverBudget: true })
+        const direct = sweepDamage(game, spec.sweep, spec.attacker, spec.defender, spec.moveId, spec.conditions, undefined, { judgeOverBudget: true, rollSteps: N })
         expect(row.cells.map((c) => c.category)).toEqual(direct.cells.map((c) => (c.kind === 'ok' ? c.category : 'over-budget')))
         expect(row.boundaries.map((b) => b.sp)).toEqual(direct.boundaries)
         checked++
@@ -97,94 +97,69 @@ describe('buildTabView: 실제 데이터', () => {
   })
 })
 
-describe('판정 기준(thresholds): 계산 전체에 전달되고 캐시 키가 구분한다', () => {
+describe('고난수 기준(rollSteps): 계산 전체에 전달되고 캐시 키가 구분한다', () => {
   const base = inputs[0]
-  const loose: CardInput = { ...base, thresholds: { highRoll: 12 / 16, lowRoll: 2 / 16 } }
+  const loose: CardInput = { ...base, rollSteps: 12 }
+  const countingCache = () => {
+    const cache = createLruCache()
+    const c = {
+      gets: 0,
+      hits: 0,
+      get(key: string) {
+        c.gets++
+        const v = cache.get(key)
+        if (v !== undefined) c.hits++
+        return v
+      },
+      set: cache.set,
+      clear: cache.clear,
+      get size() {
+        return cache.size
+      },
+    }
+    return c
+  }
 
-  it('고난수 기준을 바꾸면 같은 입력의 띠 범주·판정 키가 달라지고, 되돌리면 같아진다', () => {
+  it('기준을 바꾸면 같은 입력의 띠 범주·판정 키가 달라지고, 되돌리면 같아진다', () => {
     const a = buildTabView(base, 'attack')
     const b = buildTabView(loose, 'attack')
-    expect(a.thresholds).toEqual(TH)
-    expect(b.thresholds).toEqual(loose.thresholds)
+    expect(a.rollSteps).toBe(N)
+    expect(b.rollSteps).toBe(12)
     const cats = (v: typeof a) => v.cards.flatMap((c) => c.rows.map((r) => [r.id, r.cells.map((x) => x.category).join(',')]))
     expect(cats(b)).not.toEqual(cats(a))
-    expect(buildTabView({ ...loose, thresholds: { ...TH } }, 'attack')).toEqual(a)
+    expect(buildTabView({ ...loose, rollSteps: N }, 'attack')).toEqual(a)
 
     const pa = planTab(base, 'attack')
     const pb = planTab(loose, 'attack')
     const task = pendingTasks(pa, new Map()).stage1[0]
     expect(judgementKey(pb, task)).not.toBe(judgementKey(pa, task))
-    expect(judgementKey(planTab({ ...loose, thresholds: { ...TH } }, 'attack'), task)).toBe(judgementKey(pa, task))
+    expect(judgementKey(planTab({ ...loose, rollSteps: N }, 'attack'), task)).toBe(judgementKey(pa, task))
   })
 
-  it('기준 변경은 캐시를 맞히지 않고 재계산하며, 되돌리면 전부 캐시 적중', () => {
-    const cache = createLruCache()
-    let gets = 0
-    let hits = 0
-    const counting = {
-      ...cache,
-      get(key: string) {
-        gets++
-        const v = cache.get(key)
-        if (v !== undefined) hits++
-        return v
-      },
-      set: cache.set,
-      clear: cache.clear,
-      get size() {
-        return cache.size
-      },
-    }
-    const first = buildTabView(base, 'defense', counting)
-    const size = cache.size
-    gets = hits = 0
-    buildTabView({ ...base, thresholds: { highRoll: 14 / 16, lowRoll: 4 / 16 } }, 'defense', counting)
-    expect(hits).toBe(0)
-    expect(cache.size).toBeGreaterThan(size)
-    gets = hits = 0
-    expect(buildTabView(base, 'defense', counting)).toEqual(first)
-    expect(hits).toBe(gets)
+  it('기준 변경은 대미지 판정 캐시를 맞히지 않고 재계산하며, 되돌리면 전부 캐시 적중', () => {
+    const c = countingCache()
+    const first = buildTabView(base, 'defense', c)
+    const size = c.size
+    c.gets = c.hits = 0
+    buildTabView({ ...base, rollSteps: 10 }, 'defense', c)
+    expect(c.hits).toBe(0)
+    expect(c.size).toBeGreaterThan(size)
+    c.gets = c.hits = 0
+    expect(buildTabView(base, 'defense', c)).toEqual(first)
+    expect(c.hits).toBe(c.gets)
   })
 
-  it('판정이 읽지 않는 기준만 바꾸면 캐시 키가 같아 전부 캐시 적중한다(공격=highRoll만, 방어=lowRoll 쪽, 스피드=없음)', () => {
-    const cache = createLruCache()
-    let gets = 0
-    let hits = 0
-    const counting = {
-      ...cache,
-      get(key: string) {
-        gets++
-        const v = cache.get(key)
-        if (v !== undefined) hits++
-        return v
-      },
-      set: cache.set,
-      clear: cache.clear,
-      get size() {
-        return cache.size
-      },
-    }
-    const attack = buildTabView(base, 'attack', counting)
-    const speed = buildTabView(base, 'speed', counting)
-    gets = hits = 0
-    const lowOnly = { ...base, thresholds: { highRoll: TH.highRoll, lowRoll: 4 / 16 } }
-    expect(buildTabView(lowOnly, 'attack', counting).cards).toEqual(attack.cards)
-    expect(gets).toBeGreaterThan(0)
-    expect(hits).toBe(gets)
-    gets = hits = 0
-    expect(buildTabView({ ...base, thresholds: { highRoll: 12 / 16, lowRoll: 4 / 16 } }, 'speed', counting).cards).toEqual(speed.cards)
-    expect(gets).toBeGreaterThan(0)
-    expect(hits).toBe(gets)
-    // 공격측 판정 키는 highRoll을 구분한다
-    const pa = planTab(base, 'attack')
-    const task = pendingTasks(pa, new Map()).stage1[0]
-    expect(judgementKey(planTab(lowOnly, 'attack'), task)).toBe(judgementKey(pa, task))
-    expect(judgementKey(planTab(loose, 'attack'), task)).not.toBe(judgementKey(pa, task))
+  it('스피드 판정은 기준을 읽지 않아 키가 같고 전부 캐시 적중한다', () => {
+    const c = countingCache()
+    const speed = buildTabView(base, 'speed', c)
+    c.gets = c.hits = 0
+    expect(buildTabView(loose, 'speed', c).cards).toEqual(speed.cards)
+    expect(c.gets).toBeGreaterThan(0)
+    expect(c.hits).toBe(c.gets)
   })
 
   it('무효 기준은 계획 단계에서 코어 입력 오류', () => {
-    expect(() => planTab({ ...base, thresholds: { highRoll: 0, lowRoll: 0.1 } }, 'attack')).toThrow(CoreInputError)
-    expect(() => planTab({ ...base, thresholds: { highRoll: 0.9, lowRoll: 1 } }, 'attack')).toThrow(CoreInputError)
+    for (const rollSteps of [0, 16, 2.5, NaN]) expect(() => planTab({ ...base, rollSteps }, 'attack')).toThrow(CoreInputError)
   })
 })
 
@@ -198,7 +173,7 @@ describe('관여 능력치 속성: 키에서 뺀 능력치를 바꿔도 단건 �
       const j = judgeSpeed(game, a, d, spec.conditions, IGNORE)
       return [j.category, j.value.attackerSpeed, j.value.defenderSpeed]
     }
-    const j = judgeDamage(game, spec.sweep!.side, a, d, spec.moveId!, spec.conditions, TH, IGNORE)
+    const j = judgeDamage(game, spec.sweep!.side, a, d, spec.moveId!, spec.conditions, undefined, { ...IGNORE, rollSteps: N })
     return [j.category, j.value]
   }
 
@@ -220,6 +195,17 @@ describe('관여 능력치 속성: 키에서 뺀 능력치를 바꿔도 단건 �
           }
           for (const a of perturb(spec.attacker, rel.attacker)) expect(judged(spec, a, spec.defender)).toEqual(expected)
           for (const d of perturb(spec.defender, rel.defender)) expect(judged(spec, spec.attacker, d)).toEqual(expected)
+          // 성격 변형: 상승 대상은 관여 능력치이고, 상승 성격의 하락(현재 성격 재사용이 아니면)은 관여하지 않는 능력치다
+          const natures = spec.natures
+          if (natures === undefined) throw new Error(`스윕 행 ${rowId}에 성격 변형이 없다`)
+          const mine = plan.mySide === 'attacker' ? spec.attacker : spec.defender
+          const mineRel = plan.mySide === 'attacker' ? rel.attacker : rel.defender
+          expect(mineRel).toContain(natures.stat)
+          const plus = game.data.natures[natures.plus]
+          expect(plus.plus).toBe(natures.stat)
+          if (natures.plus !== mine.nature) expect(mineRel).not.toContain(plus.minus)
+          const neutral = game.data.natures[natures.neutral]
+          expect(neutral.plus !== natures.stat && neutral.minus !== natures.stat || neutral.plus === neutral.minus).toBe(true)
           checked++
         }
       }

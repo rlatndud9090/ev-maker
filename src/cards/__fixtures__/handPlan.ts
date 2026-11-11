@@ -1,9 +1,9 @@
 // 테스트 전용: 손으로 만든 소형 TabPlan과 행 작업 결과. 앱 코드에서 import하지 않는다.
-import type { BandThresholds, PokemonSet, SpTable } from '../../core'
+import type { PokemonSet, SpTable } from '../../core'
 import type { Snapshot, StatId } from '../../data/schema'
 import { realData } from '../testing'
 import { taskKey } from '../schedule'
-import { DEFAULT_ROLL_THRESHOLDS } from '../types'
+import { DEFAULT_ROLL_STEPS } from '../types'
 import type {
   CardSpec,
   CompactCell,
@@ -11,6 +11,9 @@ import type {
   ExtremeSpec,
   FixedSpec,
   MoveNotice,
+  NatureVariant,
+  NatureVariants,
+  PairPoint,
   RowKind,
   RowSpec,
   RowTask,
@@ -46,6 +49,10 @@ export interface RowOpts {
   error?: ErrorReason
   /** 기본 'tackle' */
   moveId?: string
+  /** 기본: 두 변형 모두 현재 성격(hardy)과 같아 변형 작업 없음. null이면 natures 없음 */
+  natures?: NatureVariants | null
+  /** 내 쪽 세트 성격(기본 hardy) */
+  nature?: string
 }
 
 export function row(o: RowOpts): RowSpec {
@@ -62,17 +69,24 @@ export function row(o: RowOpts): RowSpec {
     conditions: {},
     dependsOn: o.dependsOn ?? [],
   }
+  if (o.nature !== undefined) {
+    if (o.side === 'defender') spec.defender = { ...spec.defender, nature: o.nature }
+    else spec.attacker = { ...spec.attacker, nature: o.nature }
+  }
+  const boost = (o.side === 'defender' ? 'def' : (o.stat ?? 'atk')) as NatureVariants['stat']
+  if (o.natures !== null) spec.natures = o.natures ?? { stat: o.stat === 'hp' || o.stat === undefined ? boost : (o.stat as NatureVariants['stat']), neutral: 'hardy', plus: 'hardy' }
   if (o.kind === 'rank') spec.basis = { kind: 'rank', means: { kind: 'move', id: 'swordsdance' }, owner: 'me', myBoosts: { atk: 2 }, opponentBoosts: {}, reactions: [] }
   if (o.gate !== undefined) spec.gate = o.gate
   if (o.error !== undefined) {
     spec.error = o.error
     delete spec.sweep
+    delete spec.natures
   }
   return spec
 }
 
-export function filter(id: string, cardId: string, order = 0): ExtremeSpec {
-  return { id, cardId, moveId: 'tackle', order, attacker: dummySet('opp'), defender: dummySet('me'), conditions: {}, stats: ['hp', 'def'], dependsOn: [] }
+export function filter(id: string, cardId: string, order = 0, natures: NatureVariants = { stat: 'def', neutral: 'hardy', plus: 'hardy' }): ExtremeSpec {
+  return { id, cardId, moveId: 'tackle', order, attacker: dummySet('opp'), defender: dummySet('me'), conditions: {}, stats: ['hp', 'def'], natures, dependsOn: [] }
 }
 
 export function fixed(id: string, cardId: string): FixedSpec {
@@ -88,7 +102,6 @@ export interface CardOpts {
   fixedIds?: readonly string[]
   error?: ErrorReason
   notices?: readonly MoveNotice[]
-  thresholds?: BandThresholds
 }
 
 export function card(o: CardOpts): CardSpec {
@@ -117,7 +130,7 @@ export interface PlanOpts {
   mySp?: SpTable
   mySide?: 'attacker' | 'defender'
   notices?: readonly MoveNotice[]
-  thresholds?: BandThresholds
+  rollSteps?: number
 }
 
 const byId = <T extends { id: string }>(xs: readonly T[] = []): Record<string, T> => Object.fromEntries(xs.map((x) => [x.id, x]))
@@ -130,7 +143,7 @@ export function plan(o: PlanOpts): TabPlan {
     source: { match: 'bo1', month: '2026-10', cutoff: 1500, format: 'test' },
     mySp: o.mySp ?? sp(),
     mySide: o.mySide ?? 'attacker',
-    thresholds: o.thresholds ?? { ...DEFAULT_ROLL_THRESHOLDS },
+    rollSteps: o.rollSteps ?? DEFAULT_ROLL_STEPS,
     spTotal: game.manifest.rules.spTotal,
     spMaxPerStat: game.manifest.rules.spMaxPerStat,
     cards: o.cards,
@@ -144,8 +157,17 @@ export function plan(o: PlanOpts): TabPlan {
 
 const cell = (spv: number, category: string): CompactCell => ({ sp: spv, category })
 
-export const ends = (rowId: string, low: string, high: string): RowTaskResult => ({ kind: 'ends', rowId, low: cell(0, low), high: cell(32, high) })
+/** range 기본값 = 현재 성격 양 끝(변형이 현재와 같을 때) */
+export const ends = (rowId: string, low: string, high: string, range: readonly [string, string] = [low, high]): RowTaskResult => ({
+  kind: 'ends',
+  rowId,
+  low: cell(0, low),
+  high: cell(32, high),
+  range: { low: cell(0, range[0]), high: cell(32, range[1]) },
+})
 export const swept = (rowId: string, cells: CompactCell[]): RowTaskResult => ({ kind: 'sweep', rowId, cells })
+export const variantSwept = (rowId: string, nature: NatureVariant, cells: CompactCell[]): RowTaskResult => ({ kind: 'variant', rowId, nature, cells })
+export const pairResult = (filterId: string, nature: NatureVariant, points: PairPoint[]): RowTaskResult => ({ kind: 'pair', filterId, nature, points })
 export const extreme = (filterId: string, low: string, high: string): RowTaskResult => ({
   kind: 'extreme',
   filterId,
@@ -169,8 +191,10 @@ const keyOf = (r: RowTaskResult): string => {
       return taskKey({ kind: 'extreme', filterId: r.filterId })
     case 'fixed':
       return taskKey({ kind: 'fixed', fixedId: r.fixedId })
+    case 'variant':
+      return taskKey({ kind: 'variant', rowId: r.rowId, nature: r.nature })
     case 'pair':
-      return taskKey({ kind: 'pair', filterId: r.filterId })
+      return taskKey({ kind: 'pair', filterId: r.filterId, nature: r.nature })
     case 'error':
       return taskKey(r.task)
   }

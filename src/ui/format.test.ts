@@ -3,6 +3,7 @@ import {
   bundleText,
   categoryLabel,
   categorySymbol,
+  categoryTone,
   currentText,
   fixedText,
   fromPercentInput,
@@ -12,7 +13,6 @@ import {
   parseRollSteps,
   rankText,
   rollChanceText,
-  rollStepsOf,
   refsNote,
   shareText,
   spanText,
@@ -22,20 +22,26 @@ import {
 } from './format'
 
 describe('targetText', () => {
-  it('단일 능력치: "<판정>: 최소 A30 필요"', () => {
-    expect(targetText({ label: 'guaranteed-ohko', stats: [{ stat: 'atk', sp: 30 }], need: 0 })).toBe('확정1타: 최소 A30 필요')
+  const one = (stat: 'atk' | 'spe', sp: number, need = 0) => ({ stats: [{ stat, sp }], need })
+  it('단일 능력치: "<판정>: 최소 A32 / A15+"(무보정 / 상승)', () => {
+    expect(targetText({ label: 'guaranteed-ohko', plusStat: 'atk', neutral: one('atk', 32), plus: one('atk', 15) })).toBe('확정1타: 최소 A32 / A15+')
   })
-  it('방어 쌍: H와 B를 함께', () => {
-    expect(targetText({ label: 'guaranteed-survive', stats: [{ stat: 'hp', sp: 4 }, { stat: 'def', sp: 12 }], need: 0 })).toBe('확정견딤: 최소 H4 B12 필요')
+  it('방어 쌍: H와 B를 함께, 상승 대상(B/D) 뒤에만 +', () => {
+    const pair = (hp: number, d: number) => ({ stats: [{ stat: 'hp' as const, sp: hp }, { stat: 'def' as const, sp: d }], need: 0 })
+    expect(targetText({ label: 'guaranteed-survive', plusStat: 'def', neutral: pair(4, 12), plus: pair(2, 8) })).toBe('확정견딤: 최소 H4 B12 / H2 B8+')
   })
-  it('n이 있으면 다른 능력치에서 n 필요', () => {
-    expect(targetText({ label: 'high-roll-ohko', stats: [{ stat: 'atk', sp: 20 }], need: 8 })).toBe('고난수1타: 최소 A20 필요 (다른 능력치에서 8 필요)')
+  it('한쪽이 불가면 "무보정 불가"·"상승 불가"', () => {
+    expect(targetText({ label: 'low-roll-ohko', plusStat: 'atk', neutral: null, plus: one('atk', 28) })).toBe('저난수1타: 무보정 불가 / A28+')
+    expect(targetText({ label: 'first', plusStat: 'spe', neutral: one('spe', 20), plus: null })).toBe('선공: 최소 S20 / 상승 불가')
   })
-  it('스피드는 행동 순서 라벨', () => {
-    expect(targetText({ label: 'first', stats: [{ stat: 'spe', sp: 20 }], need: 0 })).toBe('선공: 최소 S20 필요')
+  it('n은 선택지마다 "(다른 능력치에서 n 필요)"', () => {
+    expect(targetText({ label: 'high-roll-ohko', plusStat: 'atk', neutral: one('atk', 27, 15), plus: one('atk', 11) })).toBe(
+      '고난수1타: 최소 A27 (다른 능력치에서 15 필요) / A11+',
+    )
   })
-  it('판정 라벨·랭크 부호', () => {
-    expect(judgementText('mid-high-roll-ohko')).toBe('중고난수1타')
+  it('판정 라벨(5단)·랭크 부호', () => {
+    expect(judgementText('mid-roll-ohko')).toBe('중난수1타')
+    expect(judgementText('low-roll-ohko')).toBe('저난수1타')
     expect(judgementText('tie')).toBe('동속')
     expect(rankText(2)).toBe('+2')
     expect(rankText(-1)).toBe('−1')
@@ -43,13 +49,41 @@ describe('targetText', () => {
 })
 
 describe('라벨', () => {
-  it('구간·행동 순서 라벨과 기호', () => {
+  it('범주 라벨: 5단 판정은 배지 단계명, 행동 순서, 3단 구간(dev)', () => {
+    expect(categoryLabel('guaranteed-ohko')).toBe('확정1타')
+    expect(categoryLabel('high-roll-ohko')).toBe('고난수1타')
+    expect(categoryLabel('mid-roll-ohko')).toBe('중난수1타')
+    expect(categoryLabel('low-roll-ohko')).toBe('저난수1타')
+    expect(categoryLabel('guaranteed-survive')).toBe('확정견딤')
     expect(categoryLabel('mid-or-higher')).toBe('중난수 이상')
     expect(categoryLabel('second')).toBe('후공')
     expect(categoryLabel('unknown-x')).toBe('unknown-x')
-    expect(categorySymbol('guaranteed-ohko')).toBe('◎')
-    expect(categorySymbol('tie')).toBe('△')
-    expect(categorySymbol('mid-or-higher')).toBe('×')
+  })
+  it('범주 색: 배지와 같은 5색(탭 무관), 스피드는 선공 초록·후공 빨강', () => {
+    expect(['guaranteed-ohko', 'high-roll-ohko', 'mid-roll-ohko', 'low-roll-ohko', 'guaranteed-survive'].map(categoryTone)).toEqual([
+      'red',
+      'orange',
+      'yellow',
+      'lime',
+      'green',
+    ])
+    expect(categoryTone('first')).toBe('green')
+    expect(categoryTone('second')).toBe('red')
+    expect(categoryTone('mid-or-lower')).toBe('gray')
+  })
+  it('범주 기호: 탭 관점의 좋고 나쁨(공격은 확정1타 ◎, 방어는 확정견딤 ◎)', () => {
+    expect(categorySymbol('attack', 'guaranteed-ohko')).toBe('◎')
+    expect(categorySymbol('attack', 'high-roll-ohko')).toBe('○')
+    expect(categorySymbol('attack', 'mid-roll-ohko')).toBe('△')
+    expect(categorySymbol('attack', 'low-roll-ohko')).toBe('▽')
+    expect(categorySymbol('attack', 'guaranteed-survive')).toBe('×')
+    expect(categorySymbol('defense', 'guaranteed-ohko')).toBe('×')
+    expect(categorySymbol('defense', 'guaranteed-survive')).toBe('◎')
+    expect(categorySymbol('defense', 'low-roll-ohko')).toBe('○')
+    expect(categorySymbol('speed', 'first')).toBe('◎')
+    expect(categorySymbol('speed', 'tie')).toBe('△')
+    expect(categorySymbol('speed', 'second')).toBe('×')
+    expect(categorySymbol('attack', 'first')).toBe('·')
   })
   it('현재·고정 문구', () => {
     expect(currentText('atk', 32, 'high-roll-ohko')).toBe('현재 A32 고난수1타')
@@ -58,23 +92,22 @@ describe('라벨', () => {
     expect(currentText('spe', 4, undefined)).toBe('현재 S4')
     expect(fixedText('second')).toBe('항상 후공')
   })
-  const T = { highRoll: 14 / 16, lowRoll: 2 / 16 }
-  it('결과 배지: 확정은 글자, 그 사이는 "난수1타: xx.x%" — 공격 색은 고난수 기준 단계', () => {
-    expect(koBadge('attack', { ohkoChance: 1 }, T)).toEqual({ label: '확정1타', tone: 'red' })
-    expect(koBadge('attack', { ohkoChance: 14 / 16 }, T)).toEqual({ label: '난수1타: 87.5%', tone: 'orange' })
-    expect(koBadge('attack', { ohkoChance: 13 / 16 }, T)).toEqual({ label: '난수1타: 81.3%', tone: 'yellow' })
-    expect(koBadge('attack', { ohkoChance: 0.128 }, T)).toEqual({ label: '난수1타: 12.8%', tone: 'yellow' })
-    expect(koBadge('attack', { ohkoChance: 0 }, T)).toEqual({ label: '확정견딤', tone: 'green' })
+  const N = 14
+  it('결과 배지: 5단 단계명 + 0<p<1이면 확률(chance), 확정은 확률 없이 — 공격·방어 같은 문구·색', () => {
+    for (const side of ['attack', 'defense'] as const) {
+      expect(koBadge(side, { ohkoChance: 1 }, N)).toEqual({ label: '확정1타', tone: 'red' })
+      expect(koBadge(side, { ohkoChance: 15 / 16 }, N)).toEqual({ label: '고난수1타', tone: 'orange', chance: '93.8%' })
+      expect(koBadge(side, { ohkoChance: 14 / 16 }, N)).toEqual({ label: '고난수1타', tone: 'orange', chance: '87.5%' })
+      expect(koBadge(side, { ohkoChance: 8 / 16 }, N)).toEqual({ label: '중난수1타', tone: 'yellow', chance: '50.0%' })
+      expect(koBadge(side, { ohkoChance: 2 / 16 }, N)).toEqual({ label: '저난수1타', tone: 'lime', chance: '12.5%' })
+      expect(koBadge(side, { ohkoChance: 1 / 16 }, N)).toEqual({ label: '저난수1타', tone: 'lime', chance: '6.3%' })
+      expect(koBadge(side, { ohkoChance: 0 }, N)).toEqual({ label: '확정견딤', tone: 'green' })
+    }
   })
-  it('결과 배지: 방어 색은 저난수 기준 단계(이하면 노랑)', () => {
-    expect(koBadge('defense', { ohkoChance: 1 }, T)).toEqual({ label: '확정1타', tone: 'red' })
-    expect(koBadge('defense', { ohkoChance: 3 / 16 }, T)).toEqual({ label: '난수1타: 18.8%', tone: 'orange' })
-    expect(koBadge('defense', { ohkoChance: 2 / 16 }, T)).toEqual({ label: '난수1타: 12.5%', tone: 'yellow' })
-    expect(koBadge('defense', { ohkoChance: 0 }, T)).toEqual({ label: '확정견딤', tone: 'green' })
-  })
-  it('결과 배지: 기준을 바꾸면 같은 확률의 색 단계가 바뀐다(문구는 그대로)', () => {
-    expect(koBadge('attack', { ohkoChance: 13 / 16 }, { highRoll: 13 / 16, lowRoll: 2 / 16 })).toEqual({ label: '난수1타: 81.3%', tone: 'orange' })
-    expect(koBadge('defense', { ohkoChance: 3 / 16 }, { highRoll: 14 / 16, lowRoll: 3 / 16 })).toEqual({ label: '난수1타: 18.8%', tone: 'yellow' })
+  it('결과 배지: 기준을 바꾸면 같은 확률의 단계가 바뀐다', () => {
+    expect(koBadge('attack', { ohkoChance: 13 / 16 }, 13)).toMatchObject({ label: '고난수1타', tone: 'orange' })
+    expect(koBadge('attack', { ohkoChance: 13 / 16 }, 14)).toMatchObject({ label: '중난수1타', tone: 'yellow' })
+    expect(koBadge('defense', { ohkoChance: 3 / 16 }, 13)).toMatchObject({ label: '저난수1타', tone: 'lime' })
   })
   it('난수 확률 문구: 소수 첫째 자리 반올림, 0.1%~99.9% 고정(확정과 혼동 금지)', () => {
     expect(rollChanceText(0.0004)).toBe('0.1%')
@@ -85,13 +118,11 @@ describe('라벨', () => {
     expect(rollChanceText(0.12851)).toBe('12.9%')
     expect(rollChanceText(0.5)).toBe('50.0%')
   })
-  it('기준 입력: 1~15 정수만 받고, 비율 ↔ n 왕복', () => {
+  it('기준 입력: 1~15 정수만 받는다', () => {
     expect(parseRollSteps('14', 16)).toBe(14)
     expect(parseRollSteps(' 1 ', 16)).toBe(1)
     expect(parseRollSteps('15', 16)).toBe(15)
     for (const bad of ['0', '16', '-1', '2.5', '1e1', '', ' ', 'abc', '０']) expect(parseRollSteps(bad, 16)).toBeUndefined()
-    expect(rollStepsOf(14 / 16, 16)).toBe(14)
-    expect(rollStepsOf(2 / 16, 16)).toBe(2)
     expect(shareText(14 / 16)).toBe('87.5%')
     expect(shareText(2 / 16)).toBe('12.5%')
   })
@@ -103,9 +134,9 @@ describe('라벨', () => {
     expect(orderBadge(undefined)).toBeUndefined()
   })
   it('결과 배지: 무효는 회색, 1타 확률이 없거나 칸이 없으면 배지 없음', () => {
-    expect(koBadge('attack', { immune: true, ohkoChance: 0 }, T)).toEqual({ label: '무효', tone: 'gray' })
-    expect(koBadge('defense', {}, T)).toBeUndefined()
-    expect(koBadge('attack', undefined, T)).toBeUndefined()
+    expect(koBadge('attack', { immune: true, ohkoChance: 0 }, N)).toEqual({ label: '무효', tone: 'gray' })
+    expect(koBadge('defense', {}, N)).toBeUndefined()
+    expect(koBadge('attack', undefined, N)).toBeUndefined()
   })
   it('묶음 SP와 점유율', () => {
     expect(bundleText([{ stat: 'hp', sp: 4, nature: 'neutral' }, { stat: 'def', sp: 12, nature: 'plus' }, { stat: 'spe', sp: 0, nature: 'minus' }])).toBe('H4 B12↑ S0↓')
@@ -121,6 +152,7 @@ describe('spansOf', () => {
       { from: 2, to: 3, category: 'b', overBudget: true },
     ])
     expect(spanText({ from: 5, to: 5, category: 'first', overBudget: false })).toBe('5 선공')
+    expect(spanText({ from: 0, to: 22, category: 'guaranteed-survive', overBudget: false })).toBe('0~22 확정견딤')
   })
 })
 

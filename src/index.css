@@ -80,12 +80,12 @@
   --tier-bad: var(--mb-tier-none);
   --tier-ink: var(--mb-tier-on-dark);
   --tier-ink-muted: #5c4f42;
-  /* 카드 결과 배지(확정1타·고난수·중저난수·확정견딤) 면 — 글자는 --tier-ink(대비 ≥ 7.7:1) */
+  /* 5단 판정 면(결과 배지·0~32 띠·칩 공용): 확정1타·고난수·중난수·저난수·확정견딤 — 글자는 --tier-ink(대비 ≥ 4.5:1) */
   --badge-red: #f6b8b0;
   --badge-orange: #f9cc98;
   --badge-yellow: #f6e58d;
-  --badge-green: #c4e8a8;
-  --good: #22693a;
+  --badge-lime: #cfeb98;
+  --badge-green: #a9dcb0;
   --mid: #7a5a00;
   --bad: #b1352a;
   /* dev 표 강조(경계 행·예산 밖 행) */
@@ -137,8 +137,8 @@
     --badge-red: #e9a9a1;
     --badge-orange: #eabf8e;
     --badge-yellow: #e6d585;
-    --badge-green: #b5da9c;
-    --good: #7fd29a;
+    --badge-lime: #c2dc8c;
+    --badge-green: #9ccfa4;
     --mid: #e3c56a;
     --bad: #ff8a80;
     --boundary: rgba(236, 218, 164, 0.22);
@@ -891,20 +891,34 @@ td.src {
   gap: 0.2rem 0.4rem;
 }
 
+/* 라벨 "고난수 견딤 기준"은 한 줄, 입력 칸만 좁게 */
 .roll-input {
+  white-space: nowrap;
+}
+
+.roll-input input {
   width: 5.5rem;
+}
+
+/* 단위·백분율·뜻 풀이는 한 덩어리로, 좁은 폭에서는 입력 옆에서 안쪽 줄바꿈 */
+.roll-unit {
+  flex: 1 1 10rem;
+  min-width: 0;
+  padding-bottom: 0.35rem;
+  word-break: keep-all;
 }
 
 .roll-denom,
 .roll-percent {
   font-variant-numeric: tabular-nums;
-  padding-bottom: 0.35rem;
 }
 
-.roll-percent {
+.roll-percent,
+.roll-note {
   color: var(--muted);
   font-size: 0.85rem;
 }
+
 
 .field-hint {
   color: var(--danger);
@@ -1190,8 +1204,18 @@ td.src {
   background: var(--badge-yellow);
 }
 
+.ko-lime {
+  background: var(--badge-lime);
+}
+
 .ko-green {
   background: var(--badge-green);
+}
+
+/* 배지 단계명 뒤 1타 확률 "93.8%"는 작은 글씨 */
+.ko-chance {
+  font-size: 0.82em;
+  font-weight: 600;
 }
 
 .ko-gray {
@@ -1373,20 +1397,15 @@ td.src {
   opacity: 0.55;
 }
 
-.tone-text {
+/* 상세 행의 판정 칩: 결과 배지와 같은 5색 면 + 그 탭 관점 기호(◎○△▽×) */
+.tier-chip {
+  display: inline-block;
+  min-width: 1.3em;
+  padding: 0 0.2em;
+  border-radius: 4px;
+  text-align: center;
   font-weight: 700;
-}
-
-.tone-good {
-  color: var(--good);
-}
-
-.tone-mid {
-  color: var(--mid);
-}
-
-.tone-bad {
-  color: var(--bad);
+  color: var(--tier-ink);
 }
 
 .band-scroll {
@@ -1415,18 +1434,6 @@ td.src {
   border-radius: 4px;
   /* 파스텔 판정 면 위 글자는 라이트·다크 모두 어두운 잉크(대비 ≥ 4.5:1) */
   color: var(--tier-ink);
-}
-
-.band .cell.tone-good {
-  background-color: var(--tier-good);
-}
-
-.band .cell.tone-mid {
-  background-color: var(--tier-mid);
-}
-
-.band .cell.tone-bad {
-  background-color: var(--tier-bad);
 }
 
 .band .cell.over {

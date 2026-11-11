@@ -1,6 +1,5 @@
 import { memo, type Dispatch } from 'react'
 import type { CardView, CellView, CustomTarget, RowView, Tab } from '../../cards'
-import type { BandThresholds } from '../../core'
 import type { Snapshot } from '../../data/schema'
 import { namesOf } from '../../ui/names'
 import { bundleText, fixedText, koBadge, orderBadge, shareText } from '../../ui/format'
@@ -16,7 +15,7 @@ interface Props {
   tab: Tab
   card: CardView
   /** 그 탭 뷰를 계산한 판정 기준(배지 색 단계·상세 현재 판정) */
-  thresholds: BandThresholds
+  rollSteps: number
   expanded: boolean
   onToggle: (cardId: string) => void
   /** 커스텀 카드면 그 타겟 */
@@ -69,13 +68,13 @@ function Headline({ game, tab, card, badge }: { game: Snapshot; tab: Tab; card: 
   )
 }
 
-export const CardItem = memo(function CardItem({ game, tab, card, thresholds, expanded, onToggle, target, dispatch }: Props) {
+export const CardItem = memo(function CardItem({ game, tab, card, rollSteps, expanded, onToggle, target, dispatch }: Props) {
   const names = namesOf(game)
   const ladder = card.opponent.source === 'ladder'
   const detailId = `card-detail-${encodeURIComponent(card.id)}`
   const { bundle } = card
   // 공격·방어는 1타 확률 결과 배지, 스피드는 행동 순서 배지. 간단행의 판정 기호는 없고 이 배지가 현재 판정을 글자로 보인다.
-  const badge = tab === 'speed' ? undefined : koBadge(tab, badgeCell(card), thresholds)
+  const badge = tab === 'speed' ? undefined : koBadge(tab, badgeCell(card), rollSteps)
   const order = tab === 'speed' ? orderBadge(badgeCell(card)) : undefined
   return (
     <li
@@ -112,6 +111,7 @@ export const CardItem = memo(function CardItem({ game, tab, card, thresholds, ex
         {badge !== undefined && (
           <span className={`ko-badge ko-${badge.tone}`} data-testid="ko-badge" data-tone={badge.tone}>
             {badge.label}
+            {badge.chance !== undefined && <small className="ko-chance num"> {badge.chance}</small>}
           </span>
         )}
         {order !== undefined && (
@@ -137,7 +137,7 @@ export const CardItem = memo(function CardItem({ game, tab, card, thresholds, ex
             {card.rows.length > 0 && (
               <ol className="rows">
                 {card.rows.map((r) => (
-                  <RowDetail key={r.id} game={game} tab={tab} row={r} thresholds={thresholds} />
+                  <RowDetail key={r.id} game={game} tab={tab} row={r} />
                 ))}
               </ol>
             )}

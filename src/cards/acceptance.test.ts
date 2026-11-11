@@ -46,14 +46,14 @@ import { planTab } from './plan'
 import { cardInput, realData, syntheticView } from './testing'
 import { DEFAULT_CRITERIA, TABS } from './types'
 import type { CardInput, CardSpec, CardView, NoChangeItem, RankBasis, RowKind, RowSpec, RowView, ScarfBasis, Tab, TabPlan, TabView } from './types'
-import { DEFAULT_ROLL_THRESHOLDS } from './types'
+import { DEFAULT_ROLL_STEPS } from './types'
 /** 카드 입력과 같은 제품 판정 기준(cardInput 기본값). 코어 직접 호출 기대값도 이 기준으로 낸다 */
-const TH = DEFAULT_ROLL_THRESHOLDS
+const N = DEFAULT_ROLL_STEPS
 
 const { game, bo1, bo3 } = realData()
 const { spTotal, spMaxPerStat } = game.manifest.rules
-const OVER = { judgeOverBudget: true }
-const IGNORE_TOTAL = { ignoreSpTotal: true }
+const OVER = { judgeOverBudget: true, rollSteps: N }
+const IGNORE_TOTAL = { ignoreSpTotal: true, rollSteps: N }
 
 // 파일 전체가 같은 판정 캐시를 쓴다(캐시 경유 = 무캐시는 batch.test가 봉인).
 const cache = createLruCache(200_000)
@@ -96,7 +96,7 @@ function coreSweep(spec: Pick<RowSpec, 'judge' | 'sweep' | 'attacker' | 'defende
   try {
     if (spec.judge === 'speed') return sweepSpeed(game, spec.attacker, spec.defender, spec.conditions, OVER)
     if (!spec.sweep || !spec.moveId) throw new Error('대미지 행에 스윕 대상·기술이 없다')
-    return sweepDamage(game, spec.sweep, spec.attacker, spec.defender, spec.moveId, spec.conditions, TH, OVER)
+    return sweepDamage(game, spec.sweep, spec.attacker, spec.defender, spec.moveId, spec.conditions, undefined, OVER)
   } catch (e) {
     if (e instanceof CoreError || e instanceof CoreInputError) return null
     throw e
@@ -138,9 +138,14 @@ function shownRow(card: CardView | undefined, pred: (r: RowView) => boolean): Ro
 const meansKey = (b: RankBasis | ScarfBasis | undefined): string | null =>
   b === undefined ? null : b.kind === 'rank' ? JSON.stringify([b.owner, b.means.kind, b.means.id]) : JSON.stringify([b.kind, b.item])
 
+/** 내 쪽 세트의 성격만 바꾼 행 명세 */
+function withMyNature(plan: TabPlan, spec: RowSpec, nature: string): RowSpec {
+  return plan.mySide === 'attacker' ? { ...spec, attacker: { ...spec.attacker, nature } } : { ...spec, defender: { ...spec.defender, nature } }
+}
+
 /**
  * 계획의 래더 카드를 코어로 직접 판정해 "변화 없음" 요약·표시 카드·표시 행 칸을 다시 만든다.
- * 극단 필터 = 내 H·(B|D) 함께 0 / 함께 최대(예산 무시), 행 = 33칸 스윕(예산 밖 판정), 고정 = 단건 판정.
+ * 극단 필터 = 내 H·(B|D) 함께 0·무보정 / 함께 최대·상승(예산 무시), 행 = 현재·무보정·상승 성격 33칸 스윕(예산 밖 판정)의 합집합, 고정 = 단건 판정.
  */
 function expectMatchesCore(plan: TabPlan, view: TabView): { items: number; cards: number } {
   expect(plan.status).toEqual({ kind: 'ok' })
@@ -166,12 +171,12 @@ function expectMatchesCore(plan: TabPlan, view: TabView): { items: number; cards
         let g = gates.get(spec.gate)
         if (g === undefined) {
           const f = plan.filters[spec.gate]
-          const at = (v: number) => {
-            const defender = withSp(f.defender, { [f.stats[0]]: v, [f.stats[1]]: v })
-            return coreCategory(() => judgeDamage(game, 'defender', f.attacker, defender, f.moveId, f.conditions, TH, IGNORE_TOTAL))
+          const at = (v: number, nature: string) => {
+            const defender = withSp({ ...f.defender, nature }, { [f.stats[0]]: v, [f.stats[1]]: v })
+            return coreCategory(() => judgeDamage(game, 'defender', f.attacker, defender, f.moveId, f.conditions, undefined, IGNORE_TOTAL))
           }
-          const low = at(0)
-          const high = at(spMaxPerStat)
+          const low = at(0, f.natures.neutral)
+          const high = at(spMaxPerStat, f.natures.plus)
           if (low === null || high === null) g = 'shown'
           else if (low === high) {
             g = 'hidden'
@@ -188,7 +193,13 @@ function expectMatchesCore(plan: TabPlan, view: TabView): { items: number; cards
         continue
       }
       const cats = categoriesOf(r)
-      if (cats.every((c) => c === cats[0])) {
+      const natures = spec.natures
+      if (natures === undefined) throw new Error(`스윕 행 ${rowId}에 성격 변형이 없다`)
+      const variantCats = [natures.neutral, natures.plus].flatMap((n) => {
+        const v = coreSweep(withMyNature(plan, spec, n))
+        return v === null ? [] : categoriesOf(v)
+      })
+      if ([...cats, ...variantCats].every((c) => c === cats[0])) {
         items.push(JSON.stringify([card.id, 'row', spec.moveId ?? null, spec.sweep?.stat ?? null, cats[0], meansKey(spec.basis)]))
         continue
       }
@@ -200,7 +211,7 @@ function expectMatchesCore(plan: TabPlan, view: TabView): { items: number; cards
     }
     for (const fixedId of card.fixedIds) {
       const f = plan.fixed[fixedId]
-      const c = coreCategory(() => judgeDamage(game, 'attacker', f.attacker, f.defender, f.moveId, f.conditions, TH))
+      const c = coreCategory(() => judgeDamage(game, 'attacker', f.attacker, f.defender, f.moveId, f.conditions, undefined, { rollSteps: N }))
       if (c === null) shown++
       else items.push(JSON.stringify([card.id, 'sp-independent', f.moveId, null, c, null]))
     }
@@ -230,7 +241,7 @@ describe('AC1 예시 세트(F9): 세 탭 모두 표시 카드가 있다', () => 
     const atk = run('example', top(EXAMPLE_SET), 'attack')
     const { card } = cardBySpread(atk.plan, atk.view, F9.attack.opponent, 'physical')
     const row = shownRow(card, (r) => r.kind === 'base' && r.moveId === F9.attack.move)
-    const direct = sweepDamage(game, { side: 'attacker', stat: 'atk' }, EXAMPLE_SET, opponentSet(bo1, F9.attack.opponent), F9.attack.move, undefined, TH, OVER)
+    const direct = sweepDamage(game, { side: 'attacker', stat: 'atk' }, EXAMPLE_SET, opponentSet(bo1, F9.attack.opponent), F9.attack.move, undefined, undefined, OVER)
     expect(rowBoundaries(row)).toEqual(boundariesOf(direct))
 
     const spd = run('example', top(EXAMPLE_SET), 'speed')
@@ -258,7 +269,7 @@ describe('AC2 공격 탭 고정 입력(F1)', () => {
       for (const ref of F1.cards) {
         const { card } = cardBySpread(plan, view, ref.opponent, 'physical')
         const row = shownRow(card, (r) => r.kind === 'base' && r.moveId === F1.move)
-        const direct = sweepDamage(game, { side: 'attacker', stat: F1.sweepStat }, mySet, opponentSet(bo1, ref.opponent), F1.move, undefined, TH, OVER)
+        const direct = sweepDamage(game, { side: 'attacker', stat: F1.sweepStat }, mySet, opponentSet(bo1, ref.opponent), F1.move, undefined, undefined, OVER)
         const at = direct.cells[current]
         expect(row.current).toEqual({ sp: current, category: at.kind === 'ok' ? at.category : undefined })
         expect(rowBoundaries(row)).toEqual(boundariesOf(direct))
@@ -309,7 +320,7 @@ describe('AC3 묶음(실제 스냅샷 예시)', () => {
     const expected = directBundles(e, ['hp', 'def']).filter((b) => b.share >= DEFAULT_CRITERIA.bundleShareMin).slice(0, DEFAULT_CRITERIA.cardsPerCategory)
     const cards = plan.cards.filter((c) => c.opponent.id === 'garchomp' && c.category === 'physical')
     expect(cards.map((c) => [statsKey(c), c.bundle.share])).toEqual(expected.map((b) => [b.stats, b.share]))
-    expect(cards[0].bundle.share).toBe(F1.cards[0].bundleShare)
+    expect(cards[0].bundle.share).toBe(F1.cards.find((c) => c.opponent.id === 'garchomp')?.bundleShare)
     for (const c of cards) {
       expect(c.bundle.stats.map((s) => s.stat)).toEqual(['hp', 'def'])
       expect(c.bundle.retention).toBe(e.spreads.keptShare)
@@ -319,7 +330,7 @@ describe('AC3 묶음(실제 스냅샷 예시)', () => {
 
   it('방어 특수 카드: 메가플라엣테 묶음은 상대 C만', () => {
     const { plan } = run('example', top(EXAMPLE_SET), 'defense')
-    const cards = plan.cards.filter((c) => c.opponent.id === F3.bothMidOrHigher.opponent.id && c.category === 'special')
+    const cards = plan.cards.filter((c) => c.opponent.id === F3.bothOhko.opponent.id && c.category === 'special')
     expect(cards.length).toBeGreaterThan(0)
     for (const c of cards) expect(c.bundle.stats.map((s) => s.stat)).toEqual(['spa'])
     const expected = directBundles(entryOf(bo1, 'floettemega'), ['spa']).filter((b) => b.share >= 0.05).slice(0, 3)
@@ -357,7 +368,7 @@ describe('AC4 혼합 세트·사이코쇼크(F2)', () => {
       [F2.special, spec.card],
     ] as const) {
       const row = shownRow(card, (r) => r.kind === 'base' && r.moveId === side.move)
-      const direct = sweepDamage(game, { side: 'attacker', stat: F2.sweepStat }, F2.mySet, opponentSet(bo1, side.opponent), side.move, undefined, TH, OVER)
+      const direct = sweepDamage(game, { side: 'attacker', stat: F2.sweepStat }, F2.mySet, opponentSet(bo1, side.opponent), side.move, undefined, undefined, OVER)
       expect(rowBoundaries(row)).toEqual(boundariesOf(direct))
       expect(rowBoundaries(row)).toEqual(side.boundaries)
     }
@@ -387,18 +398,56 @@ function topAttackMoves(e: MetaEntry): string[] {
 }
 
 describe('AC5 방어 탭 극단 필터(F3)', () => {
-  it('둘 다 확정 버팀·둘 다 중난수 이상 → 요약(고정 판정 = 코어 두 극단)', () => {
+  it('둘 다 확정견딤·둘 다 확정1타(낮은 극단 무보정, 높은 극단 상승 성격) → 요약(고정 판정 = 코어 두 극단)', () => {
     const { plan, view } = run('example', top(EXAMPLE_SET), 'defense')
-    for (const c of [F3.bothSurvive, F3.bothMidOrHigher]) {
+    for (const c of [F3.bothSurvive, F3.bothOhko]) {
       const { spec, card } = cardBySpread(plan, view, c.opponent, game.data.moves[c.move].category === 'Physical' ? 'physical' : 'special')
       expect(card?.rows.some((r) => r.moveId === c.move && r.kind === 'base') ?? false).toBe(false)
       const item = view.noChange.items.find((i) => i.cardId === spec.id && i.kind === 'extreme-filter' && i.moveId === c.move && i.rowKind === 'base')
       expect(item?.fixed, c.move).toBe(c.low)
       const attacker = opponentSet(bo1, c.opponent)
       const stat = game.data.moves[c.move].category === 'Physical' ? 'def' : 'spd'
-      const at = (v: number) => judgeDamage(game, 'defender', attacker, withSp(EXAMPLE_SET, { hp: v, [stat]: v }), c.move, undefined, TH, IGNORE_TOTAL).category
-      expect([at(0), at(spMaxPerStat)]).toEqual([item?.fixed, item?.fixed])
+      const at = (v: number, nature: string) =>
+        judgeDamage(game, 'defender', attacker, withSp({ ...EXAMPLE_SET, nature }, { hp: v, [stat]: v }), c.move, undefined, undefined, IGNORE_TOTAL).category
+      expect([at(0, EXAMPLE_SET.nature), at(spMaxPerStat, F3.plusNature[stat])]).toEqual([item?.fixed, item?.fixed])
+      const filter = plan.filters[spec.filterIds.find((id) => plan.filters[id].moveId === c.move && plan.filters[id].basis === undefined) ?? '']
+      expect(filter.natures).toEqual({ stat, neutral: EXAMPLE_SET.nature, plus: F3.plusNature[stat] })
     }
+  })
+
+  it('현재 성격 두 극단이 같아도 상승 성격 높은 극단이 다르면 통과해 H 행·D 행이 생긴다', () => {
+    const { plan, view } = run('example', top(EXAMPLE_SET), 'defense')
+    const c = F3.plusOnly
+    const { spec, card } = cardBySpread(plan, view, c.opponent, 'special')
+    expect(view.noChange.items.some((i) => i.cardId === spec.id && i.kind === 'extreme-filter' && i.moveId === c.move && i.rowKind === 'base')).toBe(false)
+    // 필터를 통과했으니 H 행·D 행이 각각 표시되거나 행 단위 변화 없음(각 행 스윕 기준)으로 간다
+    const shown = (card?.rows ?? []).filter((r) => r.moveId === c.move && r.kind === 'base').map((r) => r.sweepStat)
+    const hidden = view.noChange.items.filter((i) => i.cardId === spec.id && i.kind === 'row' && i.moveId === c.move && i.rowKind === 'base').map((i) => i.sweepStat)
+    expect([...shown, ...hidden].sort()).toEqual(['hp', 'spd'])
+  })
+
+  it('현재 성격으로는 전 칸 같고 상승 성격으로만 바뀌는 래더 행은 표시된다(공격 탭 F1 메가눈여아)', () => {
+    const { plan, view } = run('F1-full', top(F1.full), 'attack')
+    const { card } = cardBySpread(plan, view, F1.plusOnly.opponent, 'physical')
+    const row = shownRow(card, (r) => r.kind === 'base' && r.moveId === F1.move)
+    expect(row.noChange).toBe(false)
+    expect(row.boundaries).toEqual([])
+    expect(new Set(row.cells.map((x) => x.category))).toEqual(new Set([F1.plusOnly.fixed]))
+    expect(row.target).toEqual({
+      label: F1.plusOnly.label,
+      goal: 'better',
+      plusStat: 'atk',
+      neutral: null,
+      plus: { label: F1.plusOnly.label, stats: [{ stat: 'atk', sp: F1.plusOnly.plus }], need: Math.max(0, F1.plusOnly.plus - F1.full.sp.atk - F1.remaining.full) },
+    })
+    expect(card?.headline).toEqual({ kind: 'row', rowId: row.id })
+  })
+
+  it('현재·무보정·상승 모두 같은 래더 행은 변화 없음 요약으로 간다(F1 대도각참)', () => {
+    const { plan, view } = run('F1-full', top(F1.full), 'attack')
+    const { spec, card } = cardBySpread(plan, view, F1.bothSame.opponent, 'physical')
+    expect(card).toBeUndefined()
+    expect(view.noChange.items.filter((i) => i.cardId === spec.id).map((i) => [i.kind, i.moveId, i.fixed])).toEqual([['row', F1.move, F1.bothSame.fixed]])
   })
 
   it('필터를 통과한 기술은 H 행·B 행으로 나오고 경계 = 코어', () => {
@@ -410,7 +459,7 @@ describe('AC5 방어 탭 극단 필터(F3)', () => {
       ['def', F3.passing.defBoundaries],
     ] as const) {
       const row = shownRow(card, (r) => r.kind === 'base' && r.moveId === F3.passing.move && r.sweepStat === stat)
-      const direct = sweepDamage(game, { side: 'defender', stat }, attacker, EXAMPLE_SET, F3.passing.move, undefined, TH, OVER)
+      const direct = sweepDamage(game, { side: 'defender', stat }, attacker, EXAMPLE_SET, F3.passing.move, undefined, undefined, OVER)
       expect(rowBoundaries(row)).toEqual(boundariesOf(direct))
       expect(rowBoundaries(row)).toEqual(fixed)
     }
@@ -566,7 +615,7 @@ describe('AC8 랭크 행(F5)', () => {
             { ...spec.opponentSet, boosts: b.opponentBoosts },
             r.moveId as string,
             { attacker: { tailwind: false }, defender: { tailwind: false } },
-            TH,
+            undefined,
             OVER,
           )
           expect(r.cells.map((c) => c.category)).toEqual(categoriesOf(direct))
@@ -644,7 +693,7 @@ describe('AC11 목록 밖 타겟(F6·F10)', () => {
       expect(spec.opponentSet.species).toBe(F10.rosterId)
       expect(spec.opponentSet.moves).toEqual(F10.moves)
       for (const r of c.rows.filter((x) => x.kind === 'base')) {
-        const direct = sweepDamage(game, { side: 'attacker', stat: 'atk' }, EXAMPLE_SET, spec.opponentSet, r.moveId as string, undefined, TH, OVER)
+        const direct = sweepDamage(game, { side: 'attacker', stat: 'atk' }, EXAMPLE_SET, spec.opponentSet, r.moveId as string, undefined, undefined, OVER)
         expect(r.cells.map((x) => x.category)).toEqual(categoriesOf(direct))
         expect(r.noChange).toBe(new Set(categoriesOf(direct)).size === 1)
       }
@@ -669,7 +718,7 @@ describe('AC11 목록 밖 타겟(F6·F10)', () => {
       expect(moves.has(c.category === 'physical' ? F10.physical : F10.special)).toBe(true)
       const spec = plan.cards.find((x) => x.id === c.id) as CardSpec
       for (const r of c.rows.filter((x) => x.cells.length > 0 && x.kind === 'base')) {
-        const direct = sweepDamage(game, { side: 'defender', stat: r.sweepStat as StatId }, spec.opponentSet, EXAMPLE_SET, r.moveId as string, undefined, TH, OVER)
+        const direct = sweepDamage(game, { side: 'defender', stat: r.sweepStat as StatId }, spec.opponentSet, EXAMPLE_SET, r.moveId as string, undefined, undefined, OVER)
         expect(r.cells.map((x) => x.category)).toEqual(categoriesOf(direct))
       }
     }
@@ -701,7 +750,7 @@ describe('AC11 목록 밖 타겟(F6·F10)', () => {
     expect(first(before).opponentSet.sp).toMatchObject({ hp: 32, def: 32 })
     const cellsOf = (r: { plan: TabPlan; view: TabView }) =>
       r.view.cards.find((c) => c.id === first(r).id)?.rows.find((x) => x.kind === 'base' && x.moveId === 'dragonclaw')?.cells.map((c) => [c.category, c.maxPercent])
-    const direct = sweepDamage(game, { side: 'attacker', stat: 'atk' }, EXAMPLE_SET, first(after).opponentSet, 'dragonclaw', undefined, TH, OVER)
+    const direct = sweepDamage(game, { side: 'attacker', stat: 'atk' }, EXAMPLE_SET, first(after).opponentSet, 'dragonclaw', undefined, undefined, OVER)
     expect(cellsOf(after)).toEqual(direct.cells.map((c) => (c.kind === 'ok' && c.value.kind === 'damage' ? [c.category, c.value.maxPercent] : null)))
     expect(cellsOf(after)).not.toEqual(cellsOf(before))
 
@@ -898,7 +947,12 @@ describe('AC13 Bo3·월 변경 → 그 스냅샷 기준·출처', () => {
     expect(before.cards.some((c) => c.opponent.id === dropped)).toBe(true)
     expect(after.cards.some((c) => c.opponent.id === dropped)).toBe(false)
     for (const c of after.cards) expect(c.opponent.rank).toBe(entryOf(view, c.opponent.id).rank)
-    expect(after.cards.map((c) => c.opponent.id)).toEqual(before.cards.filter((c) => c.opponent.id !== dropped).map((c) => c.opponent.id))
+    // 빠진 종 자리에 상위 30으로 들어온 종의 카드는 맨 뒤에 붙을 수 있다(5단 판정에서는 들어온 종도 판정이 바뀐다)
+    const kept = new Set(bo1.ranking.slice(0, 30).map((e) => e.id))
+    expect(after.cards.filter((c) => kept.has(c.opponent.id)).map((c) => c.opponent.id)).toEqual(
+      before.cards.filter((c) => c.opponent.id !== dropped).map((c) => c.opponent.id),
+    )
+    for (const c of after.cards.filter((x) => !kept.has(x.opponent.id))) expect(c.opponent.rank).toBe(30)
   })
 })
 
@@ -949,7 +1003,7 @@ describe('관여 능력치 S(F11): 스피드 의존 기술 행만 내 S에 의�
   it('자이로볼 행은 dependsOn에 spe가 있고 러스터캐논 행은 없다(코어로 의존 확인)', () => {
     const opp = opponentSet(bo1, F11.opponent)
     const pct = (s: PokemonSet, move: string, spe: number) => {
-      const r = judgeDamage(game, 'attacker', withSp(s, { spe }), opp, move, undefined, TH, IGNORE_TOTAL).value
+      const r = judgeDamage(game, 'attacker', withSp(s, { spe }), opp, move, undefined, undefined, IGNORE_TOTAL).value
       return r.kind === 'damage' ? r.maxPercent : NaN
     }
     for (const [label, c, depends] of [

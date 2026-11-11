@@ -1,47 +1,64 @@
-// "최소 <능력치><SP> 필요" 목표. 판정과 순위는 코어(koLabel·judgementRank)만 쓴다.
-// 한 단계 위 = judgementRank 순위 + 1 이상(건너뛴 칸은 실제 판정을 라벨로 쓴다). 코어 nextBetter는 이 규칙에 쓰지 않는다.
-import { JUDGEMENT_ORDER, judgementRank, koLabel } from '../core'
-import type { BandThresholds, JudgementSide, KoLabel } from '../core'
+// "최소 A32 / A15+" 목표. 판정과 순위는 코어(rollTier 범주·tierRank)만 쓴다.
+// 한 단계 위 = tierRank 순위 + 1 이상(건너뛴 칸은 실제 판정을 라벨로 쓴다). 성격 변형(무보정·상승)마다 최소치를 따로 낸다.
+import { TIER_ORDER, tierRank } from '../core'
+import type { JudgementSide, RollTier } from '../core'
 import type { StatId } from '../data/schema'
-import type { CellView, CompactCell, PairPoint, TargetView } from './types'
+import type { CellView, CompactCell, PairPoint, TargetOption, TargetView } from './types'
 
-/**
- * 칸의 판정 라벨. 대미지 칸은 koLabel 4단, 스피드 칸은 행동 순서 범주 그대로.
- * 코어가 낸 칸이 아니면(1타 확률 없음·행동 순서 밖 범주) undefined.
- */
-export function cellLabel(side: JudgementSide, cell: CompactCell, thresholds: BandThresholds): string | undefined {
-  if (side === 'speed') return (JUDGEMENT_ORDER.speed as readonly string[]).includes(cell.category) ? cell.category : undefined
-  return cell.ohkoChance === undefined ? undefined : koLabel(side, cell.ohkoChance, thresholds)
+/** 칸의 판정 라벨 = 코어가 낸 범주(대미지 rollTier 5단, 스피드 행동 순서). 그 관점 순서 밖 범주면 undefined. */
+export function cellLabel(side: JudgementSide, cell: Pick<CompactCell, 'category'>): string | undefined {
+  return (TIER_ORDER[side] as readonly string[]).includes(cell.category) ? cell.category : undefined
+}
+
+type Variants<T> = { neutral?: readonly T[]; plus?: readonly T[] }
+
+/** 두 선택지에서 목표 뷰를 만든다. better = 어느 한쪽이라도 현재 + 1 순위에 닿음, 아니면 현재 순위 유지(keep). 둘 다 없으면 undefined. */
+function choose(
+  side: JudgementSide,
+  currentLabel: string,
+  plusStat: Exclude<StatId, 'hp'>,
+  pick: (which: 'neutral' | 'plus', minRank: number) => TargetOption | null,
+): TargetView | undefined {
+  const cur = tierRank(side, currentLabel)
+  const at = (min: number) => ({ neutral: pick('neutral', min), plus: pick('plus', min) })
+  let goal: TargetView['goal'] = 'better'
+  let o = at(cur + 1)
+  if (o.neutral === null && o.plus === null) {
+    goal = 'keep'
+    o = at(cur)
+  }
+  const labels = [o.neutral, o.plus].filter((x): x is TargetOption => x !== null).map((x) => x.label)
+  if (labels.length === 0) return undefined
+  const label = labels.reduce((a, b) => (tierRank(side, b) < tierRank(side, a) ? b : a))
+  return { label, goal, plusStat, neutral: o.neutral, plus: o.plus }
 }
 
 /**
- * 단일 능력치 행: 현재 칸보다 한 단계 이상 위 판정을 내는 가장 낮은 SP, 없으면 현재 판정 이상을 내는 가장 낮은 SP.
- * cells는 0~최대 33칸, need는 그 칸의 CellView.need 그대로다. 라벨을 낼 수 없는 칸이 있으면 목표 없음.
+ * 단일 능력치 행: 성격 변형마다 목표 순위 이상을 내는 가장 낮은 SP. 목표 순위 = 현재 칸보다 한 단계 위(어느 변형도 닿지 않으면 현재 유지).
+ * 각 변형 cells는 0~최대 33칸, need는 그 칸의 CellView.need 그대로다. 라벨을 낼 수 없는 칸이 있으면 목표 없음. 변형 칸이 없으면 그쪽은 null.
  */
 export function singleTarget(
   side: JudgementSide,
   stat: StatId,
-  cells: readonly CellView[],
-  currentSp: number,
-  thresholds: BandThresholds,
+  plusStat: Exclude<StatId, 'hp'>,
+  currentLabel: string,
+  variants: Variants<CellView>,
 ): TargetView | undefined {
-  const labels = cells.map((c) => cellLabel(side, c, thresholds))
-  const ci = cells.findIndex((c) => c.sp === currentSp)
-  if (ci < 0 || labels.some((l) => l === undefined)) return undefined
-  const ranks = labels.map((l) => judgementRank(side, l as string))
-  const pick = (min: number) => ranks.findIndex((r) => r >= min)
-  const better = pick(ranks[ci] + 1)
-  const i = better >= 0 ? better : pick(ranks[ci])
-  return { label: labels[i] as string, goal: better >= 0 ? 'better' : 'keep', stats: [{ stat, sp: cells[i].sp }], need: cells[i].need }
+  const all = [...(variants.neutral ?? []), ...(variants.plus ?? [])]
+  if (all.some((c) => cellLabel(side, c) === undefined)) return undefined
+  return choose(side, currentLabel, plusStat, (which, min) => {
+    const c = variants[which]?.find((x) => tierRank(side, x.category) >= min)
+    return c === undefined ? null : { label: c.category, stats: [{ stat, sp: c.sp }], need: c.need }
+  })
 }
 
 /**
  * 방어 2축 최소 조합. judge(hp, defense)는 두 SP에 대해 단조(어느 쪽을 올려도 판정이 나빠지지 않음)라고 가정한다.
  * 순위마다 계단 경계를 H 0 → max로 따라가며 각 H의 최소 B/D를 줄여 간다. 평가는 (hp, defense)별로 한 번만 한다.
  */
-export function minPairPoints(judge: (hp: number, defense: number) => KoLabel, max: number): PairPoint[] {
-  const memo = new Map<number, KoLabel>()
-  const labelAt = (hp: number, d: number): KoLabel => {
+export function minPairPoints(judge: (hp: number, defense: number) => RollTier, max: number): PairPoint[] {
+  const memo = new Map<number, RollTier>()
+  const labelAt = (hp: number, d: number): RollTier => {
     const k = hp * (max + 1) + d
     let v = memo.get(k)
     if (v === undefined) {
@@ -50,11 +67,11 @@ export function minPairPoints(judge: (hp: number, defense: number) => KoLabel, m
     }
     return v
   }
-  const rankAt = (hp: number, d: number) => judgementRank('defense', labelAt(hp, d))
+  const rankAt = (hp: number, d: number) => tierRank('defense', labelAt(hp, d))
   const top = rankAt(max, max)
   const out: PairPoint[] = []
   for (let r = 0; r <= top; r++) {
-    const atLeast = JUDGEMENT_ORDER.defense[r]
+    const atLeast = TIER_ORDER.defense[r]
     if (rankAt(0, 0) >= r) {
       out.push({ atLeast, label: labelAt(0, 0), hp: 0, defense: 0 })
       continue
@@ -77,27 +94,25 @@ export function minPairPoints(judge: (hp: number, defense: number) => KoLabel, m
   return out
 }
 
-/** 방어 탭 행: 그 행 현재 판정에서 한 단계 위 점, 없으면 현재 판정 유지 점. remaining = 잔여 예산(표시용 SP 기준). */
+/** 방어 탭 행: 성격 변형별 쌍 점에서 현재 판정 한 단계 위, 없으면 현재 판정 유지. remaining = 잔여 예산(표시용 SP 기준). */
 export function pairTarget(
-  points: readonly PairPoint[],
+  points: Variants<PairPoint>,
   currentLabel: string,
-  defenseStat: StatId,
+  defenseStat: Exclude<StatId, 'hp'>,
   current: { hp: number; defense: number },
   remaining: number,
 ): TargetView | undefined {
-  const r = judgementRank('defense', currentLabel)
-  const at = (rank: number) => points.find((p) => judgementRank('defense', p.atLeast) === rank)
-  const better = at(r + 1)
-  const p = better ?? at(r)
-  if (p === undefined) return undefined
-  const need = Math.max(0, p.hp + p.defense - (current.hp + current.defense) - remaining)
-  return {
-    label: p.label,
-    goal: better !== undefined ? 'better' : 'keep',
-    stats: [
-      { stat: 'hp', sp: p.hp },
-      { stat: defenseStat, sp: p.defense },
-    ],
-    need,
-  }
+  return choose('defense', currentLabel, defenseStat, (which, min) => {
+    const p = points[which]?.find((x) => tierRank('defense', x.atLeast) === min)
+    if (p === undefined) return null
+    const need = Math.max(0, p.hp + p.defense - (current.hp + current.defense) - remaining)
+    return {
+      label: p.label,
+      stats: [
+        { stat: 'hp', sp: p.hp },
+        { stat: defenseStat, sp: p.defense },
+      ],
+      need,
+    }
+  })
 }

@@ -41,16 +41,16 @@ export interface ExecutorDeps {
 export const DEFAULT_SLICE_MS = 12
 export const COMPUTE_START_MARK = 'cards:compute-start'
 
-type Stage = 0 | 1 | 2 | 3
-const STAGE_KEYS = ['stage1', 'stage2', 'stage3', 'stage4'] as const
+type Stage = 0 | 1 | 2 | 3 | 4
+const STAGE_KEYS = ['stage1', 'stage2', 'stage3', 'stage4', 'stage5'] as const
 
 interface TabRun {
   plan: TabPlan | null
   results: Map<string, RowTaskResult>
   /** 마지막 pendingTasks 결과와 단계별 소비 위치 */
   queue: PendingTasks
-  pos: [number, number, number, number]
-  /** extreme·ends 결과나 쌍의 마지막 행 sweep 결과가 대기열을 바꿨을 수 있음 */
+  pos: [number, number, number, number, number]
+  /** extreme·ends 결과나 쌍의 마지막 행 sweep·variant 결과가 대기열을 바꿨을 수 있음 */
   dirty: boolean
   fatal: boolean
   /** 결과가 늘 때마다 +1 */
@@ -67,30 +67,24 @@ interface Run {
 
 type Unit = { tab: Tab; kind: 'plan' } | { tab: Tab; kind: 'task'; task: RowTask }
 
-const EMPTY_QUEUE: PendingTasks = { stage1: [], stage2: [], stage3: [], stage4: [] }
+const EMPTY_QUEUE: PendingTasks = { stage1: [], stage2: [], stage3: [], stage4: [], stage5: [] }
 const IDLE: TabViewState = { kind: 'idle' }
 
 function newTabRun(): TabRun {
-  return { plan: null, results: new Map(), queue: EMPTY_QUEUE, pos: [0, 0, 0, 0], dirty: false, fatal: false, version: 0, assembled: null }
+  return { plan: null, results: new Map(), queue: EMPTY_QUEUE, pos: [0, 0, 0, 0, 0], dirty: false, fatal: false, version: 0, assembled: null }
 }
 
-/** 활성 탭 1·2단계 → 나머지 탭(TABS 순) 1·2단계 → 활성 탭 3·4단계 → 나머지 탭 3·4단계. */
+/** 활성 탭 1·2단계 → 나머지 탭(TABS 순) 1·2단계 → 활성 탭 3·4·5단계(확인 스윕·성격 변형·쌍) → 나머지 탭 3·4·5단계. */
 function priority(active: Tab): ReadonlyArray<readonly [Tab, Stage]> {
   const others = TABS.filter((t) => t !== active)
-  return [
-    [active, 0],
-    [active, 1],
-    ...others.flatMap((t) => [[t, 0] as const, [t, 1] as const]),
-    [active, 2],
-    [active, 3],
-    ...others.flatMap((t) => [[t, 2] as const, [t, 3] as const]),
-  ]
+  const late = (t: Tab) => [[t, 2] as const, [t, 3] as const, [t, 4] as const]
+  return [[active, 0], [active, 1], ...others.flatMap((t) => [[t, 0] as const, [t, 1] as const]), ...late(active), ...others.flatMap(late)]
 }
 
 function refresh(t: TabRun): void {
   if (t.plan === null) return
   t.queue = pendingTasks(t.plan, t.results)
-  t.pos = [0, 0, 0, 0]
+  t.pos = [0, 0, 0, 0, 0]
   t.dirty = false
 }
 
@@ -114,7 +108,7 @@ function take(t: TabRun, stage: Stage): RowTask | null {
 function flags(t: TabRun): { stage12Done: boolean; complete: boolean } {
   if (t.dirty) refresh(t)
   const stage12Done = remaining(t, 0) === 0 && remaining(t, 1) === 0
-  return { stage12Done, complete: stage12Done && remaining(t, 2) === 0 && remaining(t, 3) === 0 }
+  return { stage12Done, complete: stage12Done && remaining(t, 2) === 0 && remaining(t, 3) === 0 && remaining(t, 4) === 0 }
 }
 
 function messageOf(e: unknown): string {

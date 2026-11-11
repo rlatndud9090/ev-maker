@@ -1,12 +1,11 @@
 import { useId, useRef, useState, type Dispatch, type KeyboardEvent, type Ref } from 'react'
 import { ROLL_STEPS, TABS, type MetaSourceView, type Tab } from '../../cards'
-import type { BandThresholds } from '../../core'
 import type { Snapshot } from '../../data/schema'
 import type { MatchType, MetaIndexItem } from '../../data/meta-schema'
 import type { MetaView } from '../../meta'
 import { namesOf } from '../../ui/names'
 import { searchIndexOf } from '../../ui/search'
-import { fromPercentInput, parseRollSteps, rollStepsOf, shareText, toPercentInput } from '../../ui/format'
+import { fromPercentInput, parseRollSteps, shareText, toPercentInput } from '../../ui/format'
 import type { AppAction, AppState } from '../state'
 import { Combobox } from './Combobox'
 import { NumberField } from './NumberField'
@@ -37,23 +36,29 @@ interface Props {
   customButtonRef: Ref<HTMLButtonElement>
 }
 
-const ROLL_FIELD: Record<'attack' | 'defense', { key: keyof BandThresholds; label: string }> = {
-  attack: { key: 'highRoll', label: '고난수 기준' },
-  defense: { key: 'lowRoll', label: '저난수 기준' },
+/**
+ * 같은 기준 n을 탭마다 다른 이름으로 보인다(방어 탭 = 16번 중 n번 이상 버팀, 즉 저난수1타).
+ * n이 절반 이하면 두 경계가 겹쳐 코어 rollTier가 고난수1타를 우선하므로 방어 탭 안내에 그 예외를 붙인다.
+ */
+const ROLL_FIELD_LABEL: Record<'attack' | 'defense', string> = { attack: '고난수 1타 기준', defense: '고난수 견딤 기준' }
+const rollFieldNote = (tab: 'attack' | 'defense', n: number): string => {
+  if (tab === 'attack') return `16번 중 ${n}번 이상 1타 = 고난수1타`
+  const note = `16번 중 ${n}번 이상 버팀 = 저난수1타`
+  return n * 2 <= ROLL_STEPS ? `${note} (${n}번 이상 1타면 고난수1타 우선)` : note
 }
 
-/** "고난수 기준 [n]/16 (87.5%)". 1~ROLL_STEPS−1 정수만 반영하고, 그 밖 입력은 반영하지 않은 채 옆에 안내한다. */
-function RollThresholdField({ tab, thresholds, dispatch }: { tab: 'attack' | 'defense'; thresholds: BandThresholds; dispatch: Dispatch<AppAction> }) {
-  const { key, label } = ROLL_FIELD[tab]
+/** "고난수 1타 기준 [n]/16 (87.5%)". 1~ROLL_STEPS−1 정수만 반영하고, 그 밖 입력은 반영하지 않은 채 옆에 안내한다. */
+function RollThresholdField({ tab, rollSteps, dispatch }: { tab: 'attack' | 'defense'; rollSteps: number; dispatch: Dispatch<AppAction> }) {
+  const label = ROLL_FIELD_LABEL[tab]
   const id = useId()
   const hintId = `${id}-hint`
   const unitId = `${id}-unit`
   const [editing, setEditing] = useState<string | null>(null)
-  const committed = rollStepsOf(thresholds[key], ROLL_STEPS)
+  const committed = rollSteps
   const parsed = editing === null ? committed : parseRollSteps(editing, ROLL_STEPS)
   const invalid = parsed === undefined
   return (
-    <div className="roll-field" data-testid="roll-threshold" data-key={key}>
+    <div className="roll-field" data-testid="roll-threshold" data-tab={tab}>
       <label className="roll-input">
         {label}
         <input
@@ -68,16 +73,19 @@ function RollThresholdField({ tab, thresholds, dispatch }: { tab: 'attack' | 'de
           onChange={(e) => {
             setEditing(e.target.value)
             const n = parseRollSteps(e.target.value, ROLL_STEPS)
-            if (n !== undefined) dispatch({ type: 'set-roll-threshold', key, steps: n })
+            if (n !== undefined) dispatch({ type: 'set-roll-steps', steps: n })
           }}
           onBlur={() => setEditing(null)}
         />
       </label>
       {/* 단위(/16)와 반영 중인 백분율을 입력의 설명으로 묶어 스크린 리더가 "14, /16 (87.5%)"로 읽게 한다. */}
-      <span id={unitId}>
+      <span id={unitId} className="roll-unit">
         <span className="roll-denom">/{ROLL_STEPS}</span>{' '}
         <span className="roll-percent num" data-testid="roll-percent">
           ({shareText(committed / ROLL_STEPS)})
+        </span>{' '}
+        <span className="roll-note" data-testid="roll-note">
+          {rollFieldNote(tab, committed)}
         </span>
       </span>
       {invalid && (
@@ -192,7 +200,7 @@ export function Toolbar({ customButtonRef, ...p }: Props) {
         </div>
 
         <div className="tool-group">
-          {state.tab !== 'speed' && <RollThresholdField key={state.tab} tab={state.tab} thresholds={state.thresholds} dispatch={dispatch} />}
+          {state.tab !== 'speed' && <RollThresholdField key={state.tab} tab={state.tab} rollSteps={state.rollSteps} dispatch={dispatch} />}
           <label className="check">
             <input
               type="checkbox"

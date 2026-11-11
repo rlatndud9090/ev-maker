@@ -14,11 +14,18 @@ export {
   koLabel,
   nextBetter,
   normalizeThresholds,
+  ROLL_DENOMINATOR,
+  TIER_ORDER,
+  normalizeRollSteps,
+  nextBetterTier,
+  rollTier,
+  tierRank,
+  type RollTier,
   type JudgementSide,
   type KoLabel,
   type KoSide,
 } from './bands'
 export { finalSpeed, compareSpeed, minSpToOutspeed, checkSpeedSupport } from './speed'
-export { sweep, sweepDamage, sweepSpeed, judgeDamage, judgeSpeed, type CellJudgement, type DamageSweepTarget } from './sweep'
+export { sweep, sweepDamage, sweepSpeed, judgeDamage, judgeSpeed, type CellJudgement, type DamageCategoryOptions, type DamageSweepTarget } from './sweep'
 export { moveStatRefs } from './moveRefs'
 export { SPEED_DEPENDENT_MOVES, SPEED_DEPENDENT_ATTACKER_ABILITIES, engineMoveOverrides } from './engine'

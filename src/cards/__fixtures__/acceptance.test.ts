@@ -38,15 +38,15 @@ import {
   type Boundary,
   type ExtremeCase,
 } from './acceptance'
-import { DEFAULT_ROLL_THRESHOLDS } from '../types'
+import { DEFAULT_ROLL_STEPS } from '../types'
 
 /** 카드 입력과 같은 제품 판정 기준. 고정 상수는 이 기준으로 기록했다 */
-const TH = DEFAULT_ROLL_THRESHOLDS
+const N = DEFAULT_ROLL_STEPS
 
 const { game, bo1, bo3 } = realData()
 const { spTotal, spMaxPerStat } = game.manifest.rules
-const IGNORE_TOTAL = { ignoreSpTotal: true }
-const OVER = { judgeOverBudget: true }
+const IGNORE_TOTAL = { ignoreSpTotal: true, rollSteps: N }
+const OVER = { judgeOverBudget: true, rollSteps: N }
 
 const total = (s: PokemonSet) => Object.values(s.sp).reduce((a, b) => a + b, 0)
 const withSp = (s: PokemonSet, patch: Partial<Record<StatId, number>>): PokemonSet => ({ ...s, sp: { ...s.sp, ...patch } })
@@ -94,7 +94,7 @@ describe('F9 예시 세트', () => {
   })
 
   it('공격 탭: 예시 세트의 스톤샤워가 메가리자몽Y 대표에 대해 0~32 안에서 바뀐다', () => {
-    const r = sweepDamage(game, { side: 'attacker', stat: 'atk' }, EXAMPLE_SET, opponentSet(bo1, F9.attack.opponent), F9.attack.move, undefined, TH, OVER)
+    const r = sweepDamage(game, { side: 'attacker', stat: 'atk' }, EXAMPLE_SET, opponentSet(bo1, F9.attack.opponent), F9.attack.move, undefined, undefined, OVER)
     expect(boundariesOf(r)).toEqual(F9.attack.boundaries)
   })
 
@@ -129,7 +129,7 @@ describe('F1 공격 탭 고정 입력', () => {
       const current = mySet.sp[F1.sweepStat]
       const remaining = F1.remaining[which]
       for (const c of F1.cards) {
-        const r = sweepDamage(game, { side: 'attacker', stat: F1.sweepStat }, mySet, opponentSet(bo1, c.opponent), F1.move, undefined, TH, OVER)
+        const r = sweepDamage(game, { side: 'attacker', stat: F1.sweepStat }, mySet, opponentSet(bo1, c.opponent), F1.move, undefined, undefined, OVER)
         const cur = r.cells[current]
         expect(cur.kind === 'ok' && cur.category, c.opponent.spread).toBe(c.current)
         expect(boundariesOf(r), c.opponent.spread).toEqual(c.boundaries)
@@ -138,6 +138,32 @@ describe('F1 공격 탭 고정 입력', () => {
       }
     })
   }
+
+  const cats = (nature: string, ref: { id: string; spread: string }) =>
+    sweepDamage(game, { side: 'attacker', stat: F1.sweepStat }, { ...F1.full, nature }, opponentSet(bo1, ref), F1.move, undefined, undefined, OVER).cells.map((c) =>
+      c.kind === 'ok' ? c.category : 'x',
+    )
+
+  it('상승 성격으로만 바뀌는 상대: 현재(무보정)는 전 칸 같고 상승(고집)은 그 SP부터 한 단계 위', () => {
+    const { opponent, fixed, label, plus } = F1.plusOnly
+    expect(new Set(cats(F1.full.nature, opponent))).toEqual(new Set([fixed]))
+    const p = cats(F1.plusNature, opponent)
+    expect(p.findIndex((c) => c === label)).toBe(plus)
+    expect(p.slice(0, plus).every((c) => c === fixed)).toBe(true)
+  })
+
+  it('두 성격 모두 같은 상대: 현재·상승 전 칸 같음', () => {
+    const { opponent, fixed } = F1.bothSame
+    expect(new Set([...cats(F1.full.nature, opponent), ...cats(F1.plusNature, opponent)])).toEqual(new Set([fixed]))
+  })
+
+  it('목표 대조 카드: 무보정·상승 최소 A', () => {
+    const { opponent, current, label, neutral, plus } = F1.targetCard
+    const n = cats(F1.full.nature, opponent)
+    const p = cats(F1.plusNature, opponent)
+    expect(n[F1.full.sp.atk]).toBe(current)
+    expect([n.indexOf(label), p.indexOf(label)]).toEqual([neutral, plus])
+  })
 })
 
 describe('F2 혼합 세트·사이코쇼크', () => {
@@ -151,7 +177,7 @@ describe('F2 혼합 세트·사이코쇼크', () => {
   it('사이코쇼크 대미지는 상대 B로만 바뀐다', () => {
     const opp = opponentSet(bo1, F2.physical.opponent)
     const pct = (d: PokemonSet) => {
-      const r = judgeDamage(game, 'attacker', F2.mySet, d, 'psyshock', undefined, TH, IGNORE_TOTAL).value
+      const r = judgeDamage(game, 'attacker', F2.mySet, d, 'psyshock', undefined, undefined, IGNORE_TOTAL).value
       return r.kind === 'damage' ? r.maxPercent : NaN
     }
     expect(pct(withSp(opp, { def: 32 }))).toBeLessThan(pct(opp))
@@ -160,7 +186,7 @@ describe('F2 혼합 세트·사이코쇼크', () => {
 
   it('같은 상대의 물리(H·B)·특수(H·D) 대표에서 각각 판정이 바뀐다', () => {
     for (const side of [F2.physical, F2.special]) {
-      const r = sweepDamage(game, { side: 'attacker', stat: F2.sweepStat }, F2.mySet, opponentSet(bo1, side.opponent), side.move, undefined, TH, OVER)
+      const r = sweepDamage(game, { side: 'attacker', stat: F2.sweepStat }, F2.mySet, opponentSet(bo1, side.opponent), side.move, undefined, undefined, OVER)
       expect(boundariesOf(r), side.move).toEqual(side.boundaries)
     }
   })
@@ -171,20 +197,28 @@ describe('F3 방어 탭 극단 필터', () => {
     const attacker = opponentSet(bo1, c.opponent)
     const stat = moveStatRefs(game, c.move).defense
     if (!stat) throw new Error(`${c.move}은 변화기다`)
-    const at = (v: number) => judgeDamage(game, 'defender', attacker, withSp(F3.mySet, { hp: v, [stat]: v }), c.move, undefined, TH, IGNORE_TOTAL).category
-    return { low: at(0), high: at(spMaxPerStat) }
+    const at = (v: number, nature: string) =>
+      judgeDamage(game, 'defender', attacker, withSp({ ...F3.mySet, nature }, { hp: v, [stat]: v }), c.move, undefined, undefined, IGNORE_TOTAL).category
+    return { low: at(0, F3.mySet.nature), high: at(spMaxPerStat, F3.plusNature[stat as 'def' | 'spd']), currentHigh: at(spMaxPerStat, F3.mySet.nature) }
   }
 
   for (const [name, c] of [
     ['둘 다 확정 버팀', F3.bothSurvive],
-    ['둘 다 중난수 이상', F3.bothMidOrHigher],
+    ['둘 다 확정1타', F3.bothOhko],
     ['통과', F3.passing],
+    ['상승 성격으로만 통과', F3.plusOnly],
   ] as const) {
     it(`${name}: ${c.opponent.id} ${c.move}`, () => {
       expect(topAttackMoves(entry(c.opponent.id))).toContain(c.move)
-      expect(extremes(c)).toEqual({ low: c.low, high: c.high })
+      const { low, high } = extremes(c)
+      expect({ low, high }).toEqual({ low: c.low, high: c.high })
     })
   }
+
+  it('상승 성격으로만 통과: 현재 성격 두 극단은 같다', () => {
+    expect(extremes(F3.plusOnly)).toEqual({ low: F3.plusOnly.low, high: F3.plusOnly.high, currentHigh: F3.plusOnly.currentHigh })
+    expect(F3.plusOnly.currentHigh).toBe(F3.plusOnly.low)
+  })
 
   it('둘 다 저난수 1타는 상위 30 × 공격기 상위 5 × 보존 배분 전부에서 사례가 없다', () => {
     expect(F3.bothLowRoll).toBeNull()
@@ -204,8 +238,8 @@ describe('F3 방어 탭 극단 필터', () => {
 
   it('통과한 기술의 H 행·B 행 경계', () => {
     const attacker = opponentSet(bo1, F3.passing.opponent)
-    const h = sweepDamage(game, { side: 'defender', stat: 'hp' }, attacker, F3.mySet, F3.passing.move, undefined, TH, OVER)
-    const b = sweepDamage(game, { side: 'defender', stat: 'def' }, attacker, F3.mySet, F3.passing.move, undefined, TH, OVER)
+    const h = sweepDamage(game, { side: 'defender', stat: 'hp' }, attacker, F3.mySet, F3.passing.move, undefined, undefined, OVER)
+    const b = sweepDamage(game, { side: 'defender', stat: 'def' }, attacker, F3.mySet, F3.passing.move, undefined, undefined, OVER)
     expect(boundariesOf(h)).toEqual(F3.passing.hpBoundaries)
     expect(boundariesOf(b)).toEqual(F3.passing.defBoundaries)
   })
@@ -386,7 +420,7 @@ describe('F11 관여 능력치 S', () => {
   it('스피드 의존 기술만 내 S에 따라 대미지가 바뀐다', () => {
     const opp = opponentSet(bo1, F11.opponent)
     const pct = (s: PokemonSet, move: string, spe: number) => {
-      const r = judgeDamage(game, 'attacker', withSp(s, { spe }), opp, move, undefined, TH, IGNORE_TOTAL).value
+      const r = judgeDamage(game, 'attacker', withSp(s, { spe }), opp, move, undefined, undefined, IGNORE_TOTAL).value
       return r.kind === 'damage' ? r.maxPercent : NaN
     }
     const [lo, hi] = F11.speeds

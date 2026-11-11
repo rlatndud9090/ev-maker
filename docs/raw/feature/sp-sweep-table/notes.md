@@ -199,6 +199,8 @@ graph LR
 
 ### 2. 공유 계약 (확정 시그니처 — T0가 그대로 만든다)
 
+> 2026-11-11 2차 개정(5단 판정·성격 변형)은 §2.7이 우선한다. §2.1~2.6의 툴바 `data-key="highRoll|lowRoll"`·`저난수 기준` spinbutton·배지 `koLabel`·`난수1타:` 문구와 §2.1~2.5의 `thresholds`·`DEFAULT_ROLL_THRESHOLDS`·`koLabel` 단계·4단계 대기열·`TargetView.stats/need` 서술은 §2.7로 대체됐다.
+
 #### 2.1 코어 타입 추가 (`src/core/types.ts`, 기존 선언은 아래 `SweepCell` 확장 외에 바꾸지 않는다)
 
 ```ts
@@ -827,12 +829,89 @@ export function toCardInput(state: AppState, game: Snapshot, view: MetaView): Ca
 
 - 루트 `main[data-app="product"]`. dev 페이지는 기존 DOM 그대로(`/#/dev`).
 - 사이드바 `region "내 포켓몬"`: 슬라이더 `input[type=range]` 접근명 `SP HP`·`SP 공격`·`SP 방어`·`SP 특공`·`SP 특방`·`SP 스피드`, 숫자 입력 spinbutton `SP 공격 숫자` 등, 잔여 `[data-testid="sp-remaining"]`. 칩 편집 combobox `종`·`도구`·`특성`·`성격`·`기술 1`~`기술 4`, checkbox `메가진화`, 위반 안내 `role="alert"`(원인 칸 옆), 접기 버튼 `설정 접기`(좁은 화면).
-- 툴바(sticky): `tablist "결과 탭"`의 tab `공격`·`방어`·`스피드`, spinbutton `상위 N`, combobox `포켓몬 선택`, button `목록 밖 포켓몬 추가`(누르면 툴바 바로 아래 `region "목록 밖 포켓몬 추가"` 인라인 패널: combobox `추가할 포켓몬`, 기술 칩 체크박스 그룹 `group "기술"`(최대 4개 선택, 검색 combobox `기술 검색`), button `추가`(기술 0개면 `disabled`)·`취소`), checkbox `내 순풍`·`상대 순풍`, 판정 기준 `[data-testid="roll-threshold"][data-key="highRoll|lowRoll"]`(2026-11-11, 공격 탭 spinbutton `고난수 기준`·방어 탭 spinbutton `저난수 기준`, 옆에 "/16"·반영된 백분율 `[data-testid="roll-percent"]` "(87.5%)", 1~15 정수가 아니면 `aria-invalid="true"`와 안내 `[data-testid="roll-hint"]` "1~15 정수만 반영됩니다", 스피드 탭에는 없음), button `표시 기준`(펼치면 spinbutton `묶음 점유율 기준(%)`·`분류당 카드 상한`·`랭크 기준(%)`·`스카프 기준(%)`), select `매치 방식`·`월`, 출처 `[data-testid="meta-source"]`.
+- 툴바(sticky): `tablist "결과 탭"`의 tab `공격`·`방어`·`스피드`, spinbutton `상위 N`, combobox `포켓몬 선택`, button `목록 밖 포켓몬 추가`(누르면 툴바 바로 아래 `region "목록 밖 포켓몬 추가"` 인라인 패널: combobox `추가할 포켓몬`, 기술 칩 체크박스 그룹 `group "기술"`(최대 4개 선택, 검색 combobox `기술 검색`), button `추가`(기술 0개면 `disabled`)·`취소`), checkbox `내 순풍`·`상대 순풍`, 판정 기준 `[data-testid="roll-threshold"][data-tab="attack|defense"]`(2026-11-11 2차, 기준 n 하나: 공격 탭 spinbutton `고난수 1타 기준`·방어 탭 spinbutton `고난수 견딤 기준`(같은 값), 안내 `[data-testid="roll-note"]`(§2.7), 옆에 "/16"·반영된 백분율 `[data-testid="roll-percent"]` "(87.5%)", 1~15 정수가 아니면 `aria-invalid="true"`와 안내 `[data-testid="roll-hint"]` "1~15 정수만 반영됩니다", 스피드 탭에는 없음), button `표시 기준`(펼치면 spinbutton `묶음 점유율 기준(%)`·`분류당 카드 상한`·`랭크 기준(%)`·`스카프 기준(%)`), select `매치 방식`·`월`, 출처 `[data-testid="meta-source"]`.
 - 탭 패널 `[role="tabpanel"][data-testid="tab-panel"][data-tab][data-generation][data-first-card="true|false"][data-complete="true|false"]`. `data-first-card`는 현재 세대 뷰(superseded 아님)에서 `cards.length > 0 || (stage12Done && cards.length === 0)`일 때 true. 진행 `[data-testid="progress"]`, 탭 오류 `[data-testid="tab-error"]`, 탭 안내(내 기술 분류 가변) `[data-testid="tab-notice"]`, 잠정 빈 상태 `[data-testid="empty-provisional"]`, 이전 세대 뷰 표시 중이면 패널에 `data-superseded="true"`와 "갱신 중".
 - 하단 `footer [data-testid="licenses"]`(데이터 출처·라이선스).
 - 변화 없음 요약·카드 안 "변화 없음 k행"은 렌더하지 않는다(`no-change-summary` 없음 — 사용자 피드백 2026-11-10, 모델 `TabView.noChange`·`hiddenNoChangeRows`는 그대로).
-- 카드 `li[data-testid="card"][data-card-id][data-opponent][data-category][data-origin="ladder|custom"][data-state][data-rank]`(물리/특수 라벨은 렌더하지 않고 `data-category`만 남김. `data-rank`는 래더 카드의 사용률 순위 — 화면에는 순위·사용률을 보이지 않으므로 e2e가 여기서 읽는다, 2026-11-10), 결과 배지 `[data-testid="ko-badge"][data-tone="red|orange|yellow|green|gray"]`(공격·방어 탭, 대표 행 현재 칸 `ohkoChance` + 탭 뷰 `thresholds` → 코어 `koLabel` 단계 → `src/ui/format` `koBadge`가 색·문구 포맷. 문구는 `확정1타`·`확정견딤`·`난수1타: <백분율 소수 한 자리>%`(0.1%~99.9% 고정, `rollChanceText`)·`무효` — 2026-11-11, 이전 단계 이름. 계산 불가·갱신 중·스피드 탭은 없음), 펼침 `button[aria-expanded]`, 대표 문구 `[data-testid="card-headline"]`(안에 기술 라벨 `[data-testid="move-label"][data-type=<타입 slug>]` — `img[data-type-icon]` → `[data-testid="move-rank"]`(사용자 공격 랭크 부호, 있을 때만) → `.move-name` → `[data-testid="move-boosts"]`(그 밖의 랭크, 있을 때만), 스카프 행이면 앞에 `[data-testid="headline-basis"]` 도구 태그), 배분 라벨 `[data-testid="card-bundle"]`(`.bundle-stats` + `.bundle-share` 작은 회색), 상세 행 목표 `[data-testid="row-target"]`(목표 문구는 여기에만 — 간단행 `headline-target`은 2026-11-11 제거), `[data-testid="card-more"]`(k가 0이면 없음), 카드 머리 안내 `[data-testid="card-notice"]`(상대 분류 가변 기술). 커스텀 카드 상세 안 타겟 기술 편집은 `group "타겟 기술"`(마지막 1개의 해제 컨트롤은 `disabled`).
+- 카드 `li[data-testid="card"][data-card-id][data-opponent][data-category][data-origin="ladder|custom"][data-state][data-rank]`(물리/특수 라벨은 렌더하지 않고 `data-category`만 남김. `data-rank`는 래더 카드의 사용률 순위 — 화면에는 순위·사용률을 보이지 않으므로 e2e가 여기서 읽는다, 2026-11-10), 결과 배지 `[data-testid="ko-badge"][data-tone="red|orange|yellow|lime|green|gray"]`(2차 개정: 문구·단계는 §2.7)(공격·방어 탭, 대표 행 현재 칸 범주(코어 `rollTier` 5단, 탭 뷰 `rollSteps`) → `src/ui/format` `koBadge`가 색·문구 포맷. 문구는 `확정1타`·`확정견딤`·`<단계명> <백분율 소수 한 자리>%`(고난수1타·중난수1타·저난수1타, 0.1%~99.9% 고정, `rollChanceText`)·`무효` — 2026-11-11 2차, 이전 1차 `난수1타: xx.x%`. 계산 불가·갱신 중·스피드 탭은 없음), 펼침 `button[aria-expanded]`, 대표 문구 `[data-testid="card-headline"]`(안에 기술 라벨 `[data-testid="move-label"][data-type=<타입 slug>]` — `img[data-type-icon]` → `[data-testid="move-rank"]`(사용자 공격 랭크 부호, 있을 때만) → `.move-name` → `[data-testid="move-boosts"]`(그 밖의 랭크, 있을 때만), 스카프 행이면 앞에 `[data-testid="headline-basis"]` 도구 태그), 배분 라벨 `[data-testid="card-bundle"]`(`.bundle-stats` + `.bundle-share` 작은 회색), 상세 행 목표 `[data-testid="row-target"]`(목표 문구는 여기에만 — 간단행 `headline-target`은 2026-11-11 제거), `[data-testid="card-more"]`(k가 0이면 없음), 카드 머리 안내 `[data-testid="card-notice"]`(상대 분류 가변 기술). 커스텀 카드 상세 안 타겟 기술 편집은 `group "타겟 기술"`(마지막 1개의 해제 컨트롤은 `disabled`).
 - 행 `[data-testid="row"][data-row-kind][data-status]`, 띠 칸 `[data-testid="band-cell"][data-sp][data-category][data-over-budget="true|false"]`, 현재 칸 `aria-current="true"`, 띠 컨테이너 class `band-scroll`(자체 가로 스크롤).
+
+#### 2.7 2026-11-11 2차 개정 — 5단 판정·성격 변형 (사용자 피드백 2026-11-11)
+
+코어(`src/core/bands.ts`·`sweep.ts`, export 추가, 기존 3단 구간·`koLabel`·`JUDGEMENT_ORDER`는 그대로):
+
+```ts
+export const ROLL_DENOMINATOR = 16
+export type RollTier = 'guaranteed-ohko' | 'high-roll-ohko' | 'mid-roll-ohko' | 'low-roll-ohko' | 'guaranteed-survive'
+/** 1~15 정수만, 아니면 CoreInputError('rollSteps') */
+normalizeRollSteps(steps: unknown): number
+/** 1 / p ≥ n/16 / 그 사이 / 0 < p ≤ (16−n)/16 / 0. n ≤ 8로 겹치면 고난수 우선 */
+rollTier(ohkoChance: number, steps: number): RollTier
+/** 나쁨 → 좋음. attack: 확정견딤 → 저난수 → 중난수 → 고난수 → 확정1타, defense: 그 역순, speed: second → tie → first */
+TIER_ORDER: { attack; defense; speed }
+tierRank(side: JudgementSide, label: string): number   // 순서 밖이면 CoreInputError
+nextBetterTier(side: JudgementSide, label: string): string | null
+export interface DamageCategoryOptions { rollSteps?: number }
+judgeDamage(…, thresholds?, options?: EvalOptions & DamageCategoryOptions)   // rollSteps면 category = rollTier, 없으면 3단 구간 그대로
+sweepDamage(…, thresholds?, options?: SweepOptions & DamageCategoryOptions)
+```
+
+카드 모델(`src/cards/types.ts` 변경분):
+
+```ts
+export const ROLL_STEPS = ROLL_DENOMINATOR          // 16(분모, 화면 /16 표기)
+export const DEFAULT_ROLL_STEPS = 14                 // DEFAULT_ROLL_THRESHOLDS 삭제
+CardInput.rollSteps: number                          // CardInput.thresholds 삭제
+TabPlan.rollSteps: number                            // TabPlan.thresholds 삭제, planHead가 normalizeRollSteps
+TabView.rollSteps: number                            // TabView.thresholds 삭제
+export interface NatureVariants { stat: Exclude<StatId, 'hp'>; neutral: string; plus: string }   // 실제 성격 id
+export type NatureVariant = 'neutral' | 'plus'
+export const NATURE_VARIANTS: readonly NatureVariant[] = ['neutral', 'plus']
+RowSpec.natures?: NatureVariants                     // 스윕 행만(error 행 없음). 방어 탭은 그 필터와 같은 값
+ExtremeSpec.natures: NatureVariants                  // 낮은 극단 = H0·B/D0·neutral, 높은 극단 = H최대·B/D최대·plus
+RowTask += { kind: 'variant'; rowId; nature: NatureVariant }      // 현재 성격과 같은 변형은 만들지 않는다
+RowTask pair → { kind: 'pair'; filterId; nature: NatureVariant }
+RowTaskResult ends += range: { low: CompactCell; high: CompactCell }   // 무보정 0·상승 최대
+RowTaskResult += { kind: 'variant'; rowId; nature; cells }
+RowTaskResult pair += nature
+PairPoint.atLeast·label: RollTier                     // KoLabel → RollTier
+PendingTasks += stage4(variant), stage5(pair × 2)      // 이전 stage4(pair)는 stage5
+CompactCell.category                                  // 대미지 칸은 RollTier(5단), 스피드 칸은 SpeedOrder
+export interface TargetOption { label: string; stats: readonly TargetStat[]; need: number }
+export interface TargetView {
+  label: string                       // 두 선택지 실제 판정 중 낮은 쪽
+  goal: 'better' | 'keep'
+  plusStat: Exclude<StatId, 'hp'>     // 공격·스피드 = 스윕 능력치, 방어 = def|spd
+  neutral: TargetOption | null        // null = 0~최대에서 목표 순위 불가("무보정 불가")
+  plus: TargetOption | null           // 둘 중 하나 이상은 non-null
+}                                      // 이전 stats·need 필드 삭제(TargetOption으로 이동)
+RowView.noChange                       // 커스텀 카드에서 현재·무보정·상승 칸이 모두 같으면 true
+RowView.target                         // 필요한 변형 스윕(방어 탭은 두 pair)이 다 나온 뒤에만
+```
+
+모듈(신규·변경 export):
+
+| 모듈 | 공개 함수 |
+|---|---|
+| `natures.ts`(신규) | `natureVariants(game, current, stat, relevant): NatureVariants`(현재 성격이 조건에 맞으면 재사용, 상승의 하락은 현재 하락이 관여 밖이면 유지·아니면 C → A → B → D → S 순 첫 관여 밖), `variantNature(v, which)`, `withNature(set, nature)` |
+| `schedule.ts` | `taskKey`(variant·pair에 nature), `nextStage`(1→5), `neededVariants(plan, spec)`, `rowJudgements(plan, results, rowId): RowJudgements`(`{ current?, neutral?, plus?, variantsDone, variantError? }`, 현재와 같은 변형은 현재 칸, 변형 오류면 `variantError`), `rowChanges(ends, j)`(변형 범위 끝 2칸 + 나온 무보정·상승 스윕 칸 중 범주가 하나라도 다름 — 현재 성격 칸은 넣지 않음), `mayUnlockPair`(sweep·variant) |
+| `target.ts` | `cellLabel(side, cell)`(thresholds 인자 삭제, 코어 범주가 TIER_ORDER 안이면 그대로), `singleTarget(side, stat, plusStat, currentLabel, { neutral?, plus? })`, `minPairPoints(judge: (hp, d) => RollTier, max)`, `pairTarget({ neutral?, plus? }, currentLabel, defenseStat, current, remaining)` |
+| `rowTask.ts` | `specWithNature(plan, spec, nature)`, `rowVariantNature(spec, which)`, 모든 대미지 코어 호출에 `rollSteps` |
+| `key.ts` | 대미지 키에 `['rollSteps', n]`(스피드 null), 양 끝·극단에 natures 튜플, variant는 성격을 바꾼 세트의 `sweep` 키 공간, pair는 변형 성격 세트 |
+
+조립·스케줄 규칙:
+- 1단계 양 끝 = [현재 0, 현재 최대, 무보정 0, 상승 최대](변형이 현재와 같으면 다시 판정하지 않음). 4칸이 다르면 2단계(현재 스윕), 같으면 3단계. 4단계 = 양 끝이 나온 행의 필요한 변형 스윕, 5단계 = 필터 통과·두 행 현재·변형 스윕 완료·한 행이라도 변화 있는 쌍 × 2.
+- 래더 행 노출: `rowChanges(ends, rowJudgements)`가 참이면 표시(현재 칸에 경계가 없어도). 거짓이고 변형이 남았으면 잠정 제외(요약에도 안 넣음), 거짓이고 변형까지 끝났으면 변화 없음 요약 'row'. 커스텀 카드는 같은 판단으로 `noChange`.
+- 대표 행: 경계 있는 행이 먼저(min |delta|), 현재 칸 경계가 없는 변화 행(성격으로만 바뀜)은 그 뒤(점수 ∞, 동률 규칙 그대로).
+- 진행 수: extreme + pair×2(필터), ends + sweep + 필요한 variant(행), fixed.
+
+앱(`src/app`):
+- `AppState.rollSteps: number`(기본 `DEFAULT_ROLL_STEPS`, `thresholds` 삭제). 액션 `{ type: 'set-roll-steps'; steps }`(1~15 정수만, 아니면 상태 그대로; `set-roll-threshold` 삭제). `toCardInput`이 `rollSteps`를 넘긴다.
+- 실행기 단계 0~4(STAGE_KEYS stage1~stage5), 우선순위 활성 1·2 → 나머지 1·2 → 활성 3·4·5 → 나머지 3·4·5, `complete` = 5단계까지.
+
+화면 연결(컴파일 유지용 최소 수정, 화면 단계가 다듬는다): `ui/format.ts` `koBadge(side, cell, rollSteps)` → `{ label: 단계명, tone: red|orange|yellow|lime|green|gray, chance?: '93.8%' }`, `targetText(TargetLike)` → "확정1타: 최소 A32 / A15+"·"무보정 불가"·"상승 불가"·선택지별 n, `judgementText`가 5단 이름(5단 이름은 `KO_BADGE`에서, `CATEGORY_LABEL`은 3단 dev 라벨만). 툴바 입력 하나(공격 "고난수 1타 기준"·방어 "고난수 견딤 기준", `data-key` 속성 삭제). `CardItem`·`RowDetail`의 `thresholds` prop은 `rollSteps`/삭제.
+
+화면 단계(2026-11-11 2차 마무리): `categoryLabel`은 5단 판정 id면 배지 단계명(확정1타·고난수1타·중난수1타·저난수1타·확정견딤), 다음 행동 순서, 마지막으로 3단 구간 라벨(dev 경로용 `CATEGORY_LABEL`, `mid-roll-ohko` 항목은 삭제). `categoryTone(category)` → `KoBadgeTone`(5단은 배지와 같은 색, 선공 green·동속 yellow·후공 red, 그 밖 gray) — 탭과 무관하게 판정 → 색이 하나다. `categorySymbol(side, category)` → 코어 `TIER_ORDER[side]` 순위의 기호(5단 ×▽△○◎, 스피드 ×△◎, 그 관점에 없으면 '·'). `Tone`·`TONE_SYMBOL`·`rollStepsOf`는 삭제. 띠 칸 class `cell ko-<tone>`(이전 `tone-good|mid|bad`), 범례·현재 판정·고정 판정 앞 칩 `.tier-chip.ko-<tone>`. CSS 토큰 `--badge-lime`(라이트 #cfeb98·다크 #c2dc8c), `--badge-green` 조정(라이트 #a9dcb0·다크 #9ccfa4) — `--tier-ink` 대비 7.8~11.3:1, 칸 SP 숫자(`--tier-ink-muted`) 4.7:1 이상. `.ko-chance` 0.82em. 툴바 `[data-testid="roll-threshold"][data-tab]` 안 `.roll-unit`(입력의 aria-describedby) = `/16` + `[data-testid="roll-percent"]` + `[data-testid="roll-note"]`(공격 "16번 중 n번 이상 1타 = 고난수1타"·방어 "16번 중 n번 이상 버팀 = 저난수1타", n ≤ 8이면 방어 안내 뒤에 " (n번 이상 1타면 고난수1타 우선)").
 
 ### 3. 태스크 브리핑
 
@@ -1029,7 +1108,8 @@ export function toCardInput(state: AppState, game: Snapshot, view: MetaView): Ca
 | 17 | 반응성 6시나리오 × 10회(Long Task는 계산 구간만 판정, 부트스트랩은 별도 기록·원인 표기) | — | product-perf | T5(T3·T4b) |
 | 18 | 400·1280 겹침·가로 스크롤 없음, 키보드 조작 | — | product-layout·product | T4b·T5 |
 | 19 | 판정 라벨 텍스트 병기 | format | product | T4b·T5 |
-| 20 | (2026-11-11) 간단행 목표 문구 제거·열 정렬 유지, 배지 "난수1타: xx.x%"(0.1%~99.9% 고정), 툴바 판정 기준 n/16(기본 14·2, 1~15 정수만, 백분율 표시) → 배지 단계·목표·극단 필터·띠 범주·경계·캐시 키 | format(`koBadge`·`rollChanceText`·`parseRollSteps`)·state(`set-roll-threshold`)·batch(기준 변경 시 범주·키 달라짐, 되돌리면 같음·캐시 적중, 읽지 않는 기준만 바뀌면 전부 캐시 적중)·acceptance(F1·F2·F9 고정값 14/16 기준 재계산) | product(배지 형식·기준 기본값·저난수 2→1 색 변화·범위 밖 안내·간단행 목표 없음)·product-layout | 2026-11-11 |
+| 20 | (2026-11-11) 간단행 목표 문구 제거·열 정렬 유지, 배지 "난수1타: xx.x%"(0.1%~99.9% 고정), 툴바 판정 기준 n/16(기본 14·2, 1~15 정수만, 백분율 표시) → 배지 단계·목표·극단 필터·띠 범주·경계·캐시 키 — **2차 개정으로 21이 대체** | format(`rollChanceText`·`parseRollSteps`) | product-layout | 2026-11-11 |
+| 21 | (2026-11-11 2차) 5단 판정(확정1타/고난수/중난수/저난수/확정견딤, 고난수 기준 n 하나·저난수 (16−n)/16 대칭·겹치면 고난수 우선), 툴바 기준 하나(공격 "고난수 1타 기준"·방어 "고난수 견딤 기준"), 배지 "<단계명> xx.x%"·색 5종, 성격 변형(무보정·상승) 노출·극단 필터, 상세 "최소 … / …+" 2종·불가·n, 변화 스윕 단계·캐시 키 | core tiers(n=14·8·1·15 경계, 순위 단조, rollSteps 옵션 vs 3단 불변)·natures(변형 선택 속성)·schedule(4·5단계, rowJudgements·rowChanges, mayUnlockPair)·assemble(변형으로만 노출·잠정 제외·요약, 목표 2종, 쌍 2종 대기)·target(2종·불가·keep·n)·rowTask(variant·ends range·extreme 변형·pair 변형)·key(rollSteps·natures·variant=sweep 키 공간)·batch(rollSteps 캐시, 변형 하락 관여 밖 속성)·acceptance(F1 14장 재계산, 메가눈여아 상승으로만 노출, 대도각참 둘 다 같음 숨김, 메가플라엣테 moonblast 상승으로만 필터 통과, lightofruin 둘 다 확정1타)·state(`set-roll-steps`)·format(`koBadge` 5단·`targetText` 2종·`categoryLabel` 5단 이름·`categoryTone` 5색·`categorySymbol` 탭 관점 ◎○△▽×) | product(툴바 기준 하나·공격/방어 같은 값·보조 문구·n=15에서 저난수→중난수, 배지 5단 문구·작은 확률 글씨, 상세 "최소 … / …+"·현재 판정·띠 title/범례 5단 이름·띠 판정 → 색 하나)·product-perf | 2026-11-11 2차 |
 
 ADR 검증의 나머지: 코어 기본값·예산 무시·예산 밖·참조 조회(T1), 캐시 속성·캐시/무캐시 동일·점진 = 일괄·취소 세대 비혼입(T2b·T3), 진입·번들·오프라인(T4a·T5), 리듀서·의존성 무변경(T4b, `git diff --stat package.json`), 관여 능력치 S 축소(T2a·T2b 속성 테스트 + F11), 슬라이더 클램프·숫자 입력 초과 오류·superseded 표시·하단 라이선스(T4b·T5).
 
@@ -1049,7 +1129,7 @@ git diff --stat package.json                             # 무변경
 npm run test:e2e                                         # 빌드 선행 + preview: dev·제품·레이아웃·성능·번들·오프라인
 ```
 
-### 6. 결정됨 — 빌드 중 개정 11건 + 1차 구현 뒤 5건 (2026-11-09·11-10·11-11 사용자 확인, 1~15는 PRD/ADR 본문 반영 완료)
+### 6. 결정됨 — 빌드 중 개정 11건 + 1차 구현 뒤 6건 (2026-11-09·11-10·11-11 사용자 확인, 1~16은 PRD/ADR 본문 반영 완료)
 
 1. **관여 능력치의 S 축소(ADR 결정 3 캐시 키).** S는 스피드 의존 기술(`MoveStatRefs.speedDependent`)이거나 공격측 계산 특성이 `SPEED_DEPENDENT_ATTACKER_ABILITIES`일 때만 양쪽에 넣는다. 캐시 키와 드래그 "갱신 대기"가 같은 `relevance.ts relevantStats`를 쓴다. 누락은 속성 테스트(T2b)와 F11로 지킨다.
 2. **Long Task 측정 창(PRD 반응성).** 판정은 계산 구간(`cards:compute-start` mark ~ 탭 완료)에만 적용한다. 부트스트랩(스냅샷·메타 로드·첫 렌더) Long Task는 따로 기록·보고하고 100ms를 넘으면 원인을 표기한다(T3 mark, T5 측정).
@@ -1066,6 +1146,8 @@ npm run test:e2e                                         # 빌드 선행 + previ
 13. **"최소 필요" 목표(2026-11-10 사용자 결정, 카드 모델).** 경계 문구("~까지 줄여도"·"~부터") 대신 `RowView.target`(§2.3 `TargetView`)을 "<판정>: 최소 <능력치><SP> 필요"로 쓴다. 목표 판정 = 현재 배지 판정보다 한 단계 이상 위(코어 `judgementRank` 순위 + 1 이상, 순서는 §2.2 `JUDGEMENT_ORDER`; `nextBetter`는 이 선택에 쓰지 않는다)의 가장 낮은 SP, 최상위이거나 위가 SP 0~최대에서 불가능하면 현재 판정 유지 최소값(현재보다 낮을 수 있다). 한 단계를 건너뛰면 그 칸의 실제 판정을 라벨로 쓴다. 공격·스피드 탭은 그 행 33칸에서, 방어 탭은 극단 필터마다 새 행 작업 `pair`(4단계)로 H·B/D를 함께 조정한 최소 조합(합 최소, 동률 H 큰 쪽, 예산 무시 평가 `judgeDamage` + `koLabel`)을 구해 그 필터의 H행·B/D행 모두에 같은 목표를 싣는다. n = (목표 SP 합 − 현재 그 능력치 SP 합) − 잔여 예산, > 0일 때만. 4단계는 필터 통과·두 행 스윕 완료·한 행이라도 변화 있는 쌍만 내고, 실행기 우선순위는 활성 탭 1·2 → 나머지 탭 1·2 → 활성 탭 3·4 → 나머지 탭 3·4, `TabView.complete`·`progress`에 4단계를 포함한다. 캐시 키는 극단 필터와 같은 정규화(H·B/D SP 제외) + 작업 종류 `pair`. 대표 행 선택 규칙은 그대로이고, 방어 탭 대표 행의 `target.stats`가 쌍(두 개)이다.
 14. **카드 줄 표기(2026-11-10 사용자 피드백, 화면).** (1) 사용률 순위·사용률은 간단행·상세에서 뺀다(정렬은 사용률 순 그대로, 순위는 DOM `data-rank`로만). 목록 밖 포켓몬 추가 목록에 순위·사용률을 붙이는 것은 다음 단위. (2) 배분 라벨 "A32↑ 56.3%" 하나로 묶고 비중은 작은 회색, "보존 80%" 제거(모델 `bundle.retention`은 그대로). (3) 간단행 판정 기호(◎△×) 제거 — 결과 배지가 대신(상세 띠의 기호는 유지). 스피드 탭은 결과 배지가 없어 같은 자리에 행동 순서 배지 `orderBadge`("선공" 초록·"동속" 노랑·"후공" 빨강, `data-testid="order-badge"`)를 둔다(리뷰 반영 2026-11-10: 기호만 지우면 스피드 간단행에 현재 판정이 남지 않아 AC19가 깨짐, 사용자 확인 대상). (4) 대표 행 기술 라벨 `MoveLabel`: [타입 아이콘][랭크][기술명], 내 기술 칸처럼 타입색 테두리·배경(`TypeIcon`·`--type-<slug>` 재사용, `:is(.move-slot, .move-chip)[data-type]`). 랭크는 `text.ts moveRankParts(tab, row)`가 `row.basis.myBoosts`·`opponentBoosts`와 `row.refs.offense`(owner 'self')로 나눈다: 기술 사용자(공격·스피드 탭 나, 방어 탭 상대)의 공격 능력치 랭크는 부호만("+2 아이언헤드"), 그 밖은 작은 회색 "내 B+2"·"상대 S−1"(속임수처럼 대상 능력치로 공격하면 부호만 붙이지 않음). 이전 근거 태그 `basisShortText`("상대 칼춤 A+2")는 지우고, 스카프 행만 도구 태그("구애스카프")를 라벨 앞에 남긴다. (5) 목표 문구 `targetText(row.target)` — 간단행·상세 모두 "~까지 줄여도"·"~부터" 대신. 상세 행은 "현재 H2 저난수1타 · 확정견딤: 최소 H2 B4 필요 (다른 능력치에서 4 필요)" — 현재 판정도 목표와 같은 4단 라벨(`cellLabel` → `judgementText`)로 한 줄 한 어휘. 0~32 띠·범례·칸 title은 3단 구간 라벨 그대로(PRD 구간 계약, 띠 기호·색과 짝). 400px에서는 판정·최소 SP 덩어리와 "(다른 능력치에서 n 필요)" 덩어리가 각각 줄바꿈되지 않는다. 방어 탭은 pair 결과 전(4단계 대기)이면 목표 문구가 비어 있다. 스크린샷: `/Users/nhn/.claude-mine/jobs/5b0bbe4b/tmp/theme/line-1280-attack.png`·`line-1280-defense.png`·`line-400-defense.png`(저장소 밖).
 15. **판정 기준 입력·배지 백분율·간단행 목표 제거(2026-11-11 사용자 결정).** (1) 간단행의 목표 문구를 지운다(상세 행 `row-target`은 유지). 그리드는 [포켓몬 | 배분 | 기술 | 결과 | 외 k행], 좁은 화면 2줄. (2) 결과 배지 문구: p=1 "확정1타", p=0 "확정견딤", 0<p<1 "난수1타: 12.8%"(소수 한 자리 반올림, 0.1%~99.9% 고정), 무효 "무효". 색은 코어 `koLabel` 단계 그대로. 상세 행의 현재 판정·목표 문구는 단계 이름(고난수1타 등)을 유지한다. (3) 툴바에 공격 "고난수 기준 [n]/16", 방어 "저난수 기준 [n]/16"(1~15 정수, 기본 14·2). 값은 `AppState.thresholds` → `CardInput.thresholds` → `TabPlan.thresholds` → 모든 행 작업 코어 호출·`judgementKey`(그 판정이 읽는 기준 하나만: 공격측·고정 `highRoll`, 방어측·극단·쌍 `lowRoll`, 스피드 없음 — 리뷰 반영 2026-11-11)·조립 목표·`TabView.thresholds`(화면 배지·상세 현재 판정). 기본값 위치: 코어 `DEFAULT_THRESHOLDS`(0.75·0.1875)는 바꾸지 않는다 — 코어 골든(`src/core/__golden__/independent.json`의 thresholds 0.75·0.1875)·코어/수용 테스트·dev 화면 경계 안내가 이 값에 묶여 있고, 제품 기준은 화면 설정값이라 카드 모델 상수 `DEFAULT_ROLL_THRESHOLDS`(14/16·2/16)를 앱 상태 초기값으로 명시 전달하는 쪽이 층 경계(판정 규칙은 코어, 제품 기본값은 카드/앱)에 맞다. 그 결과 카드 모델 테스트 기본 입력(`cardInput`)도 제품 기준을 쓰므로 실데이터 고정값을 새 기준으로 다시 계산했다: F9 공격 스톤샤워 경계 A11→A14, F1 첫 카드 A20→A27(n full 8→15·spare 4→11), 한카리아스 6/30 A28→A32(n 16→20·12→16), 메가라이츄Y A17→A21(n 5→9·1→5), 메가한카리아스Z 2/0/0 A6→A12(n 그대로), 1/0/1 A7→A13·현재 고난수→중저난수(n 0→1), 0/0/4 A12→A18·현재 고난수→중저난수(n 0→6·0→2), 짜랑고우거 A28→A32(n 16→20·12→16), F2 사이코쇼크 경계 C15→C19, 행 작업 테스트 기습 경계 [13, 19]→[16, 19], F1 목표 A20→A27. F3(방어 극단)·F4(스피드)와 카드 순서·구성은 그대로였다. e2e 방어 한카리아스 드래곤클로 배지는 "저난수1타"→"난수1타: 12.5%"(1타 확률 2/16, 저난수 기준 2/16 이하라 노랑 그대로).
+
+16. **5단 판정·성격 변형(사용자 피드백 2026-11-11 2차, 15의 (2)·(3)과 13의 목표 표기를 대체).** (1) 판정을 확정1타(p=1) / 고난수1타(p ≥ n/16) / 중난수1타 / 저난수1타(0<p ≤ (16−n)/16) / 확정견딤(p=0) 5단으로 통일하고, 기준은 "고난수 기준" n 하나(1~15 정수, 기본 14)다. n ≤ 8로 두 경계가 겹치면 고난수 우선. 공격·방어 탭이 같은 척도·배지 문구·색을 쓴다. 코어에 `rollTier`·`TIER_ORDER`·`tierRank`·`nextBetterTier`·`normalizeRollSteps`·`ROLL_DENOMINATOR`를 더하고, `judgeDamage`·`sweepDamage`는 옵션 `rollSteps`일 때만 5단 범주를 낸다 — dev 화면·코어 골든·코어 기존 테스트의 3단 구간은 그대로. 제품 경로(카드 모델·앱)는 전부 `rollSteps`. 툴바는 공격 "고난수 1타 기준"·방어 "고난수 견딤 기준"(같은 값). (2) 노출 조건에 성격 포함: 행의 스윕 능력치(방어 탭은 B/D)에 대해 {무보정, 상승} × SP 0~32에서 5단 판정이 한 번이라도 다르면 노출, 전부 같으면 변화 없음. 현재 성격 칸은 비교에 넣지 않는다(하락 보정은 고려하지 않음 — 확정 결정 그대로, 방어 극단 필터와 같은 규칙. 리뷰 반영 2026-11-11: 처음 구현은 현재 칸도 넣었으나 결정과 어긋나 뺐다). 변형·쌍 결과가 오류면 목표를 내지 않는다(오류가 "무보정 불가"·"상승 불가"로 보이지 않게). 하락 보정 변형은 만들지 않는다. 방어 극단 필터: 낮은 극단 H0·B/D0·무보정, 높은 극단 H32·B/D32·B/D 상승. 상승 성격의 하락은 그 판정의 내 관여 능력치 밖(`relevance.ts`), 현재 하락이 관여 밖이면 유지·아니면 C → A → B → D → S 순(실데이터: 노력 → 고집·조심·장난꾸러기·신중·명랑). 현재 칸·배지·대표 행은 현재 성격·SP 기준이고, 현재 칸에 경계가 없는 변화 행(성격으로만 바뀜)도 대표 행 후보다(경계 있는 행 뒤). (3) 상세 목표 2종: 목표 순위 = 현재 + 1(두 변형 모두 불가·최상위면 현재 유지), 변형마다 최소 SP(방어 탭은 변형별 pair)를 `TargetView.neutral`·`plus`로, 닿지 않으면 null("무보정 불가"·"상승 불가"), n은 선택지마다. 표기 "최소 A32 / A15+", 방어 "최소 H4 B12 / H2 B8+", 스피드 "최소 S20 / S12+". (4) 스케줄: 1단계 양 끝에 변형 범위 끝(무보정 0·상승 최대)을 함께 판정해 다르면 2단계로 올리고, 변형 스윕은 4단계(현재 성격 스윕 뒤), 쌍 × 2는 5단계. 캐시 키에 rollSteps·변형 성격. 실측(Node, 예시 세트, 캐시 없음): 공격 탭 약 590ms(양 끝·스윕·변형 각 340건), 방어 탭 약 480ms(pair 96건 최대 4.7ms), 스피드 20ms — 반응성 기준 확인은 e2e product-perf(화면 단계). 실데이터 기대값 재계산: F1 표시 카드 7장 → 14장(5단 판정으로 확정견딤 → 저난수1타 경계가 생긴 상대 추가: sneasler 2장, 한카리아스 용감 32/32, 메가눈여아, 메가보만다 2장, 짜랑고우거 27/0/0), 한카리아스 2/32 행 경계 [27, 30] → [1, 4, 27, 30](n full [0, 0, 15, 18]·spare [0, 0, 11, 14]), 한카리아스 6/30 [32] → [5, 9, 32], 메가라이츄Y [21, 25] → [2, 21, 25], 짜랑고우거 2/0/0 [32] → [7, 11, 32], 범주 이름 mid-or-lower → mid-roll-ohko 등(F9·F2 경계 SP는 그대로). F1 목표: 한카리아스 2/32 고난수1타 A27 / A11+. F3: "둘 다 중난수 이상"(메가플라엣테 moonblast)은 상승 성격으로만 통과하는 사례(plusOnly)가 됐고, 대신 "둘 다 확정1타"(메가플라엣테 lightofruin)를 고정. 사례 고정: 성격 상승으로만 노출 = F1 메가눈여아(무보정 불가 / A23+), 둘 다 같아 숨김 = F1 대도각참 용감 32/32. AC13 월 변경 테스트: 빠진 종 자리에 들어온 상위 30위 종도 이제 카드가 생겨 맨 뒤 허용으로 고침. 상세 표: §2.7.
 
 ## 수용 기준 고정 입력 (T6a, 2026-11-09)
 

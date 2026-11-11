@@ -4,7 +4,7 @@ import {
   CoreInputError,
   checkSpeedSupport,
   moveStatRefs,
-  normalizeThresholds,
+  normalizeRollSteps,
   validateSet,
   type BattleConditions,
   type BoostTable,
@@ -22,7 +22,8 @@ import { cardId as makeCardId, presetKey, rowId } from './ids'
 import { presetAssumption } from './presets'
 import { ladderMeans, rankVariants, setMeansCandidates, type CardRefStats, type MeansCandidate } from './rank'
 import type { BoostStat } from './rankMeans'
-import { myDependsOn } from './relevance'
+import { natureVariants } from './natures'
+import { myDependsOn, relevantStats } from './relevance'
 import {
   CATEGORY_ORDER,
   type BundleSpec,
@@ -34,6 +35,7 @@ import {
   type ExtremeSpec,
   type FixedSpec,
   type MoveNotice,
+  type NatureVariants,
   type OpponentHeader,
   type PresetIndex,
   type RankBasis,
@@ -259,6 +261,12 @@ class PlanBuilder {
     ids.push(f.id)
   }
 
+  /** 내 쪽 세트(nature 공통)의 stat 성격 변형. 하락은 이 판정의 내 관여 능력치 밖에 둔다. */
+  natures(stat: NatureVariants['stat'], judge: 'damage' | 'speed', refs: MoveStatRefs | undefined, attackerAbility: string): NatureVariants {
+    const rel = relevantStats(judge, refs, attackerAbility)
+    return natureVariants(this.game, this.mySet.nature, stat, this.tab === 'defense' ? rel.defender : rel.attacker)
+  }
+
   variants(opp: Opponent, resolved: ResolvedSet, refs: CardRefStats) {
     return rankVariants(this.game, [...this.opponentMeans(opp, resolved), ...this.myMeans], this.me, resolved, refs)
   }
@@ -290,7 +298,10 @@ class PlanBuilder {
         dependsOn: extra.error ? [] : myDependsOn({ judge: 'damage', refs, sweep }, 'attacker', [], this.me.ability),
         ...extra,
       }
-      if (!extra.error) spec.sweep = sweep
+      if (!extra.error) {
+        spec.sweep = sweep
+        spec.natures = this.natures(sweep.stat as NatureVariants['stat'], 'damage', refs, this.me.ability)
+      }
       this.addRow(card, parts, spec)
     }
     for (const slot of base) row(slot, this.mySet, oppSet, {}, ['base', slot.moveId])
@@ -335,12 +346,14 @@ class PlanBuilder {
         this.addRow(card, parts, spec)
         return
       }
+      const natures = this.natures(def, 'damage', refs, ability)
       const f = this.addFilter(card, ['extreme', ...parts], {
         moveId: slot.moveId,
         attacker,
         defender,
         conditions: this.conditions,
         stats: ['hp', def],
+        natures,
         dependsOn: myDependsOn({ judge: 'damage', refs, sweep: undefined }, 'defender', ['hp', def], ability),
         ...(basis ? { basis } : {}),
       })
@@ -357,6 +370,7 @@ class PlanBuilder {
           refs,
           dependsOn: myDependsOn({ judge: 'damage', refs, sweep }, 'defender', [], ability),
           gate: f.id,
+          natures,
         }
         if (basis) spec.basis = basis
         this.addRow(card, [...parts, stat], spec)
@@ -405,6 +419,7 @@ class PlanBuilder {
         defender,
         conditions: this.conditions,
         dependsOn: myDependsOn({ judge: 'speed', refs: undefined, sweep }, 'attacker'),
+        natures: this.natures('spe', 'speed', undefined, this.me.ability),
       }
       if (basis) spec.basis = basis
       this.addRow(card, parts, spec)
@@ -447,7 +462,7 @@ function planHead(input: CardInput, tab: Tab, mySp: SpTable) {
     source: { match: manifest.match, month: manifest.month, cutoff: manifest.source.cutoff, format: manifest.source.format },
     mySp,
     mySide: tab === 'defense' ? ('defender' as const) : ('attacker' as const),
-    thresholds: normalizeThresholds(input.thresholds),
+    rollSteps: normalizeRollSteps(input.rollSteps),
     spTotal: rules.spTotal,
     spMaxPerStat: rules.spMaxPerStat,
   }

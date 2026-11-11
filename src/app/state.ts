@@ -1,10 +1,9 @@
 // 제품 화면 상태와 리듀서(React 없음). 계산 입력이 바뀔 때만 세대를 올린다.
 import type { StatId } from '../data/schema'
 import type { MatchType } from '../data/meta-schema'
-import type { BandThresholds } from '../core'
 import {
   DEFAULT_CRITERIA,
-  DEFAULT_ROLL_THRESHOLDS,
+  DEFAULT_ROLL_STEPS,
   ROLL_STEPS,
   DEFAULT_TOP_N,
   MAX_CUSTOM_MOVES,
@@ -25,8 +24,8 @@ export interface AppState {
   /** 확정된 내 세트 초안(status 'none'·boosts 0 고정) */
   draft: SetDraft
   conditions: CardConditions
-  /** 고난수·저난수 기준. 값은 언제나 n/ROLL_STEPS(n은 1~ROLL_STEPS−1 정수) */
-  thresholds: BandThresholds
+  /** 고난수 기준 n(1~ROLL_STEPS−1 정수). 공격 "고난수 1타"·방어 "고난수 견딤"이 같은 값을 공유한다 */
+  rollSteps: number
   tab: Tab
   criteria: DisplayCriteria
   filters: CardFilters
@@ -42,8 +41,8 @@ export type AppAction =
   | { type: 'set-tab'; tab: Tab }
   | { type: 'set-tailwind'; side: 'me' | 'opponent'; on: boolean }
   | { type: 'set-criteria'; criteria: Partial<DisplayCriteria> }
-  /** steps가 1~ROLL_STEPS−1 정수가 아니면 무시. 기준 = steps/ROLL_STEPS */
-  | { type: 'set-roll-threshold'; key: keyof BandThresholds; steps: number }
+  /** steps가 1~ROLL_STEPS−1 정수가 아니면 무시 */
+  | { type: 'set-roll-steps'; steps: number }
   | { type: 'set-top-n'; topN: number }
   | { type: 'set-selected'; ids: readonly string[] }
   /** moves가 1~MAX_CUSTOM_MOVES개가 아니거나 rosterId가 이미 있으면 무시 */
@@ -59,7 +58,7 @@ export function initialState(regulation: string): AppState {
     meta: null,
     draft: EXAMPLE_DRAFT,
     conditions: { myTailwind: false, opponentTailwind: false },
-    thresholds: { ...DEFAULT_ROLL_THRESHOLDS },
+    rollSteps: DEFAULT_ROLL_STEPS,
     tab: 'attack',
     criteria: { ...DEFAULT_CRITERIA },
     filters: { topN: DEFAULT_TOP_N, selected: [] },
@@ -120,9 +119,9 @@ export function reducer(state: AppState, action: AppAction): AppState {
     case 'set-criteria':
       if (!validCriteria(action.criteria)) return state
       return bump(state, { criteria: { ...state.criteria, ...action.criteria } })
-    case 'set-roll-threshold':
-      if (!isRollSteps(action.steps) || (action.key !== 'highRoll' && action.key !== 'lowRoll')) return state
-      return bump(state, { thresholds: { ...state.thresholds, [action.key]: action.steps / ROLL_STEPS } })
+    case 'set-roll-steps':
+      if (!isRollSteps(action.steps)) return state
+      return bump(state, { rollSteps: action.steps })
     case 'set-top-n':
       if (!isPositiveInt(action.topN)) return state
       return bump(state, { filters: { ...state.filters, topN: action.topN } })

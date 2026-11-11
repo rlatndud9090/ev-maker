@@ -1,5 +1,6 @@
 // 카드 모델 공유 계약. React·브라우저 API를 import하지 않는다.
-import type { BandThresholds, BattleConditions, BoostTable, CoreErrorCode, KoLabel, MoveStatRefs, PokemonSet, SpTable } from '../core'
+import { ROLL_DENOMINATOR } from '../core'
+import type { BattleConditions, BoostTable, CoreErrorCode, MoveStatRefs, PokemonSet, RollTier, SpTable } from '../core'
 import type { MatchType } from '../data/meta-schema'
 import type { Snapshot, StatId } from '../data/schema'
 import type { MetaView } from '../meta'
@@ -35,10 +36,10 @@ export interface CardFilters {
 }
 export const DEFAULT_TOP_N = 30
 
-/** 1타 확률 기준의 분모(16단계 난수). 화면 기준 입력은 1~ROLL_STEPS−1의 정수 n으로 n/ROLL_STEPS다 */
-export const ROLL_STEPS = 16
-/** 제품 기본 판정 기준(고난수 14/16 이상, 저난수 2/16 이하). 코어 DEFAULT_THRESHOLDS와 별개로 CardInput에 명시 전달한다 */
-export const DEFAULT_ROLL_THRESHOLDS: Readonly<BandThresholds> = Object.freeze({ highRoll: 14 / ROLL_STEPS, lowRoll: 2 / ROLL_STEPS })
+/** 1타 확률 기준의 분모(16단계 난수, 코어 ROLL_DENOMINATOR). 화면 기준 입력은 1~ROLL_STEPS−1의 정수 n이다 */
+export const ROLL_STEPS = ROLL_DENOMINATOR
+/** 제품 기본 "고난수 기준" n: 고난수1타 = 14/16 이상, 저난수1타 = 2/16 이하(코어 rollTier) */
+export const DEFAULT_ROLL_STEPS = 14
 
 export interface CardConditions {
   myTailwind: boolean
@@ -71,8 +72,8 @@ export interface CardInput {
   /** 검증 전 그대로. 무효면 탭 상태가 my-set-error */
   mySet: PokemonSet
   conditions: CardConditions
-  /** 배지·목표·극단 필터·0~32 띠 범주·경계가 모두 이 기준으로 판정된다(코어 normalizeThresholds로 검증) */
-  thresholds: BandThresholds
+  /** 고난수 기준 n(1~ROLL_STEPS−1 정수). 모든 대미지 칸 범주가 코어 rollTier(p, n) 5단 판정이다(코어 normalizeRollSteps로 검증) */
+  rollSteps: number
   criteria: DisplayCriteria
   filters: CardFilters
   /** 추가한 순서 */
@@ -152,6 +153,8 @@ export interface RowSpec {
   basis?: RankBasis | ScarfBasis
   /** 방어 탭: 이 극단 필터를 통과해야 행 작업이 생긴다 */
   gate?: string
+  /** 노출·목표에 쓰는 내 성격 변형(스윕 행만, 방어 탭은 그 필터와 같은 값) */
+  natures?: NatureVariants
   /** 계획 단계에서 확정된 계산 불가(하양허브 연속기 등) */
   error?: ErrorReason
 }
@@ -169,9 +172,23 @@ export interface ExtremeSpec {
   conditions: BattleConditions
   /** 함께 0 / 함께 최대로 덮어쓸 내 능력치 */
   stats: readonly ['hp', 'def' | 'spd']
+  /** 낮은 극단 = H0·B/D0·neutral, 높은 극단 = H최대·B/D최대·plus */
+  natures: NatureVariants
   dependsOn: readonly StatId[]
   basis?: RankBasis
 }
+
+/**
+ * 내 성격 변형 2종(실제 성격 id). stat = 상승 대상(공격·스피드 탭 스윕 능력치, 방어 탭 B/D).
+ * neutral: stat 보정 없음, plus: stat 상승·하락은 판정에 관여하지 않는 능력치. 현재 성격이 그 조건이면 현재 성격 id 그대로.
+ */
+export interface NatureVariants {
+  stat: Exclude<StatId, 'hp'>
+  neutral: string
+  plus: string
+}
+export type NatureVariant = 'neutral' | 'plus'
+export const NATURE_VARIANTS: readonly NatureVariant[] = ['neutral', 'plus']
 
 /** 내 SP와 무관한 기술(공격 탭 내 속임수). 고정 판정 1회 */
 export interface FixedSpec {
@@ -241,8 +258,8 @@ export interface TabPlan {
   mySp: SpTable
   /** 이 탭에서 내 세트가 서는 쪽(공격·스피드 탭 attacker, 방어 탭 defender) */
   mySide: 'attacker' | 'defender'
-  /** 정규화한 판정 기준. 모든 행 작업 판정과 캐시 키에 쓴다 */
-  thresholds: BandThresholds
+  /** 검증한 고난수 기준 n. 모든 대미지 행 작업 판정(rollTier)과 캐시 키에 쓴다 */
+  rollSteps: number
   spTotal: number
   spMaxPerStat: number
   /** 정렬 완료 */
@@ -259,20 +276,23 @@ export interface TabPlan {
 // ---------- 행 작업과 결과 ----------
 
 export type RowTask =
+  /** 현재 성격 0·최대 + 변형 범위 끝(neutral 0·plus 최대) */
   | { kind: 'ends'; rowId: string }
   | { kind: 'sweep'; rowId: string; stage: 2 | 3 }
   | { kind: 'extreme'; filterId: string }
   | { kind: 'fixed'; fixedId: string }
-  /** 방어 탭: 극단 필터(= 같은 기술·랭크 조건의 H행·B/D행 쌍)의 H·B/D 최소 조합 */
-  | { kind: 'pair'; filterId: string }
+  /** 성격 변형 스윕(그 변형이 현재 성격과 같으면 만들지 않는다) */
+  | { kind: 'variant'; rowId: string; nature: NatureVariant }
+  /** 방어 탭: 극단 필터(= 같은 기술·랭크 조건의 H행·B/D행 쌍)의 성격 변형별 H·B/D 최소 조합 */
+  | { kind: 'pair'; filterId: string; nature: NatureVariant }
 
 /**
  * 방어 2축 최소 조합 한 점. atLeast 이상 판정을 내는 (H, B/D) 중 SP 합이 최소, 동률이면 H가 큰 것.
  * label은 그 점의 실제 판정(atLeast보다 좋을 수 있다). 예산 무시 평가.
  */
 export interface PairPoint {
-  atLeast: KoLabel
-  label: KoLabel
+  atLeast: RollTier
+  label: RollTier
   hp: number
   /** 극단 필터 stats[1](def 또는 spd)의 SP */
   defense: number
@@ -293,15 +313,17 @@ export interface CompactCell {
 }
 
 export type RowTaskResult =
-  | { kind: 'ends'; rowId: string; low: CompactCell; high: CompactCell }
+  /** low·high = 현재 성격 0·최대, range = neutral 0·plus 최대(변형까지 합친 판정 범위의 양 끝) */
+  | { kind: 'ends'; rowId: string; low: CompactCell; high: CompactCell; range: { low: CompactCell; high: CompactCell } }
   | { kind: 'sweep'; rowId: string; cells: readonly CompactCell[] }
+  | { kind: 'variant'; rowId: string; nature: NatureVariant; cells: readonly CompactCell[] }
   | { kind: 'extreme'; filterId: string; low: CompactCell; high: CompactCell }
   | { kind: 'fixed'; fixedId: string; cell: CompactCell }
-  /** points: 방어 판정 순위(나쁨 → 좋음) 중 SP 0~최대 안에서 가능한 것만, 순위 순 */
-  | { kind: 'pair'; filterId: string; points: readonly PairPoint[] }
+  /** points: 5단 방어 순위(나쁨 → 좋음) 중 SP 0~최대 안에서 가능한 것만, 순위 순 */
+  | { kind: 'pair'; filterId: string; nature: NatureVariant; points: readonly PairPoint[] }
   | { kind: 'error'; task: RowTask; reason: ErrorReason }
 
-/** 키 = taskKey(task). sweep은 stage와 무관하게 같은 키 */
+/** 키 = taskKey(task). sweep은 stage와 무관하게 같은 키, variant·pair는 성격 변형마다 다른 키 */
 export type ResultMap = ReadonlyMap<string, RowTaskResult>
 
 export interface PendingTasks {
@@ -311,11 +333,13 @@ export interface PendingTasks {
   stage2: readonly RowTask[]
   /** 양 끝 판정이 같은 행의 확인 스윕 */
   stage3: readonly RowTask[]
-  /** 방어 쌍 최소 조합(필터 통과·두 행 스윕 완료·둘 중 하나라도 변화 있는 쌍) */
+  /** 성격 변형 스윕(양 끝이 나온 행, 현재 성격과 같은 변형 제외) */
   stage4: readonly RowTask[]
+  /** 방어 쌍 최소 조합 × 성격 변형(필터 통과·두 행의 현재·변형 스윕 완료·둘 중 하나라도 변화 있는 쌍) */
+  stage5: readonly RowTask[]
 }
 
-/** 캐시 값. 키에 작업 종류가 들어가 pair 키에는 PairPoint[], 그 밖에는 CompactCell[]만 담긴다 */
+/** 캐시 값. 키에 작업 종류가 들어가 pair 키에는 PairPoint[], 그 밖에는 CompactCell[]만 담긴다(variant는 sweep과 같은 키 공간) */
 export type CachedJudgement = readonly CompactCell[] | readonly PairPoint[]
 
 export interface JudgementCache {
@@ -352,7 +376,7 @@ export interface RowView {
   /** pending = 판정 전, stale = 드래그로 낡음(칸·경계는 계획 시점 값 그대로) */
   status: 'ok' | 'stale' | 'error' | 'pending'
   error?: ErrorReason
-  /** 커스텀 카드에서만 true(전 칸 같음, 또는 극단 필터에 걸린 기술) */
+  /** 커스텀 카드에서만 true(현재·무보정·상승 성격 칸이 모두 같음, 또는 극단 필터에 걸린 기술) */
   noChange: boolean
   /** 33칸(스윕이 끝난 ok/stale 행만, 아니면 빈 배열) */
   cells: readonly CellView[]
@@ -360,22 +384,32 @@ export interface RowView {
   current: { sp: number; category?: string }
   boundaries: readonly BoundaryView[]
   nearest: { up?: BoundaryView; down?: BoundaryView }
-  /** "<label>: 최소 <stats> 필요". 변화 있는 ok/stale 행만, 방어 탭은 쌍 결과가 나온 뒤에만 */
+  /** "<label>: 최소 A32 / A15+". 변화 있는 ok/stale 행만, 성격 변형 결과(방어 탭은 쌍 결과)가 나온 뒤에만 */
   target?: TargetView
 }
 export interface TargetStat {
   stat: StatId
   sp: number
 }
-export interface TargetView {
-  /** 그 최소 SP의 실제 판정. 공격·방어 탭 KoLabel, 스피드 탭 SpeedOrder */
+export interface TargetOption {
+  /** 그 최소 SP의 실제 판정(목표 순위보다 좋을 수 있다). 공격·방어 탭 RollTier, 스피드 탭 SpeedOrder */
   label: string
-  /** better: 현재보다 한 단계 이상 위. keep: 이미 최상위이거나 위가 SP 0~최대에서 불가능해 현재 판정 유지 최소값 */
-  goal: 'better' | 'keep'
   /** 공격·스피드 탭은 스윕 능력치 하나, 방어 탭은 [hp, def|spd] */
   stats: readonly TargetStat[]
   /** 다른 능력치에서 빼야 할 SP n = (stats SP 합 − 현재 그 능력치 SP 합) − 잔여 예산. 0이면 붙이지 않음 */
   need: number
+}
+export interface TargetView {
+  /** 두 선택지의 실제 판정 중 낮은 쪽(둘 다 이 판정 이상을 보장) */
+  label: string
+  /** better: 현재보다 한 단계 이상 위. keep: 이미 최상위이거나 두 변형 모두 위가 SP 0~최대에서 불가능해 현재 판정 유지 최소값 */
+  goal: 'better' | 'keep'
+  /** 상승(+) 대상 능력치(공격·스피드 탭 스윕 능력치, 방어 탭 def|spd) */
+  plusStat: Exclude<StatId, 'hp'>
+  /** 무보정 성격 최소. SP 0~최대에서 목표 순위에 닿지 않으면 null("불가") */
+  neutral: TargetOption | null
+  /** 상승 성격 최소. 닿지 않으면 null. 둘 중 하나 이상은 null이 아니다 */
+  plus: TargetOption | null
 }
 export type Headline =
   | { kind: 'row'; rowId: string }
@@ -423,8 +457,8 @@ export interface NoChangeSummary {
 export interface TabView {
   tab: Tab
   status: TabStatus
-  /** 이 뷰를 계산한 판정 기준(결과 배지·현재 판정 라벨이 같은 기준을 쓴다) */
-  thresholds: BandThresholds
+  /** 이 뷰를 계산한 고난수 기준 n(칸 범주·배지·목표가 같은 기준이다) */
+  rollSteps: number
   source: MetaSourceView
   /** 정렬 완료, 표시 대상만 */
   cards: readonly CardView[]

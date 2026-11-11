@@ -1,6 +1,6 @@
 // 테스트 전용: PRD 수용 기준 고정 입력(m-c, Bo1 2026-10 기본 메타). 앱 코드에서 import하지 않는다.
 // 각 상수의 주장은 acceptance.test.ts가 코어 직접 호출로 확인한다(데이터가 바뀌면 거기서 먼저 깨진다).
-import type { AttackBand, DefenseBand, PokemonSet, SpTable, SpeedOrder } from '../../core'
+import type { PokemonSet, RollTier, SpTable, SpeedOrder } from '../../core'
 import type { MetaEntry } from '../../data/meta-schema'
 import type { StatId } from '../../data/schema'
 import { observedSpreadAssumption } from '../../meta'
@@ -56,9 +56,9 @@ export const F9 = {
     opponent: { id: 'charizardmegay', spread: 'quiet:32/0/2/32/0/0' },
     move: 'rockslide',
     boundaries: [
-      { sp: 14, from: 'mid-or-lower', to: 'high-roll-ohko' },
+      { sp: 14, from: 'mid-roll-ohko', to: 'high-roll-ohko' },
       { sp: 17, from: 'high-roll-ohko', to: 'guaranteed-ohko' },
-    ] as Boundary<AttackBand>[],
+    ] as Boundary<RollTier>[],
   },
   // 방어 탭은 F3.passing, 스피드 탭은 F4.myTailwind의 상대(기본 행 0~32 판정 변화)를 쓴다.
   speed: {
@@ -76,15 +76,16 @@ export interface F1Card {
   opponent: OpponentRef
   /** 묶음 점유율(H·B 묶음, 소수 넷째 자리) */
   bundleShare: number
-  current: AttackBand
-  boundaries: Boundary<AttackBand>[]
+  current: RollTier
+  boundaries: Boundary<RollTier>[]
   /** 경계마다 n(잔여 0 세트 / 잔여 4 세트). n = max(0, 칸 SP − 현재 SP − 잔여 예산) */
   need: { full: number[]; spare: number[] }
 }
 
 /**
- * 한카리아스 드래곤클로 1기, A12. full = H22·A12·S32(합계 66, 잔여 0), spare = H18·A12·S32(합계 62, 잔여 4).
- * 공격 탭(상위 30·기본 표시 기준·제품 판정 기준 고난수 14/16) 표시 카드 순서 그대로. 그 밖의 래더 카드는 모두 변화 없음이다.
+ * 한카리아스 드래곤클로 1기, A12 무보정(노력). full = H22·A12·S32(합계 66, 잔여 0), spare = H18·A12·S32(합계 62, 잔여 4).
+ * 공격 탭(상위 30·기본 표시 기준·고난수 기준 14/16·5단 판정) 표시 카드 순서 그대로. 그 밖의 래더 카드는 모두 변화 없음이다
+ * (현재·무보정·상승(고집) 성격 스윕이 모두 같다).
  */
 export const F1 = {
   move: 'dragonclaw',
@@ -92,41 +93,98 @@ export const F1 = {
   full: set({ species: 'garchomp', ability: 'roughskin', item: 'lifeorb', nature: 'hardy', sp: { hp: 22, atk: 12, spe: 32 }, moves: ['dragonclaw'] }),
   spare: set({ species: 'garchomp', ability: 'roughskin', item: 'lifeorb', nature: 'hardy', sp: { hp: 18, atk: 12, spe: 32 }, moves: ['dragonclaw'] }),
   remaining: { full: 0, spare: 4 },
-  /** 점유율 최대 묶음(한카리아스 사용률 7위의 H·B 최대 묶음)이 첫 카드다 */
+  /** 상승 성격 변형(고집 +A −C). 무보정 변형은 현재 성격(노력) 그대로 */
+  plusNature: 'adamant',
+  /** 목표 대조용: 메가한카리아스 아닌 한카리아스 최대 묶음. 현재 A12 중난수1타 → 고난수1타 무보정 A27 / 상승 A11+ */
+  targetCard: { opponent: { id: 'garchomp', spread: 'adamant:2/32/0/0/0/32' }, current: 'mid-roll-ohko', label: 'high-roll-ohko', neutral: 27, plus: 11 },
+  /** 현재 성격(노력)으로는 0~32 전부 확정견딤인데 상승 성격이면 A23부터 저난수1타 → 노출(무보정 불가 / A23+) */
+  plusOnly: { opponent: { id: 'froslassmega', spread: 'timid:2/0/0/32/0/32' }, fixed: 'guaranteed-survive', label: 'low-roll-ohko', plus: 23 },
+  /** 현재·무보정·상승 모두 0~32 확정견딤 → 변화 없음 요약 */
+  bothSame: { opponent: { id: 'kingambit', spread: 'brave:32/32/0/0/2/0' }, fixed: 'guaranteed-survive' },
+  /** 공격 탭 표시 카드 순서(사용률 순 → 묶음 점유율 순). 5단 판정이라 확정견딤 → 저난수1타 경계가 있는 상대도 카드가 된다 */
   cards: [
+    {
+      opponent: { id: 'sneasler', spread: 'adamant:2/32/0/0/0/32' },
+      bundleShare: 0.2286,
+      current: 'guaranteed-survive',
+      boundaries: [{ sp: 30, from: 'guaranteed-survive', to: 'low-roll-ohko' }],
+      need: { full: [18], spare: [14] },
+    },
+    {
+      opponent: { id: 'sneasler', spread: 'adamant:0/32/2/0/0/32' },
+      bundleShare: 0.1413,
+      current: 'guaranteed-survive',
+      boundaries: [{ sp: 32, from: 'guaranteed-survive', to: 'low-roll-ohko' }],
+      need: { full: [20], spare: [16] },
+    },
     {
       opponent: { id: 'garchomp', spread: 'adamant:2/32/0/0/0/32' },
       bundleShare: 0.415,
-      current: 'mid-or-lower',
+      current: 'mid-roll-ohko',
       boundaries: [
-        { sp: 27, from: 'mid-or-lower', to: 'high-roll-ohko' },
+        { sp: 1, from: 'guaranteed-survive', to: 'low-roll-ohko' },
+        { sp: 4, from: 'low-roll-ohko', to: 'mid-roll-ohko' },
+        { sp: 27, from: 'mid-roll-ohko', to: 'high-roll-ohko' },
         { sp: 30, from: 'high-roll-ohko', to: 'guaranteed-ohko' },
       ],
-      need: { full: [15, 18], spare: [11, 14] },
+      need: { full: [0, 0, 15, 18], spare: [0, 0, 11, 14] },
+    },
+    {
+      opponent: { id: 'garchomp', spread: 'brave:32/32/0/0/2/0' },
+      bundleShare: 0.1774,
+      current: 'guaranteed-survive',
+      boundaries: [{ sp: 27, from: 'guaranteed-survive', to: 'low-roll-ohko' }],
+      need: { full: [15], spare: [11] },
     },
     {
       opponent: { id: 'garchomp', spread: 'adamant:6/30/1/0/0/29' },
       bundleShare: 0.0501,
-      current: 'mid-or-lower',
-      boundaries: [{ sp: 32, from: 'mid-or-lower', to: 'high-roll-ohko' }],
-      need: { full: [20], spare: [16] },
+      current: 'mid-roll-ohko',
+      boundaries: [
+        { sp: 5, from: 'guaranteed-survive', to: 'low-roll-ohko' },
+        { sp: 9, from: 'low-roll-ohko', to: 'mid-roll-ohko' },
+        { sp: 32, from: 'mid-roll-ohko', to: 'high-roll-ohko' },
+      ],
+      need: { full: [0, 0, 20], spare: [0, 0, 16] },
+    },
+    {
+      opponent: { id: 'froslassmega', spread: 'timid:2/0/0/32/0/32' },
+      bundleShare: 0.4268,
+      current: 'guaranteed-survive',
+      boundaries: [],
+      need: { full: [], spare: [] },
     },
     {
       opponent: { id: 'raichumegay', spread: 'timid:2/0/0/32/0/32' },
       bundleShare: 0.0752,
-      current: 'mid-or-lower',
+      current: 'mid-roll-ohko',
       boundaries: [
-        { sp: 21, from: 'mid-or-lower', to: 'high-roll-ohko' },
+        { sp: 2, from: 'low-roll-ohko', to: 'mid-roll-ohko' },
+        { sp: 21, from: 'mid-roll-ohko', to: 'high-roll-ohko' },
         { sp: 25, from: 'high-roll-ohko', to: 'guaranteed-ohko' },
       ],
-      need: { full: [9, 13], spare: [5, 9] },
+      need: { full: [0, 9, 13], spare: [0, 5, 9] },
+    },
+    {
+      opponent: { id: 'salamencemega', spread: 'timid:2/0/0/32/0/32' },
+      bundleShare: 0.3215,
+      current: 'guaranteed-survive',
+      boundaries: [{ sp: 29, from: 'guaranteed-survive', to: 'low-roll-ohko' }],
+      need: { full: [17], spare: [13] },
+    },
+    {
+      opponent: { id: 'salamencemega', spread: 'timid:1/0/0/32/1/32' },
+      bundleShare: 0.1319,
+      current: 'guaranteed-survive',
+      boundaries: [{ sp: 29, from: 'guaranteed-survive', to: 'low-roll-ohko' }],
+      need: { full: [17], spare: [13] },
     },
     {
       opponent: { id: 'garchompmegaz', spread: 'modest:2/0/0/32/0/32' },
       bundleShare: 0.4452,
       current: 'high-roll-ohko',
       boundaries: [
-        { sp: 12, from: 'mid-or-lower', to: 'high-roll-ohko' },
+        { sp: 12, from: 'mid-roll-ohko', to: 'high-roll-ohko' },
         { sp: 15, from: 'high-roll-ohko', to: 'guaranteed-ohko' },
       ],
       need: { full: [0, 3], spare: [0, 0] },
@@ -134,9 +192,9 @@ export const F1 = {
     {
       opponent: { id: 'garchompmegaz', spread: 'modest:1/0/1/32/0/32' },
       bundleShare: 0.0629,
-      current: 'mid-or-lower',
+      current: 'mid-roll-ohko',
       boundaries: [
-        { sp: 13, from: 'mid-or-lower', to: 'high-roll-ohko' },
+        { sp: 13, from: 'mid-roll-ohko', to: 'high-roll-ohko' },
         { sp: 16, from: 'high-roll-ohko', to: 'guaranteed-ohko' },
       ],
       need: { full: [1, 4], spare: [0, 0] },
@@ -144,19 +202,30 @@ export const F1 = {
     {
       opponent: { id: 'garchompmegaz', spread: 'modest:0/0/4/30/0/32' },
       bundleShare: 0.0606,
-      current: 'mid-or-lower',
+      current: 'mid-roll-ohko',
       boundaries: [
-        { sp: 18, from: 'mid-or-lower', to: 'high-roll-ohko' },
+        { sp: 18, from: 'mid-roll-ohko', to: 'high-roll-ohko' },
         { sp: 21, from: 'high-roll-ohko', to: 'guaranteed-ohko' },
       ],
       need: { full: [6, 9], spare: [2, 5] },
     },
     {
+      opponent: { id: 'kommoo', spread: 'modest:27/0/0/32/0/7' },
+      bundleShare: 0.3997,
+      current: 'guaranteed-survive',
+      boundaries: [{ sp: 32, from: 'guaranteed-survive', to: 'low-roll-ohko' }],
+      need: { full: [20], spare: [16] },
+    },
+    {
       opponent: { id: 'kommoo', spread: 'modest:2/0/0/32/0/32' },
       bundleShare: 0.157,
-      current: 'mid-or-lower',
-      boundaries: [{ sp: 32, from: 'mid-or-lower', to: 'high-roll-ohko' }],
-      need: { full: [20], spare: [16] },
+      current: 'mid-roll-ohko',
+      boundaries: [
+        { sp: 7, from: 'guaranteed-survive', to: 'low-roll-ohko' },
+        { sp: 11, from: 'low-roll-ohko', to: 'mid-roll-ohko' },
+        { sp: 32, from: 'mid-roll-ohko', to: 'high-roll-ohko' },
+      ],
+      need: { full: [0, 0, 20], spare: [0, 0, 16] },
     },
   ] as F1Card[],
 } as const
@@ -181,14 +250,14 @@ export const F2 = {
     opponent: { id: 'kommoo', spread: 'modest:2/0/0/32/0/32' },
     move: 'psyshock',
     boundaries: [
-      { sp: 19, from: 'mid-or-lower', to: 'high-roll-ohko' },
+      { sp: 19, from: 'mid-roll-ohko', to: 'high-roll-ohko' },
       { sp: 23, from: 'high-roll-ohko', to: 'guaranteed-ohko' },
-    ] as Boundary<AttackBand>[],
+    ] as Boundary<RollTier>[],
   },
   special: {
     opponent: { id: 'kommoo', spread: 'modest:27/0/0/32/0/7' },
     move: 'psychic',
-    boundaries: [{ sp: 4, from: 'high-roll-ohko', to: 'guaranteed-ohko' }] as Boundary<AttackBand>[],
+    boundaries: [{ sp: 4, from: 'high-roll-ohko', to: 'guaranteed-ohko' }] as Boundary<RollTier>[],
   },
 } as const
 
@@ -197,40 +266,51 @@ export const F2 = {
 export interface ExtremeCase {
   opponent: OpponentRef
   move: string
-  /** 내 H·(B|D) 함께 0 / 함께 32(성격 그대로, 예산 무시)의 방어 구간 */
-  low: DefenseBand
-  high: DefenseBand
+  /** 내 H·(B|D) 함께 0·무보정 / 함께 32·B(D) 상승 성격(예산 무시)의 5단 판정 */
+  low: RollTier
+  high: RollTier
 }
 
 /**
- * 내 세트 = EXAMPLE_SET(방어측). 상대 묶음은 그 기술 참조 공격 능력치(성격 포함) 최대 묶음, 기술은 상대 공격기 상위 5 안.
- * "둘 다 저난수 1타"는 실데이터로 만들 수 없다: 16단계 난수(85~100%)에서 1타 확률 ≤ 저난수 기준(기본 2/16)이 두 극단 모두 성립하려면
- * H·B 0/0 → 32/32의 대미지 감소가 3% 미만이어야 하는데 실제 종족값에서는 15% 이상이다(상위 30 × 로스터 전 종 탐색 0건).
+ * 내 세트 = EXAMPLE_SET(방어측, 노력 = 무보정). 극단 필터 상승 변형은 B → 장난꾸러기(impish, +B −C), D → 신중(careful, +D −C).
+ * 상대 묶음은 그 기술 참조 공격 능력치(성격 포함) 최대 묶음, 기술은 상대 공격기 상위 5 안.
+ * "둘 다 저난수 1타"는 실데이터로 만들 수 없다: 1타 확률 ≤ 2/16이 두 극단 모두 성립하려면 H·B 0/0·무보정 → 32/32·상승의 대미지 감소가
+ * 3% 미만이어야 하는데 실제 종족값에서는 15% 이상이다(상위 30 × 공격기 상위 5 × 보존 배분 전수 탐색 0건, __fixtures__/acceptance.test.ts).
  * 그 분기는 손으로 만든 결과 맵(handPlan) 테스트로 고정한다.
  */
 export const F3 = {
   mySet: EXAMPLE_SET,
+  plusNature: { def: 'impish', spd: 'careful' },
   bothSurvive: {
     opponent: { id: 'sneasler', spread: 'adamant:2/32/0/0/0/32' },
     move: 'closecombat',
     low: 'guaranteed-survive',
     high: 'guaranteed-survive',
   } as ExtremeCase,
-  bothMidOrHigher: {
+  /** 두 극단 모두 확정1타(상승 성격으로도 못 버팀) */
+  bothOhko: {
     opponent: { id: 'floettemega', spread: 'modest:16/0/12/15/0/23' },
-    move: 'moonblast',
-    low: 'mid-or-higher',
-    high: 'mid-or-higher',
+    move: 'lightofruin',
+    low: 'guaranteed-ohko',
+    high: 'guaranteed-ohko',
   } as ExtremeCase,
   bothLowRoll: null,
+  /** 현재 성격(노력) 두 극단은 모두 확정1타라 같지만, D 상승(신중) H32·D32는 중난수1타라 필터를 통과한다 */
+  plusOnly: {
+    opponent: { id: 'floettemega', spread: 'modest:16/0/12/15/0/23' },
+    move: 'moonblast',
+    low: 'guaranteed-ohko',
+    high: 'mid-roll-ohko',
+    currentHigh: 'guaranteed-ohko',
+  } as ExtremeCase & { currentHigh: RollTier },
   /** 필터를 통과해 H 행·B 행이 생기는 기술 */
   passing: {
     opponent: { id: 'garchomp', spread: 'adamant:2/32/0/0/0/32' },
     move: 'dragonclaw',
     low: 'low-roll-ohko',
     high: 'guaranteed-survive',
-    hpBoundaries: [{ sp: 6, from: 'low-roll-ohko', to: 'guaranteed-survive' }] as Boundary<DefenseBand>[],
-    defBoundaries: [{ sp: 3, from: 'low-roll-ohko', to: 'guaranteed-survive' }] as Boundary<DefenseBand>[],
+    hpBoundaries: [{ sp: 6, from: 'low-roll-ohko', to: 'guaranteed-survive' }] as Boundary<RollTier>[],
+    defBoundaries: [{ sp: 3, from: 'low-roll-ohko', to: 'guaranteed-survive' }] as Boundary<RollTier>[],
   },
 } as const
 

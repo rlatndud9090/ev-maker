@@ -10,11 +10,13 @@ import {
   filter,
   fixed,
   fixedResult,
+  pairResult,
   plan,
   resultMap,
   row,
   sp,
   swept,
+  variantSwept,
 } from './__fixtures__/handPlan'
 import type { MoveNotice, RowView, TabView } from './types'
 
@@ -312,5 +314,133 @@ describe('assembleTab: 탭 상태·오류 카드', () => {
     ])
     expect(v.complete).toBe(true)
     expect(v.noChange.cards).toBe(0)
+  })
+})
+
+describe('assembleTab: 성격 변형(무보정·상승)', () => {
+  // 현재 성격 hardy = 무보정 변형, 상승 변형만 따로 계산한다.
+  const natures = { stat: 'atk', neutral: 'hardy', plus: 'adamant' } as const
+  const cards = [card({ id: 'A', rowIds: ['v'] }), card({ id: 'C', order: 1, source: 'custom', rowIds: ['c'] })]
+  const rows = [row({ id: 'v', cardId: 'A', natures }), row({ id: 'c', cardId: 'C', natures })]
+  const flat = bands([[32, 'guaranteed-survive']])
+  const plusChanges = bands([
+    [22, 'guaranteed-survive'],
+    [32, 'low-roll-ohko'],
+  ])
+  const mySp = sp({ atk: 12 })
+  const p = plan({ cards, rows, mySp })
+  const base = [ends('v', 'guaranteed-survive', 'guaranteed-survive'), swept('v', flat), ends('c', 'guaranteed-survive', 'guaranteed-survive'), swept('c', flat)]
+
+  it('현재 성격 칸이 다 같아도 변형 스윕 전에는 래더 행을 잠정 제외(요약에도 안 든다), 커스텀은 잠정 noChange', () => {
+    const v = assembleTab(p, resultMap(...base))
+    expect(v.cards.some((c) => c.id === 'A')).toBe(false)
+    expect(v.noChange.items).toEqual([])
+    expect(v.complete).toBe(false)
+    expect(rowOf(v, 'c').noChange).toBe(true)
+  })
+
+  it('상승 성격으로만 바뀌면 래더 행을 표시하고 목표는 변형 칸에서(무보정 불가 / 상승 최소), 대표 행도 된다', () => {
+    const v = assembleTab(p, resultMap(...base, variantSwept('v', 'plus', plusChanges), variantSwept('c', 'plus', plusChanges)))
+    const r = rowOf(v, 'v')
+    expect(r.noChange).toBe(false)
+    expect(r.boundaries).toEqual([])
+    expect(r.target).toEqual({
+      label: 'low-roll-ohko',
+      goal: 'better',
+      plusStat: 'atk',
+      neutral: null,
+      plus: { label: 'low-roll-ohko', stats: [{ stat: 'atk', sp: 23 }], need: 0 },
+    })
+    expect(v.cards.find((c) => c.id === 'A')?.headline).toEqual({ kind: 'row', rowId: 'v' })
+    expect(rowOf(v, 'c').noChange).toBe(false)
+    expect(v.complete).toBe(true)
+  })
+
+  it('변형도 같으면 래더 행은 변화 없음 요약, 커스텀 행은 noChange', () => {
+    const v = assembleTab(p, resultMap(...base, variantSwept('v', 'plus', flat), variantSwept('c', 'plus', flat)))
+    expect(v.noChange.items.map((i) => [i.cardId, i.kind, i.fixed])).toEqual([['A', 'row', 'guaranteed-survive']])
+    expect(rowOf(v, 'c').noChange).toBe(true)
+  })
+
+  it('양 끝 range(무보정 0·상승 최대)가 다르면 변형 스윕 전에도 래더 행을 변화 있음으로 낸다(목표는 변형 결과 뒤)', () => {
+    const v = assembleTab(p, resultMap(ends('v', 'guaranteed-survive', 'guaranteed-survive', ['guaranteed-survive', 'low-roll-ohko']), swept('v', flat)))
+    const r = rowOf(v, 'v')
+    expect([r.status, r.noChange, r.target]).toEqual(['ok', false, undefined])
+  })
+
+  it('변형 스윕이 오류면 목표 없음("상승 불가"로 보이지 않는다)', () => {
+    const changing = bands([
+      [9, 'guaranteed-survive'],
+      [32, 'low-roll-ohko'],
+    ])
+    const r = resultMap(ends('v', 'guaranteed-survive', 'low-roll-ohko'), swept('v', changing))
+    r.set(JSON.stringify(['variant', 'v', 'plus']), failed({ kind: 'variant', rowId: 'v', nature: 'plus' }))
+    const v = assembleTab(plan({ cards: [cards[0]], rows: [rows[0]], mySp }), r)
+    const row = rowOf(v, 'v')
+    expect([row.status, row.noChange, row.target]).toEqual(['ok', false, undefined])
+  })
+
+  it('변형 결과가 남았으면 목표 없음, 진행 수는 변형·쌍 작업을 센다', () => {
+    const changing = bands([
+      [9, 'guaranteed-survive'],
+      [32, 'low-roll-ohko'],
+    ])
+    const r = resultMap(ends('v', 'guaranteed-survive', 'low-roll-ohko'), swept('v', changing))
+    const v = assembleTab(plan({ cards: [cards[0]], rows: [rows[0]], mySp }), r)
+    expect(rowOf(v, 'v').target).toBeUndefined()
+    expect(v.progress).toEqual({ done: 2, total: 3 })
+  })
+
+  it('방어 탭: 두 성격 쌍 결과가 다 나와야 목표, H행·D행이 같은 목표', () => {
+    const dn = { stat: 'def', neutral: 'hardy', plus: 'impish' } as const
+    const dp = plan({
+      mySide: 'defender',
+      cards: [card({ id: 'D', rowIds: ['h', 'b'], filterIds: ['f'] })],
+      rows: [row({ id: 'h', cardId: 'D', stat: 'hp', side: 'defender', gate: 'f', natures: dn }), row({ id: 'b', cardId: 'D', order: 1, stat: 'def', side: 'defender', gate: 'f', natures: dn })],
+      filters: [filter('f', 'D', 0, dn)],
+      mySp: sp({ hp: 2, def: 0 }),
+    })
+    const cells = bands([
+      [5, 'mid-roll-ohko'],
+      [32, 'low-roll-ohko'],
+    ])
+    const flatLow = bands([[32, 'low-roll-ohko']])
+    const r = resultMap(
+      extreme('f', 'mid-roll-ohko', 'guaranteed-survive'),
+      ends('h', 'mid-roll-ohko', 'low-roll-ohko'),
+      ends('b', 'mid-roll-ohko', 'low-roll-ohko'),
+      swept('h', cells),
+      swept('b', cells),
+      variantSwept('h', 'plus', flatLow),
+      variantSwept('b', 'plus', flatLow),
+      pairResult('f', 'neutral', [
+        { atLeast: 'guaranteed-ohko', label: 'mid-roll-ohko', hp: 0, defense: 0 },
+        { atLeast: 'high-roll-ohko', label: 'mid-roll-ohko', hp: 0, defense: 0 },
+        { atLeast: 'mid-roll-ohko', label: 'mid-roll-ohko', hp: 0, defense: 0 },
+        { atLeast: 'low-roll-ohko', label: 'low-roll-ohko', hp: 6, defense: 0 },
+      ]),
+    )
+    expect(rowOf(assembleTab(dp, r), 'h').target).toBeUndefined()
+    r.set(
+      JSON.stringify(['pair', 'f', 'plus']),
+      pairResult('f', 'plus', [
+        { atLeast: 'guaranteed-ohko', label: 'low-roll-ohko', hp: 0, defense: 0 },
+        { atLeast: 'high-roll-ohko', label: 'low-roll-ohko', hp: 0, defense: 0 },
+        { atLeast: 'mid-roll-ohko', label: 'low-roll-ohko', hp: 0, defense: 0 },
+        { atLeast: 'low-roll-ohko', label: 'low-roll-ohko', hp: 0, defense: 0 },
+        { atLeast: 'guaranteed-survive', label: 'guaranteed-survive', hp: 4, defense: 10 },
+      ]),
+    )
+    const v = assembleTab(dp, r)
+    const want = {
+      label: 'low-roll-ohko',
+      goal: 'better',
+      plusStat: 'def',
+      neutral: { label: 'low-roll-ohko', stats: [{ stat: 'hp', sp: 6 }, { stat: 'def', sp: 0 }], need: 0 },
+      plus: { label: 'low-roll-ohko', stats: [{ stat: 'hp', sp: 0 }, { stat: 'def', sp: 0 }], need: 0 },
+    }
+    expect(rowOf(v, 'h').target).toEqual(want)
+    expect(rowOf(v, 'b').target).toEqual(want)
+    expect(v.complete).toBe(true)
   })
 })

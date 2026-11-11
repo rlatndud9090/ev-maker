@@ -1,8 +1,9 @@
 // 계획 + 행 작업 결과 → 탭 뷰. 판정을 다시 하지 않고 표시용 SP로 산술·조회만 한다. 비용 O(행 × 33).
 import type { SpTable } from '../core'
 import type { StatId } from '../data/schema'
-import { cardPending, filterState, pendingTasks, taskKey } from './schedule'
+import { cardPending, filterState, neededVariants, pendingTasks, rowChanges, rowJudgements, taskKey, type RowJudgements } from './schedule'
 import { cellLabel, pairTarget, singleTarget } from './target'
+import { NATURE_VARIANTS } from './types'
 import type {
   BoundaryView,
   CardSpec,
@@ -12,6 +13,7 @@ import type {
   ErrorReason,
   Headline,
   NoChangeItem,
+  PairPoint,
   ResultMap,
   RowKind,
   RowSpec,
@@ -90,21 +92,33 @@ function bareRow(ctx: Ctx, head: RowHead, status: RowView['status'], extra: { er
   return row
 }
 
-/** 방어 탭(필터가 있는 행)은 쌍 결과, 그 밖은 그 행 33칸에서 목표를 낸다. */
-function targetOf(ctx: Ctx, spec: RowSpec, stat: StatId, views: readonly CellView[], at: CellView | undefined): TargetView | undefined {
+/**
+ * 방어 탭(필터가 있는 행)은 성격 변형별 쌍 결과, 그 밖은 그 행의 성격 변형별 33칸에서 목표를 낸다.
+ * 필요한 변형 결과(방어 탭은 두 쌍 결과)가 다 나오기 전이나 그중 오류가 있으면 목표 없음(오류를 "불가"로 보이지 않는다).
+ */
+function targetOf(ctx: Ctx, spec: RowSpec, stat: StatId, j: RowJudgements, at: CellView | undefined): TargetView | undefined {
   const { plan } = ctx
-  if (spec.judge === 'speed') return singleTarget('speed', stat, views, ctx.displaySp[stat], plan.thresholds)
-  if (plan.mySide === 'attacker') return singleTarget('attack', stat, views, ctx.displaySp[stat], plan.thresholds)
-  if (spec.gate === undefined) return singleTarget('defense', stat, views, ctx.displaySp[stat], plan.thresholds)
-  const pair = ctx.results.get(taskKey({ kind: 'pair', filterId: spec.gate }))
-  const label = at === undefined ? undefined : cellLabel('defense', at, plan.thresholds)
-  if (pair?.kind !== 'pair' || label === undefined) return undefined
-  const defStat = plan.filters[spec.gate].stats[1]
-  const current = { hp: ctx.displaySp.hp, defense: ctx.displaySp[defStat] }
-  return pairTarget(pair.points, label, defStat, current, plan.spTotal - ctx.spSum)
+  const side = spec.judge === 'speed' ? 'speed' : plan.mySide === 'attacker' ? 'attack' : 'defense'
+  const label = at === undefined ? undefined : cellLabel(side, at)
+  if (label === undefined || spec.natures === undefined || !j.variantsDone || j.variantError) return undefined
+  const plusStat = spec.natures.stat
+  if (spec.gate === undefined) {
+    const views = (cells: readonly CompactCell[] | undefined) => (cells === undefined ? undefined : cellViews(ctx, cells, stat))
+    return singleTarget(side, stat, plusStat, label, { neutral: views(j.neutral), plus: views(j.plus) })
+  }
+  const points: { neutral?: PairPoint[]; plus?: PairPoint[] } = {}
+  for (const nature of NATURE_VARIANTS) {
+    const r = ctx.results.get(taskKey({ kind: 'pair', filterId: spec.gate, nature }))
+    if (r === undefined || r.kind !== 'pair') return undefined
+    points[nature] = [...r.points]
+  }
+  const current = { hp: ctx.displaySp.hp, defense: ctx.displaySp[plusStat] }
+  return pairTarget(points, label, plusStat, current, plan.spTotal - ctx.spSum)
 }
 
-function sweptRow(ctx: Ctx, spec: RowSpec, stat: StatId, cells: readonly CompactCell[], noChange: boolean): RowView {
+function sweptRow(ctx: Ctx, spec: RowSpec, stat: StatId, j: RowJudgements, noChange: boolean): RowView {
+  const cells = j.current
+  if (cells === undefined) throw new Error(`행 ${spec.id}의 현재 성격 스윕이 없다`)
   const views = cellViews(ctx, cells, stat)
   const sp = ctx.displaySp[stat]
   const boundaries = boundariesOf(views, sp)
@@ -113,7 +127,7 @@ function sweptRow(ctx: Ctx, spec: RowSpec, stat: StatId, cells: readonly Compact
   const at = views.find((c) => c.sp === sp)
   if (at !== undefined) current.category = at.category
   const row: RowView = { ...headOf(spec), status: stale ? 'stale' : 'ok', noChange, cells: views, current, boundaries, nearest: nearestOf(boundaries) }
-  const target = noChange ? undefined : targetOf(ctx, spec, stat, views, at)
+  const target = noChange ? undefined : targetOf(ctx, spec, stat, j, at)
   if (target !== undefined) row.target = target
   return row
 }
@@ -136,8 +150,9 @@ function headlineOf(card: CardSpec, rows: readonly RowView[], slotOf: ReadonlyMa
   if (card.state === 'error') return { kind: 'error', reason: cardError(card) }
   let best: { row: RowView; score: number; tie: readonly number[] } | undefined
   for (const row of rows) {
-    if (row.status !== 'ok' || row.noChange || row.boundaries.length === 0) continue
-    const score = Math.min(...row.boundaries.map((b) => Math.abs(b.delta)))
+    if (row.status !== 'ok' || row.noChange || row.cells.length === 0) continue
+    // 현재 성격 칸에 경계가 없는 행(성격 변형으로만 판정이 바뀜)은 경계 있는 행 뒤에 둔다.
+    const score = row.boundaries.length === 0 ? Infinity : Math.min(...row.boundaries.map((b) => Math.abs(b.delta)))
     const tie = tieKey(row, slotOf)
     if (best === undefined || score < best.score || (score === best.score && lexLess(tie, best.tie))) best = { row, score, tie }
   }
@@ -215,8 +230,8 @@ function buildCard(ctx: Ctx, card: CardSpec): CardBuild {
     if (ends.kind !== 'ends') throw new Error(`행 ${rowId}의 양 끝 결과 종류가 ${ends.kind}다`)
     const swept = results.get(taskKey({ kind: 'sweep', rowId, stage: 2 }))
     if (swept === undefined) {
-      // 양 끝이 같은 래더 행은 3단계 확인 전까지 잠정 제외한다.
-      if (ends.low.category !== ends.high.category || !ladder) rows.push(bareRow(ctx, headOf(spec), 'pending'))
+      // 변형 범위 끝(무보정 0·상승 최대)이 같은 래더 행은 3단계 확인 전까지 잠정 제외한다.
+      if (rowChanges(ends, { variantsDone: false }) || !ladder) rows.push(bareRow(ctx, headOf(spec), 'pending'))
       continue
     }
     if (swept.kind === 'error') {
@@ -226,12 +241,15 @@ function buildCard(ctx: Ctx, card: CardSpec): CardBuild {
     if (swept.kind !== 'sweep') throw new Error(`행 ${rowId}의 스윕 결과 종류가 ${swept.kind}다`)
     const first = swept.cells[0]
     if (first === undefined) throw new Error(`행 ${rowId}의 스윕 칸이 비어 있다`)
-    const same = swept.cells.every((c) => c.category === first.category)
+    const j = rowJudgements(plan, results, rowId)
+    const same = !rowChanges(ends, j)
+    // 현재 성격으로는 같아도 성격 변형 스윕이 남았으면 래더 행은 잠정 제외(변화 없음 확정 전)한다.
+    if (same && ladder && !j.variantsDone) continue
     if (same && ladder) {
       items.push(item('row', first.category, { rowKind: spec.kind, moveId: spec.moveId, sweepStat: stat, basis: spec.basis }))
       continue
     }
-    rows.push(sweptRow(ctx, spec, stat, swept.cells, same))
+    rows.push(sweptRow(ctx, spec, stat, j, same))
   }
 
   const fixedOrder = card.rowIds.reduce((m, id) => Math.max(m, plan.rows[id].order + 1), 0)
@@ -255,7 +273,7 @@ function buildCard(ctx: Ctx, card: CardSpec): CardBuild {
   rows.sort((a, b) => a.order - b.order)
   const pending = cardPending(plan, card, results)
   const settled = pending.stage1.length === 0 && pending.stage2.length === 0
-  const allDone = settled && pending.stage3.length === 0 && pending.stage4.length === 0
+  const allDone = settled && pending.stage3.length === 0 && pending.stage4.length === 0 && pending.stage5.length === 0
   const shown = rows.filter((r) => !r.noChange).length
   const view: CardView = {
     ...base,
@@ -294,9 +312,13 @@ function progressCount(plan: TabPlan, results: ResultMap): number {
   const has = (key: string) => (results.has(key) ? 1 : 0)
   for (const card of plan.cards) {
     if (card.state === 'error') continue
-    for (const filterId of card.filterIds) done += has(taskKey({ kind: 'extreme', filterId })) + has(taskKey({ kind: 'pair', filterId }))
+    for (const filterId of card.filterIds) {
+      done += has(taskKey({ kind: 'extreme', filterId }))
+      for (const nature of NATURE_VARIANTS) done += has(taskKey({ kind: 'pair', filterId, nature }))
+    }
     for (const rowId of card.rowIds) {
       done += has(taskKey({ kind: 'ends', rowId })) + has(taskKey({ kind: 'sweep', rowId, stage: 2 }))
+      for (const nature of neededVariants(plan, plan.rows[rowId])) done += has(taskKey({ kind: 'variant', rowId, nature }))
     }
     for (const fixedId of card.fixedIds) done += has(taskKey({ kind: 'fixed', fixedId }))
   }
@@ -309,11 +331,12 @@ export function assembleTab(plan: TabPlan, results: ResultMap, displaySp: SpTabl
   const done = progressCount(plan, results)
   const shell = {
     tab: plan.tab,
-    thresholds: plan.thresholds,
+    rollSteps: plan.rollSteps,
     source: plan.source,
-    progress: { done, total: done + pending.stage1.length + pending.stage2.length + pending.stage3.length + pending.stage4.length },
+    progress: { done, total: done + pending.stage1.length + pending.stage2.length + pending.stage3.length + pending.stage4.length + pending.stage5.length },
     stage12Done: pending.stage1.length === 0 && pending.stage2.length === 0,
-    complete: pending.stage1.length === 0 && pending.stage2.length === 0 && pending.stage3.length === 0 && pending.stage4.length === 0,
+    complete:
+      pending.stage1.length === 0 && pending.stage2.length === 0 && pending.stage3.length === 0 && pending.stage4.length === 0 && pending.stage5.length === 0,
     customTargetConflicts: plan.customTargetConflicts,
     notices: plan.notices,
   }
