@@ -429,6 +429,9 @@ test.describe('제품 화면', () => {
     const value = (stat: string) => me.getByLabel(`${stat} 실능치`, { exact: true })
     const pressed = (name: RegExp) => me.getByRole('button', { name, pressed: true })
     await expect(value('공격')).toHaveText('182')
+    // SP 증감(+/−)과 헷갈리지 않게 성격 버튼은 ▲/▼
+    await expect(plus('공격')).toHaveText('▲')
+    await expect(minus('공격')).toHaveText('▼')
 
     await plus('공격').click()
     await expect(value('공격')).toHaveText('200')

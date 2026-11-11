@@ -330,7 +330,7 @@ export function MySetPanel({ game, draft, dispatch, reasons, onDisplaySp }: Prop
                       aria-label={`${STAT_LABEL[s]} 성격 상승`}
                       onClick={() => onPlus(s)}
                     >
-                      +
+                      ▲
                     </button>
                     <button
                       type="button"
@@ -338,11 +338,11 @@ export function MySetPanel({ game, draft, dispatch, reasons, onDisplaySp }: Prop
                       aria-pressed={choice.minus === s}
                       data-auto={choice.minus === s && choice.minusAuto ? 'true' : undefined}
                       aria-label={`${STAT_LABEL[s]} 성격 하락${choice.minus === s && choice.minusAuto ? ' (자동)' : ''}`}
-                      title={choice.plus === undefined ? '상승(+)을 먼저 고르세요' : choice.minus === s && choice.minusAuto ? '자동 지정(덜 쓰이는 능력치) — 눌러서 직접 지정' : undefined}
+                      title={choice.plus === undefined ? '상승(▲)을 먼저 고르세요' : choice.minus === s && choice.minusAuto ? '자동 지정(덜 쓰이는 능력치) — 눌러서 직접 지정' : undefined}
                       disabled={choice.plus === undefined || choice.plus === s}
                       onClick={() => onMinus(s)}
                     >
-                      −
+                      ▼
                     </button>
                   </span>
                 )}

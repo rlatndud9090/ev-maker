@@ -574,6 +574,9 @@ td.src {
   border: 0;
   background: transparent;
   padding-left: 0.05rem;
+  /* 오른쪽 목록의 기술 라벨(.move-chip)과 같은 굵기·크기 */
+  font-size: 1rem;
+  font-weight: 600;
 }
 
 .move-slot input:focus-visible {
@@ -706,6 +709,7 @@ td.src {
 
 .product .nat-btn {
   width: 1.4rem;
+  font-size: 0.7rem;
   padding: 0.1rem 0;
   text-align: center;
   font-weight: 700;
