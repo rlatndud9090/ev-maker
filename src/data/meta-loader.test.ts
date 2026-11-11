@@ -26,25 +26,27 @@ const gameIndex: RegulationIndex = {
   ],
 }
 
-const item = (reg: string, month: string, match: MatchType): MetaIndexItem => ({
+const item = (reg: string, month: string, match: MatchType, battles = 100): MetaIndexItem => ({
   match,
   month,
   file: `${reg}/${month}-${match}.json`,
   format: `fmt${reg.replace('-', '')}${match}`,
   url: `https://example.test/${month}/${match}.json`,
   publishedAt: `${month}-28T00:00:00Z`,
+  battles,
 })
 
 const index: MetaIndex = {
   schemaVersion: META_SCHEMA_VERSION,
   regulations: {
     'm-b': [item('m-b', '2026-08', 'bo3'), item('m-b', '2026-09', 'bo3')],
+    // 예전 월(2026-09)의 Bo3 판수가 가장 크지만 기본 선택은 최근 월(2026-10) 안에서만 비교한다.
     'm-c': [
-      item('m-c', '2026-09', 'bo1'),
-      item('m-c', '2026-09', 'bo3'),
-      item('m-c', '2026-10', 'bo1'),
-      item('m-c', '2026-10', 'bo3'),
-      item('m-c', '2026-11', 'bo3'),
+      item('m-c', '2026-08', 'bo3', 40),
+      item('m-c', '2026-09', 'bo1', 100),
+      item('m-c', '2026-09', 'bo3', 500),
+      item('m-c', '2026-10', 'bo1', 300),
+      item('m-c', '2026-10', 'bo3', 200),
     ],
   },
 }
@@ -84,28 +86,69 @@ const pick = (req?: Parameters<typeof resolveMetaSelection>[2]) => {
 }
 
 describe('메타 선택 규칙', () => {
-  it('모두 생략하면 기본 레귤레이션의 Bo1 최신 월을 고른다', () => {
+  it('모두 생략하면 기본 레귤레이션의 최근 월에서 판수가 더 많은 쪽을 고른다(예전 월 판수는 보지 않는다)', () => {
     expect(pick()).toBe('m-c/2026-10-bo1')
     expect(pick({})).toBe('m-c/2026-10-bo1')
-    expect(resolveMetaSelection(index, gameIndex).item).toEqual(item('m-c', '2026-10', 'bo1'))
+    expect(resolveMetaSelection(index, gameIndex).item).toEqual(item('m-c', '2026-10', 'bo1', 300))
   })
 
   it('Bo1이 없는 레귤레이션은 Bo3 최신 월을 고른다', () => {
     expect(pick({ regulation: 'm-b' })).toBe('m-b/2026-09-bo3')
   })
 
-  it('매치 방식만 주면 그 매치 방식의 최신 월이다', () => {
-    expect(pick({ match: 'bo3' })).toBe('m-c/2026-11-bo3')
+  it('매치 방식만 주면 판수와 무관하게 그 매치 방식의 최신 월이다', () => {
+    expect(pick({ match: 'bo3' })).toBe('m-c/2026-10-bo3')
     expect(pick({ match: 'bo1' })).toBe('m-c/2026-10-bo1')
   })
 
-  it('월만 주면 그 월의 Bo1, 없으면 Bo3다', () => {
-    expect(pick({ month: '2026-09' })).toBe('m-c/2026-09-bo1')
-    expect(pick({ month: '2026-11' })).toBe('m-c/2026-11-bo3')
+  it('월만 주면 그 월에서 판수가 더 많은 쪽, 한쪽만 있으면 그쪽이다', () => {
+    expect(pick({ month: '2026-09' })).toBe('m-c/2026-09-bo3')
+    expect(pick({ month: '2026-10' })).toBe('m-c/2026-10-bo1')
+    expect(pick({ month: '2026-08' })).toBe('m-c/2026-08-bo3')
   })
 
-  it('둘 다 주면 정확히 그 조합이다', () => {
+  it('둘 다 주면 판수와 무관하게 정확히 그 조합이다', () => {
     expect(pick({ month: '2026-09', match: 'bo3' })).toBe('m-c/2026-09-bo3')
+    expect(pick({ month: '2026-09', match: 'bo1' })).toBe('m-c/2026-09-bo1')
+  })
+
+  describe('판수 기준 기본 매치 방식(합성 인덱스)', () => {
+    const only = (...items: MetaIndexItem[]): MetaIndex => ({ schemaVersion: META_SCHEMA_VERSION, regulations: { 'm-c': items } })
+    const sel = (idx: MetaIndex, req?: Parameters<typeof resolveMetaSelection>[2]) => {
+      const s = resolveMetaSelection(idx, gameIndex, req)
+      return `${s.month}-${s.match}`
+    }
+
+    it('최근 월에서 Bo3 판수가 더 크면 Bo3다', () => {
+      expect(sel(only(item('m-c', '2026-10', 'bo1', 10), item('m-c', '2026-10', 'bo3', 11)))).toBe('2026-10-bo3')
+    })
+
+    it('판수가 같으면 Bo1이다(인덱스 순서와 무관)', () => {
+      expect(sel(only(item('m-c', '2026-10', 'bo3', 7), item('m-c', '2026-10', 'bo1', 7)))).toBe('2026-10-bo1')
+      expect(sel(only(item('m-c', '2026-10', 'bo1', 7), item('m-c', '2026-10', 'bo3', 7)))).toBe('2026-10-bo1')
+    })
+
+    it('최근 월에 한 매치 방식만 있으면 예전 월의 다른 매치 방식 판수가 커도 그쪽이다', () => {
+      const idx = only(item('m-c', '2026-09', 'bo1', 9_999), item('m-c', '2026-09', 'bo3', 1), item('m-c', '2026-10', 'bo3', 1))
+      expect(sel(idx)).toBe('2026-10-bo3')
+    })
+
+    it('매치 방식을 주면 판수가 더 적어도 그 매치 방식이고, 월을 생략하면 그 매치 방식의 최근 월이다', () => {
+      const idx = only(item('m-c', '2026-09', 'bo1', 5), item('m-c', '2026-10', 'bo3', 50))
+      expect(sel(idx, { match: 'bo1' })).toBe('2026-09-bo1')
+      expect(sel(idx)).toBe('2026-10-bo3')
+    })
+
+    it('월을 주면 그 월 안에서만 판수를 비교한다', () => {
+      const idx = only(
+        item('m-c', '2026-09', 'bo1', 1),
+        item('m-c', '2026-09', 'bo3', 2),
+        item('m-c', '2026-10', 'bo1', 9),
+        item('m-c', '2026-10', 'bo3', 3),
+      )
+      expect(sel(idx, { month: '2026-09' })).toBe('2026-09-bo3')
+      expect(sel(idx, { month: '2026-10' })).toBe('2026-10-bo1')
+    })
   })
 
   it.each([
@@ -161,6 +204,11 @@ describe('메타 정합 검사', () => {
     expect(() => assertMetaIndex({ ...index, schemaVersion: 0 })).toThrow(/schemaVersion 0/)
     const wrongFile = { ...item('m-c', '2026-10', 'bo1'), file: 'm-c/../x.json' }
     expect(() => assertMetaIndex({ schemaVersion: 1, regulations: { 'm-c': [wrongFile] } })).toThrow(MetaLoadError)
+  })
+
+  it.each([0, -1, 1.5, Number.NaN, '100', null, undefined])('인덱스 판수 battles %j는 양의 정수가 아니라 거부한다', (battles) => {
+    const bad = { ...item('m-c', '2026-10', 'bo1'), battles } as unknown as MetaIndexItem
+    expect(() => assertMetaIndex({ schemaVersion: 1, regulations: { 'm-c': [bad] } })).toThrow(/판수 battles/)
   })
 
   it('schemaVersion이 다른 스냅샷을 명확한 오류로 거부한다', () => {

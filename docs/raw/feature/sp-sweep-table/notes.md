@@ -789,7 +789,7 @@ export function useExecutor(): { executor: Executor; snapshot: ExecutorSnapshot 
 // src/app/state.ts (T4b, React 없음)
 export interface AppState {
   regulation: string
-  /** null = 기본(resolveMetaSelection 규칙: 최근 월 Bo1) */
+  /** null = 기본(resolveMetaSelection 규칙: 최근 월에서 판수가 더 많은 매치 방식, 동률 Bo1 — 2.9) */
   meta: { match: MatchType; month: string } | null
   /** 확정된 내 세트 초안(src/ui/setDraft SetDraft, status 'none'·boosts 0 고정) */
   draft: SetDraft
@@ -955,6 +955,16 @@ RowView.keptAsPriority?: true                      // 가장 센 기술이 아�
 - 스피드 탭·스카프 행·랭크 수단 행 구성은 그대로.
 
 실측(예시 세트·상위 30·Node·동기·캐시 없음, 2026-11-11): 공격 탭 probe 340·양 끝 85·스윕 85·변형 85건 약 190~220ms(이전 양 끝·스윕·변형 각 340건 약 590ms), 방어 탭 probe 411·극단 131·양 끝 50·스윕 50·변형 50·pair 32건 약 220~270ms(이전 극단 411·pair 96건 약 480ms), 스피드 탭 약 20ms 그대로. e2e product-perf는 "반응성 측정" 절.
+
+#### 2.9 2026-11-11 4차 개정 — 기본 통계 기준은 판수가 더 많은 쪽 (사용자 피드백 2026-11-11)
+
+- 사용자 결정: 툴바 통계 기준(Bo1/Bo3) 기본값은 데이터(판수)가 더 많은 쪽이다.
+- 메타 인덱스 계약: `MetaIndexItem.battles: number`(원천 `info["number of battles"]`, 스냅샷 `manifest.source.battles`와 같은 값)를 추가한다. 파이프라인 `rebuildIndex`가 스냅샷 매니페스트에서 옮겨 싣고, `assertMetaIndex`가 양의 정수인지 검사한다.
+- `META_SCHEMA_VERSION`은 1 그대로다. 인덱스는 언제나 디스크의 스냅샷으로 통째로 다시 만들어지는 파생물이고(앱과 같은 번들에 정적 import), 스냅샷 형식은 바뀌지 않았다(`battles`는 schema 1 스냅샷에 이미 있다). 올리면 `rebuildIndex`가 기존 스냅샷을 다른 버전으로 거부해 스냅샷까지 다시 만들어야 한다. 낡은 인덱스(필드 없음)는 `assertMetaIndex`가 명확한 오류로 거부한다.
+- 선택 규칙(`resolveMetaSelection`): 매치를 생략하면 월을 먼저 정한다(월도 생략이면 그 레귤레이션의 가장 최근 월) → 그 월의 항목 중 `battles`가 큰 쪽, 동률이면 `MATCH_TYPES` 순(Bo1). 예전 월의 판수는 비교하지 않는다. 매치를 지정하면 판수와 무관하게 그 매치(월 생략 시 그 매치의 최근 월).
+- 인덱스 재생성: 네트워크 없이 `npm run gen:meta -- --regulation m-c --month 2026-10`(이미 있는 스냅샷은 "유지"로 건너뛰고 `rebuildIndex`만 다시 쓴다). 스냅샷 파일은 바이트 그대로(sha 대조). 현재 값 2026-10: Bo1 1,649,648판, Bo3 262,609판 → 기본은 여전히 Bo1.
+- 선행 단위와의 관계: [메타 통계](../meta-usage-stats/prd.md)(accepted)의 "기본은 Bo1의 가장 최근 월, Bo1이 없으면 Bo3"(PRD 79행·ADR 결정 기본 선택)를 이 단위가 "최근 월에서 판수가 더 많은 쪽(동률 Bo1)"으로 바꾼다. 승인 문서는 고치지 않고 여기 기록만 한다. 현재 데이터에서는 그 단위의 수용 기준(M-C 기본 Bo1 2026-10, Bo1 없는 레귤레이션은 Bo3 최근 월)이 그대로 성립한다. 달라지는 경우: Bo3만 있는 월이 Bo1 최신 월보다 나중이거나, 최근 월 Bo3 판수가 Bo1보다 많을 때.
+- 테스트: `meta-loader.test.ts`(합성 인덱스 — 판수 큰 쪽·동률 Bo1·최근 월 우선·월 지정·매치 지정·판수 검증), `meta-snapshot.test.ts`(인덱스 판수 = manifest), `meta-pipeline.test.ts`(인덱스에 판수), e2e `product.spec.ts`(처음 열면 통계 기준 bo1·출처 문구).
 
 ### 3. 태스크 브리핑
 

@@ -1073,7 +1073,7 @@ describe('AC13 Bo3·월 변경 → 그 스냅샷 기준·출처', () => {
     const base = bo1.meta
     const dropped = 'garchomp'
     const synthetic = syntheticView(game, { ...base, manifest: { ...base.manifest, month } }, base.entries.filter((e) => e.id !== dropped))
-    const indexItem = { match: 'bo1' as const, month, file: `${base.manifest.regulation}/${month}-bo1.json`, format: base.manifest.source.format, url: 'https://example.test/x.json', publishedAt: '2026-10-01T00:00:00Z' }
+    const indexItem = { match: 'bo1' as const, month, file: `${base.manifest.regulation}/${month}-bo1.json`, format: base.manifest.source.format, url: 'https://example.test/x.json', publishedAt: '2026-10-01T00:00:00Z', battles: base.manifest.source.battles }
     const index: MetaIndex = { schemaVersion: 1, regulations: { [base.manifest.regulation]: [indexItem] } }
     const loader = createMetaLoader(index, loadRegulationIndexSync(), {
       [`./meta/${base.manifest.regulation}/${month}-bo1.json`]: async () => synthetic.meta,

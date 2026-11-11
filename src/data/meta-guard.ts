@@ -56,13 +56,23 @@ export function listMetaSnapshots(index: MetaIndex, regulation: string): MetaInd
   return Object.hasOwn(index.regulations, regulation) ? index.regulations[regulation] : []
 }
 
-function latest(items: MetaIndexItem[], match: MatchType): MetaIndexItem | undefined {
+/** 그 월 후보 중 판수(battles)가 가장 큰 항목. 동률이면 MATCH_TYPES 순(bo1 먼저). */
+function mostBattles(items: MetaIndexItem[], month: string): MetaIndexItem | undefined {
   let best: MetaIndexItem | undefined
-  for (const it of items) if (it.match === match && (!best || it.month > best.month)) best = it
+  for (const m of MATCH_TYPES) {
+    const it = items.find((x) => x.match === m && x.month === month)
+    if (it && (!best || it.battles > best.battles)) best = it
+  }
   return best
 }
 
-/** 생략한 레귤레이션은 gameIndex.default, 생략한 매치 방식은 Bo1 우선, 생략한 월은 가장 최근 월. */
+const latestMonth = (items: MetaIndexItem[]): string | undefined =>
+  items.reduce<string | undefined>((acc, it) => (acc === undefined || it.month > acc ? it.month : acc), undefined)
+
+/**
+ * 생략한 레귤레이션은 gameIndex.default, 생략한 월은 가장 최근 월(매치를 주면 그 매치의 최근 월).
+ * 생략한 매치 방식은 정한 월 안에서 판수가 더 많은 쪽(동률 Bo1)이다. 예전 월 판수는 비교하지 않는다.
+ */
 export function resolveMetaSelection(index: MetaIndex, gameIndex: RegulationIndex, req?: MetaRequest): MetaSelection {
   if (req !== undefined && (typeof req !== 'object' || req === null)) {
     throw new MetaLoadError(`메타 요청은 객체여야 한다: ${String(req)}`)
@@ -79,21 +89,18 @@ export function resolveMetaSelection(index: MetaIndex, gameIndex: RegulationInde
   if (month !== undefined) assertMonth(month)
 
   const items = listMetaSnapshots(index, regulation)
-  const order: readonly MatchType[] = match === undefined ? MATCH_TYPES : [match]
-  let item: MetaIndexItem | undefined
-  for (const m of order) {
-    item = month === undefined ? latest(items, m) : items.find((it) => it.match === m && it.month === month)
-    if (item) break
-  }
+  const candidates = match === undefined ? items : items.filter((it) => it.match === match)
+  const targetMonth = month ?? latestMonth(candidates)
+  const item = targetMonth === undefined ? undefined : mostBattles(candidates, targetMonth)
   if (!item) {
     const available = items.map((it) => `${it.match} ${it.month}`).join(', ') || '없음'
-    const wanted = `${match ?? '(bo1→bo3)'} ${month ?? '(최근 월)'}`
+    const wanted = `${match ?? '(판수 많은 쪽)'} ${month ?? '(최근 월)'}`
     throw new MetaLoadError(`레귤레이션 ${regulation}에 메타 스냅샷 ${wanted}이 없다 (사용 가능: ${available})`)
   }
   return { regulation, match: item.match, month: item.month, item }
 }
 
-/** schemaVersion과 항목 형식(매치 방식·월·파일 위치)을 검사한다. */
+/** schemaVersion과 항목 형식(매치 방식·월·파일 위치·판수)을 검사한다. */
 export function assertMetaIndex(index: MetaIndex): void {
   if (index?.schemaVersion !== META_SCHEMA_VERSION) {
     throw new MetaLoadError(
@@ -109,6 +116,9 @@ export function assertMetaIndex(index: MetaIndex): void {
       const expected = `${reg}/${metaFileName(it.month, it.match)}`
       if (it.file !== expected) {
         throw new MetaLoadError(`메타 인덱스 ${reg}의 파일 위치 ${it.file}이 ${expected}과 다르다`)
+      }
+      if (!Number.isSafeInteger(it.battles) || it.battles <= 0) {
+        throw new MetaLoadError(`메타 인덱스 ${it.file}의 판수 battles ${String(it.battles)}가 양의 정수가 아니다`)
       }
     }
   }

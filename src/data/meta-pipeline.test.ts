@@ -797,9 +797,10 @@ describe('메타 인덱스·설정 확장', () => {
     const r = await s.run({ month: '2026-10' })
     expect(r.generated).toEqual(['m-c/2026-10-bo1'])
     const index = s.read<MetaIndex>('src/data/meta/index.json')
-    expect(index.regulations['m-c'].map((it) => [it.month, it.match, it.file, it.url])).toEqual([
-      ['2026-09', 'bo1', 'm-c/2026-09-bo1.json', urlOf('2026-09', BO1)],
-      ['2026-10', 'bo1', 'm-c/2026-10-bo1.json', urlOf('2026-10', BO1)],
+    const battles = fixture().info['number of battles']
+    expect(index.regulations['m-c'].map((it) => [it.month, it.match, it.file, it.url, it.battles])).toEqual([
+      ['2026-09', 'bo1', 'm-c/2026-09-bo1.json', urlOf('2026-09', BO1), battles],
+      ['2026-10', 'bo1', 'm-c/2026-10-bo1.json', urlOf('2026-10', BO1), battles],
     ])
   }, TIMEOUT)
 })

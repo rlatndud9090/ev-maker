@@ -2,6 +2,7 @@
   "regulations": {
     "m-c": [
       {
+        "battles": 1649648,
         "file": "m-c/2026-10-bo1.json",
         "format": "gen9championsvgc2026regmc",
         "match": "bo1",
@@ -10,6 +11,7 @@
         "url": "https://www.smogon.com/stats/2026-10/chaos/gen9championsvgc2026regmc-1760.json"
       },
       {
+        "battles": 262609,
         "file": "m-c/2026-10-bo3.json",
         "format": "gen9championsvgc2026regmcbo3",
         "match": "bo3",

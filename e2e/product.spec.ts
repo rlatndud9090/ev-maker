@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { cards, combo, mySet, openProduct, region, resultTab, selectTab, tabPanel, waitComplete } from './helpers'
 
@@ -13,6 +14,11 @@ const customPanel = (page: Page) => region(page, '목록 밖 포켓몬 추가')
 const ladderCards = (page: Page) => cards(page).and(page.locator('[data-origin="ladder"]'))
 const customCards = (page: Page) => cards(page).and(page.locator('[data-origin="custom"]'))
 const cardLine = (card: Locator) => card.locator('button[aria-expanded]').first()
+
+/** 커밋된 메타 인덱스(기본 레귤레이션 m-c) 항목 */
+interface IndexItem { match: 'bo1' | 'bo3'; month: string; format: string; url: string; battles: number }
+const metaIndexItems = (): IndexItem[] =>
+  (JSON.parse(readFileSync(new URL('../src/data/meta/index.json', import.meta.url), 'utf8')) as { regulations: Record<string, IndexItem[]> }).regulations['m-c']
 
 /** 래더 카드의 사용률 순위 목록(화면에는 보이지 않고 카드 data-rank로만 싣는다). */
 async function ladderRanks(page: Page): Promise<{ opponent: string; rank: number }[]> {
@@ -301,6 +307,19 @@ test.describe('제품 화면', () => {
     const seen = await page.evaluate(() => (window as unknown as { __superseded: string[] }).__superseded)
     expect(seen.length).toBeGreaterThan(0)
     expect(seen).toContain('갱신 중')
+  })
+
+  test('처음 열면 통계 기준은 최근 월에서 판수가 더 많은 쪽(현재 데이터는 Bo1)이고 출처가 그 스냅샷이다(사용자 피드백 2026-11-11)', async ({ page }) => {
+    const items = metaIndexItems()
+    const month = items.map((it) => it.month).sort().at(-1)
+    const inMonth = items.filter((it) => it.month === month)
+    const bo1 = inMonth.find((it) => it.match === 'bo1')
+    const bo3 = inMonth.find((it) => it.match === 'bo3')
+    expect(bo1 && bo3 && bo1.battles > bo3.battles, '현재 데이터: 최근 월 Bo1 판수가 Bo3보다 많다').toBe(true)
+    await openProduct(page)
+    await waitComplete(page)
+    await expect(combo(page, '통계 기준')).toHaveValue('bo1')
+    await expect(page.getByTestId('meta-source')).toHaveText(`통계 Bo1 · ${month} · 컷 1760 · ${bo1?.format}`)
   })
 
   test('Bo3로 바꾸면 그 스냅샷 출처로 바뀐다(AC13)', async ({ page }) => {

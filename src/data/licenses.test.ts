@@ -15,6 +15,7 @@ const item = (match: 'bo1' | 'bo3', month: string, format: string, publishedAt: 
   format,
   url: `https://www.smogon.com/stats/${month}/chaos/${format}-1760.json`,
   publishedAt,
+  battles: 1,
 })
 
 const metaIndex: MetaIndex = {

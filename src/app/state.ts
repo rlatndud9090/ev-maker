@@ -19,7 +19,7 @@ import { EXAMPLE_DRAFT } from './example'
 
 export interface AppState {
   regulation: string
-  /** null = 기본(resolveMetaSelection 규칙: 최근 월 Bo1) */
+  /** null = 기본(resolveMetaSelection 규칙: 최근 월에서 판수가 더 많은 매치 방식, 동률 Bo1) */
   meta: { match: MatchType; month: string } | null
   /** 확정된 내 세트 초안(status 'none'·boosts 0 고정) */
   draft: SetDraft
