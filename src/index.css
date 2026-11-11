@@ -1078,11 +1078,62 @@ td.src {
   border: 0;
   background: transparent;
   text-align: left;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.15rem 0.6rem;
+  /* 표처럼 열을 맞춘다: 포켓몬 | 배분 | 기술 | 목표 | 결과 | 외 n행 (모든 카드가 같은 열 폭) */
+  display: grid;
+  grid-template-columns: 8rem 7rem 9.5rem minmax(0, 1fr) 6rem 2.8rem;
+  grid-template-areas: 'name bundle move target result more';
+  align-items: center;
+  gap: 0.2rem 0.6rem;
   padding: 0.5rem 0.6rem;
+}
+
+.card-who {
+  grid-area: name;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-line > .card-bundle {
+  grid-area: bundle;
+  justify-self: start;
+}
+
+.card-line .card-headline,
+.card-line .row-headline {
+  display: contents;
+}
+
+.card-line .hl-move {
+  grid-area: move;
+  justify-self: start;
+  min-width: 0;
+}
+
+.card-line .headline-target {
+  grid-area: target;
+  min-width: 0;
+}
+
+/* 갱신 중·계산 불가·고정 판정 문구는 기술~목표 칸을 함께 쓴다 */
+.card-line .headline:not(.row-headline) {
+  grid-column: move-start / target-end;
+}
+
+.card-line > .ko-badge,
+.card-line > .badge-error {
+  grid-area: result;
+  justify-self: start;
+}
+
+@media (max-width: 44rem) {
+  .product .card-line {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'name name result more'
+      'bundle move move move'
+      'target target target target';
+  }
 }
 
 .card-meta {
@@ -1158,7 +1209,7 @@ td.src {
 }
 
 .card-headline {
-  flex: 1 1 16rem;
+  flex: 0 1 auto;
   min-width: 0;
 }
 
@@ -1231,6 +1282,8 @@ td.src {
 }
 
 .card-more {
+  grid-area: more;
+  justify-self: end;
   font-size: 0.82rem;
   color: var(--muted);
 }

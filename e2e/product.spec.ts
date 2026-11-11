@@ -440,14 +440,32 @@ test.describe('제품 화면', () => {
         await waitComplete(page)
       }
       const badges = tabPanel(page).locator('.card-line [data-testid="ko-badge"]')
-      // 순서: 포켓몬 → SP 배분 → 기술 → 결과(맨 오른쪽, 줄의 마지막 요소)
-      const order = await tabPanel(page).locator('[data-origin="ladder"] .card-line').first().evaluate((line) => {
-        const last = line.lastElementChild as HTMLElement
-        const right = (sel: string) => line.querySelector(sel)?.getBoundingClientRect().right ?? 0
-        return { last: last.dataset.testid, badgeLeft: last.getBoundingClientRect().left, maxOther: Math.max(right('.card-name'), right('[data-testid="card-bundle"]'), right('[data-testid="card-headline"]')) }
-      })
-      expect(order.last).toBe('ko-badge')
-      expect(order.badgeLeft).toBeGreaterThanOrEqual(order.maxOther)
+      // 표처럼 열 정렬: 포켓몬 | 배분 | 기술 | 목표 | 결과 | 외 n행 — 래더 카드끼리 같은 열은 같은 x에서 시작한다.
+      const cols = await tabPanel(page)
+        .locator('[data-origin="ladder"] .card-line')
+        .evaluateAll((lines) =>
+          lines.slice(0, 8).map((line) => {
+            const x = (sel: string) => line.querySelector(sel)?.getBoundingClientRect().left ?? NaN
+            const more = line.querySelector('[data-testid="card-more"]')
+            return {
+              name: x('.card-name'),
+              bundle: x('[data-testid="card-bundle"]'),
+              move: x('[data-testid="move-label"]'),
+              badge: x('[data-testid="ko-badge"]'),
+              moreRightGap: more ? line.getBoundingClientRect().right - more.getBoundingClientRect().right : 0,
+            }
+          }),
+        )
+      expect(cols.length).toBeGreaterThan(2)
+      for (const key of ['name', 'bundle', 'move', 'badge'] as const) {
+        const xs = cols.map((c) => c[key]).filter((v) => !Number.isNaN(v))
+        expect(xs.length, key).toBeGreaterThan(2)
+        expect(Math.max(...xs) - Math.min(...xs), key).toBeLessThanOrEqual(1)
+      }
+      expect(cols[0].name).toBeLessThan(cols[0].bundle)
+      expect(cols[0].bundle).toBeLessThan(cols[0].move)
+      expect(cols[0].move).toBeLessThan(cols[0].badge)
+      for (const c of cols) expect(c.moreRightGap).toBeLessThan(24)
       expect(await badges.count()).toBeGreaterThan(0)
       for (const text of await badges.allTextContents()) expect(labels).toContain(text)
       // 물리/특수 분류 배지·변화 없음 요약은 없다(계약 속성 data-category는 남는다).

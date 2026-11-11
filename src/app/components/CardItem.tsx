@@ -67,16 +67,18 @@ function Headline({ game, tab, card, badge }: { game: Snapshot; tab: Tab; card: 
   if (row === undefined || row.sweepStat === undefined) return null
   // 판정은 결과 배지가 보이고, 여기는 기술 라벨과 "한 단계 위(또는 유지) 최소 SP" 목표만.
   return (
-    <span className="headline">
-      {row.basis !== undefined && row.basis.kind !== 'rank' && (
-        <span className="basis-tag" data-testid="headline-basis" data-row-kind={row.kind}>
-          {itemKeyLabel(game, row.basis.item)}
-        </span>
-      )}{' '}
-      <MoveLabel game={game} tab={tab} row={row} />{' '}
-      {row.target !== undefined && (
-        <TargetText target={row.target} />
-      )}
+    <span className="headline row-headline">
+      <span className="hl-move">
+        {row.basis !== undefined && row.basis.kind !== 'rank' && (
+          <>
+            <span className="basis-tag" data-testid="headline-basis" data-row-kind={row.kind}>
+              {itemKeyLabel(game, row.basis.item)}
+            </span>{' '}
+          </>
+        )}
+        <MoveLabel game={game} tab={tab} row={row} />
+      </span>{' '}
+      {row.target !== undefined && <TargetText target={row.target} />}
     </span>
   )
 }
@@ -101,12 +103,14 @@ export const CardItem = memo(function CardItem({ game, tab, card, expanded, onTo
       data-state={card.state}
     >
       <button type="button" className="card-line" aria-expanded={expanded} aria-controls={detailId} onClick={() => onToggle(card.id)}>
-        {!ladder && (
-          <span className="card-meta">
-            <span className="custom-tag">출처: 사용자 지정</span>
-          </span>
-        )}
-        <span className="card-name">{names.species.label(card.opponent.id)}</span>
+        <span className="card-who">
+          <span className="card-name">{names.species.label(card.opponent.id)}</span>
+          {!ladder && (
+            <span className="card-meta">
+              <span className="custom-tag">출처: 사용자 지정</span>
+            </span>
+          )}
+        </span>
         {/* 배분 묶음 라벨 "A32↑ 56.3%": 비중(래더)·소수 배분·프리셋(커스텀)은 작은 회색 글씨 */}
         <span className="card-bundle num" data-testid="card-bundle">
           <span className="bundle-stats">{bundle.stats.length > 0 ? bundleText(bundle.stats) : '관련 SP 없음'}</span>
@@ -118,12 +122,7 @@ export const CardItem = memo(function CardItem({ game, tab, card, expanded, onTo
         <span className="card-headline" data-testid="card-headline">
           <Headline game={game} tab={tab} card={card} badge={badge !== undefined || order !== undefined} />
         </span>
-        {card.moreRows > 0 && (
-          <span className="card-more" data-testid="card-more">
-            외 {card.moreRows}행
-          </span>
-        )}
-        {/* 결과 배지는 줄 맨 오른쪽: 포켓몬 → SP 배분 → 기술 → 결과 */}
+        {/* 왼쪽부터 포켓몬 → SP 배분 → 기술 → 결과, 오른쪽 끝에는 "외 n행"만 */}
         {badge !== undefined && (
           <span className={`ko-badge ko-${badge.tone}`} data-testid="ko-badge" data-tone={badge.tone}>
             {badge.label}
@@ -132,6 +131,11 @@ export const CardItem = memo(function CardItem({ game, tab, card, expanded, onTo
         {order !== undefined && (
           <span className={`ko-badge ko-${order.tone}`} data-testid="order-badge" data-tone={order.tone}>
             {order.label}
+          </span>
+        )}
+        {card.moreRows > 0 && (
+          <span className="card-more" data-testid="card-more">
+            외 {card.moreRows}행
           </span>
         )}
       </button>
