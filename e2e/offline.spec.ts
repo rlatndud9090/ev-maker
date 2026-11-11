@@ -34,7 +34,7 @@ test('제품 화면 로드·탭 전환·카드 펼침·Bo3 전환 중 외부 ori
   }
   await cards(page).first().locator('button[aria-expanded]').first().click()
   await expect(cards(page).first().getByTestId('row').first()).toBeVisible()
-  await combo(page, '매치 방식').selectOption('bo3')
+  await combo(page, '통계 기준').selectOption('bo3')
   await expect(page.getByTestId('meta-source')).toContainText('Bo3')
   await waitComplete(page)
 

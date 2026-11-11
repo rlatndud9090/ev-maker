@@ -36,16 +36,7 @@ interface Props {
   customButtonRef: Ref<HTMLButtonElement>
 }
 
-/**
- * 같은 기준 n을 탭마다 다른 이름으로 보인다(방어 탭 = 16번 중 n번 이상 버팀, 즉 저난수1타).
- * n이 절반 이하면 두 경계가 겹쳐 코어 rollTier가 고난수1타를 우선하므로 방어 탭 안내에 그 예외를 붙인다.
- */
 const ROLL_FIELD_LABEL: Record<'attack' | 'defense', string> = { attack: '고난수 1타 기준', defense: '고난수 견딤 기준' }
-const rollFieldNote = (tab: 'attack' | 'defense', n: number): string => {
-  if (tab === 'attack') return `16번 중 ${n}번 이상 1타 = 고난수1타`
-  const note = `16번 중 ${n}번 이상 버팀 = 저난수1타`
-  return n * 2 <= ROLL_STEPS ? `${note} (${n}번 이상 1타면 고난수1타 우선)` : note
-}
 
 /** "고난수 1타 기준 [n]/16 (87.5%)". 1~ROLL_STEPS−1 정수만 반영하고, 그 밖 입력은 반영하지 않은 채 옆에 안내한다. */
 function RollThresholdField({ tab, rollSteps, dispatch }: { tab: 'attack' | 'defense'; rollSteps: number; dispatch: Dispatch<AppAction> }) {
@@ -83,9 +74,6 @@ function RollThresholdField({ tab, rollSteps, dispatch }: { tab: 'attack' | 'def
         <span className="roll-denom">/{ROLL_STEPS}</span>{' '}
         <span className="roll-percent num" data-testid="roll-percent">
           ({shareText(committed / ROLL_STEPS)})
-        </span>{' '}
-        <span className="roll-note" data-testid="roll-note">
-          {rollFieldNote(tab, committed)}
         </span>
       </span>
       {invalid && (
@@ -195,7 +183,7 @@ export function Toolbar({ customButtonRef, ...p }: Props) {
             )}
           </div>
           <button type="button" ref={customButtonRef} aria-expanded={p.customOpen} onClick={p.onToggleCustom}>
-            목록 밖 포켓몬 추가
+            포켓몬 추가
           </button>
         </div>
 
@@ -218,7 +206,7 @@ export function Toolbar({ customButtonRef, ...p }: Props) {
             상대 순풍
           </label>
           <label className="inline-select">
-            매치 방식
+            통계 기준
             <select value={p.selection.match} onChange={(e) => setMeta(e.target.value as MatchType, p.selection.month)}>
               {matches.map((m) => (
                 <option key={m} value={m}>
@@ -261,7 +249,7 @@ export function Toolbar({ customButtonRef, ...p }: Props) {
             onValue={(v) => dispatch({ type: 'set-criteria', criteria: { cardsPerCategory: v } })}
           />
           <NumberField
-            label="랭크 기준(%)"
+            label="랭업 최소사용률(%)"
             value={state.criteria.rankShareMin}
             toText={toPercentInput}
             fromText={fromPercentInput}
@@ -271,7 +259,7 @@ export function Toolbar({ customButtonRef, ...p }: Props) {
             onValue={(v) => dispatch({ type: 'set-criteria', criteria: { rankShareMin: v } })}
           />
           <NumberField
-            label="스카프 기준(%)"
+            label="스카프 최소사용률(%)"
             value={state.criteria.scarfShareMin}
             toText={toPercentInput}
             fromText={fromPercentInput}

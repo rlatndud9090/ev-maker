@@ -23,7 +23,7 @@ async function ladderRanks(page: Page): Promise<{ opponent: string; rank: number
 
 /** 목록 밖 타겟 추가 패널에서 종·기술을 고르고 [추가]. */
 async function addCustomTarget(page: Page, species: string, moves: string[]) {
-  await page.getByRole('button', { name: '목록 밖 포켓몬 추가', exact: true }).click()
+  await page.getByRole('button', { name: '포켓몬 추가', exact: true }).click()
   const panel = customPanel(page)
   await expect(panel).toBeVisible()
   await combo(panel, '추가할 포켓몬').fill(species)
@@ -196,7 +196,7 @@ test.describe('제품 화면', () => {
 
   test('목록 밖 추가: 기술 0개면 [추가] 비활성·[취소]로 닫힘, 워시로토무 사용자 지정 카드·편집·마지막 기술 유지(AC11)', async ({ page }) => {
     await openProduct(page)
-    const open = page.getByRole('button', { name: '목록 밖 포켓몬 추가', exact: true })
+    const open = page.getByRole('button', { name: '포켓몬 추가', exact: true })
     await open.click()
     const panel = customPanel(page)
     const add = panel.getByRole('button', { name: '추가', exact: true })
@@ -307,7 +307,7 @@ test.describe('제품 화면', () => {
     await openProduct(page)
     const source = page.getByTestId('meta-source')
     await expect(source).toContainText('Bo1')
-    await combo(page, '매치 방식').selectOption('bo3')
+    await combo(page, '통계 기준').selectOption('bo3')
     await expect(source).toContainText('Bo3')
     await waitComplete(page)
     await expect(cards(page).first()).toBeVisible()
@@ -319,7 +319,7 @@ test.describe('제품 화면', () => {
     await openProduct(page)
     await waitComplete(page)
     const source = page.getByTestId('meta-source')
-    const match = combo(page, '매치 방식')
+    const match = combo(page, '통계 기준')
     await match.selectOption('bo3')
     await expect(page.getByRole('alert').filter({ hasText: '메타 통계를 불러오지 못했습니다' })).toBeVisible()
     await expect(match).toHaveValue('bo1')
@@ -609,8 +609,9 @@ test.describe('제품 화면', () => {
     await expect(high).toHaveValue('14')
     await expect(field.getByTestId('roll-percent')).toHaveText('(87.5%)')
     await expect(field).toContainText('/16')
-    // 스크린 리더가 단위·반영 백분율·뜻을 함께 읽는다(접근 가능한 설명)
-    await expect(high).toHaveAccessibleDescription('/16 (87.5%) 16번 중 14번 이상 1타 = 고난수1타')
+    // 스크린 리더가 단위·반영 백분율을 함께 읽는다(접근 가능한 설명, 뜻 설명 문구는 없음)
+    await expect(high).toHaveAccessibleDescription('/16 (87.5%)')
+    await expect(field.getByTestId('roll-note')).toHaveCount(0)
 
     await selectTab(page, '스피드')
     await expect(page.getByTestId('roll-threshold')).toHaveCount(0)
@@ -622,7 +623,6 @@ test.describe('제품 화면', () => {
     const survive = page.getByRole('spinbutton', { name: '고난수 견딤 기준', exact: true })
     await expect(survive).toHaveValue('14')
     await expect(field.getByTestId('roll-percent')).toHaveText('(87.5%)')
-    await expect(field.getByTestId('roll-note')).toHaveText('16번 중 14번 이상 버팀 = 저난수1타')
     // F3 통과 카드: 1타 확률 2/16 — n=14(저난수 2/16 이하)에서 저난수1타, n=15(저난수 1/16 이하)로 올리면 중난수1타. 확률 문구는 그대로.
     const garchomp = ladderCards(page)
       .and(page.locator('[data-opponent="garchomp"]'))
@@ -642,7 +642,7 @@ test.describe('제품 화면', () => {
       await survive.fill(bad)
       await expect(field.getByTestId('roll-hint')).toHaveText('1~15 정수만 반영됩니다')
       await expect(survive).toHaveAttribute('aria-invalid', 'true')
-      await expect(survive).toHaveAccessibleDescription('/16 (93.8%) 16번 중 15번 이상 버팀 = 저난수1타 1~15 정수만 반영됩니다')
+      await expect(survive).toHaveAccessibleDescription('/16 (93.8%) 1~15 정수만 반영됩니다')
       await expect(field.getByTestId('roll-percent')).toHaveText('(93.8%)')
       await expect(badge).toHaveAttribute('data-tone', 'yellow')
     }
@@ -653,14 +653,13 @@ test.describe('제품 화면', () => {
     await selectTab(page, '공격')
     await expect(page.getByRole('spinbutton', { name: '고난수 1타 기준', exact: true })).toHaveValue('15')
     await selectTab(page, '방어')
-    // n ≤ 8이면 두 경계가 겹쳐 고난수1타가 우선한다는 안내가 붙는다(2/16은 5/16 미만이라 그대로 저난수1타).
+    // n ≤ 8이면 두 경계가 겹쳐 고난수1타가 우선한다(2/16은 5/16 미만이라 그대로 저난수1타).
     await survive.fill('5')
-    await expect(field.getByTestId('roll-note')).toHaveText('16번 중 5번 이상 버팀 = 저난수1타 (5번 이상 1타면 고난수1타 우선)')
+    await expect(field.getByTestId('roll-percent')).toHaveText('(31.3%)')
     await waitComplete(page)
     await expect(badge).toHaveText('저난수1타 12.5%')
     await survive.fill('14')
     await expect(field.getByTestId('roll-hint')).toHaveCount(0)
-    await expect(field.getByTestId('roll-note')).toHaveText('16번 중 14번 이상 버팀 = 저난수1타')
     await waitComplete(page)
     await expect(badge).toHaveText('저난수1타 12.5%')
     await expect(badge).toHaveAttribute('data-tone', 'lime')

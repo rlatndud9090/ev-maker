@@ -20,7 +20,7 @@ for (const width of [400, 1280]) {
       await card.locator('button[aria-expanded]').first().click()
       await expect(card.getByTestId('band-cell').first()).toBeVisible()
       await page.getByRole('button', { name: '표시 기준', exact: true }).click()
-      await page.getByRole('button', { name: '목록 밖 포켓몬 추가', exact: true }).click()
+      await page.getByRole('button', { name: '포켓몬 추가', exact: true }).click()
 
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
       expect(overflow).toBeLessThanOrEqual(0)

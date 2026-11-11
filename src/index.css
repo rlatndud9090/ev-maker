@@ -890,7 +890,7 @@ td.src {
 /* 판정 기준 "고난수 기준 [n]/16 (87.5%)": 입력 칸 옆에 분모·백분율·안내를 한 줄로 */
 .roll-field {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: flex-end;
   gap: 0.2rem 0.4rem;
 }
@@ -904,12 +904,16 @@ td.src {
   width: 5.5rem;
 }
 
-/* 단위·백분율·뜻 풀이는 한 덩어리로, 좁은 폭에서는 입력 옆에서 안쪽 줄바꿈 */
-.roll-unit {
-  flex: 1 1 10rem;
+.roll-field .field-hint {
+  flex: 1 1 auto;
   min-width: 0;
+}
+
+/* 단위·백분율은 입력 바로 옆 한 줄 */
+.roll-unit {
+  flex: none;
   padding-bottom: 0.35rem;
-  word-break: keep-all;
+  white-space: nowrap;
 }
 
 .roll-denom,
@@ -917,12 +921,10 @@ td.src {
   font-variant-numeric: tabular-nums;
 }
 
-.roll-percent,
-.roll-note {
+.roll-percent {
   color: var(--muted);
   font-size: 0.85rem;
 }
-
 
 .field-hint {
   color: var(--danger);
