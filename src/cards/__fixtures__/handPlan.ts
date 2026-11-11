@@ -7,9 +7,11 @@ import { DEFAULT_ROLL_STEPS } from '../types'
 import type {
   CardSpec,
   CompactCell,
+  ConditionGroup,
   ErrorReason,
   ExtremeSpec,
   FixedSpec,
+  ProbeSpec,
   MoveNotice,
   NatureVariant,
   NatureVariants,
@@ -102,6 +104,7 @@ export interface CardOpts {
   fixedIds?: readonly string[]
   error?: ErrorReason
   notices?: readonly MoveNotice[]
+  conditions?: readonly ConditionGroup[]
 }
 
 export function card(o: CardOpts): CardSpec {
@@ -117,6 +120,7 @@ export function card(o: CardOpts): CardSpec {
     rowIds: o.rowIds ?? [],
     filterIds: o.filterIds ?? [],
     fixedIds: o.fixedIds ?? [],
+    conditions: o.conditions ?? [],
   }
   if (o.error) spec.error = o.error
   return spec
@@ -127,6 +131,7 @@ export interface PlanOpts {
   rows?: RowSpec[]
   filters?: ExtremeSpec[]
   fixed?: FixedSpec[]
+  probes?: ProbeSpec[]
   mySp?: SpTable
   mySide?: 'attacker' | 'defender'
   notices?: readonly MoveNotice[]
@@ -150,6 +155,7 @@ export function plan(o: PlanOpts): TabPlan {
     rows: byId(o.rows),
     filters: byId(o.filters),
     fixed: byId(o.fixed),
+    probes: byId(o.probes),
     customTargetConflicts: [],
     notices: o.notices ?? [],
   }
@@ -183,6 +189,8 @@ export const failed = (task: RowTask, field?: string): RowTaskResult => ({
 
 const keyOf = (r: RowTaskResult): string => {
   switch (r.kind) {
+    case 'probe':
+      return taskKey({ kind: 'probe', target: 'row', id: r.id })
     case 'ends':
       return taskKey({ kind: 'ends', rowId: r.rowId })
     case 'sweep':

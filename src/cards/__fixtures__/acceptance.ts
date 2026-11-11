@@ -244,15 +244,22 @@ export const F2 = {
     moves: ['psyshock', 'psychic', 'drainpunch'],
   }),
   sweepStat: 'spa' as StatId,
-  /** 같은 상대가 물리 카드(H·B 묶음, 사이코쇼크 행)와 특수 카드(H·D 묶음, 사이코키네시스 행)로 둘 다 표시된다 */
+  /** 같은 상대가 물리 카드(H·B 묶음)와 특수 카드(H·D 묶음)로 계획된다(사이코쇼크는 물리 카드, 사이코키네시스는 특수 카드 행) */
   opponent: 'kommoo',
+  /** 물리 카드에 사이코쇼크 행이 남는 상대(사이코쇼크가 세 기술 중 가장 셈) */
   physical: {
+    opponent: { id: 'froslassmega', spread: 'timid:2/0/0/32/0/32' },
+    move: 'psyshock',
+    boundaries: [{ sp: 29, from: 'guaranteed-survive', to: 'low-roll-ohko' }] as Boundary<RollTier>[],
+  },
+  /**
+   * 분류를 가로지른 가장 센 기술(사용자 피드백 2026-11-11): 짜랑고우거 물리 카드 대표 세트에는 사이코키네시스가 무투자 확정1타라
+   * 그 물리 카드의 사이코쇼크 행(현재 C32 mid-roll-ohko)이 빠지고 카드가 목록에서 사라진다.
+   */
+  crossDropped: {
     opponent: { id: 'kommoo', spread: 'modest:2/0/0/32/0/32' },
     move: 'psyshock',
-    boundaries: [
-      { sp: 19, from: 'mid-roll-ohko', to: 'high-roll-ohko' },
-      { sp: 23, from: 'high-roll-ohko', to: 'guaranteed-ohko' },
-    ] as Boundary<RollTier>[],
+    stronger: 'psychic',
   },
   special: {
     opponent: { id: 'kommoo', spread: 'modest:27/0/0/32/0/7' },
@@ -295,12 +302,23 @@ export const F3 = {
     high: 'guaranteed-ohko',
   } as ExtremeCase,
   bothLowRoll: null,
-  /** 현재 성격(노력) 두 극단은 모두 확정1타라 같지만, D 상승(신중) H32·D32는 중난수1타라 필터를 통과한다 */
+  /**
+   * 현재 성격(노력) 두 극단은 모두 확정1타라 같지만, D 상승(신중) H32·D32는 중난수1타라 필터를 통과한다.
+   * 2026-11-11부터 같은 카드에서 파멸의빛(lightofruin)이 더 세서(둘 다 확정1타, 최대 대미지 비율이 큼) 이 기술은 행이 없다(F12.maxPercentTie).
+   */
   plusOnly: {
     opponent: { id: 'floettemega', spread: 'modest:16/0/12/15/0/23' },
     move: 'moonblast',
     low: 'guaranteed-ohko',
     high: 'mid-roll-ohko',
+    currentHigh: 'guaranteed-ohko',
+  } as ExtremeCase & { currentHigh: RollTier },
+  /** plusOnly와 같은 성질이고 그 카드·조건에서 가장 센 기술이라 필터를 거쳐 H 행·D 행이 생긴다(2026-11-11) */
+  plusOnlyStrongest: {
+    opponent: { id: 'dragonitemega', spread: 'modest:25/0/0/32/0/9' },
+    move: 'dracometeor',
+    low: 'guaranteed-ohko',
+    high: 'high-roll-ohko',
     currentHigh: 'guaranteed-ohko',
   } as ExtremeCase & { currentHigh: RollTier },
   /** 필터를 통과해 H 행·B 행이 생기는 기술 */
@@ -483,4 +501,72 @@ export const F11 = {
   opponent: { id: 'floettemega', spread: 'modest:16/0/12/15/0/23' },
   /** 비교할 내 S(32는 합계 98이라 예산 무시 평가로 본다) */
   speeds: [0, 32],
+} as const
+
+// ---------- F12 카드·조건당 가장 센 기술 하나 + 선공기(사용자 피드백 2026-11-11) ----------
+
+/**
+ * 현재 세트(현재 SP·성격) 단건 판정의 1타 확률 → 최대 대미지 비율 → 슬롯(방어 탭은 상대 사용률) 순으로 고른다.
+ * ohko·maxPercent는 코어 judgeDamage(rollSteps 14) 값(maxPercent 소수 한 자리 반올림 비교).
+ */
+export const F12 = {
+  /** 예시 세트 공격 탭 포푸니크: 분함의발구르기가 무투자 확정1타라 드래곤클로 등은 행이 없고, 남은 행도 변화 없음이라 카드가 빠진다 */
+  sneasler: {
+    mySet: EXAMPLE_SET,
+    opponent: { id: 'sneasler', spread: 'adamant:2/32/0/0/0/32' },
+    chosen: 'stompingtantrum',
+    dropped: ['earthquake', 'dragonclaw', 'rockslide'],
+    probe: {
+      stompingtantrum: { ohko: 1, maxPercent: 190.4 },
+      earthquake: { ohko: 1, maxPercent: 188.5 },
+      dragonclaw: { ohko: 0.125, maxPercent: 101.9 },
+      rockslide: { ohko: 0, maxPercent: 24.2 },
+    },
+  },
+  /** 1타 확률·최대 대미지 비율이 모두 같으면 슬롯이 앞선 지진 */
+  slotTie: {
+    mySet: EXAMPLE_SET,
+    opponent: { id: 'sneasler', spread: 'brave:29/32/5/0/0/0' },
+    chosen: 'earthquake',
+    tiedWith: 'stompingtantrum',
+    probe: { ohko: 1, maxPercent: 152.7 },
+  },
+  /** 방어 탭: 1타 확률이 같으면(둘 다 확정1타) 최대 대미지 비율이 큰 파멸의빛 */
+  maxPercentTie: {
+    mySet: EXAMPLE_SET,
+    opponent: { id: 'floettemega', spread: 'modest:16/0/12/15/0/23' },
+    chosen: 'lightofruin',
+    over: 'moonblast',
+    probe: { lightofruin: { ohko: 1, maxPercent: 265.9 }, moonblast: { ohko: 1, maxPercent: 181.6 } },
+  },
+  /** 공격 탭 선공기: 기습은 더 약해도 남는다(가장 센 기술 = 도각참). 선공기가 무효면(키키링 테일아머) 남지 않는다 */
+  priority: {
+    mySet: F5.swordsDance.mySet,
+    opponent: { id: 'indeedeef', spread: 'bold:32/0/32/0/2/0' },
+    chosen: 'kowtowcleave',
+    kept: 'suckerpunch',
+    dropped: ['ironhead'],
+    probe: { kowtowcleave: { ohko: 1, maxPercent: 123.2 }, suckerpunch: { ohko: 0.125, maxPercent: 102.8 } },
+    immune: { opponent: { id: 'farigiraf', spread: 'quiet:10/0/13/30/13/0' }, move: 'suckerpunch' },
+  },
+  /** 방어 탭: 상대 상위 5 후보 중 나에게 가장 센 기술(도각참)과 선공기(기습)만 */
+  defense: {
+    mySet: EXAMPLE_SET,
+    opponent: { id: 'kingambit', spread: 'brave:32/32/0/0/2/0' },
+    chosen: 'kowtowcleave',
+    kept: 'suckerpunch',
+    dropped: ['ironhead', 'lowkick'],
+    probe: { kowtowcleave: { ohko: 0, maxPercent: 55.1 }, ironhead: { ohko: 0, maxPercent: 51.9 } },
+  },
+  /**
+   * SP를 바꾸면 가장 센 기술이 분류를 넘어 바뀐다: 메가후딘 C32면 사이코키네시스(특수 카드 행, 물리 카드는 빠짐),
+   * C의 32를 A로 옮기면 드레인펀치(물리 카드 행, 특수 카드는 빠짐). 같은 대표 배분이 두 분류 카드에 다 있다.
+   */
+  spSwitch: {
+    mySet: F2.mySet,
+    moved: { ...F2.mySet, sp: { ...F2.mySet.sp, atk: 32, spa: 0 } } as PokemonSet,
+    opponent: { id: 'excadrill', spread: 'adamant:2/32/0/0/0/32' },
+    special: { chosen: 'psychic', probe: { psyshock: 44.4, psychic: 47.1, drainpunch: 28.9 } },
+    physical: { chosen: 'drainpunch', probe: { psyshock: 38.5, psychic: 40.1, drainpunch: 41.7 } },
+  },
 } as const

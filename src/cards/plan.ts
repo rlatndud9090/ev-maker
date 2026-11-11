@@ -30,10 +30,13 @@ import {
   type CardInput,
   type CardSpec,
   type Category,
+  type ConditionGroup,
   type CustomTarget,
   type ErrorReason,
   type ExtremeSpec,
   type FixedSpec,
+  type ProbeSpec,
+  type MoveCandidate,
   type MoveNotice,
   type NatureVariants,
   type OpponentHeader,
@@ -72,8 +75,11 @@ function withBoosts(set: PokemonSet, boosts: BoostTable): PokemonSet {
   return out
 }
 
-const isMultihit = (game: Snapshot, moveId: string): boolean =>
-  Object.prototype.hasOwnProperty.call(game.data.moves, moveId) && game.data.moves[moveId].multihit !== undefined
+const hasMove = (game: Snapshot, moveId: string): boolean => Object.prototype.hasOwnProperty.call(game.data.moves, moveId)
+const isMultihit = (game: Snapshot, moveId: string): boolean => hasMove(game, moveId) && game.data.moves[moveId].multihit !== undefined
+const isPriority = (game: Snapshot, moveId: string): boolean => hasMove(game, moveId) && game.data.moves[moveId].priority > 0
+const BASE_CONDITION = JSON.stringify(['base'])
+const rankCondition = (b: RankBasis): string => JSON.stringify(['rank', ...meansParts(b)])
 
 const WHITE_HERB_MULTIHIT: ErrorReason = {
   code: 'WHITE_HERB_MULTIHIT',
@@ -107,6 +113,7 @@ class PlanBuilder {
   readonly rows: Record<string, RowSpec> = {}
   readonly filters: Record<string, ExtremeSpec> = {}
   readonly fixed: Record<string, FixedSpec> = {}
+  readonly probes: Record<string, ProbeSpec> = {}
 
   readonly input: CardInput
   readonly tab: Tab
@@ -225,6 +232,7 @@ class PlanBuilder {
       rowIds: [],
       filterIds: [],
       fixedIds: [],
+      conditions: [],
     }
     if (seed.error) card.error = seed.error
     this.cards.push(card)
@@ -247,7 +255,32 @@ class PlanBuilder {
     return f
   }
 
-  addFixed(card: CardSpec, moveId: string, opponentSet: PokemonSet): void {
+  candidate(target: MoveCandidate['target'], id: string, moveId: string): MoveCandidate {
+    return { target, id, moveId, priority: isPriority(this.game, moveId) }
+  }
+
+  /** 이 카드에 행이 있는 후보가 없으면(비교 전용 후보뿐) 조건을 두지 않는다. */
+  addCondition(card: CardSpec, id: string, candidates: readonly MoveCandidate[]): void {
+    if (!candidates.some((c) => c.target !== 'probe')) return
+    const groups = card.conditions as ConditionGroup[]
+    groups.push({ id, candidates })
+  }
+
+  /** 다른 분류 기술의 비교 전용 후보(행 없음). 이 카드 대표 세트·같은 조건으로 단건 판정만 한다. */
+  crossProbe(
+    card: CardSpec,
+    parts: readonly (string | null)[],
+    moveId: string,
+    side: ProbeSpec['side'],
+    attacker: PokemonSet,
+    defender: PokemonSet,
+  ): MoveCandidate {
+    const p: ProbeSpec = { id: rowId(card.id, ['cross', ...parts]), cardId: card.id, moveId, side, attacker, defender, conditions: this.conditions }
+    this.probes[p.id] = p
+    return this.candidate('probe', p.id, moveId)
+  }
+
+  addFixed(card: CardSpec, moveId: string, opponentSet: PokemonSet): string {
     const f: FixedSpec = {
       id: rowId(card.id, ['fixed', moveId]),
       cardId: card.id,
@@ -259,6 +292,7 @@ class PlanBuilder {
     this.fixed[f.id] = f
     const ids = card.fixedIds as string[]
     ids.push(f.id)
+    return f.id
   }
 
   /** 내 쪽 세트(nature 공통)의 stat 성격 변형. 하락은 이 판정의 내 관여 능력치 밖에 둔다. */
@@ -273,18 +307,25 @@ class PlanBuilder {
 
   // ---------- 탭별 행 ----------
 
-  attackCard(opp: Opponent, seed: CardSeed, slots: readonly MoveSlot[]): void {
+  /**
+   * all = 내 공격기 전부(슬롯 순). 이 카드 분류의 기술만 행을 만들고, 다른 분류 기술은 비교 전용 후보로만 넣어
+   * 조건마다 4개 기술 전부에서 가장 센 기술을 고른다(사용자 피드백 2026-11-11).
+   */
+  attackCard(opp: Opponent, seed: CardSeed, all: readonly MoveSlot[]): void {
     const card = this.openCard(opp, seed, [])
     const resolved = seed.resolved
     if (!resolved) return
     const oppSet = seed.assumption.set
+    const inCategory = (slot: MoveSlot) => slot.refs?.defense === defenseStatOf(seed.category as Category)
+    const slots = all.filter(inCategory)
     const base: MoveSlot[] = []
+    const fixedOf = new Map<string, string>()
     for (const slot of slots) {
       const refs = slot.refs as MoveStatRefs
-      if (refs.offense?.owner === 'target') this.addFixed(card, slot.moveId, oppSet)
+      if (refs.offense?.owner === 'target') fixedOf.set(slot.moveId, this.addFixed(card, slot.moveId, oppSet))
       else base.push(slot)
     }
-    const row = (slot: MoveSlot, attacker: PokemonSet, defender: PokemonSet, extra: Partial<RowSpec>, parts: (string | null)[]) => {
+    const row = (slot: MoveSlot, attacker: PokemonSet, defender: PokemonSet, extra: Partial<RowSpec>, parts: (string | null)[]): RowSpec => {
       const refs = slot.refs as MoveStatRefs
       const sweep = { side: 'attacker' as const, stat: refs.offense?.stat as StatId }
       const spec: Omit<RowSpec, 'id' | 'cardId' | 'order'> = {
@@ -302,9 +343,18 @@ class PlanBuilder {
         spec.sweep = sweep
         spec.natures = this.natures(sweep.stat as NatureVariants['stat'], 'damage', refs, this.me.ability)
       }
-      this.addRow(card, parts, spec)
+      return this.addRow(card, parts, spec)
     }
-    for (const slot of base) row(slot, this.mySet, oppSet, {}, ['base', slot.moveId])
+    const baseRows = new Map(base.map((slot) => [slot.moveId, row(slot, this.mySet, oppSet, {}, ['base', slot.moveId]).id]))
+    this.addCondition(
+      card,
+      BASE_CONDITION,
+      all.map((slot) => {
+        if (!inCategory(slot)) return this.crossProbe(card, ['base', slot.moveId], slot.moveId, 'attacker', this.mySet, oppSet)
+        const fixedId = fixedOf.get(slot.moveId)
+        return fixedId === undefined ? this.candidate('row', baseRows.get(slot.moveId) as string, slot.moveId) : this.candidate('fixed', fixedId, slot.moveId)
+      }),
+    )
     if (base.length === 0) return
     const refs: CardRefStats = {
       my: unique(base.map((s) => s.refs?.offense?.stat as BoostStat)),
@@ -313,21 +363,43 @@ class PlanBuilder {
     for (const v of this.variants(opp, resolved, refs)) {
       const attacker = withBoosts(this.mySet, v.basis.myBoosts)
       const defender = withBoosts(oppSet, v.basis.opponentBoosts)
-      for (const slot of base) {
+      const candidates: MoveCandidate[] = []
+      for (const slot of all) {
+        // 상대 능력치를 쓰는 기술(SP 무관 판정)은 기본 조건에서만 고른다.
+        if (slot.refs?.offense?.owner === 'target') continue
+        const herbError = v.whiteHerbConsumed && isMultihit(this.game, slot.moveId)
+        const parts = ['rank', slot.moveId, ...meansParts(v.basis)]
+        if (!inCategory(slot)) {
+          if (!herbError) candidates.push(this.crossProbe(card, parts, slot.moveId, 'attacker', attacker, defender))
+          continue
+        }
         const extra: Partial<RowSpec> = { kind: 'rank', basis: v.basis }
-        if (v.whiteHerbConsumed && isMultihit(this.game, slot.moveId)) extra.error = WHITE_HERB_MULTIHIT
-        row(slot, attacker, defender, extra, ['rank', slot.moveId, ...meansParts(v.basis)])
+        if (herbError) extra.error = WHITE_HERB_MULTIHIT
+        const r = row(slot, attacker, defender, extra, parts)
+        if (r.error === undefined) candidates.push(this.candidate('row', r.id, slot.moveId))
       }
+      this.addCondition(card, rankCondition(v.basis), candidates)
     }
   }
 
-  defenseCard(opp: Opponent, seed: CardSeed, slots: readonly MoveSlot[], errors: readonly MoveSlot[], notices: readonly MoveNotice[]): void {
+  /** all = 상대 후보 공격기 전부(사용률 순). 공격 탭과 같이 다른 분류 기술은 비교 전용 후보로만 넣는다. */
+  defenseCard(opp: Opponent, seed: CardSeed, all: readonly MoveSlot[], errors: readonly MoveSlot[], notices: readonly MoveNotice[]): void {
     const card = this.openCard(opp, seed, notices)
     const resolved = seed.resolved
     if (!resolved) return
     const oppSet = seed.assumption.set
     const def = defenseStatOf(seed.category as Category)
-    const pair = (slot: MoveSlot, attacker: PokemonSet, defender: PokemonSet, basis: RankBasis | undefined, error: ErrorReason | undefined, parts: (string | null)[]) => {
+    const inCategory = (slot: MoveSlot) => slot.refs?.defense === def
+    const slots = all.filter(inCategory)
+    /** 극단 필터 id(계획 단계 계산 불가면 undefined) */
+    const pair = (
+      slot: MoveSlot,
+      attacker: PokemonSet,
+      defender: PokemonSet,
+      basis: RankBasis | undefined,
+      error: ErrorReason | undefined,
+      parts: (string | null)[],
+    ): string | undefined => {
       const refs = slot.refs as MoveStatRefs
       const ability = resolved.ability
       if (error) {
@@ -344,7 +416,7 @@ class PlanBuilder {
         }
         if (basis) spec.basis = basis
         this.addRow(card, parts, spec)
-        return
+        return undefined
       }
       const natures = this.natures(def, 'damage', refs, ability)
       const f = this.addFilter(card, ['extreme', ...parts], {
@@ -375,8 +447,24 @@ class PlanBuilder {
         if (basis) spec.basis = basis
         this.addRow(card, [...parts, stat], spec)
       }
+      return f.id
     }
-    for (const slot of slots) pair(slot, oppSet, this.mySet, undefined, undefined, ['base', slot.moveId])
+    /** 행을 만들거나(이 분류) 비교 전용 후보를 넣는다(다른 분류). 계산 불가는 후보가 아니다. */
+    const group = (id: string, attacker: PokemonSet, defender: PokemonSet, basis: RankBasis | undefined, herbConsumed: boolean) => {
+      const candidates: MoveCandidate[] = []
+      for (const slot of all) {
+        const error = herbConsumed && isMultihit(this.game, slot.moveId) ? WHITE_HERB_MULTIHIT : undefined
+        const parts = basis ? ['rank', slot.moveId, ...meansParts(basis)] : ['base', slot.moveId]
+        if (!inCategory(slot)) {
+          if (!error) candidates.push(this.crossProbe(card, parts, slot.moveId, 'defender', attacker, defender))
+          continue
+        }
+        const filterId = pair(slot, attacker, defender, basis, error, parts)
+        if (filterId !== undefined) candidates.push(this.candidate('filter', filterId, slot.moveId))
+      }
+      this.addCondition(card, id, candidates)
+    }
+    group(BASE_CONDITION, oppSet, this.mySet, undefined, false)
     for (const slot of errors) {
       this.addRow(card, ['base', slot.moveId], {
         kind: 'base',
@@ -397,10 +485,7 @@ class PlanBuilder {
     for (const v of this.variants(opp, resolved, refs)) {
       const attacker = withBoosts(oppSet, v.basis.opponentBoosts)
       const defender = withBoosts(this.mySet, v.basis.myBoosts)
-      for (const slot of slots) {
-        const error = v.whiteHerbConsumed && isMultihit(this.game, slot.moveId) ? WHITE_HERB_MULTIHIT : undefined
-        pair(slot, attacker, defender, v.basis, error, ['rank', slot.moveId, ...meansParts(v.basis)])
-      }
+      group(rankCondition(v.basis), attacker, defender, v.basis, v.whiteHerbConsumed)
     }
   }
 
@@ -450,7 +535,7 @@ const unique = <T>(xs: readonly T[]): T[] => [...new Set(xs)]
 const meansParts = (b: RankBasis): string[] => [b.owner, b.means.kind, b.means.id]
 
 function emptyPlan(input: CardInput, tab: Tab, mySp: SpTable, status: TabPlan['status'], conflicts: string[]): TabPlan {
-  return { ...planHead(input, tab, mySp), status, cards: [], rows: {}, filters: {}, fixed: {}, customTargetConflicts: conflicts, notices: [] }
+  return { ...planHead(input, tab, mySp), status, cards: [], rows: {}, filters: {}, fixed: {}, probes: {}, customTargetConflicts: conflicts, notices: [] }
 }
 
 function planHead(input: CardInput, tab: Tab, mySp: SpTable) {
@@ -536,8 +621,7 @@ export function planTab(input: CardInput, tab: Tab): TabPlan {
     const categories = CATEGORY_ORDER.filter((c) => slots.some((s) => s.refs?.defense === defenseStatOf(c)))
     for (const opp of opponents) {
       for (const category of categories) {
-        const inCategory = slots.filter((s) => s.refs?.defense === defenseStatOf(category))
-        for (const seed of seedsOf(opp, category, ['hp', defenseStatOf(category)])) b.attackCard(opp, seed, inCategory)
+        for (const seed of seedsOf(opp, category, ['hp', defenseStatOf(category)])) b.attackCard(opp, seed, slots)
       }
     }
   } else if (tab === 'defense') {
@@ -557,7 +641,7 @@ export function planTab(input: CardInput, tab: Tab): TabPlan {
             .filter((s) => s.refs?.offense?.owner === 'self')
             .flatMap((s) => (s.refs as MoveStatRefs).attackerStats.filter((stat) => stat !== 'spe')),
         )
-        for (const seed of seedsOf(opp, category, keyStats)) b.defenseCard(opp, seed, inCategory, errors, notices)
+        for (const seed of seedsOf(opp, category, keyStats)) b.defenseCard(opp, seed, ok, errors, notices)
       }
     }
   } else {
@@ -575,6 +659,7 @@ export function planTab(input: CardInput, tab: Tab): TabPlan {
     rows: b.rows,
     filters: b.filters,
     fixed: b.fixed,
+    probes: b.probes,
     customTargetConflicts: conflicts,
     notices: tabNotices,
   }

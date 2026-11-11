@@ -142,8 +142,11 @@ describe('고난수 기준(rollSteps): 계산 전체에 전달되고 캐시 키�
     const size = c.size
     c.gets = c.hits = 0
     buildTabView({ ...base, rollSteps: 10 }, 'defense', c)
-    expect(c.hits).toBe(0)
-    expect(c.size).toBeGreaterThan(size)
+    // 같은 계산 안의 적중(다른 분류 카드 행과 같은 세트·조건인 비교 전용 후보)만 남고 앞 기준의 키는 하나도 맞히지 않는다.
+    const fresh = countingCache()
+    buildTabView({ ...base, rollSteps: 10 }, 'defense', fresh)
+    expect(c.hits).toBe(fresh.hits)
+    expect(c.size).toBe(size + fresh.size)
     c.gets = c.hits = 0
     expect(buildTabView(base, 'defense', c)).toEqual(first)
     expect(c.hits).toBe(c.gets)

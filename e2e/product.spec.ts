@@ -62,11 +62,70 @@ test.describe('제품 화면', () => {
     await expect(page.locator('main[data-app="product"]')).toHaveCount(0)
   })
 
+  test('카드 상세 행은 조건(기본·랭크 수단)마다 가장 센 기술 하나 + 선공기만, 포푸니크 카드는 목록에 없다(사용자 피드백 2026-11-11)', async ({ page }) => {
+    await openProduct(page)
+    await waitComplete(page)
+    for (const tab of ['공격', '방어'] as const) {
+      if (tab !== '공격') {
+        await selectTab(page, tab)
+        await waitComplete(page)
+      }
+      const all = await cards(page).all()
+      expect(all.length, tab).toBeGreaterThan(3)
+      for (const card of all) {
+        await cardLine(card).click()
+        await expect(card.locator('.card-detail')).toBeVisible()
+      }
+      const byCard = await cards(page).evaluateAll((els) =>
+        els.map((el) => ({
+          id: (el as HTMLElement).dataset.cardId ?? '',
+          rows: [...el.querySelectorAll<HTMLElement>('[data-testid="row"]')].map((r) => ({
+            move: r.dataset.move ?? '',
+            condition: r.dataset.condition ?? '',
+            status: r.dataset.status ?? '',
+            priority: r.dataset.priorityKept === 'true',
+            tag: r.querySelector('[data-testid="priority-tag"]') !== null,
+          })),
+        })),
+      )
+      for (const c of byCard) {
+        const strongest = new Map<string, Set<string>>()
+        for (const r of c.rows) {
+          expect(r.tag, c.id).toBe(r.priority)
+          if (r.priority || r.status === 'error') continue
+          strongest.set(r.condition, new Set([...(strongest.get(r.condition) ?? []), r.move]))
+        }
+        for (const [condition, moves] of strongest) expect([...moves], `${tab} ${c.id} ${condition}`).toHaveLength(1)
+      }
+      // 방어 탭은 행이 H행·B/D행 쌍이라 한 조건에 행이 2개다(기술은 하나).
+      if (tab === '방어') expect(byCard.some((c) => c.rows.filter((r) => r.condition === 'base' && !r.priority).length === 2)).toBe(true)
+    }
+    // 예시 세트 공격 탭: 포푸니크는 분함의발구르기가 무투자 확정1타라(드래곤클로 행 없음) 카드가 빠진다.
+    // 빈 목록 통과를 막는 전제: 포푸니크는 상위 N 대상이다(스피드 탭에는 카드가 있다). 변화 없음 요약은 화면에 없다(2026-11-10).
+    await selectTab(page, '스피드')
+    await waitComplete(page)
+    await expect(ladderCards(page).and(page.locator('[data-opponent="sneasler"]')).first()).toBeVisible()
+    await selectTab(page, '공격')
+    await waitComplete(page)
+    await expect(ladderCards(page).and(page.locator('[data-opponent="sneasler"]'))).toHaveCount(0)
+  })
+
   test('펼친 상세: 행·0~32 띠·현재값·예산 밖 칸 구분, 접힌 줄 대표 문구·외 k행(AC9·AC19)', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
+    // 외 k행은 남은 행(조건당 가장 센 기술 + 선공기) 기준. 예시 세트 공격 탭은 카드마다 한 행이라 방어 탭(H행·B/D행 쌍)에서 본다.
+    await selectTab(page, '방어')
+    await waitComplete(page)
     const withMore = cards(page).filter({ has: page.getByTestId('card-more') }).first()
     await expect(withMore.getByTestId('card-more')).toHaveText(/^외 \d+행$/)
+    await cardLine(withMore).click()
+    await expect(withMore.locator('.card-detail')).toBeVisible()
+    const shownRows = await withMore.locator('[data-testid="row"]').count()
+    await expect(withMore.getByTestId('card-more')).toHaveText(`외 ${shownRows - 1}행`)
+    await cardLine(withMore).click()
+    await expect(cardLine(withMore)).toHaveAttribute('aria-expanded', 'false')
+    await selectTab(page, '공격')
+    await waitComplete(page)
     // 목표 문구는 간단행에 없고(사용자 피드백 2026-11-11) 펼친 상세 행에만 있다.
     await expect(tabPanel(page).getByTestId('headline-target')).toHaveCount(0)
     await cardLine(cards(page).first()).click()
@@ -158,12 +217,13 @@ test.describe('제품 화면', () => {
     await expect(customCards(page).first()).toContainText('출처: 사용자 지정')
     for (const text of await customCards(page).locator('.card-line').allTextContents()) expect(text).not.toMatch(/%/)
 
-    // 방어 탭: 고른 기술 분류(특수 하이드로펌프·물리 폴터가이스트)마다 3장.
+    // 방어 탭: 계획은 분류(특수 하이드로펌프·물리 폴터가이스트)마다 3장이지만, 가장 센 기술은 분류를 가로질러 고르므로
+    // 하이드로펌프가 폴터가이스트보다 센 물리 프리셋 카드 3장은 빠지고 특수 3장만 보인다(사용자 피드백 2026-11-11).
     await selectTab(page, '방어')
     await waitComplete(page)
     const defense = await customCards(page).evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.category))
     expect(defense.filter((c) => c === 'special')).toHaveLength(3)
-    expect(defense.filter((c) => c === 'physical')).toHaveLength(3)
+    expect(defense.filter((c) => c === 'physical')).toHaveLength(0)
 
     await selectTab(page, '스피드')
     await waitComplete(page)
@@ -276,20 +336,22 @@ test.describe('제품 화면', () => {
     await expect(page.getByText('메타 통계를 불러오지 못했습니다')).toHaveCount(0)
   })
 
-  test('간단행의 대표 행이 랭크 행이면 기술 라벨에 랭크를 합친다(대도각참 칼춤 → "+2 아이언헤드")', async ({ page }) => {
+  test('간단행의 대표 행이 랭크 행이면 기술 라벨에 랭크를 합친다(대도각참 칼춤 → "+2 도각참")', async ({ page }) => {
     await openProduct(page)
     await selectTab(page, '방어')
     await waitComplete(page)
     // 랭크 행 대표면 근거는 기술 라벨 안의 랭크로 보이고, 별도 근거 태그는 스카프 행에만 남는다.
     await expect(tabPanel(page).getByTestId('headline-basis').and(page.locator('[data-row-kind="rank"]'))).toHaveCount(0)
-    const gambit = cards(page).filter({ hasText: '대도각참' }).getByTestId('move-label').filter({ hasText: '아이언헤드' }).filter({ has: page.getByTestId('move-rank') })
-    await expect(gambit.first()).toContainText('+2 아이언헤드')
+    // 칼춤 조건에서 대도각참의 가장 센 기술은 도각참이다(아이언헤드는 더 약해 행 없음, 사용자 피드백 2026-11-11).
+    const gambit = cards(page).filter({ hasText: '대도각참' }).getByTestId('move-label').filter({ hasText: '도각참' }).filter({ has: page.getByTestId('move-rank') })
+    await expect(gambit.first()).toContainText('+2 도각참')
     await expect(gambit.first().getByTestId('move-rank')).toHaveText('+2')
-    await expect(gambit.first()).toHaveAttribute('data-type', 'steel')
-    await expect(gambit.first().locator('img[data-type-icon="steel"]')).toHaveCount(1)
+    await expect(gambit.first()).toHaveAttribute('data-type', 'dark')
+    await expect(gambit.first().locator('img[data-type-icon="dark"]')).toHaveCount(1)
+    await expect(cards(page).filter({ hasText: '대도각참' }).getByTestId('move-label').filter({ hasText: '아이언헤드' })).toHaveCount(0)
     // 아이콘 → 랭크 → 기술명 순서.
     const order = await gambit.first().evaluate((el) => [...el.children].map((c) => c.getAttribute('data-type-icon') ?? c.className))
-    expect(order.filter((c) => c !== 'sr-only')).toEqual(['steel', 'move-rank num', 'move-name'])
+    expect(order.filter((c) => c !== 'sr-only')).toEqual(['dark', 'move-rank num', 'move-name'])
 
     // 스카프·비스카프(도구) 행 대표 카드는 기술 라벨 앞에 도구 태그를 유지한다(결정 C: "구애스카프" 등).
     // 예시 세트 스피드 탭에는 비스카프 행 대표(생명의구슬)가 있다. 같은 분기라 태그가 사라지면 여기서 잡힌다.

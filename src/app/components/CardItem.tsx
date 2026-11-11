@@ -7,7 +7,7 @@ import { koReason } from '../../ui/koErrors'
 import type { AppAction } from '../state'
 import { CustomEditor } from './CustomEditor'
 import { RowDetail } from './RowDetail'
-import { MoveLabel } from './MoveLabel'
+import { MoveLabel, PriorityTag } from './MoveLabel'
 import { itemKeyLabel, moveNoticeText } from './text'
 
 interface Props {
@@ -63,6 +63,12 @@ function Headline({ game, tab, card, badge }: { game: Snapshot; tab: Tab; card: 
           </>
         )}
         <MoveLabel game={game} tab={tab} row={row} />
+        {row.keptAsPriority && (
+          <>
+            {' '}
+            <PriorityTag />
+          </>
+        )}
       </span>
     </span>
   )

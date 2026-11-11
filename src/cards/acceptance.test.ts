@@ -7,6 +7,7 @@ import {
   STAT_IDS,
   judgeDamage,
   judgeSpeed,
+  moveStatRefs,
   natureMultiplier,
   sweepDamage,
   sweepSpeed,
@@ -42,7 +43,7 @@ import {
 import { buildTabView } from './batch'
 import { createLruCache } from './cache'
 import { presetKey } from './ids'
-import { planTab } from './plan'
+import { defenseMoveIds, planTab } from './plan'
 import { cardInput, realData, syntheticView } from './testing'
 import { DEFAULT_CRITERIA, TABS } from './types'
 import type { CardInput, CardSpec, CardView, NoChangeItem, RankBasis, RowKind, RowSpec, RowView, ScarfBasis, Tab, TabPlan, TabView } from './types'
@@ -143,11 +144,93 @@ function withMyNature(plan: TabPlan, spec: RowSpec, nature: string): RowSpec {
   return plan.mySide === 'attacker' ? { ...spec, attacker: { ...spec.attacker, nature } } : { ...spec, defender: { ...spec.defender, nature } }
 }
 
+type CorePick = 'kept' | 'dropped' | 'error'
+
+/** 후보 기술(행을 만들 수 있는 공격기): 분류 고정이고 공격측 HP에 의존하지 않는다. 스냅샷에 없으면 null */
+function candidateRefs(moveId: string, mine: boolean): ReturnType<typeof moveStatRefs> | null {
+  if (!Object.prototype.hasOwnProperty.call(game.data.moves, moveId)) return null
+  const refs = moveStatRefs(game, moveId)
+  if (!refs.offense || !refs.defense || refs.categoryVaries) return null
+  if (mine && refs.offense.owner === 'self' && refs.attackerStats.includes('hp')) return null
+  return refs
+}
+
+/**
+ * 카드·조건(기본 / 랭크 수단 하나)마다 현재 세트 단건 판정을 코어로 직접 내 가장 센 기술(1타 확률 → 최대 대미지 비율 → 슬롯·사용률 순)과
+ * 선공기만 남긴다. 후보는 분류를 가로지른 상대 한 마리의 기술 전부다(사용자 피드백 2026-11-11): 다른 분류 기술은 이 카드의 대표 세트·같은 조건 세트로
+ * 판정하고, 그 기술이 고르면 이 카드의 행은 빠진다. 무효는 버리고 코어가 거부하면 error. 키 = 공격 탭 행·고정 id, 방어 탭 필터 id.
+ */
+function corePicks(plan: TabPlan, card: CardSpec, meta: MetaView): Map<string, CorePick> {
+  type Cand = { id: string; moveId: string; order: number; judge: () => ReturnType<typeof judgeDamage> }
+  type Sets = { side: 'attacker' | 'defender'; attacker: PokemonSet; defender: PokemonSet; conditions: RowSpec['conditions']; herb: boolean }
+  const groups = new Map<string, Cand[]>()
+  const sets = new Map<string, Sets>()
+  const add = (group: string | null, c: Cand) => groups.set(group ?? 'base', [...(groups.get(group ?? 'base') ?? []), c])
+  const opt = { rollSteps: N }
+  const defense = plan.tab === 'defense'
+  const entry = meta.entry(card.opponent.id)
+  const mySet = plan.rows[card.rowIds[0]]?.attacker ?? plan.fixed[card.fixedIds[0]]?.attacker
+  const allMoves = defense ? defenseMoveIds(game, entry as MetaEntry) : (mySet?.moves ?? [])
+  const orderOf = (moveId: string) => allMoves.indexOf(moveId)
+  const herbOf = (b: RankBasis | ScarfBasis | undefined) => b?.kind === 'rank' && b.reactions.includes('whiteherb')
+  card.filterIds.forEach((id) => {
+    const f = plan.filters[id]
+    sets.set(meansKey(f.basis) ?? 'base', { side: 'defender', attacker: f.attacker, defender: f.defender, conditions: f.conditions, herb: herbOf(f.basis) })
+    add(meansKey(f.basis), { id, moveId: f.moveId, order: orderOf(f.moveId), judge: () => judgeDamage(game, 'defender', f.attacker, f.defender, f.moveId, f.conditions, undefined, opt) })
+  })
+  for (const rowId of card.rowIds) {
+    const r = plan.rows[rowId]
+    if (r.error || r.gate !== undefined || r.judge !== 'damage' || !r.sweep || !r.moveId) continue
+    const moveId = r.moveId
+    const side = r.sweep.side
+    sets.set(meansKey(r.basis) ?? 'base', { side, attacker: r.attacker, defender: r.defender, conditions: r.conditions, herb: herbOf(r.basis) })
+    add(meansKey(r.basis), { id: rowId, moveId, order: r.attacker.moves.indexOf(moveId), judge: () => judgeDamage(game, side, r.attacker, r.defender, moveId, r.conditions, undefined, opt) })
+  }
+  for (const fixedId of card.fixedIds) {
+    const f = plan.fixed[fixedId]
+    if (!sets.has('base')) sets.set('base', { side: 'attacker', attacker: f.attacker, defender: f.defender, conditions: f.conditions, herb: false })
+    add(null, { id: fixedId, moveId: f.moveId, order: f.attacker.moves.indexOf(f.moveId), judge: () => judgeDamage(game, 'attacker', f.attacker, f.defender, f.moveId, f.conditions, undefined, opt) })
+  }
+  // 다른 분류 기술(비교 전용). 랭크 조건에서는 상대 능력치 기술·하양허브 소비 뒤 연속기를 뺀다.
+  const myDefense = card.category === 'physical' ? 'def' : 'spd'
+  for (const [key, g] of sets) {
+    for (const moveId of allMoves) {
+      const refs = candidateRefs(moveId, !defense)
+      if (refs === null || refs.defense === myDefense) continue
+      if (key !== 'base' && (refs.offense?.owner === 'target' || (g.herb && game.data.moves[moveId].multihit !== undefined))) continue
+      add(key === 'base' ? null : key, {
+        id: JSON.stringify(['cross', key, moveId]),
+        moveId,
+        order: orderOf(moveId),
+        judge: () => judgeDamage(game, g.side, g.attacker, g.defender, moveId, g.conditions, undefined, opt),
+      })
+    }
+  }
+  const out = new Map<string, CorePick>()
+  for (const cands of groups.values()) {
+    const scored: { c: Cand; p: number; max: number }[] = []
+    for (const c of [...cands].sort((a, b) => a.order - b.order)) {
+      try {
+        const v = c.judge().value
+        out.set(c.id, 'dropped')
+        if (v.kind === 'damage') scored.push({ c, p: v.ohkoChance, max: v.maxPercent })
+      } catch (e) {
+        if (!(e instanceof CoreError || e instanceof CoreInputError)) throw e
+        out.set(c.id, 'error')
+      }
+    }
+    const best = scored.reduce<(typeof scored)[number] | undefined>((b, x) => (b === undefined || x.p > b.p || (x.p === b.p && x.max > b.max) ? x : b), undefined)
+    for (const x of scored) if (x === best || game.data.moves[x.c.moveId].priority > 0) out.set(x.c.id, 'kept')
+  }
+  return out
+}
+
 /**
  * 계획의 래더 카드를 코어로 직접 판정해 "변화 없음" 요약·표시 카드·표시 행 칸을 다시 만든다.
+ * 행은 카드·조건당 가장 센 기술(+선공기)만(corePicks), 고르지 않은 기술은 표시·요약 어디에도 없다.
  * 극단 필터 = 내 H·(B|D) 함께 0·무보정 / 함께 최대·상승(예산 무시), 행 = 현재·무보정·상승 성격 33칸 스윕(예산 밖 판정)의 합집합, 고정 = 단건 판정.
  */
-function expectMatchesCore(plan: TabPlan, view: TabView): { items: number; cards: number } {
+function expectMatchesCore(plan: TabPlan, view: TabView, meta: MetaView = bo1): { items: number; cards: number } {
   expect(plan.status).toEqual({ kind: 'ok' })
   expect(view.complete).toBe(true)
   const items: string[] = []
@@ -160,11 +243,23 @@ function expectMatchesCore(plan: TabPlan, view: TabView): { items: number; cards
       continue
     }
     let shown = 0
+    const picks = corePicks(plan, card, meta)
+    const viewCard = view.cards.find((c) => c.id === card.id)
     const gates = new Map<string, 'passed' | 'shown' | 'hidden'>()
     for (const rowId of card.rowIds) {
       const spec = plan.rows[rowId]
       if (spec.error) {
         shown++
+        continue
+      }
+      const pick = picks.get(spec.gate ?? rowId)
+      if (pick === 'dropped') {
+        expect(viewCard?.rows.find((x) => x.id === rowId), rowId).toBeUndefined()
+        continue
+      }
+      if (pick === 'error') {
+        if (spec.gate === undefined || !gates.has(spec.gate)) shown++
+        if (spec.gate !== undefined) gates.set(spec.gate, 'shown')
         continue
       }
       if (spec.gate !== undefined) {
@@ -210,6 +305,7 @@ function expectMatchesCore(plan: TabPlan, view: TabView): { items: number; cards
       expect(row?.boundaries.map((b) => b.sp), rowId).toEqual(r.boundaries)
     }
     for (const fixedId of card.fixedIds) {
+      if (picks.get(fixedId) === 'dropped') continue
       const f = plan.fixed[fixedId]
       const c = coreCategory(() => judgeDamage(game, 'attacker', f.attacker, f.defender, f.moveId, f.conditions, undefined, { rollSteps: N }))
       if (c === null) shown++
@@ -355,14 +451,18 @@ describe('AC3 묶음(실제 스냅샷 예시)', () => {
 describe('AC4 혼합 세트·사이코쇼크(F2)', () => {
   it('같은 상대가 물리(H·B)·특수(H·D) 카드로 나뉘고 사이코쇼크는 물리 카드 행이다', () => {
     const { plan, view } = run('F2', top(F2.mySet), 'attack')
+    const moves = (c: CardSpec) => [...new Set(c.rowIds.map((id) => plan.rows[id].moveId))]
+    const kommoo = (category: CardSpec['category']) => plan.cards.filter((c) => c.opponent.id === F2.opponent && c.category === category)
+    for (const c of kommoo('physical')) {
+      expect(c.bundle.stats.map((s) => s.stat)).toEqual(['hp', 'def'])
+      expect(moves(c).sort()).toEqual(['drainpunch', 'psyshock'])
+    }
+    for (const c of kommoo('special')) {
+      expect(c.bundle.stats.map((s) => s.stat)).toEqual(['hp', 'spd'])
+      expect(moves(c)).toEqual(['psychic'])
+    }
     const phys = cardBySpread(plan, view, F2.physical.opponent, 'physical')
     const spec = cardBySpread(plan, view, F2.special.opponent, 'special')
-    expect(phys.spec.bundle.stats.map((s) => s.stat)).toEqual(['hp', 'def'])
-    expect(spec.spec.bundle.stats.map((s) => s.stat)).toEqual(['hp', 'spd'])
-    const moves = (c: CardSpec) => [...new Set(c.rowIds.map((id) => plan.rows[id].moveId))]
-    expect(moves(phys.spec).sort()).toEqual(['drainpunch', 'psyshock'])
-    expect(moves(spec.spec)).toEqual(['psychic'])
-
     for (const [side, card] of [
       [F2.physical, phys.card],
       [F2.special, spec.card],
@@ -374,6 +474,19 @@ describe('AC4 혼합 세트·사이코쇼크(F2)', () => {
     }
     const psyshock = shownRow(phys.card, (r) => r.moveId === 'psyshock' && r.kind === 'base')
     expect(psyshock.refs).toMatchObject({ category: 'Special', defense: 'def' })
+  })
+
+  it('가장 센 기술은 분류를 가로질러 고른다: 짜랑고우거 물리 카드는 특수기 사이코키네시스가 무투자 확정1타라 사이코쇼크 행이 없고 카드가 빠진다(사용자 피드백 2026-11-11)', () => {
+    const { plan, view } = run('F2', top(F2.mySet), 'attack')
+    const c = cardBySpread(plan, view, F2.crossDropped.opponent, 'physical')
+    const base = c.spec.conditions.find((g) => g.id === JSON.stringify(['base']))
+    expect(base?.candidates.map((x) => [x.moveId, x.target])).toEqual([
+      ['psyshock', 'row'],
+      ['psychic', 'probe'],
+      ['drainpunch', 'row'],
+    ])
+    expect(c.card).toBeUndefined()
+    expect(view.noChange.items.filter((i) => i.cardId === c.spec.id)).toEqual([])
   })
 
   it('분류마다 카드 상한 3장', () => {
@@ -417,7 +530,11 @@ describe('AC5 방어 탭 극단 필터(F3)', () => {
 
   it('현재 성격 두 극단이 같아도 상승 성격 높은 극단이 다르면 통과해 H 행·D 행이 생긴다', () => {
     const { plan, view } = run('example', top(EXAMPLE_SET), 'defense')
-    const c = F3.plusOnly
+    // F3.plusOnly(문포스)는 같은 카드의 파멸의빛이 더 세서 행·요약 어디에도 없다(2026-11-11 가장 센 기술 하나)
+    const weaker = cardBySpread(plan, view, F3.plusOnly.opponent, 'special')
+    expect(rowsFor(view, F3.plusOnly.opponent.id).some((r) => r.moveId === F3.plusOnly.move)).toBe(false)
+    expect(view.noChange.items.some((i) => i.cardId === weaker.spec.id && i.moveId === F3.plusOnly.move)).toBe(false)
+    const c = F3.plusOnlyStrongest
     const { spec, card } = cardBySpread(plan, view, c.opponent, 'special')
     expect(view.noChange.items.some((i) => i.cardId === spec.id && i.kind === 'extreme-filter' && i.moveId === c.move && i.rowKind === 'base')).toBe(false)
     // 필터를 통과했으니 H 행·D 행이 각각 표시되거나 행 단위 변화 없음(각 행 스윕 기준)으로 간다
@@ -502,11 +619,17 @@ describe('AC6 변화 없음 요약', () => {
     expect(view.noChange.items.every((i) => i.kind === 'sp-independent')).toBe(true)
   })
 
-  it('속임수 + 일반 기술: 표시 카드가 있어도 고정 판정은 1행씩 센다', () => {
+  it('속임수 + 일반 기술: 속임수가 가장 세면 고정 판정 1건만 요약에, 아니면 속임수는 어디에도 없다', () => {
     const { plan, view } = run('foul-mixed', top(kingambitFoul(['foulplay', 'kowtowcleave']), { filters: { topN: 12, selected: [] } }), 'attack')
     expectMatchesCore(plan, view)
-    const shownIds = new Set(view.cards.map((c) => c.id))
-    expect(view.noChange.items.some((i) => i.kind === 'sp-independent' && shownIds.has(i.cardId))).toBe(true)
+    const itemsOf = (id: string) => view.noChange.items.filter((i) => i.cardId === id).map((i) => [i.kind, i.moveId])
+    // 실데이터: 포푸니크 adamant:2/32/0/0/0/32는 속임수(최대 60.5%)가 도각참(55.4%)보다 세고, 키키링 quiet:10/0/13/30/13/0은 도각참이 확정1타
+    const foul = cardBySpread(plan, view, { id: 'sneasler', spread: 'adamant:2/32/0/0/0/32' }, 'physical')
+    expect(foul.card).toBeUndefined()
+    expect(itemsOf(foul.spec.id)).toEqual([['sp-independent', 'foulplay']])
+    const cleave = cardBySpread(plan, view, { id: 'farigiraf', spread: 'quiet:10/0/13/30/13/0' }, 'physical')
+    expect(cleave.card?.rows.map((r) => r.moveId)).toEqual(['kowtowcleave'])
+    expect(itemsOf(cleave.spec.id)).toEqual([])
   })
 
   it('목록 밖 커스텀 카드는 변화 없음 행도 카드 안에 남고 요약에 세지 않는다', () => {
@@ -700,10 +823,10 @@ describe('AC11 목록 밖 타겟(F6·F10)', () => {
     }
   })
 
-  it('방어 탭: 고른 기술의 분류마다(물리 폴터가이스트·특수 하이드로펌프·일렉트릭네트) 3장', () => {
+  it('방어 탭: 계획은 분류마다 프리셋 3장이지만 가장 센 기술은 분류를 가로질러 고른다 — 하이드로펌프가 폴터가이스트보다 세 물리 카드는 빠지고 특수 카드만 하이드로펌프 행(사용자 피드백 2026-11-11)', () => {
     const { plan, view } = run('custom-rotom', top(EXAMPLE_SET, { customTargets: [target] }), 'defense')
-    const cards = customCards(view)
-    expect(cards.map((c) => [c.category, c.bundle.presetIndex])).toEqual([
+    const planned = plan.cards.filter((c) => c.opponent.source === 'custom')
+    expect(planned.map((c) => [c.category, c.bundle.presetIndex])).toEqual([
       ['physical', 0],
       ['physical', 1],
       ['physical', 2],
@@ -711,11 +834,27 @@ describe('AC11 목록 밖 타겟(F6·F10)', () => {
       ['special', 1],
       ['special', 2],
     ])
+    // 물리 카드의 대표 세트(프리셋)로 코어를 직접 불러도 하이드로펌프가 폴터가이스트보다 세다(1타 확률 → 최대 대미지 비율).
+    for (const c of planned.filter((x) => x.category === 'physical')) {
+      const score = (move: string) => {
+        const v = judgeDamage(game, 'defender', c.opponentSet, EXAMPLE_SET, move, undefined, undefined, { rollSteps: N }).value
+        return v.kind === 'damage' ? [v.ohkoChance, v.maxPercent] : [-1, -1]
+      }
+      const [hp, hm] = score(F10.special)
+      const [pp, pm] = score(F10.physical)
+      expect(hp > pp || (hp === pp && hm > pm), c.id).toBe(true)
+    }
+    const cards = customCards(view)
+    expect(cards.map((c) => [c.category, c.bundle.presetIndex])).toEqual([
+      ['special', 0],
+      ['special', 1],
+      ['special', 2],
+    ])
     for (const c of cards) {
       const moves = new Set(c.rows.map((r) => r.moveId))
       const want = c.category === 'physical' ? 'Physical' : 'Special'
-      expect([...moves]).toEqual(F10.moves.filter((m) => game.data.moves[m].category === want))
-      expect(moves.has(c.category === 'physical' ? F10.physical : F10.special)).toBe(true)
+      expect(F10.moves.filter((m) => game.data.moves[m].category === want)).toEqual(expect.arrayContaining([...moves]))
+      expect([...moves]).toEqual([F10.special])
       const spec = plan.cards.find((x) => x.id === c.id) as CardSpec
       for (const r of c.rows.filter((x) => x.cells.length > 0 && x.kind === 'base')) {
         const direct = sweepDamage(game, { side: 'defender', stat: r.sweepStat as StatId }, spec.opponentSet, EXAMPLE_SET, r.moveId as string, undefined, undefined, OVER)

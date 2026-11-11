@@ -50,7 +50,7 @@ interface TabRun {
   /** 마지막 pendingTasks 결과와 단계별 소비 위치 */
   queue: PendingTasks
   pos: [number, number, number, number, number]
-  /** extreme·ends 결과나 쌍의 마지막 행 sweep·variant 결과가 대기열을 바꿨을 수 있음 */
+  /** probe·fixed(가장 센 기술 고르기)·extreme·ends 결과나 쌍의 마지막 행 sweep·variant 결과가 대기열을 바꿨을 수 있음 */
   dirty: boolean
   fatal: boolean
   /** 결과가 늘 때마다 +1 */
@@ -225,7 +225,8 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
       if (t.plan === null) throw new Error(`${unit.tab} 탭 계획 없이 작업이 나왔다`)
       t.results.set(taskKey(unit.task), computeRowTask(t.plan, unit.task, cache))
       t.version++
-      if (unit.task.kind === 'ends' || unit.task.kind === 'extreme' || mayUnlockPair(t.plan, t.results, unit.task)) t.dirty = true
+      const k = unit.task.kind
+      if (k === 'probe' || k === 'fixed' || k === 'ends' || k === 'extreme' || mayUnlockPair(t.plan, t.results, unit.task)) t.dirty = true
     } catch (e) {
       fail(run, unit.tab, e)
     }

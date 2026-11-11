@@ -1,7 +1,19 @@
 // 계획 + 행 작업 결과 → 탭 뷰. 판정을 다시 하지 않고 표시용 SP로 산술·조회만 한다. 비용 O(행 × 33).
 import type { SpTable } from '../core'
 import type { StatId } from '../data/schema'
-import { cardPending, filterState, neededVariants, pendingTasks, rowChanges, rowJudgements, taskKey, type RowJudgements } from './schedule'
+import {
+  candidateStates,
+  cardPending,
+  filterState,
+  neededVariants,
+  pendingTasks,
+  probeKey,
+  rowChanges,
+  rowJudgements,
+  taskKey,
+  type CandidateState,
+  type RowJudgements,
+} from './schedule'
 import { cellLabel, pairTarget, singleTarget } from './target'
 import { NATURE_VARIANTS } from './types'
 import type {
@@ -191,11 +203,41 @@ function buildCard(ctx: Ctx, card: CardSpec): CardBuild {
     return reason
   }
 
+  const states = candidateStates(card, results)
+  const probeErrors = new Map<string, ErrorReason>()
+  for (const group of card.conditions) {
+    for (const c of group.candidates) {
+      const r = results.get(probeKey(c))
+      if (c.target !== 'fixed' && r?.kind === 'error') probeErrors.set(c.id, r.reason)
+    }
+  }
   const filterDone = new Set<string>()
+  const filterHead = (gate: string, order: number): RowHead => {
+    const filter = plan.filters[gate]
+    const head: RowHead = { id: JSON.stringify(['filter', gate]), kind: filter.basis ? 'rank' : 'base', order, moveId: filter.moveId }
+    if (filter.basis !== undefined) head.basis = filter.basis
+    return head
+  }
   for (const rowId of card.rowIds) {
     const spec = plan.rows[rowId]
     if (spec.error !== undefined) {
       rows.push(bareRow(ctx, headOf(spec), 'error', { error: spec.error }))
+      continue
+    }
+    const candidate = spec.gate ?? rowId
+    const state: CandidateState | undefined = states.get(candidate)
+    if (state === 'dropped') continue
+    if (state === 'probing') {
+      if (!ladder) rows.push(bareRow(ctx, headOf(spec), 'pending'))
+      continue
+    }
+    if (state === 'error') {
+      const reason = probeErrors.get(candidate) as ErrorReason
+      if (spec.gate === undefined) rows.push(bareRow(ctx, headOf(spec), 'error', { error: fail(reason) }))
+      else if (!filterDone.has(spec.gate)) {
+        filterDone.add(spec.gate)
+        rows.push(bareRow(ctx, filterHead(spec.gate, spec.order), 'error', { error: fail(reason) }))
+      }
       continue
     }
     if (spec.gate !== undefined) {
@@ -208,8 +250,7 @@ function buildCard(ctx: Ctx, card: CardSpec): CardBuild {
         if (filterDone.has(spec.gate)) continue
         filterDone.add(spec.gate)
         const filter = plan.filters[spec.gate]
-        const head: RowHead = { id: JSON.stringify(['filter', spec.gate]), kind: filter.basis ? 'rank' : 'base', order: spec.order, moveId: filter.moveId }
-        if (filter.basis !== undefined) head.basis = filter.basis
+        const head = filterHead(spec.gate, spec.order)
         if (f.kind === 'error') rows.push(bareRow(ctx, head, 'error', { error: fail(f.result.reason) }))
         else if (ladder) items.push(item('extreme-filter', f.result.low.category, { rowKind: head.kind, moveId: filter.moveId, basis: filter.basis }))
         else rows.push(bareRow(ctx, head, 'ok', { category: f.result.low.category, noChange: true }))
@@ -249,7 +290,9 @@ function buildCard(ctx: Ctx, card: CardSpec): CardBuild {
       items.push(item('row', first.category, { rowKind: spec.kind, moveId: spec.moveId, sweepStat: stat, basis: spec.basis }))
       continue
     }
-    rows.push(sweptRow(ctx, spec, stat, j, same))
+    const row = sweptRow(ctx, spec, stat, j, same)
+    if (state === 'priority') row.keptAsPriority = true
+    rows.push(row)
   }
 
   const fixedOrder = card.rowIds.reduce((m, id) => Math.max(m, plan.rows[id].order + 1), 0)
@@ -257,7 +300,9 @@ function buildCard(ctx: Ctx, card: CardSpec): CardBuild {
     const spec = plan.fixed[fixedId]
     const head: RowHead = { id: JSON.stringify(['fixed', fixedId]), kind: 'base', order: fixedOrder + i, moveId: spec.moveId }
     const r = results.get(taskKey({ kind: 'fixed', fixedId }))
-    if (r === undefined) {
+    const state = states.get(fixedId)
+    if (state === 'dropped') return
+    if (r === undefined || state === 'probing') {
       if (!ladder) rows.push(bareRow(ctx, head, 'pending'))
     } else if (r.kind === 'error') {
       rows.push(bareRow(ctx, head, 'error', { error: fail(r.reason) }))
@@ -266,7 +311,9 @@ function buildCard(ctx: Ctx, card: CardSpec): CardBuild {
     } else if (ladder) {
       items.push(item('sp-independent', r.cell.category, { moveId: spec.moveId }))
     } else {
-      rows.push(bareRow(ctx, head, 'ok', { category: r.cell.category, noChange: true }))
+      const row = bareRow(ctx, head, 'ok', { category: r.cell.category, noChange: true })
+      if (state === 'priority') row.keptAsPriority = true
+      rows.push(row)
     }
   })
 
@@ -286,7 +333,8 @@ function buildCard(ctx: Ctx, card: CardSpec): CardBuild {
   const visible = rows.length > 0 || card.notices.length > 0
   return {
     view,
-    displayed: !ladder || (settled && visible),
+    // 커스텀 카드도 다른 분류 기술이 가장 세 행이 하나도 남지 않으면 뺀다(그 상대의 다른 분류 카드가 보인다).
+    displayed: ladder ? settled && visible : visible,
     emptyDone: ladder && allDone && !visible,
     items,
     mySetReasons: reasons,
@@ -312,6 +360,9 @@ function progressCount(plan: TabPlan, results: ResultMap): number {
   const has = (key: string) => (results.has(key) ? 1 : 0)
   for (const card of plan.cards) {
     if (card.state === 'error') continue
+    for (const group of card.conditions) {
+      for (const c of group.candidates) if (c.target !== 'fixed') done += has(probeKey(c))
+    }
     for (const filterId of card.filterIds) {
       done += has(taskKey({ kind: 'extreme', filterId }))
       for (const nature of NATURE_VARIANTS) done += has(taskKey({ kind: 'pair', filterId, nature }))

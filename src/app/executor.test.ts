@@ -132,7 +132,7 @@ describe('createExecutor', () => {
   })
 
   it('우선순위: 활성 탭 1·2단계 → 나머지 탭 1·2단계 → 3단계', async () => {
-    const active: Tab = 'defense'
+    const active: Tab = 'attack'
     const others = TABS.filter((t) => t !== active)
     expect(hasStage3(inputA, active)).toBe(true)
     const m = manualScheduler()

@@ -127,6 +127,23 @@ function computePair(plan: TabPlan, filterId: string, which: NatureVariant): Pai
   }, plan.spMaxPerStat)
 }
 
+/** 후보 기술의 현재 세트 단건 판정(가장 센 기술 고르기 전용, 칸 sp는 0). 방어 탭 필터는 상대 → 나, 비교 전용 후보는 그 명세의 관점. */
+function computeProbe(plan: TabPlan, task: Extract<RowTask, { kind: 'probe' }>): CompactCell[] {
+  const options = { rollSteps: plan.rollSteps }
+  if (task.target === 'filter') {
+    const spec = plan.filters[task.id]
+    if (spec === undefined) throw new Error(`극단 필터 ${task.id}가 계획에 없다`)
+    return [compactDamage(0, judgeDamage(plan.game, 'defender', spec.attacker, spec.defender, spec.moveId, spec.conditions, undefined, options))]
+  }
+  if (task.target === 'probe') {
+    const spec = plan.probes[task.id]
+    if (spec === undefined) throw new Error(`비교 판정 ${task.id}가 계획에 없다`)
+    return [compactDamage(0, judgeDamage(plan.game, spec.side, spec.attacker, spec.defender, spec.moveId, spec.conditions, undefined, options))]
+  }
+  const spec = rowSpec(plan, task.id)
+  return [compactDamage(0, judgeDamage(plan.game, spec.sweep.side, spec.attacker, spec.defender, moveOf(spec), spec.conditions, undefined, options))]
+}
+
 /** 내 SP와 무관한 판정이라 칸 sp는 0으로 둔다. */
 function computeFixed(plan: TabPlan, fixedId: string): CompactCell[] {
   const spec = plan.fixed[fixedId]
@@ -136,6 +153,8 @@ function computeFixed(plan: TabPlan, fixedId: string): CompactCell[] {
 
 function compute(plan: TabPlan, task: RowTask): CachedJudgement {
   switch (task.kind) {
+    case 'probe':
+      return computeProbe(plan, task)
     case 'ends':
       return computeEnds(plan, task.rowId)
     case 'sweep':
@@ -156,6 +175,8 @@ function toResult(task: RowTask, value: CachedJudgement): RowTaskResult {
   if (task.kind === 'pair') return { kind: 'pair', filterId: task.filterId, nature: task.nature, points: value as readonly PairPoint[] }
   const cells = value as readonly CompactCell[]
   switch (task.kind) {
+    case 'probe':
+      return { kind: 'probe', id: task.id, cell: cells[0] }
     case 'ends':
       return { kind: 'ends', rowId: task.rowId, low: cells[0], high: cells[1], range: { low: cells[2], high: cells[3] } }
     case 'sweep':

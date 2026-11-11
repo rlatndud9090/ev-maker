@@ -6,7 +6,19 @@ export { bundlesOf } from './bundles'
 export { RANK_MEANS, REACTIONS, applyMeans, myMeansNotes } from './rankMeans'
 export { presetAssumption } from './presets'
 export { planTab } from './plan'
-export { taskKey, pendingTasks, nextStage, mayUnlockPair, neededVariants, rowJudgements, rowChanges, type RowJudgements } from './schedule'
+export {
+  taskKey,
+  pendingTasks,
+  nextStage,
+  mayUnlockPair,
+  neededVariants,
+  rowJudgements,
+  rowChanges,
+  candidateStates,
+  probeKey,
+  type CandidateState,
+  type RowJudgements,
+} from './schedule'
 export { natureVariants } from './natures'
 export { judgementKey } from './key'
 export { createLruCache } from './cache'

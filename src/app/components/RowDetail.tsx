@@ -3,7 +3,12 @@ import { cellLabel, type CellView, type RowView, type Tab } from '../../cards'
 import type { Snapshot } from '../../data/schema'
 import { categoryLabel, categorySymbol, categoryTone, currentText, fixedText, spanText, spansOf, targetText } from '../../ui/format'
 import { koReason } from '../../ui/koErrors'
+import { PriorityTag } from './MoveLabel'
 import { ROW_KIND_LABEL, basisText, rowRefsNote, rowTitle } from './text'
+
+/** 행 조건(기본·랭크 수단·도구) 식별 문자열. e2e가 "조건당 기술 하나(+선공기)"를 대조한다 */
+const conditionOf = (row: RowView): string =>
+  row.basis === undefined ? 'base' : row.basis.kind === 'rank' ? JSON.stringify([row.basis.owner, row.basis.means.kind, row.basis.means.id]) : JSON.stringify([row.basis.kind, row.basis.item])
 
 /** 판정 색 칩(결과 배지와 같은 5색) + 그 탭 관점의 좋고 나쁨 기호 */
 function TierChip({ tab, category }: { tab: Tab; category: string }) {
@@ -55,10 +60,19 @@ export const RowDetail = memo(function RowDetail({ game, tab, row }: Props) {
   const cur = row.cells.find((c) => c.sp === row.current.sp)
   const currentLabel = cur === undefined ? undefined : cellLabel(tab, cur)
   return (
-    <li className={`row row-${row.status}`} data-testid="row" data-row-kind={row.kind} data-status={row.status}>
+    <li
+      className={`row row-${row.status}`}
+      data-testid="row"
+      data-row-kind={row.kind}
+      data-status={row.status}
+      data-move={row.moveId}
+      data-condition={conditionOf(row)}
+      data-priority-kept={row.keptAsPriority ? 'true' : undefined}
+    >
       <div className="row-head">
         <span className="row-kind">{ROW_KIND_LABEL[row.kind]}</span>
         <strong className="row-title">{rowTitle(game, row)}</strong>
+        {row.keptAsPriority && <PriorityTag />}
         {note && <span className="hint">({note})</span>}
         {row.basis && <span className="row-basis">{basisText(game, row.basis)}</span>}
       </div>

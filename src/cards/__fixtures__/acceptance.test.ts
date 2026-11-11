@@ -23,6 +23,7 @@ import {
   F1,
   F10,
   F11,
+  F12,
   F2,
   F3,
   F4,
@@ -37,6 +38,7 @@ import {
   withIllegalRepresentativeMove,
   type Boundary,
   type ExtremeCase,
+  type OpponentRef,
 } from './acceptance'
 import { DEFAULT_ROLL_STEPS } from '../types'
 
@@ -184,11 +186,26 @@ describe('F2 혼합 세트·사이코쇼크', () => {
     expect(pct(withSp(opp, { spd: 32 }))).toBe(pct(opp))
   })
 
-  it('같은 상대의 물리(H·B)·특수(H·D) 대표에서 각각 판정이 바뀐다', () => {
+  it('물리 카드 대표(메가눈여아 사이코쇼크)·특수 카드 대표(짜랑고우거 사이코키네시스)에서 각각 판정이 바뀐다', () => {
     for (const side of [F2.physical, F2.special]) {
       const r = sweepDamage(game, { side: 'attacker', stat: F2.sweepStat }, F2.mySet, opponentSet(bo1, side.opponent), side.move, undefined, undefined, OVER)
       expect(boundariesOf(r), side.move).toEqual(side.boundaries)
     }
+  })
+
+  it('메가눈여아 대표에는 사이코쇼크가 세 기술 중 가장 세고, 짜랑고우거 물리 카드 대표에는 사이코키네시스가 무투자 확정1타', () => {
+    const score = (ref: OpponentRef, move: string) => {
+      const v = judgeDamage(game, 'attacker', F2.mySet, opponentSet(bo1, ref), move, undefined, undefined, { rollSteps: N }).value
+      return v.kind === 'damage' ? [v.ohkoChance, v.maxPercent] : [-1, -1]
+    }
+    const beats = (a: number[], b: number[]) => a[0] > b[0] || (a[0] === b[0] && a[1] > b[1])
+    for (const m of F2.mySet.moves.filter((x) => x !== F2.physical.move)) {
+      expect(beats(score(F2.physical.opponent, F2.physical.move), score(F2.physical.opponent, m)), m).toBe(true)
+    }
+    const c = F2.crossDropped
+    expect(beats(score(c.opponent, c.stronger), score(c.opponent, c.move))).toBe(true)
+    const zero = { ...withSp(F2.mySet, { spa: 0 }), nature: 'serious' }
+    expect(judgeDamage(game, 'attacker', zero, opponentSet(bo1, c.opponent), c.stronger, undefined, undefined, IGNORE_TOTAL).category).toBe('guaranteed-ohko')
   })
 })
 
@@ -207,6 +224,7 @@ describe('F3 방어 탭 극단 필터', () => {
     ['둘 다 확정1타', F3.bothOhko],
     ['통과', F3.passing],
     ['상승 성격으로만 통과', F3.plusOnly],
+    ['상승 성격으로만 통과(가장 센 기술)', F3.plusOnlyStrongest],
   ] as const) {
     it(`${name}: ${c.opponent.id} ${c.move}`, () => {
       expect(topAttackMoves(entry(c.opponent.id))).toContain(c.move)
@@ -218,6 +236,8 @@ describe('F3 방어 탭 극단 필터', () => {
   it('상승 성격으로만 통과: 현재 성격 두 극단은 같다', () => {
     expect(extremes(F3.plusOnly)).toEqual({ low: F3.plusOnly.low, high: F3.plusOnly.high, currentHigh: F3.plusOnly.currentHigh })
     expect(F3.plusOnly.currentHigh).toBe(F3.plusOnly.low)
+    expect(extremes(F3.plusOnlyStrongest)).toEqual({ low: F3.plusOnlyStrongest.low, high: F3.plusOnlyStrongest.high, currentHigh: F3.plusOnlyStrongest.currentHigh })
+    expect(F3.plusOnlyStrongest.currentHigh).toBe(F3.plusOnlyStrongest.low)
   })
 
   it('둘 다 저난수 1타는 상위 30 × 공격기 상위 5 × 보존 배분 전부에서 사례가 없다', () => {
@@ -430,5 +450,75 @@ describe('F11 관여 능력치 S', () => {
     expect(moveStatRefs(game, F11.independent.move).speedDependent).toBe(false)
     expect(pct(F11.dependent.mySet, F11.dependent.move, lo)).not.toBe(pct(F11.dependent.mySet, F11.dependent.move, hi))
     expect(pct(F11.independent.mySet, F11.independent.move, lo)).toBe(pct(F11.independent.mySet, F11.independent.move, hi))
+  })
+})
+
+describe('F12 카드·조건당 가장 센 기술(현재 세트 단건 판정)', () => {
+  const ROLL = { rollSteps: N }
+  const round1 = (x: number) => Math.round(x * 10) / 10
+  /** 내가 공격(공격 탭) 또는 상대가 나를 공격(방어 탭)하는 현재 세트 단건 판정 */
+  const probe = (attacker: PokemonSet, defender: PokemonSet, move: string, side: 'attacker' | 'defender') => {
+    const v = judgeDamage(game, side, attacker, defender, move, undefined, undefined, ROLL).value
+    return v.kind === 'damage' ? { ohko: v.ohkoChance, maxPercent: round1(v.maxPercent) } : 'immune'
+  }
+  const mine = (my: PokemonSet, ref: Parameters<typeof opponentSet>[1], move: string) => probe(my, opponentSet(bo1, ref), move, 'attacker')
+  const theirs = (my: PokemonSet, ref: Parameters<typeof opponentSet>[1], move: string) => probe(opponentSet(bo1, ref), my, move, 'defender')
+
+  it('포푸니크: 분함의발구르기가 1타 확률 같은 지진보다 최대 대미지가 커 가장 세고, 무투자·무보정에서도 확정1타다', () => {
+    const c = F12.sneasler
+    for (const [move, want] of Object.entries(c.probe)) expect(mine(c.mySet, c.opponent, move), move).toEqual(want)
+    expect(c.mySet.moves).toEqual(['earthquake', 'dragonclaw', 'rockslide', 'stompingtantrum'])
+    const zero = { ...withSp(c.mySet, { atk: 0 }), nature: 'serious' }
+    expect(judgeDamage(game, 'attacker', zero, opponentSet(bo1, c.opponent), c.chosen, undefined, undefined, { ...ROLL, ignoreSpTotal: true }).category).toBe('guaranteed-ohko')
+  })
+
+  it('동률(1타 확률·최대 대미지 비율 모두 같음): 지진 = 분함의발구르기', () => {
+    const c = F12.slotTie
+    expect(mine(c.mySet, c.opponent, c.chosen)).toEqual(c.probe)
+    expect(mine(c.mySet, c.opponent, c.tiedWith)).toEqual(c.probe)
+    expect(c.mySet.moves.indexOf(c.chosen)).toBeLessThan(c.mySet.moves.indexOf(c.tiedWith))
+  })
+
+  it('방어 탭 1타 확률 동률 → 최대 대미지 비율: 파멸의빛 > 문포스', () => {
+    const c = F12.maxPercentTie
+    for (const [move, want] of Object.entries(c.probe)) expect(theirs(c.mySet, c.opponent, move), move).toEqual(want)
+    expect(topAttackMoves(entry(c.opponent.id))).toEqual(expect.arrayContaining([c.chosen, c.over]))
+  })
+
+  it('선공기: 기습은 도각참보다 약하고 우선도 > 0, 테일아머(키키링) 상대에게는 무효', () => {
+    const c = F12.priority
+    for (const [move, want] of Object.entries(c.probe)) expect(mine(c.mySet, c.opponent, move), move).toEqual(want)
+    expect(game.data.moves[c.kept].priority).toBeGreaterThan(0)
+    expect(game.data.moves[c.chosen].priority).toBe(0)
+    expect(mine(c.mySet, c.immune.opponent, c.immune.move)).toBe('immune')
+  })
+
+  it('방어 탭: 대도각참 상위 5 후보 중 도각참이 나에게 가장 세다(기습은 선공기)', () => {
+    const c = F12.defense
+    const moves = topAttackMoves(entry(c.opponent.id))
+    expect(moves).toEqual(expect.arrayContaining([c.chosen, c.kept, ...c.dropped]))
+    for (const [move, want] of Object.entries(c.probe)) expect(theirs(c.mySet, c.opponent, move), move).toEqual(want)
+    const best = theirs(c.mySet, c.opponent, c.chosen)
+    for (const m of moves.filter((x) => x !== c.chosen)) {
+      const r = theirs(c.mySet, c.opponent, m)
+      if (r === 'immune' || best === 'immune') continue
+      expect(r.ohko <= best.ohko && r.maxPercent < best.maxPercent, m).toBe(true)
+    }
+    expect(game.data.moves[c.kept].priority).toBeGreaterThan(0)
+  })
+
+  it('SP를 바꾸면 가장 센 기술이 분류를 넘어 바뀐다: 메가후딘 C32 사이코키네시스 → A32 드레인펀치', () => {
+    const c = F12.spSwitch
+    validateSet(game, c.moved)
+    for (const [set, want] of [
+      [c.mySet, c.special],
+      [c.moved, c.physical],
+    ] as const) {
+      for (const [move, pct] of Object.entries(want.probe)) {
+        const r = mine(set, c.opponent, move)
+        expect(r === 'immune' ? r : r.maxPercent, move).toBe(pct)
+        if (r !== 'immune') expect(r.ohko).toBe(0)
+      }
+    }
   })
 })

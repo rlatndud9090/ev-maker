@@ -200,6 +200,21 @@ export interface FixedSpec {
   conditions: BattleConditions
 }
 
+/**
+ * 다른 분류 카드에 행이 있는 내 기술(공격 탭)·상대 기술(방어 탭)을 이 카드의 대표 세트·같은 조건으로 단건 판정하는 비교 전용 후보.
+ * 가장 센 기술은 상대 한 마리의 기술 전부(분류를 가로질러)에서 고른다(사용자 피드백 2026-11-11). 이 후보가 고르면 이 카드의 행은 빠진다(선공기 제외).
+ */
+export interface ProbeSpec {
+  id: string
+  cardId: string
+  moveId: string
+  /** judgeDamage 관점: 공격 탭 attacker(나 → 상대), 방어 탭 defender(상대 → 나) */
+  side: 'attacker' | 'defender'
+  attacker: PokemonSet
+  defender: PokemonSet
+  conditions: BattleConditions
+}
+
 export interface BundleStat {
   stat: StatId
   sp: number
@@ -231,6 +246,27 @@ export interface OpponentHeader {
   usage?: number
 }
 
+/**
+ * 카드 안 조건 하나(기본 상태·랭크 수단 행 조건)의 기술 후보. 현재 세트 단건 판정(probe, 고정 판정은 그 결과)으로
+ * 1타 확률 → 최대 대미지 비율 → 후보 순서로 가장 센 기술 하나만 고르고, 선공기(우선도 > 0)는 함께 남긴다.
+ * 무효·계산 불가 후보는 고르지 않는다. 고른 후보에만 양 끝·스윕·변형·극단·쌍 작업이 생긴다.
+ */
+export interface MoveCandidate {
+  /** row = 공격 탭 스윕 행, filter = 방어 탭 극단 필터(H행·B/D행 쌍), fixed = 공격 탭 내 SP 무관 판정, probe = 다른 분류 기술의 비교 전용 판정(행 없음) */
+  target: 'row' | 'filter' | 'fixed' | 'probe'
+  /** rowId·filterId·fixedId·probeId */
+  id: string
+  moveId: string
+  /** 스냅샷 move.priority > 0 */
+  priority: boolean
+}
+export interface ConditionGroup {
+  /** 카드 안 유일: JSON.stringify(['base']) 또는 ['rank', owner, means.kind, means.id] */
+  id: string
+  /** 기존 순서(공격 탭 내 기술 슬롯 순, 방어 탭 상대 기술 사용률 순). 동률이면 앞이 이긴다 */
+  candidates: readonly MoveCandidate[]
+}
+
 export interface CardSpec {
   id: string
   /** 탭 안 정렬 순번 */
@@ -247,6 +283,8 @@ export interface CardSpec {
   rowIds: readonly string[]
   filterIds: readonly string[]
   fixedIds: readonly string[]
+  /** 조건별 기술 후보(스피드 탭·error 카드는 빈 배열). 후보가 아닌 행(계획 단계 계산 불가)은 그대로 표시한다 */
+  conditions: readonly ConditionGroup[]
 }
 
 export interface TabPlan {
@@ -267,6 +305,8 @@ export interface TabPlan {
   rows: Readonly<Record<string, RowSpec>>
   filters: Readonly<Record<string, ExtremeSpec>>
   fixed: Readonly<Record<string, FixedSpec>>
+  /** 비교 전용 후보(다른 분류 기술) */
+  probes: Readonly<Record<string, ProbeSpec>>
   /** 메타 목록 안에 있어 목록 밖 타겟으로 받지 않은 rosterId */
   customTargetConflicts: readonly string[]
   /** 내 기술의 계산하지 않음 안내(분류 가변·내 HP 의존, 탭 안내) */
@@ -276,6 +316,8 @@ export interface TabPlan {
 // ---------- 행 작업과 결과 ----------
 
 export type RowTask =
+  /** 후보 기술의 현재 세트(계획 시점 SP·성격) 단건 판정. 가장 센 기술 고르기 전용 */
+  | { kind: 'probe'; target: 'row' | 'filter' | 'probe'; id: string }
   /** 현재 성격 0·최대 + 변형 범위 끝(neutral 0·plus 최대) */
   | { kind: 'ends'; rowId: string }
   | { kind: 'sweep'; rowId: string; stage: 2 | 3 }
@@ -313,6 +355,7 @@ export interface CompactCell {
 }
 
 export type RowTaskResult =
+  | { kind: 'probe'; id: string; cell: CompactCell }
   /** low·high = 현재 성격 0·최대, range = neutral 0·plus 최대(변형까지 합친 판정 범위의 양 끝) */
   | { kind: 'ends'; rowId: string; low: CompactCell; high: CompactCell; range: { low: CompactCell; high: CompactCell } }
   | { kind: 'sweep'; rowId: string; cells: readonly CompactCell[] }
@@ -327,7 +370,7 @@ export type RowTaskResult =
 export type ResultMap = ReadonlyMap<string, RowTaskResult>
 
 export interface PendingTasks {
-  /** 극단 필터·양 끝·고정 판정(카드 순 → 행 순) */
+  /** 후보 단건 판정·고정 판정, 고른 후보의 극단 필터·양 끝(카드 순 → 행 순) */
   stage1: readonly RowTask[]
   /** 양 끝 판정이 다른 행의 스윕 */
   stage2: readonly RowTask[]
@@ -386,6 +429,8 @@ export interface RowView {
   nearest: { up?: BoundaryView; down?: BoundaryView }
   /** "<label>: 최소 A32 / A15+". 변화 있는 ok/stale 행만, 성격 변형 결과(방어 탭은 쌍 결과)가 나온 뒤에만 */
   target?: TargetView
+  /** 가장 센 기술이 아니지만 선공기(우선도 > 0)라 남은 행 */
+  keptAsPriority?: true
 }
 export interface TargetStat {
   stat: StatId
