@@ -101,7 +101,7 @@ export interface ErrorReason {
 export type TabStatus = { kind: 'ok' } | { kind: 'my-set-error'; reasons: readonly ErrorReason[] }
 
 /**
- * 행·카드가 되지 않는 기술의 안내. 요약·외 k행에 세지 않는다.
+ * 행·카드가 되지 않는 기술의 안내. 외 k행에 세지 않는다.
  * category-varies: 분류가 능력치에 따라 바뀌는 기술(셸암즈, 내 것·상대 것).
  * attacker-hp-dependent: 대미지가 내 HP로 정해지는 기술(목숨걸기, 공격 탭 내 기술만 — 상대 것은 묶음 키에 상대 H를 넣어 계산한다).
  */
@@ -261,8 +261,8 @@ export interface OpponentHeader {
 
 /**
  * 카드 안 조건 하나(기본 상태·랭크 수단 행 조건)의 기술 후보. 현재 세트 단건 판정(probe, 고정 판정은 그 결과)으로
- * 1타 확률 → 최대 대미지 비율 → 후보 순서로 가장 센 기술 하나만 고르고, 선공기(우선도 > 0)는 함께 남긴다.
- * 무효·계산 불가 후보는 고르지 않는다. 고른 후보에만 양 끝·스윕·변형·극단·쌍 작업이 생긴다.
+ * 1타 확률 → 최대 대미지 비율 → 후보 순서로 가장 센 기술 하나만 고르고, 선공기 행 조건을 채운 선공기는 함께 남긴다.
+ * 무효·계산 불가 후보는 고르지 않는다(모든 후보가 무효면 첫 후보를 고른다 — 상대 행이 "무효"로 남게). 고른 후보에만 양 끝·스윕·변형·극단·쌍 작업이 생긴다.
  */
 export interface MoveCandidate {
   /** row = 공격 탭 스윕 행, filter = 방어 탭 극단 필터(H행·B/D행 쌍), fixed = 공격 탭 내 SP 무관 판정, probe = 다른 분류 기술의 비교 전용 판정(행 없음) */
@@ -270,7 +270,7 @@ export interface MoveCandidate {
   /** rowId·filterId·fixedId·probeId */
   id: string
   moveId: string
-  /** 스냅샷 move.priority > 0 */
+  /** 선공기 행 조건(keepsPriorityRow): 우선도 > 0이고 대상 약점이거나 사용자 자속·반감 아님. 가장 센 기술이 아니어도 행으로 남는다 */
   priority: boolean
 }
 export interface ConditionGroup {
@@ -432,8 +432,13 @@ export interface RowView {
   /** pending = 판정 전, stale = 드래그로 낡음(칸·경계는 계획 시점 값 그대로) */
   status: 'ok' | 'stale' | 'error' | 'pending'
   error?: ErrorReason
-  /** 커스텀 카드·변화 없음 선택지 래더 카드에서만 true(현재·무보정·상승 성격 칸이 모두 같음, 또는 극단 필터에 걸린 기술) */
+  /**
+   * 내 SP(0~최대)·성격(무보정·상승)을 바꿔도 판정이 같음(변형 범위 끝·변형 스윕 칸이 모두 같은 범주, 또는 극단 필터에 걸린 기술·내 SP 무관 판정).
+   * false = "변동 가능". 변형 스윕이 끝나기 전에는 현재까지의 결과로 잠정 판정한다(그때 true면 provisional).
+   */
   noChange: boolean
+  /** 잠정 변화 없음: noChange가 true지만 성격 변형 스윕이 아직 남아 "변동 가능"으로 바뀔 수 있다(고정 판정으로 보이지 않고, 대표로 세우지 않는다) */
+  provisional?: true
   /** 33칸(스윕이 끝난 ok/stale 행만, 아니면 빈 배열) */
   cells: readonly CellView[]
   /** 표시용 현재 SP와 그 칸 범주(칸이 없으면 category 없음) */
@@ -442,8 +447,10 @@ export interface RowView {
   nearest: { up?: BoundaryView; down?: BoundaryView }
   /** "<label>: 최소 A32 / A15+". 변화 있는 ok/stale 행만, 성격 변형 결과(방어 탭은 쌍 결과)가 나온 뒤에만 */
   target?: TargetView
-  /** 가장 센 기술이 아니지만 선공기(우선도 > 0)라 남은 행 */
+  /** 가장 센 기술이 아니지만 선공기 행 조건을 채워 남은 행 */
   keptAsPriority?: true
+  /** 칸이 없는 내 SP 무관 판정 행(공격 탭 속임수)의 판정 칸(결과 배지용) */
+  fixedCell?: CompactCell
 }
 export interface TargetStat {
   stat: StatId
@@ -473,7 +480,7 @@ export type Headline =
   | { kind: 'row'; rowId: string }
   | { kind: 'error'; reason: ErrorReason }
   | { kind: 'updating' }
-  /** 커스텀 카드·변화 없음 선택지 래더 카드: 모든 행이 변화 없음. fixed는 고정 범주 목록 */
+  /** 대표로 세울 판정 행이 없음(안내만 있는 카드 등). fixed는 행들의 고정 범주 목록 */
   | { kind: 'no-change'; fixed: readonly string[] }
 export interface CardView {
   id: string
@@ -484,33 +491,17 @@ export interface CardView {
   opponent: OpponentHeader
   category: Category | null
   bundle: BundleSpec
-  /** 표시 행(기본·랭크·스카프·계산 불가 + 커스텀·변화 없음 선택지 래더 카드면 변화 없음 행), 카드 안 순서 */
+  /** 표시 행(조건별 가장 센 기술·선공기 행 조건을 채운 선공기·계산 불가, 변화 없음 행 포함), 카드 안 순서 */
   rows: readonly RowView[]
-  /** 래더 카드 안에서 뺀 변화 없음 행 수 */
-  hiddenNoChangeRows: number
+  /**
+   * 대표 행: 변화 있는 행이 있으면 경계까지 SP 차이가 가장 작은 행, 없으면 기본 조건의 가장 센 기술 행(선공기 행 아님).
+   * 판정 전·갱신 대기·잠정 변화 없음(provisional) 행이 있고 변화 있는 ok 행이 없으면 updating.
+   */
   headline: Headline
-  /** 외 k행(0이면 생략) */
+  /** 이 카드에 칸이 있는 ok·stale 변화 있는 행이 있음("변동 가능"). 대표 행과 따로 세어 드래그 중(updating)에도 유지된다 */
+  variable: boolean
+  /** 외 k행 = 표시 행 수 − 1(0이면 생략) */
   moreRows: number
-}
-export type NoChangeKind = 'row' | 'extreme-filter' | 'sp-independent'
-export interface NoChangeItem {
-  cardId: string
-  opponent: OpponentHeader
-  category: Category | null
-  kind: NoChangeKind
-  rowKind?: RowKind
-  moveId?: string
-  sweepStat?: StatId
-  basis?: RankBasis | ScarfBasis
-  /** 고정 범주(극단 필터는 두 극단의 같은 범주) */
-  fixed: string
-}
-export interface NoChangeSummary {
-  /** 목록에서 빠진 변화 없음 행만(변화 없음 선택지로 보이는 카드의 행은 그 카드 rows에 있다). 행 N개(극단 필터·내 SP 무관 항목은 1건 = 1행) */
-  rows: number
-  /** 카드 M장(표시 행이 하나도 남지 않아 목록에서 빠진 래더 카드 수. 변화 없음 선택지로 보이는 카드는 세지 않는다) */
-  cards: number
-  items: readonly NoChangeItem[]
 }
 export interface TabView {
   tab: Tab
@@ -518,13 +509,12 @@ export interface TabView {
   /** 이 뷰를 계산한 고난수 기준 n(칸 범주·배지·목표가 같은 기준이다) */
   rollSteps: number
   source: MetaSourceView
-  /** 정렬 완료, 표시 대상만 */
+  /** 정렬 완료, 표시 대상만(래더 상대는 판정 변화와 무관하게 전부) */
   cards: readonly CardView[]
-  noChange: NoChangeSummary
   progress: { done: number; total: number }
   /** 1·2단계 완료(잠정 빈 상태 판정 기준) */
   stage12Done: boolean
-  /** 3단계까지 완료(false면 요약에 "확인 중") */
+  /** 3단계까지 완료(false면 진행 문구에 "확인 중") */
   complete: boolean
   customTargetConflicts: readonly string[]
   /** 내 기술의 계산하지 않음 안내(분류 가변·내 HP 의존, 탭 안내) */

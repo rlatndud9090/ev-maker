@@ -38,6 +38,56 @@ export function engineMoveOverrides(moveId: string): { defensiveStat?: string; o
   return out
 }
 
+/**
+ * 기본 타입 상성 배율(엔진 타입표): 기술 타입 → 방어측 타입들의 곱(0·0.25·0.5·1·2·4).
+ * 특성·도구·날씨·테라 등에 따른 타입·상성 변화는 넣지 않는다. 엔진 타입표에 없는 타입은 CoreError(ENGINE_UNSUPPORTED).
+ */
+export function typeEffectiveness(moveType: string, defenderTypes: readonly string[]): number {
+  const t = gen.types.get(toID(moveType))
+  if (!t) throw coreError('ENGINE_UNSUPPORTED', 'move', `${moveType} 타입은 계산 엔진 데이터에 없다`)
+  const table = t.effectiveness as Readonly<Record<string, number | undefined>>
+  return defenderTypes.reduce((m, d) => {
+    const e = table[d]
+    if (e === undefined) throw coreError('ENGINE_UNSUPPORTED', 'defender', `${d} 타입은 계산 엔진 데이터에 없다`)
+    return m * e
+  }, 1)
+}
+
+/** 스킨 계열 특성: 노말 기술 → 그 타입(엔진 gen789 대미지 경로와 같은 규칙) */
+const ATE_ABILITIES: Readonly<Record<string, string>> = { aerilate: 'Flying', galvanize: 'Electric', pixilate: 'Fairy', refrigerate: 'Ice', dragonize: 'Dragon' }
+/** 엔진이 특성 타입 변화를 넣지 않는 기술 */
+const NO_TYPE_CHANGE_MOVES: readonly string[] = ['revelationdance', 'judgment', 'naturepower', 'technoblast', 'multiattack', 'naturalgift', 'weatherball', 'terrainpulse', 'struggle']
+/** 노말·격투 기술이 고스트에 맞는 특성(배짱·심안) */
+const GHOST_REVEALING_ABILITIES: readonly string[] = ['scrappy', 'mindseye']
+
+const abilityKey = (ability: string): string => toID(ENGINE_ALIASES.abilities?.[ability] ?? ability)
+
+/**
+ * 공격측 특성에 따른 기술 타입(엔진 대미지 경로와 같은 규칙): 스킨 특성(노말 → 비행·전기·페어리·얼음·드래곤), 촉촉보이스(소리 기술 → 물),
+ * 노말스킨(모든 기술 → 노말). 도구·날씨·테라 등에 따른 변화(웨더볼 등)는 넣지 않는다. 엔진에 없는 기술은 기본 타입 그대로.
+ */
+export function attackMoveType(moveId: string, baseType: string, ability: string): string {
+  if (NO_TYPE_CHANGE_MOVES.includes(moveId)) return baseType
+  const key = abilityKey(ability)
+  const ate = ATE_ABILITIES[key]
+  if (ate !== undefined) return baseType === 'Normal' ? ate : baseType
+  if (key === 'liquidvoice') {
+    const m = gen.moves.get(toID(ENGINE_ALIASES.moves?.[moveId] ?? moveId))
+    return m?.flags?.sound ? 'Water' : baseType
+  }
+  if (key === 'normalize') return 'Normal'
+  return baseType
+}
+
+/**
+ * 공격측 특성을 넣은 상성 배율: attackMoveType으로 바꾼 타입의 기본 상성, 배짱·심안이면 노말·격투 기술의 고스트 무효를 등배로.
+ * 방어측 특성(부유 등)·도구·필드는 넣지 않는다. 엔진 타입표에 없는 타입은 CoreError(ENGINE_UNSUPPORTED).
+ */
+export function attackEffectiveness(moveType: string, defenderTypes: readonly string[], ability: string): number {
+  const revealed = GHOST_REVEALING_ABILITIES.includes(abilityKey(ability)) && (moveType === 'Normal' || moveType === 'Fighting')
+  return typeEffectiveness(moveType, revealed ? defenderTypes.filter((t) => t !== 'Ghost') : defenderTypes)
+}
+
 /** 엔진은 overrides.types를 배열 깊은 병합하고 clone()마다 재병합하므로, 인스턴스와 그 사본에 타입을 다시 고정한다. */
 function pinTypes(p: Pokemon, types: EngineTypes): Pokemon {
   p.types = types

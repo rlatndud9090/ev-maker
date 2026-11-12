@@ -157,6 +157,19 @@ describe('assembleTab: headline·k', () => {
     expect(assembleTab(p3, r3).cards[0].headline).toEqual({ kind: 'row', rowId: 'y-h' })
   })
 
+  it('드래그로 변화 있는 행이 stale이 되어 대표가 updating이어도 변동 가능은 유지된다(noChange는 표시 SP와 무관)', () => {
+    const custom = plan({
+      cards: [card({ id: 'C', source: 'custom', rowIds: ['base'] })],
+      rows: [row({ id: 'base', cardId: 'C', stat: 'atk', dependsOn: ['def'] })],
+      mySp,
+    })
+    const r = resultMap(ends('base', 'l', 'h'), swept('base', bands([[20, 'l'], [32, 'h']])))
+    const idle = assembleTab(custom, r).cards[0]
+    expect([idle.headline.kind, idle.variable]).toEqual(['row', true])
+    const drag = assembleTab(custom, r, { ...mySp, def: 3 }).cards[0]
+    expect([drag.rows[0].status, drag.headline.kind, drag.variable]).toEqual(['stale', 'updating', true])
+  })
+
   it('ok 경계 행이 없으면 stale·pending → updating, 그다음 error', () => {
     const custom = plan({
       cards: [card({ id: 'C', source: 'custom', rowIds: ['base', 'rank'] })],
@@ -174,7 +187,7 @@ describe('assembleTab: headline·k', () => {
     expect(c.moreRows).toBe(1)
   })
 
-  it('안내(notices)는 headline·k·요약에 들지 않는다', () => {
+  it('안내(notices)는 headline·k에 들지 않는다', () => {
     const notice: MoveNotice = { kind: 'category-varies', moveId: 'shellsidearm', owner: 'opponent' }
     const tabNotice: MoveNotice = { kind: 'category-varies', moveId: 'shellsidearm', owner: 'me' }
     const pn = plan({ cards: [card({ id: 'A', rowIds: ['base', 'rank', 'far'], notices: [notice] })], rows, mySp, notices: [tabNotice] })
@@ -183,7 +196,48 @@ describe('assembleTab: headline·k', () => {
     expect(v.notices).toEqual([tabNotice])
     expect(v.cards[0].notices).toEqual([notice])
     expect({ ...v.cards[0], notices: [] }).toEqual(plain.cards[0])
-    expect(v.noChange).toEqual(plain.noChange)
+  })
+
+  it('변화 있는 행이 없으면 대표 행 = 기본 조건 가장 센 기술 행(선공기 행·랭크 행보다 앞), 변동 가능 아님, k = 표시 행 수 − 1', () => {
+    const pr = plan({
+      cards: [card({ id: 'A', rowIds: ['rank', 'pri', 'base'], conditions: [{ id: JSON.stringify(['base']), candidates: [
+        { target: 'row', id: 'pri', moveId: 'm-pri', priority: true },
+        { target: 'row', id: 'base', moveId: 'm-base', priority: false },
+      ] }] })],
+      rows: [
+        row({ id: 'rank', cardId: 'A', order: 0, kind: 'rank', moveId: 'm-base', stat: 'atk' }),
+        row({ id: 'pri', cardId: 'A', order: 1, moveId: 'm-pri', stat: 'atk' }),
+        row({ id: 'base', cardId: 'A', order: 2, moveId: 'm-base', stat: 'atk' }),
+      ],
+      mySp,
+    })
+    const flat = (id: string, cat: string) => [ends(id, cat, cat), swept(id, bands([[32, cat]]))]
+    const probes = resultMap(
+      { kind: 'probe', id: 'pri', cell: { sp: 0, category: 'l', ohkoChance: 0, maxPercent: 30 } },
+      { kind: 'probe', id: 'base', cell: { sp: 0, category: 'h', ohkoChance: 0, maxPercent: 60 } },
+      ...flat('rank', 'h'),
+      ...flat('pri', 'l'),
+      ...flat('base', 'h'),
+    )
+    const c = assembleTab(pr, probes).cards[0]
+    expect(c.rows.map((r) => [r.id, r.noChange, r.keptAsPriority ?? false])).toEqual([
+      ['rank', true, false],
+      ['pri', true, true],
+      ['base', true, false],
+    ])
+    expect(c.headline).toEqual({ kind: 'row', rowId: 'base' })
+    expect(c.variable).toBe(false)
+    expect(c.moreRows).toBe(2)
+    // 기본 조건 행이 아직 판정 전이면 updating(나중에 대표가 바뀔 수 있다)
+    const early = new Map(probes)
+    early.delete(JSON.stringify(['sweep', 'base']))
+    expect(assembleTab(pr, early).cards[0].headline).toEqual({ kind: 'updating' })
+  })
+
+  it('변화 있는 행이 하나라도 있으면 그 행이 대표이고 카드는 변동 가능', () => {
+    const c = assembleTab(p, results(20, 18)).cards[0]
+    expect(c.headline).toEqual({ kind: 'row', rowId: 'rank' })
+    expect(c.variable).toBe(true)
   })
 })
 
@@ -208,44 +262,52 @@ describe('assembleTab: 변화 없음·카드 표시', () => {
   })
   const stage1 = [extreme('f1', 'k', 'k'), ends('same', 'p', 'p'), ends('diff', 'p', 'q'), fixedResult('x1', 'fx'), ends('q', 'p', 'p')]
 
-  it('1·2단계 전에는 래더 카드를 내지 않는다', () => {
+  it('래더 카드는 그 카드의 1·2단계(가장 센 기술·양 끝·변화 스윕)가 끝나야 보이고, 판정 변화와 무관하게 보인다', () => {
     const v0 = assembleTab(p, new Map())
     expect(v0.cards).toEqual([])
     expect(v0.stage12Done).toBe(false)
     const v1 = assembleTab(p, resultMap(...stage1))
-    expect(v1.cards).toEqual([])
+    // L은 변화 스윕(2단계)이 남았고, Q는 확인 스윕(3단계)만 남아 판정 전 행으로 보인다. 행이 하나도 없는 Z는 없다.
+    expect(v1.cards.map((c) => c.id)).toEqual(['Q'])
+    expect(v1.cards[0].rows.map((r) => [r.id, r.status])).toEqual([['q', 'pending']])
+    expect(v1.cards[0].headline).toEqual({ kind: 'updating' })
     expect(v1.progress).toEqual({ done: 5, total: 8 })
   })
 
-  it('3단계 대기 행은 잠정 제외, 확정 전에는 요약 항목·M에 안 든다', () => {
+  it('3단계 대기 행은 판정 전 행으로, 극단 필터에 걸린 기술·내 SP 무관 판정은 변화 없음 행으로 카드에 남는다', () => {
     const v = assembleTab(p, resultMap(...stage1, swept('diff', bands([[10, 'p'], [32, 'q']]))))
     expect(v.stage12Done).toBe(true)
     expect(v.complete).toBe(false)
-    expect(v.cards.map((c) => c.id)).toEqual(['L'])
-    expect(v.cards[0].rows.map((r) => r.id)).toEqual(['diff'])
-    expect(v.cards[0].moreRows).toBe(0)
-    expect(v.noChange.items.map((i) => i.kind)).toEqual(['extreme-filter', 'sp-independent'])
-    expect(v.noChange).toMatchObject({ rows: 2, cards: 1 })
+    expect(v.cards.map((c) => c.id)).toEqual(['L', 'Q'])
+    const l = v.cards[0]
+    expect(l.rows.map((r) => [r.id, r.status, r.noChange, r.current.category ?? null])).toEqual([
+      [JSON.stringify(['filter', 'f1']), 'ok', true, 'k'],
+      ['same', 'pending', false, null],
+      ['diff', 'ok', false, 'p'],
+      [JSON.stringify(['fixed', 'x1']), 'ok', true, 'fx'],
+    ])
+    expect(l.headline).toEqual({ kind: 'row', rowId: 'diff' })
+    expect(l.variable).toBe(true)
+    expect(l.moreRows).toBe(3)
+    // 내 SP 무관 판정 행은 결과 배지용 칸을 싣는다
+    expect(l.rows[3].fixedCell).toEqual({ sp: 0, category: 'fx' })
   })
 
-  it('완료: N = 행 + 극단 필터 1건 + 내 SP 무관 1건, M = 표시 행이 없는 래더 카드(처음부터 없던 카드 포함)', () => {
+  it('완료: 변화 없음 카드(Q)도 목록에 남고 대표 행은 그 행, 변동 가능 아님', () => {
     const v = assembleTab(
       p,
       resultMap(...stage1, swept('diff', bands([[10, 'p'], [32, 'q']])), swept('same', bands([[32, 'p']])), swept('q', bands([[32, 'p']]))),
     )
     expect(v.complete).toBe(true)
     expect(v.progress).toEqual({ done: 8, total: 8 })
-    expect(v.cards.map((c) => c.id)).toEqual(['L'])
-    // 카드 안 k = 그 카드에서 요약으로 빠진 항목 전부(33칸 같음 행 + 극단 필터 + 내 SP 무관)
-    expect(v.cards[0].hiddenNoChangeRows).toBe(3)
-    expect(v.noChange.rows).toBe(4)
-    expect(v.noChange.cards).toBe(2)
-    expect(v.noChange.items).toEqual([
-      { cardId: 'L', opponent: v.cards[0].opponent, category: 'physical', kind: 'extreme-filter', rowKind: 'base', moveId: 'tackle', fixed: 'k' },
-      { cardId: 'L', opponent: v.cards[0].opponent, category: 'physical', kind: 'row', rowKind: 'base', moveId: 'tackle', sweepStat: 'hp', fixed: 'p' },
-      { cardId: 'L', opponent: v.cards[0].opponent, category: 'physical', kind: 'sp-independent', moveId: 'foulplay', fixed: 'fx' },
-      expect.objectContaining({ cardId: 'Q', kind: 'row', fixed: 'p' }),
-    ])
+    expect(v.cards.map((c) => c.id)).toEqual(['L', 'Q'])
+    expect(v.cards[0].rows.map((r) => r.noChange)).toEqual([true, true, false, true])
+    expect([v.cards[0].variable, v.cards[0].moreRows]).toEqual([true, 3])
+    const q = v.cards[1]
+    expect(q.rows.map((r) => [r.id, r.noChange, r.current.category])).toEqual([['q', true, 'p']])
+    expect(q.rows[0].cells).toHaveLength(33)
+    expect(q.headline).toEqual({ kind: 'row', rowId: 'q' })
+    expect([q.variable, q.moreRows]).toEqual([false, 0])
   })
 
   it('커스텀 카드는 계획 직후부터 보이고, 변화 없음 행·극단 필터 1행·고정 판정을 noChange 행으로 남긴다', () => {
@@ -268,17 +330,16 @@ describe('assembleTab: 변화 없음·카드 표시', () => {
     ])
     expect(c.rows[0].moveId).toBe('tackle')
     expect(c.rows[1].cells).toHaveLength(33)
-    expect(c.headline).toEqual({ kind: 'no-change', fixed: ['k', 'p', 'fx'] })
-    expect(c.moreRows).toBe(0)
-    expect(c.hiddenNoChangeRows).toBe(0)
-    expect(v.noChange).toEqual({ rows: 0, cards: 0, items: [] })
+    // 동률 순서(kind → 슬롯 → H 행 → 순번)로 첫 행 = 극단 필터 행
+    expect(c.headline).toEqual({ kind: 'row', rowId: JSON.stringify(['filter', 'f1']) })
+    expect([c.variable, c.moreRows]).toEqual([false, 2])
   })
 
   it('필터 오류는 gate 행 대신 오류 행 1개', () => {
     const v = assembleTab(p, resultMap(...stage1.slice(1), failed({ kind: 'extreme', filterId: 'f1' }), swept('diff', bands([[10, 'p'], [32, 'q']])), swept('same', bands([[32, 'p']]))))
     const c = v.cards.find((x) => x.id === 'L')
-    expect(c?.rows.map((r) => r.status)).toEqual(['error', 'ok'])
-    expect(c?.moreRows).toBe(1)
+    expect(c?.rows.map((r) => r.status)).toEqual(['error', 'ok', 'ok', 'ok'])
+    expect(c?.moreRows).toBe(3)
   })
 })
 
@@ -313,7 +374,6 @@ describe('assembleTab: 탭 상태·오류 카드', () => {
       ['W', 'ok', 'error'],
     ])
     expect(v.complete).toBe(true)
-    expect(v.noChange.cards).toBe(0)
   })
 })
 
@@ -331,12 +391,23 @@ describe('assembleTab: 성격 변형(무보정·상승)', () => {
   const p = plan({ cards, rows, mySp })
   const base = [ends('v', 'guaranteed-survive', 'guaranteed-survive'), swept('v', flat), ends('c', 'guaranteed-survive', 'guaranteed-survive'), swept('c', flat)]
 
-  it('현재 성격 칸이 다 같아도 변형 스윕 전에는 래더 행을 잠정 제외(요약에도 안 든다), 커스텀은 잠정 noChange', () => {
+  it('현재 성격 칸이 다 같으면 변형 스윕 전에는 래더·커스텀 모두 잠정 noChange(provisional, 행은 보인다) — 대표는 updating', () => {
     const v = assembleTab(p, resultMap(...base))
-    expect(v.cards.some((c) => c.id === 'A')).toBe(false)
-    expect(v.noChange.items).toEqual([])
     expect(v.complete).toBe(false)
-    expect(rowOf(v, 'c').noChange).toBe(true)
+    expect([rowOf(v, 'v').noChange, rowOf(v, 'v').provisional]).toEqual([true, true])
+    expect(v.cards.find((c) => c.id === 'A')?.variable).toBe(false)
+    expect(v.cards.map((c) => [c.id, c.headline.kind])).toEqual([
+      ['A', 'updating'],
+      ['C', 'updating'],
+    ])
+    expect([rowOf(v, 'c').noChange, rowOf(v, 'c').provisional]).toEqual([true, true])
+    // 변형이 나오면 잠정 표지가 사라지고 대표 행이 선다(변화 없음 확정 또는 변동 가능).
+    const done = assembleTab(p, resultMap(...base, variantSwept('v', 'plus', flat), variantSwept('c', 'plus', plusChanges)))
+    expect([rowOf(done, 'v').provisional, rowOf(done, 'c').provisional]).toEqual([undefined, undefined])
+    expect(done.cards.map((c) => [c.id, c.headline, c.variable])).toEqual([
+      ['A', { kind: 'row', rowId: 'v' }, false],
+      ['C', { kind: 'row', rowId: 'c' }, true],
+    ])
   })
 
   it('상승 성격으로만 바뀌면 래더 행을 표시하고 목표는 변형 칸에서(무보정 불가 / 상승 최소), 대표 행도 된다', () => {
@@ -352,13 +423,19 @@ describe('assembleTab: 성격 변형(무보정·상승)', () => {
       plus: { label: 'low-roll-ohko', stats: [{ stat: 'atk', sp: 23 }], need: 0 },
     })
     expect(v.cards.find((c) => c.id === 'A')?.headline).toEqual({ kind: 'row', rowId: 'v' })
+    expect(v.cards.find((c) => c.id === 'A')?.variable).toBe(true)
     expect(rowOf(v, 'c').noChange).toBe(false)
     expect(v.complete).toBe(true)
   })
 
-  it('변형도 같으면 래더 행은 변화 없음 요약, 커스텀 행은 noChange', () => {
+  it('변형도 같으면 래더·커스텀 행 모두 noChange(변동 가능 아님)', () => {
     const v = assembleTab(p, resultMap(...base, variantSwept('v', 'plus', flat), variantSwept('c', 'plus', flat)))
-    expect(v.noChange.items.map((i) => [i.cardId, i.kind, i.fixed])).toEqual([['A', 'row', 'guaranteed-survive']])
+    expect(v.complete).toBe(true)
+    expect([rowOf(v, 'v').noChange, rowOf(v, 'v').current.category]).toEqual([true, 'guaranteed-survive'])
+    expect(v.cards.map((c) => [c.id, c.variable])).toEqual([
+      ['A', false],
+      ['C', false],
+    ])
     expect(rowOf(v, 'c').noChange).toBe(true)
   })
 
@@ -445,7 +522,7 @@ describe('assembleTab: 성격 변형(무보정·상승)', () => {
   })
 })
 
-describe('assembleTab: 변화 없음 배분도 선택지(같은 상대의 다른 카드가 보일 때)', () => {
+describe('assembleTab: 판정 변화와 무관하게 래더 상대·배분 카드를 보인다(사용자 피드백 2026-11-12)', () => {
   const same = (c: ReturnType<typeof card>, opponent: string) => ({ ...c, opponent: { ...c.opponent, id: opponent } })
   const rows = [
     row({ id: 'a', cardId: 'A', stat: 'hp', side: 'defender' }),
@@ -460,35 +537,34 @@ describe('assembleTab: 변화 없음 배분도 선택지(같은 상대의 다른
   const flat = bands([[32, 'p']])
   const stage1 = [ends('a', 'p', 'q'), ends('b', 'p', 'p'), ends('c', 'p', 'p')]
 
-  it('완료: 다른 배분이 보이는 상대의 변화 없음 카드는 변화 없음 행·고정 판정 headline으로 들어오고 요약에서 빠진다', () => {
+  it('완료: 변화 없음 배분(B)·어떤 배분도 변화가 없는 상대(C)도 행·대표 행과 함께 보이고, 변동 가능은 변화 있는 카드만', () => {
     const v = assembleTab(p, resultMap(...stage1, swept('a', bands([[10, 'p'], [32, 'q']])), swept('b', flat), swept('c', flat)))
     expect(v.complete).toBe(true)
-    expect(v.cards.map((c) => c.id)).toEqual(['A', 'B'])
-    const b = v.cards[1]
-    expect(b.rows.map((r) => [r.id, r.status, r.noChange, r.current.category])).toEqual([['b', 'ok', true, 'p']])
-    expect(b.rows[0].cells).toHaveLength(33)
-    expect(b.headline).toEqual({ kind: 'no-change', fixed: ['p'] })
-    expect([b.hiddenNoChangeRows, b.moreRows]).toEqual([0, 0])
-    // 어떤 카드도 변화가 없는 상대(y)는 지금처럼 빠지고 요약에 남는다.
-    expect(v.noChange.items.map((i) => [i.cardId, i.kind])).toEqual([['C', 'row']])
-    expect(v.noChange).toMatchObject({ rows: 1, cards: 1 })
+    expect(v.cards.map((c) => [c.id, c.headline, c.variable])).toEqual([
+      ['A', { kind: 'row', rowId: 'a' }, true],
+      ['B', { kind: 'row', rowId: 'b' }, false],
+      ['C', { kind: 'row', rowId: 'c' }, false],
+    ])
+    expect(v.cards[1].rows.map((r) => [r.id, r.status, r.noChange, r.current.category])).toEqual([['b', 'ok', true, 'p']])
   })
 
-  it('보이는 카드가 없으면 같은 상대라도 빠진다(행 단위 가시성 = 그 상대 카드 중 하나라도 변화 있음)', () => {
+  it('모든 카드가 변화 없음이어도 전부 보인다', () => {
     const v = assembleTab(p, resultMap(ends('a', 'p', 'p'), ends('b', 'p', 'p'), ends('c', 'p', 'p'), swept('a', flat), swept('b', flat), swept('c', flat)))
     expect(v.complete).toBe(true)
-    expect(v.cards).toEqual([])
-    expect(v.noChange).toMatchObject({ rows: 3, cards: 3 })
+    expect(v.cards.map((c) => [c.id, c.variable])).toEqual([
+      ['A', false],
+      ['B', false],
+      ['C', false],
+    ])
   })
 
-  it('3단계 확인 스윕 전에는 잠정 행(갱신 중)으로 들어오고, 그 상대가 보이기 전(1·2단계 중)에는 넣지 않는다', () => {
+  it('3단계 확인 스윕 전에는 판정 전 행(갱신 중)으로, 2단계가 남은 카드는 넣지 않는다', () => {
     const early = assembleTab(p, resultMap(...stage1))
-    expect(early.cards).toEqual([])
+    expect(early.cards.map((c) => c.id)).toEqual(['B', 'C'])
+    expect(early.cards.map((c) => c.headline)).toEqual([{ kind: 'updating' }, { kind: 'updating' }])
     const v = assembleTab(p, resultMap(...stage1, swept('a', bands([[10, 'p'], [32, 'q']]))))
     expect(v.complete).toBe(false)
-    expect(v.cards.map((c) => c.id)).toEqual(['A', 'B'])
+    expect(v.cards.map((c) => c.id)).toEqual(['A', 'B', 'C'])
     expect(v.cards[1].rows.map((r) => [r.id, r.status])).toEqual([['b', 'pending']])
-    expect(v.cards[1].headline).toEqual({ kind: 'updating' })
-    expect(v.noChange.items).toEqual([])
   })
 })

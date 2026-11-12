@@ -54,11 +54,11 @@ describe('candidateStates(손 계획)', () => {
     expect(Object.fromEntries(candidateStates(c, results))).toEqual({ imm: 'dropped', err: 'error', a: 'chosen', p: 'priority', pi: 'dropped' })
   })
 
-  it('선공기가 가장 세면 chosen, 모두 무효면 고른 기술이 없다', () => {
+  it('선공기가 가장 세면 chosen, 모두 무효면 첫 후보만 chosen(무효 행으로 상대가 남는다)', () => {
     const c = card({ id: 'c', conditions: [group(cand('a'), cand('p', true))] })
     expect(Object.fromEntries(candidateStates(c, resultMap(probe('a', 0, 40), probe('p', 0, 50))))).toEqual({ a: 'dropped', p: 'chosen' })
     expect(Object.fromEntries(candidateStates(c, resultMap(probe('a', 0, 0, { immune: true }), probe('p', 0, 0, { immune: true }))))).toEqual({
-      a: 'dropped',
+      a: 'chosen',
       p: 'dropped',
     })
   })
@@ -89,7 +89,7 @@ describe('대기열·조립(손 계획)', () => {
     ])
   })
 
-  it('고르지 않은 행은 표시·요약·외 k행에 없고, 선공기 행은 keptAsPriority', () => {
+  it('고르지 않은 행은 표시·외 k행에 없고, 선공기 행은 keptAsPriority', () => {
     const results = resultMap(
       probe('a', 0.5, 120),
       probe('b', 0.1, 90),
@@ -107,17 +107,24 @@ describe('대기열·조립(손 계획)', () => {
       ['p', true],
     ])
     expect(c.moreRows).toBe(1)
-    expect(view.noChange.items).toEqual([])
     expect(view.progress).toEqual({ done: 7, total: 7 })
   })
 
-  it('고른 행이 변화 없음이면 래더 카드가 목록에서 빠지고 요약 카드 M에 센다', () => {
+  it('고른 행이 변화 없음이어도 래더 카드는 그 행(가장 센 기술)을 대표로 목록에 남는다', () => {
     const one = card({ id: 'c', rowIds: ['a', 'b'], conditions: [group(cand('a'), cand('b'))] })
     const pl = plan({ cards: [one], rows: rows.slice(0, 2) })
     const view = assembleTab(pl, resultMap(probe('a', 1, 190), probe('b', 0.125, 101), ends('a', 'x', 'x'), swept('a', bands([[32, 'x']]))))
-    expect(view.cards).toEqual([])
-    expect(view.noChange).toMatchObject({ rows: 1, cards: 1 })
-    expect(view.noChange.items.map((i) => i.moveId)).toEqual(['tackle'])
+    expect(view.cards.map((c) => c.rows.map((r) => [r.id, r.noChange]))).toEqual([[['a', true]]])
+    expect(view.cards[0].headline).toEqual({ kind: 'row', rowId: 'a' })
+    expect(view.cards[0].variable).toBe(false)
+  })
+
+  it('모든 후보가 무효면 첫 후보를 고르고(무효 행이 남는다), 계산 불가 후보가 있으면 고르지 않는다', () => {
+    const c = card({ id: 'c', conditions: [group(cand('a'), cand('b'), cand('p', true))] })
+    const immune = (id: string) => probe(id, 0, 0, { immune: true })
+    expect(Object.fromEntries(candidateStates(c, resultMap(immune('a'), immune('b'), immune('p'))))).toEqual({ a: 'chosen', b: 'dropped', p: 'dropped' })
+    const err: RowTaskResult = { kind: 'error', task: { kind: 'probe', target: 'row', id: 'a' }, reason: { code: 'ILLEGAL_MOVE', message: 'x' } }
+    expect(Object.fromEntries(candidateStates(c, resultMap(err, immune('b'), immune('p'))))).toEqual({ a: 'error', b: 'dropped', p: 'dropped' })
   })
 
   it('방어 탭: 필터 단위로 고르고 고른 필터만 극단 판정·H행·B행', () => {
@@ -133,14 +140,13 @@ describe('대기열·조립(손 계획)', () => {
     expect(pendingTasks(pl, probed).stage1).toEqual([{ kind: 'extreme', filterId: 'f2' }])
   })
 
-  it('고정 판정이 더 약하면 고정 행·요약 모두 없다', () => {
+  it('고정 판정이 더 약하면 고정 행이 없다', () => {
     const f = fixed('f', 'c')
     const c = card({ id: 'c', rowIds: ['a'], fixedIds: ['f'], conditions: [group(cand('f', false, 'fixed'), cand('a'))] })
     const pl = plan({ cards: [c], rows: [rows[0]], fixed: [f] })
     const weak: RowTaskResult = { kind: 'fixed', fixedId: 'f', cell: { sp: 0, category: 'x', ohkoChance: 0, maxPercent: 10 } }
     const view = assembleTab(pl, resultMap(weak, probe('a', 0, 20), ends('a', 'x', 'y'), swept('a', bands([[5, 'x'], [32, 'y']]))))
     expect(view.cards[0].rows.map((r) => r.id)).toEqual(['a'])
-    expect(view.noChange.items).toEqual([])
   })
 })
 
@@ -162,14 +168,13 @@ describe('분류를 가로지른 가장 센 기술(손 계획, 사용자 피드�
     expect(pendingTasks(pl, probed).stage1).toEqual([{ kind: 'ends', rowId: 'p' }])
   })
 
-  it('선공기도 없으면 래더 카드는 빠지고(요약 행 없음, 카드 M에 셈), 커스텀 카드도 표시하지 않는다', () => {
+  it('다른 분류 기술이 가장 세고 선공기도 없으면 이 카드는 행이 없어 래더·커스텀 모두 표시하지 않는다(그 상대의 다른 분류 카드가 보인다)', () => {
     const only = [group(cand('a'), cand('x', false, 'probe'))]
     for (const source of ['ladder', 'custom'] as const) {
       const pl = plan({ cards: [card({ id: 'c', source, rowIds: ['a'], conditions: only })], rows: [rows[0]], probes: [crossSpec] })
       const view = assembleTab(pl, resultMap(probe('a', 0.5, 120), probe('x', 1, 150)))
       expect(view.complete, source).toBe(true)
       expect(view.cards, source).toEqual([])
-      expect(view.noChange, source).toMatchObject({ rows: 0, cards: source === 'ladder' ? 1 : 0 })
       expect(view.progress, source).toEqual({ done: 2, total: 2 })
     }
   })
@@ -244,10 +249,10 @@ function run(label: string, input: CardInput, tab: Tab) {
 function cardOf(p: TabPlan, view: TabView, ref: { id: string; spread: string }, category: CardSpec['category']) {
   const spec = p.cards.find((c) => c.opponent.id === ref.id && c.category === category && c.bundle.representativeSpread === ref.spread)
   if (!spec) throw new Error(`${ref.id} ${ref.spread} 카드가 없다`)
-  return { spec, card: view.cards.find((c) => c.id === spec.id), items: view.noChange.items.filter((i) => i.cardId === spec.id) }
+  return { spec, card: view.cards.find((c) => c.id === spec.id) }
 }
 
-/** 표시 행·요약 항목에 나온 (조건, 기술) 집합. 조건 = 랭크 수단 또는 기본 */
+/** 표시 행(변화 없음 행 포함)에 나온 (조건, 기술) 집합. 조건 = 랭크 수단 또는 기본 */
 function movesByCondition(card: ReturnType<typeof cardOf>): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>()
   const add = (basis: unknown, move: string | undefined) => {
@@ -257,24 +262,25 @@ function movesByCondition(card: ReturnType<typeof cardOf>): Map<string, Set<stri
     out.set(k, new Set([...(out.get(k) ?? []), move]))
   }
   for (const r of card.card?.rows ?? []) add(r.basis, r.moveId)
-  for (const i of card.items) add(i.basis, i.moveId)
   return out
 }
 
 describe('실데이터: 카드·조건당 가장 센 기술(+선공기)', () => {
   const example = cardInput({ mySet: F12.sneasler.mySet })
 
-  it('포푸니크: 분함의발구르기만 계산하고(드래곤클로·지진·스톤샤워 행 없음) 그 행이 변화 없음 — 기본 기준(5%)에선 다른 포푸니크 배분도 변화 없음이라 카드가 목록에서 빠진다', () => {
+  it('포푸니크: 분함의발구르기만 계산하고(드래곤클로·지진·스톤샤워 행 없음) 그 행이 변화 없음 — 기본 기준(5%)에서 다른 배분도 변화 없음이어도 목록에 남는다(사용자 피드백 2026-11-12)', () => {
     const { plan: p, view } = run('example', example, 'attack')
     const c = cardOf(p, view, F12.sneasler.opponent, 'physical')
     expect(c.spec.conditions.map((g) => g.candidates.map((x) => x.moveId))).toEqual([['earthquake', 'dragonclaw', 'rockslide', 'stompingtantrum']])
-    expect(view.cards.some((x) => x.opponent.id === c.spec.opponent.id)).toBe(false)
-    expect(c.card).toBeUndefined()
-    expect(c.items.map((i) => [i.kind, i.moveId, i.sweepStat, i.fixed])).toEqual([['row', F12.sneasler.chosen, 'atk', 'guaranteed-ohko']])
-    for (const m of F12.sneasler.dropped) expect(view.noChange.items.some((i) => i.cardId === c.spec.id && i.moveId === m)).toBe(false)
+    const all = view.cards.filter((x) => x.opponent.id === c.spec.opponent.id)
+    expect(all.length).toBeGreaterThan(0)
+    expect(all.every((x) => !x.variable)).toBe(true)
+    expect(c.card?.rows.map((r) => [r.moveId, r.sweepStat, r.noChange, r.current.category])).toEqual([[F12.sneasler.chosen, 'atk', true, 'guaranteed-ohko']])
+    expect(c.card?.headline).toEqual({ kind: 'row', rowId: c.card?.rows[0].id })
+    for (const m of F12.sneasler.dropped) expect(c.card?.rows.some((r) => r.moveId === m)).toBe(false)
   })
 
-  it('포푸니크(배분 기준 0.5%): 판정이 바뀌는 다른 포푸니크 배분이 보이면 같은 카드가 변화 없음 선택지로 남는다', () => {
+  it('포푸니크(배분 기준 0.5%): 판정이 바뀌는 다른 배분은 변동 가능, 최대 배분 카드는 변화 없음 행 그대로', () => {
     const { plan: p, view } = run('example-bundle-0.005', cardInput({ mySet: F12.sneasler.mySet, criteria: { ...DEFAULT_CRITERIA, bundleShareMin: 0.005 } }), 'attack')
     const c = cardOf(p, view, F12.sneasler.opponent, 'physical')
     expect(c.spec.conditions.map((g) => g.candidates.map((x) => x.moveId))).toEqual([['earthquake', 'dragonclaw', 'rockslide', 'stompingtantrum']])
@@ -282,10 +288,8 @@ describe('실데이터: 카드·조건당 가장 센 기술(+선공기)', () => 
     const others = view.cards.filter((x) => x.opponent.id === c.spec.opponent.id && x.id !== c.spec.id)
     expect(others.some((x) => x.rows.some((r) => !r.noChange))).toBe(true)
     expect(c.card?.rows.map((r) => [r.moveId, r.noChange, r.current.category])).toEqual([[F12.sneasler.chosen, true, 'guaranteed-ohko']])
-    expect(c.card?.headline).toEqual({ kind: 'no-change', fixed: ['guaranteed-ohko'] })
-    expect(c.card?.hiddenNoChangeRows).toBe(0)
-    // 보이는 카드의 행은 요약에서 빠진다.
-    expect(c.items).toEqual([])
+    expect(c.card?.headline).toEqual({ kind: 'row', rowId: c.card?.rows[0].id })
+    expect([c.card?.variable, others.some((x) => x.variable)]).toEqual([false, true])
     for (const m of F12.sneasler.dropped) expect(c.card?.rows.some((r) => r.moveId === m)).toBe(false)
   })
 
@@ -337,7 +341,7 @@ describe('실데이터: 카드·조건당 가장 센 기술(+선공기)', () => 
     ] as const) {
       const { plan: p, view } = run(`switch-${label}`, only(mySet), 'attack')
       expect([...(movesByCondition(cardOf(p, view, F12.spSwitch.opponent, shown)).get('base') ?? [])], label).toEqual([want])
-      // 다른 분류 카드의 기본 조건 기술(사이코쇼크 / 사이코키네시스)은 더 약해 행도 요약도 없다.
+      // 다른 분류 카드의 기본 조건 기술(사이코쇼크 / 사이코키네시스)은 더 약해 행이 없다.
       expect(movesByCondition(cardOf(p, view, F12.spSwitch.opponent, empty)).get('base'), label).toBeUndefined()
     }
   })

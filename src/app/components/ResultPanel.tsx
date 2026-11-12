@@ -112,14 +112,15 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
           )}
           {view.status.kind === 'ok' && (
             <>
+              {/* 래더 상대는 판정 변화와 무관하게 다 보인다: 빈 목록 = 판정할 상대·기술이 없음(내 세트에 공격기가 없는 등) */}
               {view.cards.length === 0 && view.stage12Done && !view.complete && (
                 <p className="empty" data-testid="empty-provisional">
-                  지금까지 SP로 판정이 바뀌는 카드가 없습니다(확인 중).
+                  지금까지 판정할 상대가 없습니다(확인 중).
                 </p>
               )}
               {view.cards.length === 0 && view.complete && (
                 <p className="empty" data-testid="empty">
-                  SP로 판정이 바뀌는 카드가 없습니다.
+                  판정할 상대가 없습니다. 이 탭에서 계산할 기술이 있는지 확인하세요.
                 </p>
               )}
               {view.cards.length === 0 && !view.stage12Done && <p className="hint">카드를 계산하는 중…</p>}

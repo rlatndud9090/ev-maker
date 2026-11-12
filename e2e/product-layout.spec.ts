@@ -16,9 +16,20 @@ for (const width of [400, 1280]) {
       await openProduct(page)
       await selectTab(page, '방어')
       await waitComplete(page)
-      const card = cards(page).first()
+      const card = cards(page).and(page.locator('[data-variable="true"]')).first()
       await card.locator('button[aria-expanded]').first().click()
       await expect(card.getByTestId('band-cell').first()).toBeVisible()
+      // 상세 오른쪽 열의 띠가 상자보다 넓으면: 처음 열 때 현재 칸이 보이고, 더 있는 쪽 가장자리 표시(data-more-*)가 붙는다.
+      const bands = await card.locator('.band-scroll').evaluateAll((els) =>
+        els.map((el) => {
+          const box = el.getBoundingClientRect()
+          const cur = el.querySelector('[aria-current="true"]')!.getBoundingClientRect()
+          const wider = el.scrollWidth > el.clientWidth
+          return { wider, curVisible: cur.left >= box.left - 0.5 && cur.right <= box.right + 0.5, marked: el.hasAttribute('data-more-left') || el.hasAttribute('data-more-right') }
+        }),
+      )
+      expect(bands.length).toBeGreaterThan(0)
+      for (const b of bands) expect(b).toEqual({ wider: b.wider, curVisible: true, marked: b.wider })
       await page.getByRole('button', { name: '표시 기준', exact: true }).click()
       await page.getByRole('button', { name: '포켓몬 추가', exact: true }).click()
 
@@ -33,6 +44,22 @@ for (const width of [400, 1280]) {
       )
       expect(leaks).toBe(0)
       expect(await findOverlaps(page, CONTROLS)).toEqual([])
+      // 접힌 줄: 결과(배지 + 변동 가능)가 "외 n행"과 겹치지 않고, 이름(폼 꼬리 포함)은 1280px에서 한 줄.
+      const lineIssues = await page.evaluate((wide) => {
+        const out: string[] = []
+        const lines = [...document.querySelectorAll('[data-testid="card"] .card-line')]
+        for (const line of lines) {
+          const name = line.querySelector('.card-name')!
+          const res = line.querySelector('.card-result')?.getBoundingClientRect()
+          const more = line.querySelector('.card-more')?.getBoundingClientRect()
+          if (res && more && res.top < more.bottom && more.top < res.bottom && res.right > more.left + 0.5) out.push(`${name.textContent} 결과↔외 n행 ${res.right - more.left}`)
+          const lh = parseFloat(getComputedStyle(name).lineHeight) || 24
+          if (wide && name.getBoundingClientRect().height > lh * 1.5) out.push(`${name.textContent} 이름 두 줄`)
+        }
+        return { out, checked: lines.filter((l) => l.querySelector('.card-more')).length }
+      }, width >= 1280)
+      expect(lineIssues.checked).toBeGreaterThan(0)
+      expect(lineIssues.out).toEqual([])
       await page.screenshot({ path: test.info().outputPath(`product-${width}.png`), fullPage: true })
 
       // 목록 박스 안을 스크롤해도 겹침·가로 스크롤이 생기지 않는다.
@@ -75,31 +102,70 @@ for (const width of [400, 1280]) {
       expect(leak).toBeNull()
     })
 
-    test(`${width}px: 배분 메뉴·배분 탭이 화면 안에 들어오고 탭 줄만 자체 가로 스크롤`, async ({ page }) => {
+    test(`${width}px: 배분 메뉴·상세 배분 목록이 화면 안에 들어오고, 좁으면 목록이 판정 행 위로 쌓여 자체 세로 스크롤`, async ({ page }) => {
       await openProduct(page)
       await selectTab(page, '방어')
       await waitComplete(page)
       const row = cards(page).filter({ has: page.locator('button.bundle-btn') }).first()
       await row.locator('button[aria-expanded]').first().click()
-      const tabs = row.getByTestId('bundle-tabs')
-      await expect(tabs).toBeVisible()
-      const m = await tabs.evaluate((el) => ({
-        overflowX: getComputedStyle(el).overflowX,
-        right: el.getBoundingClientRect().right,
-        viewport: window.innerWidth,
-      }))
-      expect(m.overflowX).toBe('auto')
+      const list = row.getByTestId('bundle-list')
+      await expect(list).toBeVisible()
+      const m = await row.evaluate((el) => {
+        const side = el.querySelector('[data-testid="bundle-list"]') as HTMLElement
+        const panel = el.querySelector('[data-testid="bundle-panel"]')!.getBoundingClientRect()
+        const r = side.getBoundingClientRect()
+        const form = side.querySelector('[data-testid="bundle-add"]')!
+        const mids = [...form.querySelectorAll('label, input, button')].map((e) => {
+          const b = e.getBoundingClientRect()
+          return b.top + b.height / 2
+        })
+        return {
+          overflowY: getComputedStyle(side).overflowY,
+          maxHeight: parseFloat(getComputedStyle(side).maxHeight),
+          rem: parseFloat(getComputedStyle(document.documentElement).fontSize),
+          left: r.left,
+          right: r.right,
+          bottom: r.bottom,
+          panelTop: panel.top,
+          panelLeft: panel.left,
+          formSpread: Math.max(...mids) - Math.min(...mids),
+          viewport: window.innerWidth,
+        }
+      })
+      expect(m.overflowY).toBe('auto')
+      expect(m.left).toBeGreaterThanOrEqual(0)
       expect(m.right).toBeLessThanOrEqual(m.viewport)
-      // 넘치는 경우를 강제(탭 줄 폭을 줄임)해 그 줄 안에서만 가로로 스크롤되는지 본다.
-      const forced = await tabs.evaluate((el) => {
-        el.style.maxWidth = '5rem'
-        const r = { scrolls: el.scrollWidth > el.clientWidth, left: ((el.scrollLeft = 40), el.scrollLeft) }
-        el.scrollLeft = 0
-        el.style.maxWidth = ''
+      expect(m.formSpread).toBeLessThanOrEqual(2)
+      if (width < 700) {
+        // 좁은 화면: 목록이 위(낮은 상자 13rem = 추가 폼 + 항목 5개), 판정 행이 아래
+        expect(m.panelTop).toBeGreaterThanOrEqual(m.bottom - 1)
+        expect(m.maxHeight).toBeLessThanOrEqual(13 * m.rem + 0.5)
+        // 추가 폼 + 항목 5개(두 줄 항목 없음)는 스크롤 없이 다 들어간다(항목 수를 5로 맞춰 확인).
+        const five = await list.evaluate((el) => {
+          const group = el.querySelector('[role="radiogroup"]')!
+          const radios = [...group.querySelectorAll('[role="radio"]')]
+          const added = radios.length < 5 ? Array.from({ length: 5 - radios.length }, () => group.appendChild(radios[0].cloneNode(true))) : []
+          const hidden = radios.slice(5).map((r) => ((r as HTMLElement).hidden = true, r as HTMLElement))
+          const r = { count: group.querySelectorAll('[role="radio"]:not([hidden])').length, overflow: el.scrollHeight - el.clientHeight }
+          added.forEach((a) => (a as Element).remove())
+          hidden.forEach((h) => (h.hidden = false))
+          return r
+        })
+        expect(five.count).toBe(5)
+        expect(five.overflow).toBeLessThanOrEqual(0)
+      } else {
+        expect(m.panelLeft).toBeGreaterThan(m.right)
+      }
+      // 항목이 많으면 목록 상자 안에서만 세로로 스크롤된다(목록 높이를 줄여 강제).
+      const forced = await list.evaluate((el) => {
+        el.style.maxHeight = '4rem'
+        const r = { scrolls: el.scrollHeight > el.clientHeight, top: ((el.scrollTop = 30), el.scrollTop) }
+        el.scrollTop = 0
+        el.style.maxHeight = ''
         return r
       })
       expect(forced.scrolls).toBe(true)
-      expect(forced.left).toBeGreaterThan(0)
+      expect(forced.top).toBeGreaterThan(0)
       expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
 
       // 배분 메뉴는 화면 가로 안에 열리고 페이지 가로 스크롤을 만들지 않는다.

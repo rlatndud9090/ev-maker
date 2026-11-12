@@ -50,3 +50,18 @@ export function PriorityTag() {
     </span>
   )
 }
+
+/** 판정이 내 SP·성격(무보정·상승) 조정으로 바뀔 수 있음 표시. compact = 배분 목록 항목용 짧은 글씨(접근 가능한 이름은 같다). */
+export function VariableTag({ compact = false, id, testId = 'variable-tag' }: { compact?: boolean; id?: string; testId?: string }) {
+  return (
+    <span className={compact ? 'variable-tag compact' : 'variable-tag'} data-testid={testId} id={id} title="내 SP·성격 조정으로 판정이 바뀔 수 있습니다">
+      {compact ? (
+        <>
+          변동<span className="sr-only"> 가능</span>
+        </>
+      ) : (
+        '변동 가능'
+      )}
+    </span>
+  )
+}

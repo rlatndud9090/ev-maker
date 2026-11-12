@@ -59,19 +59,41 @@ export interface TargetLike {
   plus: TargetOptionLike | null
 }
 
-const optionText = (o: TargetOptionLike, plusStat: StatId | null): string => {
-  const sps = o.stats.map((s) => `${STAT_SHORT[s.stat]}${s.sp}${s.stat === plusStat ? '+' : ''}`).join(' ')
-  return o.need > 0 ? `${sps} (다른 능력치에서 ${o.need} 필요)` : sps
+/** 목표 문구의 한 선택지: 앞말("최소 ")·SP 조합("H4 B12+", 한 덩어리)·뒷말(" (다른 능력치에서 n 필요)") 또는 불가 문구(lead만) */
+export interface TargetSegment {
+  lead: string
+  sps?: string
+  note?: string
 }
+export interface TargetSegments {
+  judgement: string
+  neutral: TargetSegment
+  plus: TargetSegment
+}
+
+const optionSegment = (o: TargetOptionLike, plusStat: StatId | null, lead: string): TargetSegment => {
+  const sps = o.stats.map((s) => `${STAT_SHORT[s.stat]}${s.sp}${s.stat === plusStat ? '+' : ''}`).join(' ')
+  return o.need > 0 ? { lead, sps, note: ` (다른 능력치에서 ${o.need} 필요)` } : { lead, sps }
+}
+
+/** 목표 문구를 조각으로(화면이 SP 조합만 줄바꿈 없이 묶는다). 합치면 targetText와 같다 */
+export function targetSegments(t: TargetLike): TargetSegments {
+  return {
+    judgement: judgementText(t.label),
+    neutral: t.neutral === null ? { lead: '무보정 불가' } : optionSegment(t.neutral, null, '최소 '),
+    plus: t.plus === null ? { lead: '상승 불가' } : optionSegment(t.plus, t.plusStat, ''),
+  }
+}
+
+const segmentText = (o: TargetSegment): string => `${o.lead}${o.sps ?? ''}${o.note ?? ''}`
 
 /**
  * 목표 문구 "확정1타: 최소 A32 / A15+"(무보정 / 상승, 상승 대상 능력치 뒤 '+'), 방어 쌍 "확정견딤: 최소 H4 B12 / H2 B8+".
  * 한쪽이 불가면 "무보정 불가 / A28+"·"최소 A30 / 상승 불가". n은 선택지마다 "(다른 능력치에서 n 필요)".
  */
 export function targetText(t: TargetLike): string {
-  const neutral = t.neutral === null ? '무보정 불가' : `최소 ${optionText(t.neutral, null)}`
-  const plus = t.plus === null ? '상승 불가' : optionText(t.plus, t.plusStat)
-  return `${judgementText(t.label)}: ${neutral} / ${plus}`
+  const seg = targetSegments(t)
+  return `${seg.judgement}: ${segmentText(seg.neutral)} / ${segmentText(seg.plus)}`
 }
 
 /** "현재 A32 확정1타". label은 목표 문구와 같은 판정 라벨(공격·방어 5단 판정, 스피드 행동 순서) — 한 줄에 같은 어휘만 쓴다. */
@@ -164,6 +186,12 @@ export function koBadge(_side: KoSide, cell: KoCellLike | undefined, rollSteps: 
   if (p === undefined) return undefined
   const badge = KO_BADGE[rollTier(p, rollSteps)]
   return p > 0 && p < 1 ? { ...badge, chance: rollChanceText(p) } : { ...badge }
+}
+
+/** 칸 없이 범주만 있는 고정 판정(극단 필터에 걸린 기술): 그 단계 배지(확률 없음). 5단 판정이 아니면 배지 없음. */
+export function categoryBadge(category: string | undefined): KoBadge | undefined {
+  if (category === undefined || !Object.prototype.hasOwnProperty.call(KO_BADGE, category)) return undefined
+  return { ...KO_BADGE[category as RollTier] }
 }
 
 /** 기준 입력 문자열 → 1~steps−1 정수, 그 밖(빈칸·소수·범위 밖·숫자 아님)은 undefined */

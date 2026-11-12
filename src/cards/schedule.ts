@@ -126,7 +126,8 @@ export function filterState(results: ResultMap, filterId: string): FilterState {
 }
 
 /**
- * 후보 상태. probing = 같은 조건의 단건 판정이 다 나오지 않음, chosen = 가장 센 기술, priority = 가장 센 기술은 아니지만 선공기라 남김,
+ * 후보 상태. probing = 같은 조건의 단건 판정이 다 나오지 않음, chosen = 가장 센 기술(모든 후보가 무효면 첫 후보),
+ * priority = 가장 센 기술은 아니지만 선공기 행 조건(MoveCandidate.priority)을 채워 남김,
  * dropped = 고르지 않음(더 약함·무효), error = 단건 판정이 계산 불가(오류 행으로 보인다).
  */
 export type CandidateState = 'probing' | 'chosen' | 'priority' | 'dropped' | 'error'
@@ -160,16 +161,24 @@ export function candidateStates(card: CardSpec, results: ResultMap): Map<string,
       continue
     }
     let best = -1
+    let firstImmune = -1
+    let errored = false
     group.candidates.forEach((c, i) => {
       const cell = probeCell(cells[i] as RowTaskResult)
       if (cell === undefined) {
         out.set(c.id, 'error')
+        errored = true
         return
       }
       out.set(c.id, 'dropped')
-      if (cell.immune === true) return
+      if (cell.immune === true) {
+        if (firstImmune < 0) firstImmune = i
+        return
+      }
       if (best < 0 || stronger(cell, probeCell(cells[best] as RowTaskResult) as CompactCell)) best = i
     })
+    // 모든 후보가 무효면 첫 무효 후보를 고른다: 그 상대 행이 "무효" 판정으로 남는다(계산 불가 후보가 있으면 그 오류 행이 남는다).
+    if (best < 0 && !errored) best = firstImmune
     group.candidates.forEach((c, i) => {
       if (i === best) out.set(c.id, 'chosen')
       else if (c.priority && out.get(c.id) === 'dropped' && probeCell(cells[i] as RowTaskResult)?.immune !== true) out.set(c.id, 'priority')

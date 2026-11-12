@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   bundleText,
+  categoryBadge,
   categoryLabel,
   categorySymbol,
   categoryTone,
@@ -17,6 +18,7 @@ import {
   shareText,
   spanText,
   spansOf,
+  targetSegments,
   targetText,
   toPercentInput,
 } from './format'
@@ -38,6 +40,15 @@ describe('targetText', () => {
     expect(targetText({ label: 'high-roll-ohko', plusStat: 'atk', neutral: one('atk', 27, 15), plus: one('atk', 11) })).toBe(
       '고난수1타: 최소 A27 (다른 능력치에서 15 필요) / A11+',
     )
+  })
+  it('조각(targetSegments): SP 조합은 따로(화면이 한 덩어리로 묶는다), 불가는 앞말만', () => {
+    const pair = (hp: number, d: number, need = 0) => ({ stats: [{ stat: 'hp' as const, sp: hp }, { stat: 'def' as const, sp: d }], need })
+    expect(targetSegments({ label: 'guaranteed-survive', plusStat: 'def', neutral: pair(2, 8, 3), plus: pair(0, 0) })).toEqual({
+      judgement: '확정견딤',
+      neutral: { lead: '최소 ', sps: 'H2 B8', note: ' (다른 능력치에서 3 필요)' },
+      plus: { lead: '', sps: 'H0 B0+' },
+    })
+    expect(targetSegments({ label: 'first', plusStat: 'spe', neutral: null, plus: one('spe', 4) }).neutral).toEqual({ lead: '무보정 불가' })
   })
   it('판정 라벨(5단)·랭크 부호', () => {
     expect(judgementText('mid-roll-ohko')).toBe('중난수1타')
@@ -174,5 +185,14 @@ describe('% 입력 변환', () => {
     expect(fromPercentInput('10')).toBeCloseTo(0.1)
     expect(fromPercentInput('')).toBeNaN()
     expect(fromPercentInput('abc')).toBeNaN()
+  })
+})
+
+describe('categoryBadge(칸 없는 고정 판정)', () => {
+  it('5단 판정 범주는 그 배지(확률 없음), 그 밖·없음은 배지 없음', () => {
+    expect(categoryBadge('low-roll-ohko')).toEqual({ label: '저난수1타', tone: 'lime' })
+    expect(categoryBadge('guaranteed-survive')).toEqual({ label: '확정견딤', tone: 'green' })
+    expect(categoryBadge('first')).toBeUndefined()
+    expect(categoryBadge(undefined)).toBeUndefined()
   })
 })

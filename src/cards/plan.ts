@@ -24,6 +24,7 @@ import { presetAssumption } from './presets'
 import { ladderMeans, rankVariants, setMeansCandidates, type CardRefStats, type MeansCandidate } from './rank'
 import type { BoostStat } from './rankMeans'
 import { natureVariants } from './natures'
+import { keepsPriorityRow, type PriorityUser } from './priority'
 import { myDependsOn, relevantStats } from './relevance'
 import {
   CATEGORY_ORDER,
@@ -78,7 +79,6 @@ function withBoosts(set: PokemonSet, boosts: BoostTable): PokemonSet {
 
 const hasMove = (game: Snapshot, moveId: string): boolean => Object.prototype.hasOwnProperty.call(game.data.moves, moveId)
 const isMultihit = (game: Snapshot, moveId: string): boolean => hasMove(game, moveId) && game.data.moves[moveId].multihit !== undefined
-const isPriority = (game: Snapshot, moveId: string): boolean => hasMove(game, moveId) && game.data.moves[moveId].priority > 0
 const BASE_CONDITION = JSON.stringify(['base'])
 const rankCondition = (b: RankBasis): string => JSON.stringify(['rank', ...meansParts(b)])
 
@@ -115,6 +115,8 @@ class PlanBuilder {
   readonly filters: Record<string, ExtremeSpec> = {}
   readonly fixed: Record<string, FixedSpec> = {}
   readonly probes: Record<string, ProbeSpec> = {}
+  /** 카드 id → 기술 사용자(폼 타입·특성)·대상 타입(선공기 행 조건용) */
+  private readonly cardTypes = new Map<string, { user: PriorityUser; target: readonly string[] }>()
 
   readonly input: CardInput
   readonly tab: Tab
@@ -277,6 +279,11 @@ class PlanBuilder {
       conditions: [],
     }
     if (seed.error) card.error = seed.error
+    if (seed.resolved) {
+      const mine = { types: this.me.species.types, ability: this.me.ability }
+      const theirs = { types: seed.resolved.species.types, ability: seed.resolved.ability }
+      this.cardTypes.set(card.id, this.tab === 'defense' ? { user: theirs, target: mine.types } : { user: mine, target: theirs.types })
+    }
     this.cards.push(card)
     return card
   }
@@ -297,8 +304,10 @@ class PlanBuilder {
     return f
   }
 
-  candidate(target: MoveCandidate['target'], id: string, moveId: string): MoveCandidate {
-    return { target, id, moveId, priority: isPriority(this.game, moveId) }
+  /** priority = 선공기 행 조건(keepsPriorityRow): 사용자·대상 = 공격·스피드 탭 나 → 상대, 방어 탭 상대 → 나(카드 대표 세트 폼 타입·특성). */
+  candidate(card: CardSpec, target: MoveCandidate['target'], id: string, moveId: string): MoveCandidate {
+    const t = this.cardTypes.get(card.id)
+    return { target, id, moveId, priority: t !== undefined && keepsPriorityRow(this.game, moveId, t.user, t.target) }
   }
 
   /** 이 카드에 행이 있는 후보가 없으면(비교 전용 후보뿐) 조건을 두지 않는다. */
@@ -319,7 +328,7 @@ class PlanBuilder {
   ): MoveCandidate {
     const p: ProbeSpec = { id: rowId(card.id, ['cross', ...parts]), cardId: card.id, moveId, side, attacker, defender, conditions: this.conditions }
     this.probes[p.id] = p
-    return this.candidate('probe', p.id, moveId)
+    return this.candidate(card, 'probe', p.id, moveId)
   }
 
   addFixed(card: CardSpec, moveId: string, opponentSet: PokemonSet): string {
@@ -394,7 +403,7 @@ class PlanBuilder {
       all.map((slot) => {
         if (!inCategory(slot)) return this.crossProbe(card, ['base', slot.moveId], slot.moveId, 'attacker', this.mySet, oppSet)
         const fixedId = fixedOf.get(slot.moveId)
-        return fixedId === undefined ? this.candidate('row', baseRows.get(slot.moveId) as string, slot.moveId) : this.candidate('fixed', fixedId, slot.moveId)
+        return fixedId === undefined ? this.candidate(card, 'row', baseRows.get(slot.moveId) as string, slot.moveId) : this.candidate(card, 'fixed', fixedId, slot.moveId)
       }),
     )
     if (base.length === 0) return
@@ -418,7 +427,7 @@ class PlanBuilder {
         const extra: Partial<RowSpec> = { kind: 'rank', basis: v.basis }
         if (herbError) extra.error = WHITE_HERB_MULTIHIT
         const r = row(slot, attacker, defender, extra, parts)
-        if (r.error === undefined) candidates.push(this.candidate('row', r.id, slot.moveId))
+        if (r.error === undefined) candidates.push(this.candidate(card, 'row', r.id, slot.moveId))
       }
       this.addCondition(card, rankCondition(v.basis), candidates)
     }
@@ -502,7 +511,7 @@ class PlanBuilder {
           continue
         }
         const filterId = pair(slot, attacker, defender, basis, error, parts)
-        if (filterId !== undefined) candidates.push(this.candidate('filter', filterId, slot.moveId))
+        if (filterId !== undefined) candidates.push(this.candidate(card, 'filter', filterId, slot.moveId))
       }
       this.addCondition(card, id, candidates)
     }

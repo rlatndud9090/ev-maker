@@ -1,14 +1,14 @@
-import { memo, useEffect, useId, useLayoutEffect, useRef, useState, type Dispatch, type KeyboardEvent, type MouseEvent } from 'react'
-import { addedBundleCardId, defaultOption, type AddedBundle, type CardGroup, type CardView, type CellView, type CustomTarget, type RowView, type Tab } from '../../cards'
+import { memo, useEffect, useId, useLayoutEffect, useRef, useState, type Dispatch, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { addedBundleCardId, defaultOption, type AddedBundle, type CardGroup, type CardView, type CustomTarget, type RowView, type Tab } from '../../cards'
 import type { Snapshot, StatId } from '../../data/schema'
 import { namesOf } from '../../ui/names'
-import { STAT_SHORT, bundleText, fixedText, koBadge, orderBadge, shareText, type KoBadge } from '../../ui/format'
+import { STAT_SHORT, bundleText, categoryBadge, fixedText, koBadge, orderBadge, shareText, type KoBadge } from '../../ui/format'
 import { STAT_LABEL } from '../../ui/labels'
 import { koReason } from '../../ui/koErrors'
 import type { AppAction } from '../state'
 import { CustomEditor } from './CustomEditor'
 import { RowDetail } from './RowDetail'
-import { MoveLabel, PriorityTag } from './MoveLabel'
+import { MoveLabel, PriorityTag, VariableTag } from './MoveLabel'
 import { itemKeyLabel, moveNoticeText } from './text'
 
 interface Props {
@@ -28,26 +28,29 @@ interface Props {
   dispatch: Dispatch<AppAction>
 }
 
-const currentCell = (row: RowView): CellView | undefined => row.cells.find((c) => c.sp === row.current.sp)
-
-/** 카드 줄 배지의 기준 칸: 대표 행의 현재 칸. 전 행 변화 없음 커스텀 카드는 칸이 있는 첫 행. */
-function badgeCell(card: CardView): CellView | undefined {
+/** 카드 줄 배지의 기준 행: 대표 행. 대표로 세울 행이 없는 카드(no-change)는 범주가 있는 첫 행. */
+function badgeRow(card: CardView): RowView | undefined {
   const h = card.headline
-  if (h.kind === 'row') {
-    const row = card.rows.find((r) => r.id === h.rowId)
-    return row === undefined ? undefined : currentCell(row)
-  }
+  if (h.kind === 'row') return card.rows.find((r) => r.id === h.rowId)
   if (h.kind !== 'no-change') return undefined
-  for (const row of card.rows) {
-    const cell = currentCell(row)
-    if (cell !== undefined) return cell
-  }
-  return undefined
+  return card.rows.find((r) => r.current.category !== undefined)
 }
 
-/** 공격·방어는 1타 확률 결과 배지, 스피드는 행동 순서 배지. */
+/**
+ * 공격·방어는 1타 확률 결과 배지, 스피드는 행동 순서 배지. 기준 칸 = 그 행의 현재 칸(스윕 행), 내 SP 무관 판정 칸(고정 판정 행),
+ * 칸이 없는 극단 필터 행은 범주만(확률 없음).
+ */
 function resultBadge(tab: Tab, card: CardView, rollSteps: number): { kind: 'ko' | 'order'; badge: KoBadge } | undefined {
-  const badge = tab === 'speed' ? orderBadge(badgeCell(card)) : koBadge(tab, badgeCell(card), rollSteps)
+  const row = badgeRow(card)
+  if (row === undefined) return undefined
+  const cell = row.cells.find((c) => c.sp === row.current.sp) ?? row.fixedCell
+  const category = row.current.category
+  const badge =
+    tab === 'speed'
+      ? orderBadge(cell ?? (category === undefined ? undefined : { category }))
+      : cell !== undefined
+        ? koBadge(tab, cell, rollSteps)
+        : categoryBadge(category)
   return badge === undefined ? undefined : { kind: tab === 'speed' ? 'order' : 'ko', badge }
 }
 
@@ -74,18 +77,44 @@ function BundleLabel({ card }: { card: CardView }) {
   )
 }
 
+/** 배분 선택지 한 항목의 내용: 배분·비중 라벨 + 결과 배지 + 변동 가능 표시(드롭다운·상세 왼쪽 목록 공용). */
+function BundleOptionContent({ tab, option, rollSteps }: { tab: Tab; option: CardView; rollSteps: number }) {
+  const r = resultBadge(tab, option, rollSteps)
+  return (
+    <>
+      <span className="bundle-opt-label num">
+        <BundleLabel card={option} />
+      </span>
+      <span className="bundle-opt-result">
+        {option.state === 'error' && <span className="badge-error">계산 불가</span>}
+        {r !== undefined && <span className={`ko-badge ko-${r.badge.tone} ko-small`}>{r.badge.label}</span>}
+        {option.variable && <VariableTag compact testId="variable-mark" />}
+      </span>
+    </>
+  )
+}
+
+/** 배분 선택지 항목의 공용 data 속성(e2e 계약) */
+const optionData = (o: CardView) => ({
+  'data-card-id': o.id,
+  'data-category': o.category ?? 'none',
+  'data-user-added': isUser(o) ? 'true' : undefined,
+  'data-headline': o.headline.kind,
+  'data-variable': o.variable ? 'true' : 'false',
+})
+
 function Headline({ game, tab, card, badge }: { game: Snapshot; tab: Tab; card: CardView; badge: boolean }) {
   const h = card.headline
   if (h.kind === 'updating') return <span className="headline updating">갱신 중</span>
   if (h.kind === 'error') return <span className="headline error">계산 불가: {koReason(game, h.reason)}</span>
   if (h.kind === 'no-change') {
-    // 배지가 고정 판정을 대신한다. 칸 없는 고정 판정 행(극단 필터·내 SP 무관)만 문구로 보인다.
+    // 배지가 고정 판정을 대신한다. 배지가 없는 고정 판정만 문구로 보인다.
     if (badge || h.fixed.length === 0) return null
     return <span className="headline fixed">{h.fixed.map(fixedText).join(', ')}</span>
   }
   const row = card.rows.find((r) => r.id === h.rowId)
-  if (row === undefined || row.sweepStat === undefined) return null
-  // 판정은 결과 배지가 보이고 여기는 기술 라벨만. 목표 문구("최소 … 필요")는 상세 행에만 있다.
+  if (row === undefined) return null
+  // 판정은 결과 배지가 보이고 여기는 기술 라벨만(변화 없음 행도 라벨은 보인다). 목표 문구("최소 … 필요")는 상세 행에만 있다.
   return (
     <span className="headline row-headline">
       <span className="hl-move">
@@ -108,13 +137,25 @@ function Headline({ game, tab, card, badge }: { game: Snapshot; tab: Tab; card: 
   )
 }
 
+/** "나인테일(알로라의 모습)" → 이름 + 작은 폼 꼬리(서식만, 이름 문자열은 그대로) */
+function SpeciesName({ label }: { label: string }) {
+  const m = /^(.+?)(\(.+\))$/.exec(label)
+  if (m === null) return <>{label}</>
+  return (
+    <>
+      {m[1]}
+      <span className="form-suffix">{m[2]}</span>
+    </>
+  )
+}
+
 const stop = (e: MouseEvent) => e.stopPropagation()
 
 const SP_TEXT = /^\d+$/
 
 /**
- * 메뉴 최상단 직접 추가 폼 "H [ ] B [ ] [추가]": 현재 배분의 키 능력치 순, 기본값은 현재 SP.
- * 0~spMax 정수가 아니거나 빈칸이면 [추가]를 막고 안내한다. Enter로 추가. 키 입력은 메뉴 키보드 처리로 올리지 않는다.
+ * 직접 추가 폼 "H [ ] B [ ] [추가]"(한 줄): 현재 배분의 키 능력치 순, 기본값은 현재 SP.
+ * 0~spMax 정수가 아니거나 빈칸이면 [추가]를 막고 안내한다. Enter로 추가. 키 입력은 바깥 키보드 처리(메뉴·목록)로 올리지 않는다.
  */
 function BundleAddForm({ card, spMax, onAdd }: { card: CardView; spMax: number; onAdd: (sp: Record<StatId, number>) => void }) {
   const stats = card.bundle.stats
@@ -138,31 +179,33 @@ function BundleAddForm({ card, spMax, onAdd }: { card: CardView; spMax: number; 
         onAdd(Object.fromEntries(stats.map((s, i) => [s.stat, Number(values[i])])) as Record<StatId, number>)
       }}
     >
-      {stats.map((s, i) => (
-        <label key={s.stat} title={`SP ${STAT_LABEL[s.stat]}`}>
-          {STAT_SHORT[s.stat]}
-          <input
-            type="number"
-            inputMode="numeric"
-            className="num"
-            min={0}
-            max={spMax}
-            step={1}
-            aria-label={`직접 추가 SP ${STAT_LABEL[s.stat]}`}
-            aria-invalid={!valid[i]}
-            aria-describedby={ok ? undefined : hintId}
-            value={values[i]}
-            onChange={(e) => {
-              const next = [...values]
-              next[i] = e.target.value
-              setValues(next)
-            }}
-          />
-        </label>
-      ))}
-      <button type="submit" disabled={!ok}>
-        추가
-      </button>
+      <span className="bundle-add-fields">
+        {stats.map((s, i) => (
+          <label key={s.stat} title={`SP ${STAT_LABEL[s.stat]}`}>
+            {STAT_SHORT[s.stat]}
+            <input
+              type="number"
+              inputMode="numeric"
+              className="num"
+              min={0}
+              max={spMax}
+              step={1}
+              aria-label={`직접 추가 SP ${STAT_LABEL[s.stat]}`}
+              aria-invalid={!valid[i]}
+              aria-describedby={ok ? undefined : hintId}
+              value={values[i]}
+              onChange={(e) => {
+                const next = [...values]
+                next[i] = e.target.value
+                setValues(next)
+              }}
+            />
+          </label>
+        ))}
+        <button type="submit" disabled={!ok}>
+          추가
+        </button>
+      </span>
       {!ok && (
         <span className="bundle-add-hint" id={hintId} role="status">
           SP는 0~{spMax} 정수만 넣을 수 있습니다
@@ -170,11 +213,6 @@ function BundleAddForm({ card, spMax, onAdd }: { card: CardView; spMax: number; 
       )}
     </form>
   )
-}
-
-interface PickerProps extends Pick<Props, 'tab' | 'group' | 'card' | 'rollSteps' | 'onSelect' | 'dispatch'> {
-  /** 래더 행: 메뉴 최상단 직접 추가 폼·사용자 배분 삭제 */
-  spMax?: number
 }
 
 /**
@@ -193,13 +231,55 @@ function rememberFocusReturn(key: string) {
   document.addEventListener('pointerdown', forget, true)
 }
 
+type ActionProps = Pick<Props, 'tab' | 'group' | 'card' | 'onSelect' | 'dispatch'>
+
+/**
+ * 배분 직접 추가·삭제(드롭다운·상세 목록 공용). 같은 키 배분이 이미 선택지면 그걸 고르고, 아니면 상태에 추가하고 그 카드를 미리 고른다
+ * (계산이 끝나면 맨 위에 보인다). 추가·삭제 뒤 재계산 중 포커스를 잃으면 그 행의 배분 버튼으로 돌려준다.
+ */
+function bundleActions({ tab, group, card, onSelect, dispatch }: ActionProps, spMax: number | undefined) {
+  const returnKey = JSON.stringify([tab, group.key])
+  /** done: 선택을 반영한 뒤(포커스 복귀 기억 전) 부를 마무리(메뉴 닫기 등) */
+  const add = (sp: Record<StatId, number>, done?: () => void) => {
+    const stats = card.bundle.stats.map((s) => ({ stat: s.stat, sp: sp[s.stat] }))
+    const same = (o: CardView) =>
+      o.bundle.stats.length === stats.length && o.bundle.stats.every((s, i) => s.stat === stats[i].stat && s.sp === stats[i].sp && s.nature === 'neutral')
+    const existing = group.options.find((o) => !isUser(o) && same(o)) ?? group.options.find((o) => isUser(o) && same(o))
+    if (existing !== undefined) {
+      onSelect(group.key, existing.id)
+    } else if (spMax !== undefined) {
+      const added: AddedBundle = { tab, opponentId: card.opponent.id, category: card.category, sp }
+      dispatch({ type: 'add-bundle', bundle: added, keyStats: stats.map((s) => s.stat), spMax })
+      onSelect(group.key, addedBundleCardId(added, stats))
+    }
+    done?.()
+    if (existing === undefined) rememberFocusReturn(returnKey)
+  }
+  const remove = (o: CardView, done?: () => void) => {
+    dispatch({ type: 'remove-bundle', bundle: addedOf(tab, o) })
+    if (o.id === card.id) onSelect(group.key, defaultOption({ ...group, options: group.options.filter((x) => x.id !== o.id) }).id)
+    done?.()
+    rememberFocusReturn(returnKey)
+  }
+  return { add, remove, returnKey }
+}
+
+interface PickerProps extends Pick<Props, 'tab' | 'group' | 'card' | 'rollSteps' | 'onSelect' | 'dispatch'> {
+  /** 래더 행: 직접 추가 폼·사용자 배분 삭제 */
+  spMax?: number
+}
+
 /** 행의 배분 배지: 아래로 여는 배분 선택 메뉴(래더 행은 직접 추가 폼 포함). */
 function BundlePicker({ tab, group, card, rollSteps, onSelect, dispatch, spMax }: PickerProps) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLSpanElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
-  const returnKey = JSON.stringify([tab, group.key])
+  const close = () => {
+    setOpen(false)
+    btnRef.current?.focus()
+  }
+  const { add, remove, returnKey } = bundleActions({ tab, group, card, onSelect, dispatch }, spMax)
 
   // 추가·삭제 뒤 재계산 중 이 행이 다시 붙었고 포커스가 갈 곳을 잃었으면 배분 버튼으로 돌려준다.
   useEffect(() => {
@@ -240,8 +320,7 @@ function BundlePicker({ tab, group, card, rollSteps, onSelect, dispatch, spMax }
     const at = items.indexOf(document.activeElement as HTMLButtonElement)
     if (e.key === 'Escape') {
       e.preventDefault()
-      setOpen(false)
-      btnRef.current?.focus()
+      close()
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
       const step = e.key === 'ArrowDown' ? 1 : -1
@@ -250,35 +329,6 @@ function BundlePicker({ tab, group, card, rollSteps, onSelect, dispatch, spMax }
       e.preventDefault()
       items[e.key === 'Home' ? 0 : items.length - 1]?.focus()
     }
-  }
-
-  const close = () => {
-    setOpen(false)
-    btnRef.current?.focus()
-  }
-
-  /** 같은 키 배분이 이미 선택지면 그걸 고르고, 아니면 상태에 추가하고 그 카드를 미리 고른다(계산이 끝나면 맨 위에 보인다). */
-  const add = (sp: Record<StatId, number>) => {
-    const stats = card.bundle.stats.map((s) => ({ stat: s.stat, sp: sp[s.stat] }))
-    const same = (o: CardView) =>
-      o.bundle.stats.length === stats.length && o.bundle.stats.every((s, i) => s.stat === stats[i].stat && s.sp === stats[i].sp && s.nature === 'neutral')
-    const existing = group.options.find((o) => !isUser(o) && same(o)) ?? group.options.find((o) => isUser(o) && same(o))
-    if (existing !== undefined) {
-      onSelect(group.key, existing.id)
-    } else if (spMax !== undefined) {
-      const added: AddedBundle = { tab, opponentId: card.opponent.id, category: card.category, sp }
-      dispatch({ type: 'add-bundle', bundle: added, keyStats: stats.map((s) => s.stat), spMax })
-      onSelect(group.key, addedBundleCardId(added, stats))
-    }
-    close()
-    if (existing === undefined) rememberFocusReturn(returnKey)
-  }
-
-  const remove = (o: CardView) => {
-    dispatch({ type: 'remove-bundle', bundle: addedOf(tab, o) })
-    if (o.id === card.id) onSelect(group.key, defaultOption({ ...group, options: group.options.filter((x) => x.id !== o.id) }).id)
-    close()
-    rememberFocusReturn(returnKey)
   }
 
   return (
@@ -314,9 +364,8 @@ function BundlePicker({ tab, group, card, rollSteps, onSelect, dispatch, spMax }
           }}
           data-testid="bundle-menu"
         >
-          {spMax !== undefined && card.bundle.stats.length > 0 && <BundleAddForm key={card.id} card={card} spMax={spMax} onAdd={add} />}
+          {spMax !== undefined && card.bundle.stats.length > 0 && <BundleAddForm key={card.id} card={card} spMax={spMax} onAdd={(sp) => add(sp, close)} />}
           {group.options.map((o) => {
-            const r = resultBadge(tab, o, rollSteps)
             const item = (
               <button
                 key={o.id}
@@ -324,27 +373,20 @@ function BundlePicker({ tab, group, card, rollSteps, onSelect, dispatch, spMax }
                 role="menuitemradio"
                 aria-checked={o.id === card.id}
                 className={`bundle-opt${userClass(o)}`}
-                data-card-id={o.id}
-                data-category={o.category ?? 'none'}
-                data-user-added={isUser(o) ? 'true' : undefined}
-                data-headline={o.headline.kind}
+                {...optionData(o)}
                 onClick={() => {
                   onSelect(group.key, o.id)
                   close()
                 }}
               >
-                <span className="bundle-opt-label num">
-                  <BundleLabel card={o} />
-                </span>
-                {o.state === 'error' && <span className="badge-error">계산 불가</span>}
-                {r !== undefined && <span className={`ko-badge ko-${r.badge.tone} ko-small`}>{r.badge.label}</span>}
+                <BundleOptionContent tab={tab} option={o} rollSteps={rollSteps} />
               </button>
             )
             if (!isUser(o)) return item
             return (
               <div key={o.id} className="bundle-opt-row" role="none">
                 {item}
-                <button type="button" role="menuitem" className="bundle-del" aria-label="직접 추가 배분 삭제" onClick={() => remove(o)}>
+                <button type="button" role="menuitem" className="bundle-del" aria-label="직접 추가 배분 삭제" onClick={() => remove(o, close)}>
                   ×
                 </button>
               </div>
@@ -366,56 +408,104 @@ function bundleAria(card: CardView): string {
   return bundle.share !== undefined ? `${stats} ${shareText(bundle.share)}` : stats
 }
 
-/** 상세 최상단: 배분을 사용률 순 가로 탭으로(넘치면 가로 스크롤). */
-function BundleTabs({ group, card, onSelect, tabId, panelId }: Pick<Props, 'group' | 'card' | 'onSelect'> & { tabId: (i: number) => string; panelId: string }) {
+interface ListProps extends PickerProps {
+  /** 항목 id(오른쪽 판정 영역이 선택 항목을 이름으로 가리킨다) */
+  optionId: (i: number) => string
+}
+
+/**
+ * 상세 왼쪽 열: 드롭다운과 같은 배분 목록을 세로로 고정(래더는 맨 위 직접 추가 폼). 선택은 radiogroup(↑↓·←→ 이동 즉시 선택, Home/End),
+ * radiogroup 안에는 radio만 둔다: 사용자 추가 배분 삭제는 그 radio에서 Delete·Backspace 키, 마우스는 항목 안 × 표시(보조 기술에는 숨김 —
+ * 터치 스크린 리더는 드롭다운 메뉴의 삭제 항목을 쓴다). 사용자 추가 배분은 다른 면 색.
+ */
+function BundleList({ tab, group, card, rollSteps, onSelect, dispatch, spMax, optionId, deleteHintId }: ListProps & { deleteHintId: string }) {
   const listRef = useRef<HTMLDivElement>(null)
+  const { add, remove } = bundleActions({ tab, group, card, onSelect, dispatch }, spMax)
+  const anySelected = group.options.some((o) => o.id === card.id)
+
   useEffect(() => {
-    // 선택 탭이 가로 스크롤 밖이면 보이게 옮긴다(세로 스크롤은 건드리지 않는다).
+    // 선택 항목이 목록 스크롤 밖이면 보이게 옮긴다(목록 박스 안에서만, 페이지는 건드리지 않는다).
     const list = listRef.current
-    const tab = list?.querySelector<HTMLElement>('[aria-selected="true"]')
-    if (!list || !tab) return
-    const left = tab.offsetLeft - list.offsetLeft
-    if (left < list.scrollLeft) list.scrollLeft = left
-    else if (left + tab.offsetWidth > list.scrollLeft + list.clientWidth) list.scrollLeft = left + tab.offsetWidth - list.clientWidth
+    const item = list?.querySelector<HTMLElement>('[aria-checked="true"]')
+    if (!list || !item) return
+    const top = item.offsetTop - list.offsetTop
+    if (top < list.scrollTop) list.scrollTop = top
+    else if (top + item.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = top + item.offsetHeight - list.clientHeight
   }, [card.id])
 
+  const focusOption = (id: string) =>
+    requestAnimationFrame(() => listRef.current?.querySelector<HTMLElement>(`[role="radio"][data-card-id="${CSS.escape(id)}"]`)?.focus())
+
   const onKey = (e: KeyboardEvent) => {
+    const focused = e.target as HTMLElement
+    if (focused.getAttribute('role') !== 'radio') return
     const n = group.options.length
-    const at = group.options.findIndex((o) => o.id === card.id)
+    const at = group.options.findIndex((o) => o.id === focused.dataset.cardId)
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      const o = group.options[at]
+      if (o === undefined || !isUser(o)) return
+      e.preventDefault()
+      remove(o)
+      return
+    }
     let to: number
-    if (e.key === 'ArrowRight') to = (at + 1) % n
-    else if (e.key === 'ArrowLeft') to = (at - 1 + n) % n
+    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') to = (at + 1) % n
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') to = (at - 1 + n) % n
     else if (e.key === 'Home') to = 0
     else if (e.key === 'End') to = n - 1
     else return
     e.preventDefault()
     const next = group.options[to]
     onSelect(group.key, next.id)
-    requestAnimationFrame(() => listRef.current?.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(next.id)}"]`)?.focus())
+    focusOption(next.id)
   }
 
   return (
-    <div className="bundle-tabs" role="tablist" aria-label="노력치 배분" data-testid="bundle-tabs" ref={listRef} onKeyDown={onKey}>
-      {group.options.map((o, i) => {
-        const selected = o.id === card.id
-        return (
-          <button
-            key={o.id}
-            type="button"
-            role="tab"
-            id={tabId(i)}
-            aria-controls={panelId}
-            aria-selected={selected}
-            tabIndex={selected ? 0 : -1}
-            className={`bundle-tab num${userClass(o)}`}
-            data-card-id={o.id}
-            data-user-added={isUser(o) ? 'true' : undefined}
-            onClick={() => onSelect(group.key, o.id)}
-          >
-            <BundleLabel card={o} />
-          </button>
-        )
-      })}
+    <div className="bundle-side" data-testid="bundle-list" ref={listRef}>
+      {spMax !== undefined && card.bundle.stats.length > 0 && <BundleAddForm key={card.id} card={card} spMax={spMax} onAdd={(sp) => add(sp)} />}
+      <div className="bundle-radios" role="radiogroup" aria-label="노력치 배분" onKeyDown={onKey}>
+        {group.options.map((o, i) => {
+          const selected = o.id === card.id
+          const user = isUser(o)
+          return (
+            <button
+              key={o.id}
+              type="button"
+              role="radio"
+              id={optionId(i)}
+              aria-checked={selected}
+              // 선택 항목(없으면 첫 항목)만 Tab으로 들어온다(roving tabindex)
+              tabIndex={selected || (!anySelected && i === 0) ? 0 : -1}
+              aria-keyshortcuts={user ? 'Delete' : undefined}
+              aria-describedby={user ? deleteHintId : undefined}
+              className={`bundle-opt${userClass(o)}`}
+              {...optionData(o)}
+              onClick={() => onSelect(group.key, o.id)}
+            >
+              <BundleOptionContent tab={tab} option={o} rollSteps={rollSteps} />
+              {user && (
+                <span
+                  className="bundle-del"
+                  aria-hidden="true"
+                  title="직접 추가 배분 삭제"
+                  data-testid="bundle-del"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    remove(o)
+                  }}
+                >
+                  ×
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+      {group.options.some(isUser) && (
+        <span id={deleteHintId} className="sr-only">
+          Delete 키로 직접 추가 배분 삭제
+        </span>
+      )}
     </div>
   )
 }
@@ -427,27 +517,25 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
   const multi = group.options.length > 1
   // 래더 행은 직접 추가 폼 때문에 배분이 하나여도 늘 고를 수 있는 배지다(관련 SP가 없으면 추가할 것이 없다).
   const addable = ladder && card.bundle.stats.length > 0
+  const spMax = addable ? game.manifest.rules.spMaxPerStat : undefined
   const result = resultBadge(tab, card, rollSteps)
-  // 토글 버튼 이름은 포켓몬, 설명은 줄의 기술·결과(스크린 리더가 접힌 줄 판정을 함께 읽는다)
+  // 토글 버튼 이름은 포켓몬, 설명은 줄의 기술·결과·변동 가능(스크린 리더가 접힌 줄 판정을 함께 읽는다)
   const uid = useId()
   const headlineId = `${uid}-headline`
   const resultId = `${uid}-result`
-  const tabId = (i: number) => `${uid}-tab-${i}`
-  const panelId = `${uid}-panel`
-  const selectedIndex = Math.max(0, group.options.findIndex((o) => o.id === card.id))
-  const body = (
-    <>
-      {card.state === 'error' && card.error && <p className="row-error">계산 불가: {koReason(game, card.error)}</p>}
-      {card.rows.length > 0 && (
-        <ol className="rows">
-          {card.rows.map((r) => (
-            <RowDetail key={r.id} game={game} tab={tab} row={r} />
-          ))}
-        </ol>
-      )}
-      {target !== undefined && <CustomEditor key={card.id} game={game} tab={tab} card={card} target={target} dispatch={dispatch} />}
-    </>
-  )
+  const variableId = `${uid}-variable`
+  const optionId = (i: number) => `${uid}-option-${i}`
+  const selectedIndex = group.options.findIndex((o) => o.id === card.id)
+  const describedBy = [headlineId, ...(result === undefined ? [] : [resultId]), ...(card.variable ? [variableId] : [])].join(' ')
+  let resultBody: ReactNode = null
+  if (result !== undefined) {
+    resultBody = (
+      <span className={`ko-badge ko-${result.badge.tone}`} data-testid={result.kind === 'ko' ? 'ko-badge' : 'order-badge'} data-tone={result.badge.tone} id={resultId}>
+        {result.badge.label}
+        {result.badge.chance !== undefined && <small className="ko-chance num"> {result.badge.chance}</small>}
+      </span>
+    )
+  }
   return (
     <li
       className={`card card-${card.state}${expanded ? ' open' : ''}`}
@@ -460,12 +548,15 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
       data-rank={ladder ? card.opponent.rank : undefined}
       data-state={card.state}
       data-headline={card.headline.kind}
+      data-variable={card.variable ? 'true' : 'false'}
       data-user-added={isUser(card) ? 'true' : undefined}
     >
       {/* 행 어디를 눌러도 펼친다. 키보드·스크린 리더는 이름 칸 버튼(클릭이 이 줄로 버블돼 한 번만 토글). */}
       <div className="card-line" onClick={() => onToggle(group.key)}>
-        <button type="button" className="card-toggle card-who" aria-expanded={expanded} aria-controls={detailId} aria-describedby={result === undefined ? headlineId : `${headlineId} ${resultId}`}>
-          <span className="card-name">{names.species.label(card.opponent.id)}</span>
+        <button type="button" className="card-toggle card-who" aria-expanded={expanded} aria-controls={detailId} aria-describedby={describedBy}>
+          <span className="card-name">
+            <SpeciesName label={names.species.label(card.opponent.id)} />
+          </span>
           {!ladder && (
             <span className="card-meta">
               <span className="custom-tag">출처: 사용자 지정</span>
@@ -473,15 +564,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
           )}
         </button>
         {multi || addable ? (
-          <BundlePicker
-            tab={tab}
-            group={group}
-            card={card}
-            rollSteps={rollSteps}
-            onSelect={onSelect}
-            dispatch={dispatch}
-            spMax={addable ? game.manifest.rules.spMaxPerStat : undefined}
-          />
+          <BundlePicker tab={tab} group={group} card={card} rollSteps={rollSteps} onSelect={onSelect} dispatch={dispatch} spMax={spMax} />
         ) : (
           <span className="bundle-cell">
             <span className="card-bundle num" data-testid="card-bundle">
@@ -489,20 +572,15 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
             </span>
           </span>
         )}
-        {card.state === 'error' && <span className="badge-error">계산 불가</span>}
         <span className="card-headline" data-testid="card-headline" id={headlineId}>
           <Headline game={game} tab={tab} card={card} badge={result !== undefined} />
         </span>
-        {/* 왼쪽부터 포켓몬 → SP 배분 → 기술 → 결과, 오른쪽 끝에는 "외 n행"만 */}
-        {result?.kind === 'ko' && (
-          <span className={`ko-badge ko-${result.badge.tone}`} data-testid="ko-badge" data-tone={result.badge.tone} id={resultId}>
-            {result.badge.label}
-            {result.badge.chance !== undefined && <small className="ko-chance num"> {result.badge.chance}</small>}
-          </span>
-        )}
-        {result?.kind === 'order' && (
-          <span className={`ko-badge ko-${result.badge.tone}`} data-testid="order-badge" data-tone={result.badge.tone} id={resultId}>
-            {result.badge.label}
+        {/* 왼쪽부터 포켓몬 → SP 배분 → 기술 → 결과(+변동 가능), 오른쪽 끝에는 "외 n행"만 */}
+        {(card.state === 'error' || resultBody !== null || card.variable) && (
+          <span className="card-result">
+            {card.state === 'error' && <span className="badge-error">계산 불가</span>}
+            {resultBody}
+            {card.variable && <VariableTag id={variableId} />}
           </span>
         )}
         {card.moreRows > 0 && (
@@ -517,17 +595,39 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
         </p>
       ))}
       <div id={detailId} className="card-detail" hidden={!expanded}>
-        {expanded &&
-          (multi ? (
-            <>
-              <BundleTabs group={group} card={card} onSelect={onSelect} tabId={tabId} panelId={panelId} />
-              <div role="tabpanel" id={panelId} className="bundle-panel" aria-labelledby={tabId(selectedIndex)} data-testid="bundle-panel">
-                {body}
-              </div>
-            </>
-          ) : (
-            body
-          ))}
+        {expanded && (
+          <div className="detail-grid">
+            <BundleList
+              tab={tab}
+              group={group}
+              card={card}
+              rollSteps={rollSteps}
+              onSelect={onSelect}
+              dispatch={dispatch}
+              spMax={spMax}
+              optionId={optionId}
+              deleteHintId={`${uid}-delete-hint`}
+            />
+            {/* 오른쪽 영역 이름 = 선택 배분 항목(목록에 없으면 일반 이름) */}
+            <div
+              role="region"
+              className="bundle-panel"
+              aria-labelledby={selectedIndex >= 0 ? optionId(selectedIndex) : undefined}
+              aria-label={selectedIndex >= 0 ? undefined : '선택한 노력치 배분의 판정'}
+              data-testid="bundle-panel"
+            >
+              {card.state === 'error' && card.error && <p className="row-error">계산 불가: {koReason(game, card.error)}</p>}
+              {card.rows.length > 0 && (
+                <ol className="rows">
+                  {card.rows.map((r) => (
+                    <RowDetail key={r.id} game={game} tab={tab} row={r} />
+                  ))}
+                </ol>
+              )}
+              {target !== undefined && <CustomEditor key={card.id} game={game} tab={tab} card={card} target={target} dispatch={dispatch} />}
+            </div>
+          </div>
+        )}
       </div>
     </li>
   )

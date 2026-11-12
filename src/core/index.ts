@@ -28,4 +28,4 @@ export {
 export { finalSpeed, compareSpeed, minSpToOutspeed, checkSpeedSupport } from './speed'
 export { sweep, sweepDamage, sweepSpeed, judgeDamage, judgeSpeed, type CellJudgement, type DamageCategoryOptions, type DamageSweepTarget } from './sweep'
 export { moveStatRefs } from './moveRefs'
-export { SPEED_DEPENDENT_MOVES, SPEED_DEPENDENT_ATTACKER_ABILITIES, engineMoveOverrides } from './engine'
+export { SPEED_DEPENDENT_MOVES, SPEED_DEPENDENT_ATTACKER_ABILITIES, attackEffectiveness, attackMoveType, engineMoveOverrides, typeEffectiveness } from './engine'

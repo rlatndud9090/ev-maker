@@ -30,8 +30,8 @@ function view(opts: {
       presetIndex: opts.preset,
     },
     rows: [],
-    hiddenNoChangeRows: 0,
     headline: { kind: 'updating' },
+    variable: false,
     moreRows: 0,
   }
 }

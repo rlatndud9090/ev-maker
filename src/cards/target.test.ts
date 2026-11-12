@@ -383,10 +383,10 @@ describe('방어 탭 H·B 최소 조합 2종(예시 세트)', () => {
       }
     }
     expect(checked).toBeGreaterThan(4)
-  })
+  }, 20_000) // 33×33 전수 대조라 전체 병렬 실행에서 기본 5초를 넘을 수 있다
 
-  it('대표 행이 쌍 목표를 가진다(카드 headline → 그 행 target 선택지 stats 두 개)', () => {
-    const withTarget = view.cards.filter((c) => c.headline.kind === 'row')
+  it('변동 가능 카드의 대표 행이 쌍 목표를 가진다(카드 headline → 그 행 target 선택지 stats 두 개)', () => {
+    const withTarget = view.cards.filter((c) => c.headline.kind === 'row' && c.variable)
     expect(withTarget.length).toBeGreaterThan(0)
     for (const c of withTarget) {
       const h = c.headline
