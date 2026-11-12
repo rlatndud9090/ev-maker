@@ -96,7 +96,7 @@ test.describe('제품 화면', () => {
     await expect(page.locator('main[data-app="product"]')).toHaveCount(0)
   })
 
-  test('카드 상세 행은 조건(기본·랭크 수단)마다 가장 센 기술 하나 + 선공기만, 포푸니크 카드는 목록에 없다(사용자 피드백 2026-11-11)', async ({ page }) => {
+  test('카드 상세 행은 조건(기본·랭크 수단)마다 가장 센 기술 하나 + 선공기만, 포푸니크 최대 배분은 변화 없음(고정 판정)(사용자 피드백 2026-11-11·11-12)', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     for (const tab of ['공격', '방어'] as const) {
@@ -134,14 +134,26 @@ test.describe('제품 화면', () => {
       // 방어 탭은 행이 H행·B/D행 쌍이라 한 조건에 행이 2개다(기술은 하나).
       if (tab === '방어') expect(byCard.some((c) => c.rows.filter((r) => r.condition === 'base' && !r.priority).length === 2)).toBe(true)
     }
-    // 예시 세트 공격 탭: 포푸니크는 분함의발구르기가 무투자 확정1타라(드래곤클로 행 없음) 카드가 빠진다.
-    // 빈 목록 통과를 막는 전제: 포푸니크는 상위 N 대상이다(스피드 탭에는 카드가 있다). 변화 없음 요약은 화면에 없다(2026-11-10).
-    await selectTab(page, '스피드')
-    await waitComplete(page)
-    await expect(ladderCards(page).and(page.locator('[data-opponent="sneasler"]')).first()).toBeVisible()
+    // 예시 세트 공격 탭: 포푸니크 최대 배분(H2 B0)은 분함의발구르기가 무투자 확정1타라(드래곤클로 행 없음) 변화 없음이다.
+    // 기본 기준(5%)에선 다른 포푸니크 배분도 변화 없음이라 행이 목록에서 빠진다.
     await selectTab(page, '공격')
     await waitComplete(page)
-    await expect(ladderCards(page).and(page.locator('[data-opponent="sneasler"]'))).toHaveCount(0)
+    const sneasler = ladderCards(page).and(page.locator('[data-opponent="sneasler"]'))
+    await expect(sneasler).toHaveCount(0)
+    // 기준을 0.5%로 낮추면 판정이 바뀌는 다른 배분이 생겨 행이 남고(2026-11-12), 기본 선택(최대 배분)은 고정 판정 배지로 보인다.
+    await page.getByRole('button', { name: '표시 기준', exact: true }).click()
+    const min = toolbarSpin(page, '배분 최소비중(%)')
+    await min.fill('0.5')
+    await min.blur()
+    await waitComplete(page)
+    await expect(sneasler).toHaveCount(1)
+    await expect(sneasler.getByTestId('card-bundle')).toHaveText(/^H2 B0 \d+\.\d%$/)
+    await expect(sneasler).toHaveAttribute('data-headline', 'no-change')
+    await expect(sneasler.getByTestId('ko-badge')).toHaveText('확정1타')
+    await expect(sneasler.getByTestId('move-label')).toHaveCount(0)
+    await bundleButton(sneasler).click()
+    await expect(bundleMenu(sneasler).locator('[role="menuitemradio"]:not([data-headline="no-change"])').first()).toBeVisible()
+    await bundleMenu(sneasler).press('Escape')
   })
 
   test('펼친 상세: 행·0~32 띠·현재값·예산 밖 칸 구분, 접힌 줄 대표 문구·외 k행(AC9·AC19)', async ({ page }) => {
@@ -162,8 +174,10 @@ test.describe('제품 화면', () => {
     await waitComplete(page)
     // 목표 문구는 간단행에 없고(사용자 피드백 2026-11-11) 펼친 상세 행에만 있다.
     await expect(tabPanel(page).getByTestId('headline-target')).toHaveCount(0)
-    await cardLine(cards(page).first()).click()
-    await expect(cards(page).first().getByTestId('row-target').first()).toHaveText(new RegExp(`^ · ${targetPattern('A\\d+')}$`))
+    // 기본 선택이 변화 없음 배분인 행은 목표가 없으므로 대표 행이 있는 첫 행에서 본다.
+    const withRow = cards(page).and(page.locator('[data-headline="row"]')).first()
+    await cardLine(withRow).click()
+    await expect(withRow.getByTestId('row-target').first()).toHaveText(new RegExp(`^ · ${targetPattern('A\\d+')}$`))
 
     // 방어 탭 H 행: 내 H는 2, 잔여 0이라 3 이상은 예산 밖.
     await selectTab(page, '방어')
@@ -582,8 +596,9 @@ test.describe('제품 화면', () => {
       }
       const badges = tabPanel(page).locator('.card-line [data-testid="ko-badge"]')
       // 표처럼 열 정렬: 포켓몬 | 배분 | 기술 | 결과 | 외 n행 — 래더 카드끼리 같은 열은 같은 x에서 시작한다.
+      // 기본 선택이 변화 없음 배분인 행(기술 라벨 없음)은 열 정렬 비교에서 뺀다.
       const cols = await tabPanel(page)
-        .locator('[data-origin="ladder"] .card-line')
+        .locator('[data-origin="ladder"][data-headline="row"] .card-line')
         .evaluateAll((lines) =>
           lines.slice(0, 8).map((line) => {
             const x = (sel: string) => line.querySelector(sel)?.getBoundingClientRect().left ?? NaN
@@ -930,23 +945,286 @@ test.describe('포켓몬마다 한 행 + 노력치 배분 선택(사용자 피�
     await expect(panel.locator('.rows')).toHaveCount(1)
   })
 
-  test('배분 선택지가 하나뿐이면 배지는 고를 수 없는 라벨이고 상세에 탭이 없다(표시 기준 "배분 선택지 수" 1)', async ({ page }) => {
+  test('표시 기준: "배분 선택지 수"는 없고 "배분 최소비중(%)" 기본 5', async ({ page }) => {
+    await openProduct(page)
+    await page.getByRole('button', { name: '표시 기준', exact: true }).click()
+    await expect(toolbarSpin(page, '배분 최소비중(%)')).toHaveValue('5')
+    await expect(toolbarSpin(page, '배분 선택지 수')).toHaveCount(0)
+  })
+
+  test('모든 래더 행의 배분 배지는 고를 수 있는 버튼이고, 메뉴 선택지 비중은 모두 0.5% 이상(또는 소수 배분)', async ({ page }) => {
+    await openProduct(page)
+    for (const tab of ['공격', '방어', '스피드'] as const) {
+      await selectTab(page, tab)
+      await waitComplete(page)
+      const rows = ladderCards(page)
+      const n = await rows.count()
+      expect(n, tab).toBeGreaterThan(0)
+      // 관련 SP가 없는 묶음(추가할 능력치 없음)만 버튼이 아닐 수 있다.
+      const plain = await rows.filter({ hasNot: page.locator('button.bundle-btn') }).getByTestId('card-bundle').allTextContents()
+      for (const text of plain) expect(text, tab).toMatch(/^관련 SP 없음/)
+      expect(await rows.filter({ has: page.locator('button.bundle-btn') }).count(), tab).toBe(n - plain.length)
+      expect(n - plain.length, tab).toBeGreaterThan(0)
+    }
+    // 공격 탭 앞 5행의 메뉴: 모든 관측 배분 비중 ≥ 기준(기본 5%, 낮춘 뒤 0.5%), 소수 배분은 기준 이상이 하나도 없을 때만(그때 한 개).
+    await selectTab(page, '공격')
+    const menuTotal = async (min: number) => {
+      await waitComplete(page)
+      const btnRows = ladderCards(page).filter({ has: page.locator('button.bundle-btn') })
+      let total = 0
+      for (let i = 0; i < 5; i++) {
+        const row = btnRows.nth(i)
+        const options = await bundleOptions(row)
+        const shares = options.map((o) => shareOf(o.text))
+        const majors = shares.filter((x) => x >= 0)
+        for (const x of majors) expect(x).toBeGreaterThanOrEqual(min)
+        if (majors.length < shares.length) expect(majors).toEqual([])
+        total += options.length
+      }
+      return total
+    }
+    await menuTotal(5)
+    await page.getByRole('button', { name: '표시 기준', exact: true }).click()
+    const minField = toolbarSpin(page, '배분 최소비중(%)')
+    await minField.fill('0.5')
+    await minField.blur()
+    // 상한(3장)이 없으므로 기준을 0.5%로 낮추면 5행 합이 15를 넘는다(실제 스냅샷).
+    expect(await menuTotal(0.5)).toBeGreaterThan(15)
+  })
+
+  test('묶음 기준 100%면 선택지가 하나라도 래더 배지는 버튼(직접 추가 폼), 상세에 배분 탭은 없다', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     await page.getByRole('button', { name: '표시 기준', exact: true }).click()
-    await expect(toolbarSpin(page, '배분 최소비중(%)')).toBeVisible()
-    const limit = toolbarSpin(page, '배분 선택지 수')
-    await limit.fill('1')
-    await limit.blur()
+    const min = toolbarSpin(page, '배분 최소비중(%)')
+    await min.fill('100')
+    await min.blur()
     await waitComplete(page)
-    // 공격 탭(내 기술 전부 물리)은 포켓몬마다 분류 하나라 선택지 하나.
-    expect(await cards(page).count()).toBeGreaterThan(0)
-    await expect(tabPanel(page).locator('button.bundle-btn')).toHaveCount(0)
-    const row = cards(page).first()
-    await expect(row.getByTestId('card-bundle')).toBeVisible()
-    expect(await row.getByTestId('card-bundle').evaluate((el) => el.closest('button') === null)).toBe(true)
+    // 공격 탭(내 기술 전부 물리)은 포켓몬마다 분류 하나 × 소수 배분 1장이라 선택지 하나.
+    const row = ladderCards(page).first()
+    await expect(row).toBeVisible()
+    const button = bundleButton(row)
+    await expect(button).toBeVisible()
+    await button.click()
+    const menu = bundleMenu(row)
+    await expect(menu.getByRole('menuitemradio')).toHaveCount(1)
+    await expect(menu.getByTestId('bundle-add')).toBeVisible()
+    await menu.press('Escape')
     await cardLine(row).click()
     await expect(row.locator('.card-detail')).toBeVisible()
     await expect(row.getByTestId('bundle-tabs')).toHaveCount(0)
+  })
+})
+
+test.describe('배분 직접 추가(사용자 피드백 2026-11-12)', () => {
+  const addForm = (row: Locator) => bundleMenu(row).getByTestId('bundle-add')
+  const spInput = (row: Locator, stat: string) => addForm(row).getByRole('spinbutton', { name: `직접 추가 SP ${stat}`, exact: true })
+  const addButton = (row: Locator) => addForm(row).getByRole('button', { name: '추가', exact: true })
+  const bg = (loc: Locator) => loc.evaluate((el) => getComputedStyle(el).backgroundColor)
+  /** 사용자 배분 면 토큰(--user-bundle-bg)을 계산된 rgb로: 같은 배경을 칠한 탐침 요소로 푼다 */
+  const userBg = (page: Page) =>
+    page.evaluate(() => {
+      const probe = document.createElement('div')
+      probe.style.background = 'var(--user-bundle-bg)'
+      document.body.appendChild(probe)
+      const v = getComputedStyle(probe).backgroundColor
+      probe.remove()
+      return v
+    })
+
+  /** 공격 탭 첫 래더 행(그룹 키로 고정) */
+  async function firstRow(page: Page): Promise<Locator> {
+    const first = ladderCards(page).filter({ has: page.locator('button.bundle-btn') }).first()
+    await expect(first).toBeVisible()
+    const key = await first.getAttribute('data-group-key')
+    return cards(page).and(page.locator(`[data-group-key='${key}']`))
+  }
+
+  test('메뉴 최상단 "H [ ] B [ ] [추가]": 기본값은 현재 배분 SP, 0~32 정수만(범위 밖·빈칸·소수면 추가 막힘 + 안내), 클릭이 행을 토글하지 않는다', async ({ page }) => {
+    await openProduct(page)
+    await waitComplete(page)
+    const row = await firstRow(page)
+    const badge = (await row.getByTestId('card-bundle').textContent()) ?? ''
+    const m = /^H(\d+)[↑↓]? B(\d+)[↑↓]?/.exec(badge)
+    expect(m, badge).not.toBeNull()
+    await bundleButton(row).click()
+    const menu = bundleMenu(row)
+    await expect(menu).toBeVisible()
+    // 폼이 메뉴 맨 위, 라벨은 묶음 능력치 순 H → B
+    expect(await menu.evaluate((el) => el.firstElementChild?.getAttribute('data-testid'))).toBe('bundle-add')
+    expect(await addForm(row).locator('label').allTextContents()).toEqual(['H', 'B'])
+    await expect(spInput(row, 'HP')).toHaveValue(m![1])
+    await expect(spInput(row, '방어')).toHaveValue(m![2])
+    for (const attr of [['min', '0'], ['max', '32'], ['step', '1']]) await expect(spInput(row, 'HP')).toHaveAttribute(attr[0], attr[1])
+    await expect(addButton(row)).toBeEnabled()
+
+    const hint = addForm(row).locator('.bundle-add-hint')
+    for (const bad of ['33', '-1', '1.5', '']) {
+      await spInput(row, 'HP').fill(bad)
+      await expect(addButton(row), bad).toBeDisabled()
+      await expect(hint, bad).toHaveText('SP는 0~32 정수만 넣을 수 있습니다')
+      await expect(spInput(row, 'HP')).toHaveAttribute('aria-invalid', 'true')
+    }
+    await spInput(row, 'HP').fill('32')
+    await expect(addButton(row)).toBeEnabled()
+    await expect(hint).toHaveCount(0)
+    await spInput(row, 'HP').fill('0')
+    await expect(addButton(row)).toBeEnabled()
+
+    // 폼 안 클릭·키 입력은 메뉴를 닫거나 행을 펼치지 않는다(↑↓는 숫자 칸 값만 바꾼다).
+    await spInput(row, '방어').click()
+    await spInput(row, '방어').fill('10')
+    await page.keyboard.press('ArrowUp')
+    await expect(spInput(row, '방어')).toHaveValue('11')
+    await expect(spInput(row, '방어')).toBeFocused()
+    await expect(menu).toBeVisible()
+    await expect(cardLine(row)).toHaveAttribute('aria-expanded', 'false')
+    await addForm(row).click({ position: { x: 2, y: 2 } })
+    await expect(menu).toBeVisible()
+    await expect(cardLine(row)).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  test('추가 → 맨 위에 다른 배경 "직접 추가" 항목 + 자동 선택(배지도 다른 배경, 결과 갱신), × 삭제 → 기본 배분으로', async ({ page }) => {
+    await openProduct(page)
+    await waitComplete(page)
+    const row = await firstRow(page)
+    const before = { id: await row.getAttribute('data-card-id'), text: (await row.getByTestId('card-bundle').textContent()) ?? '' }
+    const tint = await userBg(page)
+    expect(tint).toMatch(/^rgb/)
+    // 일반(관측) 배지는 포커스 없이 사용자 면 색이 아니다
+    expect(await bg(bundleButton(row))).not.toBe(tint)
+    await bundleButton(row).click()
+    // 관측 배분과 겹치지 않을 값(H31 B3, 무보정)
+    await spInput(row, 'HP').fill('31')
+    await spInput(row, '방어').fill('3')
+    await page.keyboard.press('Enter')
+    await expect(bundleMenu(row)).toHaveCount(0)
+    // 재계산 중 행이 잠깐 빠졌다 다시 붙어도 포커스는 그 행의 배분 버튼으로 돌아온다.
+    await expect(bundleButton(row)).toBeFocused()
+    await waitComplete(page)
+
+    await expect(row.getByTestId('card-bundle')).toHaveText('H31 B3 직접 추가')
+    await expect(row).toHaveAttribute('data-user-added', 'true')
+    await expect(row).not.toHaveAttribute('data-card-id', before.id!)
+    await expect(bundleButton(row)).toHaveClass(/user-bundle/)
+    await page.mouse.move(0, 0)
+    // 포커스 없이: 사용자 면 색
+    await bundleButton(row).evaluate((el) => (el as HTMLElement).blur())
+    await expect(bundleButton(row)).not.toBeFocused()
+    await expect.poll(() => bg(bundleButton(row))).toBe(tint)
+    // 키보드 포커스(:focus-visible)여도 사용자 면 색이 유지된다(포커스는 윤곽선만)
+    await page.keyboard.press('Shift')
+    await bundleButton(row).focus()
+    expect(await bundleButton(row).evaluate((el) => el.matches(':focus-visible'))).toBe(true)
+    await expect.poll(() => bg(bundleButton(row))).toBe(tint)
+    await bundleButton(row).evaluate((el) => (el as HTMLElement).blur())
+    // 결과 배지(가장 센 기술의 현재 판정)가 그 배분으로 다시 계산돼 보인다.
+    await expect(row.getByTestId('ko-badge')).toBeVisible()
+    await expect(row).not.toHaveAttribute('data-headline', 'updating')
+
+    await bundleButton(row).click()
+    const items = bundleMenu(row).getByRole('menuitemradio')
+    await expect(items.first()).toHaveAttribute('data-user-added', 'true')
+    await expect(items.first()).toHaveAttribute('aria-checked', 'true')
+    await expect(items.first().locator('.bundle-opt-label')).toHaveText('H31 B3 직접 추가')
+    await expect(items.first().locator('.ko-badge')).toHaveCount(1)
+    await expect(items.nth(1)).not.toHaveAttribute('data-user-added', 'true')
+    await expect(items.nth(1).locator('.bundle-opt-label')).toHaveText(before.text)
+    // 호버를 항목 밖(추가 폼 라벨)으로 옮긴 뒤: 선택된 사용자 항목도 사용자 면 색, 관측 항목은 아니다
+    await addForm(row).locator('label').first().hover()
+    await expect.poll(() => bg(items.first())).toBe(tint)
+    expect(await bg(items.nth(1))).not.toBe(tint)
+
+    // 상세 배분 탭도 같은 면 색, 맨 앞
+    await bundleMenu(row).press('Escape')
+    await cardLine(row).click()
+    const tabs = row.getByTestId('bundle-tabs').getByRole('tab')
+    await expect(tabs.first()).toHaveAttribute('data-user-added', 'true')
+    await expect(tabs.first()).toHaveAttribute('aria-selected', 'true')
+    await expect(tabs.first()).toHaveClass(/user-bundle/)
+    await page.mouse.move(0, 0)
+    await expect.poll(() => bg(tabs.first())).toBe(tint)
+    expect(await bg(tabs.nth(1))).not.toBe(tint)
+    await cardLine(row).click()
+
+    // 두 번째 추가는 첫 번째 뒤(추가 순), 둘 다 맨 위
+    await bundleButton(row).click()
+    await spInput(row, 'HP').fill('30')
+    await spInput(row, '방어').fill('5')
+    await addButton(row).click()
+    await waitComplete(page)
+    await expect(row.getByTestId('card-bundle')).toHaveText('H30 B5 직접 추가')
+    await bundleButton(row).click()
+    await expect(bundleMenu(row).locator('.bundle-opt-label').first()).toHaveText('H31 B3 직접 추가')
+    await expect(bundleMenu(row).locator('.bundle-opt-label').nth(1)).toHaveText('H30 B5 직접 추가')
+
+    // 삭제: 선택돼 있던 H30 B5를 지우면 기본(최고 비중) 배분으로 돌아간다.
+    const del = bundleMenu(row).getByRole('menuitem', { name: '직접 추가 배분 삭제' })
+    await expect(del).toHaveCount(2)
+    await del.nth(1).click()
+    await expect(bundleMenu(row)).toHaveCount(0)
+    await waitComplete(page)
+    await expect(row).toHaveAttribute('data-card-id', before.id!)
+    await expect(row.getByTestId('card-bundle')).toHaveText(before.text)
+    await expect(bundleButton(row)).not.toHaveClass(/user-bundle/)
+    await bundleButton(row).click()
+    await expect(bundleMenu(row).locator('[data-user-added="true"]')).toHaveCount(1)
+    await expect(bundleMenu(row).locator('.bundle-opt-label').first()).toHaveText('H31 B3 직접 추가')
+    // 선택돼 있지 않던 것을 지우면 선택은 그대로
+    await bundleMenu(row).getByRole('menuitem', { name: '직접 추가 배분 삭제' }).click()
+    await waitComplete(page)
+    await expect(row).toHaveAttribute('data-card-id', before.id!)
+    await bundleButton(row).click()
+    await expect(bundleMenu(row).locator('[data-user-added="true"]')).toHaveCount(0)
+  })
+
+  test('관측 배분과 같은 값을 추가하면 새 항목 없이 그 배분을 고른다', async ({ page }) => {
+    await openProduct(page)
+    await waitComplete(page)
+    const row = await firstRow(page)
+    await bundleButton(row).click()
+    const items = bundleMenu(row).getByRole('menuitemradio')
+    const texts = await items.locator('.bundle-opt-label').allTextContents()
+    // 성격 보정 없는 두 번째 이후 관측 배분(직접 추가는 늘 무보정)
+    const at = texts.findIndex((t, i) => i > 0 && /^H\d+ B\d+ /.test(t))
+    expect(at, texts.join(' | ')).toBeGreaterThan(0)
+    const [, h, b] = /^H(\d+) B(\d+) /.exec(texts[at])!
+    const target = await items.nth(at).getAttribute('data-card-id')
+    await spInput(row, 'HP').fill(h)
+    await spInput(row, '방어').fill(b)
+    await addButton(row).click()
+    await expect(row).toHaveAttribute('data-card-id', target!)
+    await expect(row.getByTestId('card-bundle')).toHaveText(texts[at])
+    await expect(tabPanel(page)).not.toHaveAttribute('data-superseded', 'true')
+    await bundleButton(row).click()
+    await expect(bundleMenu(row).locator('[data-user-added="true"]')).toHaveCount(0)
+    await expect(bundleMenu(row).getByRole('menuitemradio')).toHaveCount(texts.length)
+  })
+
+  test('변화 없음 배분도 선택지: 고르면 행 배지가 고정 판정(펼치면 변화 없음 행)', async ({ page }) => {
+    await openProduct(page)
+    await waitComplete(page)
+    // 메뉴 항목 data-headline="no-change" = 그 배분은 모든 행이 변화 없음
+    const rows = ladderCards(page).filter({ has: page.locator('button.bundle-btn') })
+    const n = await rows.count()
+    let found: Locator | null = null
+    for (let i = 0; i < n && found === null; i++) {
+      const row = rows.nth(i)
+      await bundleButton(row).click()
+      const opt = bundleMenu(row).locator('[role="menuitemradio"][data-headline="no-change"]')
+      if ((await opt.count()) > 0) {
+        const key = await row.getAttribute('data-group-key')
+        found = cards(page).and(page.locator(`[data-group-key='${key}']`))
+        await expect(opt.first().locator('.ko-badge')).toHaveCount(1)
+        await opt.first().click()
+      } else await bundleMenu(row).press('Escape')
+    }
+    expect(found, '변화 없음 배분 선택지가 있는 행').not.toBeNull()
+    const row = found!
+    await expect(row).toHaveAttribute('data-headline', 'no-change')
+    await expect(row.getByTestId('ko-badge')).toBeVisible()
+    await expect(row.getByTestId('ko-badge')).toHaveText(new RegExp(`^${TIER}`))
+    await cardLine(row).click()
+    await expect(row.locator('.card-detail .rows li').first()).toBeVisible()
   })
 })

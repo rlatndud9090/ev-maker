@@ -230,18 +230,21 @@ function corePicks(plan: TabPlan, card: CardSpec, meta: MetaView): Map<string, C
  * 행은 카드·조건당 가장 센 기술(+선공기)만(corePicks), 고르지 않은 기술은 표시·요약 어디에도 없다.
  * 극단 필터 = 내 H·(B|D) 함께 0·무보정 / 함께 최대·상승(예산 무시), 행 = 현재·무보정·상승 성격 33칸 스윕(예산 밖 판정)의 합집합, 고정 = 단건 판정.
  */
-function expectMatchesCore(plan: TabPlan, view: TabView, meta: MetaView = bo1): { items: number; cards: number } {
+function expectMatchesCore(plan: TabPlan, view: TabView, meta: MetaView = bo1): { items: number; cards: number; promoted: number } {
   expect(plan.status).toEqual({ kind: 'ok' })
   expect(view.complete).toBe(true)
   const items: string[] = []
   const shownLadder: string[] = []
+  const perCard: { id: string; group: string; shown: number; items: string[] }[] = []
   let emptyCards = 0
+  let promoted = 0
   for (const card of plan.cards) {
     if (card.opponent.source !== 'ladder') continue
     if (card.state === 'error') {
-      shownLadder.push(card.id)
+      perCard.push({ id: card.id, group: JSON.stringify([card.opponent.source, card.opponent.id]), shown: 1, items: [] })
       continue
     }
+    const start = items.length
     let shown = 0
     const picks = corePicks(plan, card, meta)
     const viewCard = view.cards.find((c) => c.id === card.id)
@@ -311,17 +314,34 @@ function expectMatchesCore(plan: TabPlan, view: TabView, meta: MetaView = bo1): 
       if (c === null) shown++
       else items.push(JSON.stringify([card.id, 'sp-independent', f.moveId, null, c, null]))
     }
-    if (shown > 0) shownLadder.push(card.id)
-    else emptyCards++
+    perCard.push({ id: card.id, group: JSON.stringify([card.opponent.source, card.opponent.id]), shown, items: items.splice(start) })
   }
+  // 변화 없음 배분도 선택지: 표시 행이 없는 카드라도 같은 상대의 다른 카드가 보이면 변화 없음 행(요약 항목 1건 = 1행)과 함께 보이고 요약에서 빠진다.
+  const shownGroups = new Set(perCard.filter((c) => c.shown > 0).map((c) => c.group))
+  for (const c of perCard) {
+    if (c.shown > 0) shownLadder.push(c.id)
+    else if (c.items.length > 0 && shownGroups.has(c.group)) {
+      shownLadder.push(c.id)
+      const v = view.cards.find((x) => x.id === c.id)
+      expect(v?.rows.length, c.id).toBe(c.items.length)
+      expect(v?.rows.every((r) => r.noChange && r.status === 'ok'), c.id).toBe(true)
+      expect(v?.headline.kind, c.id).toBe('no-change')
+      expect(v?.hiddenNoChangeRows, c.id).toBe(0)
+      promoted++
+    } else {
+      items.push(...c.items)
+      emptyCards++
+    }
+  }
+  for (const c of perCard) if (c.shown > 0) items.push(...c.items)
   const actual = view.noChange.items.map((i: NoChangeItem) =>
     JSON.stringify([i.cardId, i.kind, i.moveId ?? null, i.sweepStat ?? null, i.fixed, meansKey(i.basis)]),
   )
   expect([...actual].sort()).toEqual([...items].sort())
   expect(view.noChange.rows).toBe(items.length)
   expect(view.noChange.cards).toBe(emptyCards)
-  expect(view.cards.filter((c) => c.opponent.source === 'ladder').map((c) => c.id)).toEqual(shownLadder)
-  return { items: items.length, cards: emptyCards }
+  expect(view.cards.filter((c) => c.opponent.source === 'ladder').map((c) => c.id)).toEqual(plan.cards.map((c) => c.id).filter((id) => shownLadder.includes(id)))
+  return { items: items.length, cards: emptyCards, promoted }
 }
 
 // ---------- AC 1·F9 예시 세트 ----------
@@ -358,7 +378,12 @@ describe('AC2 공격 탭 고정 입력(F1)', () => {
       const remaining = spTotal - STAT_IDS.reduce((s, k) => s + mySet.sp[k], 0)
       expect(remaining).toBe(F1.remaining[which])
 
-      expect(view.cards.map((c) => [c.opponent.id, c.bundle.representativeSpread])).toEqual(F1.cards.map((c) => [c.opponent.id, c.opponent.spread]))
+      // 기준 이상 전부(상한 없음) + 변화 없음 배분도 선택지라 표시 카드는 고정 목록보다 많다. 고정 목록은 그 안에 같은 순서로 있다.
+      const shownKeys = view.cards.map((c) => JSON.stringify([c.opponent.id, c.bundle.representativeSpread]))
+      const at = F1.cards.map((c) => shownKeys.indexOf(JSON.stringify([c.opponent.id, c.opponent.spread])))
+      expect(at.every((i) => i >= 0)).toBe(true)
+      expect([...at].sort((a, b) => a - b)).toEqual(at)
+      expect(view.cards.length).toBeGreaterThan(F1.cards.length)
       const ranks = view.cards.map((c) => c.opponent.rank as number)
       expect([...ranks].sort((a, b) => a - b)).toEqual(ranks)
 
@@ -410,10 +435,15 @@ function directBundles(entry: MetaEntry, keyStats: readonly StatId[]): { stats: 
 const statsKey = (c: CardSpec) => JSON.stringify(c.bundle.stats.map((s) => [s.stat, s.sp, s.nature]))
 
 describe('AC3 묶음(실제 스냅샷 예시)', () => {
-  it('공격 물리 카드: 한카리아스 H·B 묶음 점유율 = 보존 배분 합, 기준 이상만 최대 3장, 보존률, 관련 능력치는 H·B만', () => {
+  it('공격 물리 카드: 한카리아스 H·B 묶음 점유율 = 보존 배분 합, 기준(기본 5%) 이상 전부(상한 없음), 보존률, 관련 능력치는 H·B만', () => {
     const { plan } = run('F1-full', top(F1.full), 'attack')
     const e = entryOf(bo1, 'garchomp')
-    const expected = directBundles(e, ['hp', 'def']).filter((b) => b.share >= DEFAULT_CRITERIA.bundleShareMin).slice(0, DEFAULT_CRITERIA.cardsPerCategory)
+    const expected = directBundles(e, ['hp', 'def']).filter((b) => b.share >= DEFAULT_CRITERIA.bundleShareMin)
+    // 상한이 없다: 기준을 0.5%로 낮추면 상한이 있던 시절(3장)보다 선택지가 많다(실제 스냅샷).
+    const low = run('F1-full-bundle-0.005', only(F1.full, ['garchomp'], { criteria: { ...DEFAULT_CRITERIA, bundleShareMin: 0.005 } }), 'attack').plan
+    const lowExpected = directBundles(e, ['hp', 'def']).filter((b) => b.share >= 0.005)
+    expect(lowExpected.length).toBeGreaterThan(3)
+    expect(low.cards.filter((c) => c.category === 'physical').map((c) => [statsKey(c), c.bundle.share])).toEqual(lowExpected.map((b) => [b.stats, b.share]))
     const cards = plan.cards.filter((c) => c.opponent.id === 'garchomp' && c.category === 'physical')
     expect(cards.map((c) => [statsKey(c), c.bundle.share])).toEqual(expected.map((b) => [b.stats, b.share]))
     expect(cards[0].bundle.share).toBe(F1.cards.find((c) => c.opponent.id === 'garchomp')?.bundleShare)
@@ -429,20 +459,24 @@ describe('AC3 묶음(실제 스냅샷 예시)', () => {
     const cards = plan.cards.filter((c) => c.opponent.id === F3.bothOhko.opponent.id && c.category === 'special')
     expect(cards.length).toBeGreaterThan(0)
     for (const c of cards) expect(c.bundle.stats.map((s) => s.stat)).toEqual(['spa'])
-    const expected = directBundles(entryOf(bo1, 'floettemega'), ['spa']).filter((b) => b.share >= 0.05).slice(0, 3)
+    const expected = directBundles(entryOf(bo1, 'floettemega'), ['spa']).filter((b) => b.share >= DEFAULT_CRITERIA.bundleShareMin)
     expect(cards.map((c) => [statsKey(c), c.bundle.share])).toEqual(expected.map((b) => [b.stats, b.share]))
   })
 
-  it('포켓몬·분류당 카드는 최대 3장', () => {
+  it('포켓몬·분류당 카드 = 기준 이상 묶음 수(없으면 소수 배분 1장), 모든 관측 카드 점유율 ≥ 기준(기본 5%) 또는 소수 배분', () => {
+    let over3 = 0
     for (const tab of TABS) {
       const { plan } = run('example', top(EXAMPLE_SET), tab)
       const count = new Map<string, number>()
       for (const c of plan.cards) {
+        if (c.opponent.source !== 'ladder') continue
+        expect(c.bundle.minority || (c.bundle.share ?? 0) >= DEFAULT_CRITERIA.bundleShareMin, c.id).toBe(true)
         const k = JSON.stringify([c.opponent.id, c.category])
         count.set(k, (count.get(k) ?? 0) + 1)
       }
-      expect(Math.max(...count.values()), tab).toBeLessThanOrEqual(DEFAULT_CRITERIA.cardsPerCategory)
+      over3 += [...count.values()].filter((n) => n > 3).length
     }
+    expect(over3).toBeGreaterThan(0)
   })
 })
 
@@ -489,12 +523,14 @@ describe('AC4 혼합 세트·사이코쇼크(F2)', () => {
     expect(view.noChange.items.filter((i) => i.cardId === c.spec.id)).toEqual([])
   })
 
-  it('분류마다 카드 상한 3장', () => {
+  it('분류마다 카드 = 그 분류 키(H·B / H·D)로 묶은 기준 이상 묶음 전부', () => {
     const { plan } = run('F2', top(F2.mySet), 'attack')
+    const e = entryOf(bo1, F2.opponent)
     for (const category of ['physical', 'special'] as const) {
-      const n = plan.cards.filter((c) => c.opponent.id === F2.opponent && c.category === category).length
-      expect(n).toBeGreaterThan(0)
-      expect(n).toBeLessThanOrEqual(3)
+      const cards = plan.cards.filter((c) => c.opponent.id === F2.opponent && c.category === category)
+      const expected = directBundles(e, ['hp', category === 'physical' ? 'def' : 'spd']).filter((b) => b.share >= DEFAULT_CRITERIA.bundleShareMin)
+      expect(cards.length).toBeGreaterThan(0)
+      expect(cards.map((c) => [statsKey(c), c.bundle.share])).toEqual(expected.map((b) => [b.stats, b.share]))
     }
   })
 })
@@ -615,7 +651,8 @@ describe('AC6 변화 없음 요약', () => {
     const ok = plan.cards.filter((c) => c.opponent.source === 'ladder' && c.state === 'ok')
     expect(ok.every((c) => c.rowIds.length === 0 && c.fixedIds.length === 1)).toBe(true)
     const n = expectMatchesCore(plan, view)
-    expect(n).toEqual({ items: ok.length, cards: ok.length })
+    // 모든 카드가 변화 없음이라 어느 상대도 표시되지 않는다(변화 없음 선택지로 올라갈 카드가 없다).
+    expect(n).toEqual({ items: ok.length, cards: ok.length, promoted: 0 })
     expect(view.noChange.items.every((i) => i.kind === 'sp-independent')).toBe(true)
   })
 
@@ -1097,7 +1134,7 @@ describe('AC13 Bo3·월 변경 → 그 스냅샷 기준·출처', () => {
 
 // ---------- AC 15 표시 기준 ----------
 
-describe('AC15 표시 기준 4개를 바꾸면 결과가 그에 맞게 바뀐다', () => {
+describe('AC15 표시 기준 3개를 바꾸면 결과가 그에 맞게 바뀐다', () => {
   const criteria = (patch: Partial<typeof DEFAULT_CRITERIA>) => ({ ...DEFAULT_CRITERIA, ...patch })
 
   it('묶음 기준: 높이면 기준 미만 묶음이 빠지고, 넘는 묶음이 없으면 소수 배분 1장', () => {
@@ -1106,16 +1143,17 @@ describe('AC15 표시 기준 4개를 바꾸면 결과가 그에 맞게 바뀐다
       const { plan } = run(`bundle-${min}`, only(F1.full, ['garchomp'], { criteria: criteria({ bundleShareMin: min }) }), 'attack')
       const cards = plan.cards.filter((c) => c.category === 'physical')
       const all = directBundles(e, ['hp', 'def'])
-      const passing = all.filter((b) => b.share >= min).slice(0, 3)
+      const passing = all.filter((b) => b.share >= min)
       const expected = passing.length > 0 ? passing.map((b) => [b.stats, b.share, false]) : [[all[0].stats, all[0].share, true]]
       expect(cards.map((c) => [statsKey(c), c.bundle.share, c.bundle.minority]), String(min)).toEqual(expected)
     }
   })
 
-  it('카드 상한: 1이면 포켓몬·분류당 1장', () => {
-    const { plan } = run('cap-1', top(F1.full, { criteria: criteria({ cardsPerCategory: 1 }) }), 'attack')
+  it('묶음 기준 1(100%)이면 포켓몬·분류당 소수 배분 1장', () => {
+    const { plan } = run('min-1', top(F1.full, { criteria: criteria({ bundleShareMin: 1 }) }), 'attack')
     const keys = plan.cards.map((c) => JSON.stringify([c.opponent.id, c.category]))
     expect(new Set(keys).size).toBe(keys.length)
+    expect(plan.cards.every((c) => c.bundle.minority)).toBe(true)
     const def = run('F1-full', top(F1.full), 'attack').plan
     expect(def.cards.length).toBeGreaterThan(plan.cards.length)
   })

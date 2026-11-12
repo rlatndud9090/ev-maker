@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { validateSet, type PokemonSet } from '../core'
 import type { MetaEntry } from '../data/meta-schema'
-import { cardId, presetKey } from './ids'
+import { addedBundleCardId, cardId, presetKey } from './ids'
 import { DEFENSE_MOVES, defenseMoveIds, planTab } from './plan'
+import { buildTabView } from './batch'
+import { defaultOption, groupCards } from './groups'
 import { cardInput, realData, syntheticEntry, syntheticView } from './testing'
-import type { CardInput, CardSpec, RowSpec, TabPlan } from './types'
+import { DEFAULT_CRITERIA, type AddedBundle, type CardInput, type CardSpec, type RowSpec, type TabPlan } from './types'
 
 const { game, bo1 } = realData()
 const ZERO = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }
@@ -71,18 +73,23 @@ describe('planTab: 내 세트', () => {
 describe('planTab: 공격 탭', () => {
   const plan = planTab(input({ mySet: GARCHOMP }), 'attack')
 
-  it('카드 = 상대 묶음 × 기술 분류, 분류당 상한 3장, 묶음 키는 H + 상대 방어 능력치', () => {
+  it('카드 = 상대 묶음 × 기술 분류(기준 5% 이상 전부, 상한 없음), 묶음 키는 H + 상대 방어 능력치', () => {
     const top = bo1.ranking.slice(0, 10).map((e) => e.id)
     expect([...new Set(plan.cards.map((c) => c.opponent.id))]).toEqual(top)
+    let over3 = 0
     for (const id of top) {
       const cards = cardsOf(plan, id)
       for (const cat of ['physical', 'special'] as const) {
         const inCat = cards.filter((c) => c.category === cat)
         expect(inCat.length).toBeGreaterThanOrEqual(1)
-        expect(inCat.length).toBeLessThanOrEqual(3)
-        for (const c of inCat) expect(c.bundle.stats.map((s) => s.stat)).toEqual(['hp', cat === 'physical' ? 'def' : 'spd'])
+        if (inCat.length > 3) over3++
+        for (const c of inCat) {
+          expect(c.bundle.stats.map((s) => s.stat)).toEqual(['hp', cat === 'physical' ? 'def' : 'spd'])
+          expect(c.bundle.minority || (c.bundle.share as number) >= DEFAULT_CRITERIA.bundleShareMin).toBe(true)
+        }
       }
     }
+    expect(over3).toBeGreaterThan(0)
   })
 
   it('행 = 그 분류의 내 공격기(슬롯 순), 변화기 없음, 스윕 = 내 공격 능력치', () => {
@@ -572,5 +579,109 @@ describe('planTab: 상대 목록·목록 밖 타겟', () => {
       expect(c.opponentSet).toMatchObject({ species: mega.base, item: mega.stone, mega: true })
       expect(c.state).toBe('ok')
     }
+  })
+})
+
+describe('planTab: 사용자 추가 배분', () => {
+  const opp = 'garchomp'
+  const ladderCards = (plan: TabPlan, category: CardSpec['category']) =>
+    plan.cards.filter((c) => c.opponent.id === opp && c.opponent.source === 'ladder' && c.category === category)
+  const added = (sp: Record<string, number>, extra: Partial<AddedBundle> = {}): AddedBundle => ({ tab: 'attack', opponentId: opp, category: 'physical', sp, ...extra })
+  const planWith = (addedBundles: AddedBundle[], tab: 'attack' | 'defense' | 'speed' = 'attack') =>
+    planTab(input({ mySet: GARCHOMP, filters: { topN: 30, selected: [opp] }, addedBundles }), tab)
+
+  it('그 (탭, 상대, 분류)에만 관측 카드 뒤에 사용자 카드가 생긴다: 키 능력치 neutral, 점유율 없음, id에 user 표지', () => {
+    const base = planWith([])
+    const plan = planWith([added({ hp: 32, def: 31 }), added({ hp: 0, def: 1 })])
+    const phys = ladderCards(plan, 'physical')
+    const observed = ladderCards(base, 'physical')
+    expect(phys.slice(0, observed.length).map((c) => c.id)).toEqual(observed.map((c) => c.id))
+    const user = phys.slice(observed.length)
+    expect(user.map((c) => c.bundle)).toEqual([
+      { key: JSON.stringify([{ stat: 'hp', sp: 32, nature: 'neutral' }, { stat: 'def', sp: 31, nature: 'neutral' }]), stats: [{ stat: 'hp', sp: 32, nature: 'neutral' }, { stat: 'def', sp: 31, nature: 'neutral' }], minority: false, userAdded: 0 },
+      { key: JSON.stringify([{ stat: 'hp', sp: 0, nature: 'neutral' }, { stat: 'def', sp: 1, nature: 'neutral' }]), stats: [{ stat: 'hp', sp: 0, nature: 'neutral' }, { stat: 'def', sp: 1, nature: 'neutral' }], minority: false, userAdded: 1 },
+    ])
+    expect(user[0].id).toBe(addedBundleCardId(added({ hp: 32, def: 31 }), user[0].bundle.stats))
+    expect(user[0].id).toBe(cardId(['attack', 'ladder', opp, 'physical', user[0].bundle.key, 'user']))
+    expect(user.every((c) => c.state === 'ok' && c.rowIds.length > 0)).toBe(true)
+    // 다른 분류·다른 탭에는 영향이 없다.
+    expect(ladderCards(plan, 'special').map((c) => c.id)).toEqual(ladderCards(base, 'special').map((c) => c.id))
+    expect(planWith([added({ hp: 32, def: 31 })], 'defense').cards.some((c) => c.bundle.userAdded !== undefined)).toBe(false)
+  })
+
+  it('가정 세트 = 대표(최고 점유율) 묶음 가정에서 키 능력치 SP만 바꾸고, 대표 성격이 키 능력치에 보정을 주면 무보정 성격', () => {
+    const plan = planWith([added({ hp: 10, def: 20 })])
+    const phys = ladderCards(plan, 'physical')
+    const top = phys[0]
+    const user = phys.find((c) => c.bundle.userAdded !== undefined) as CardSpec
+    expect(user.opponentSet.sp.hp).toBe(10)
+    expect(user.opponentSet.sp.def).toBe(20)
+    for (const s of ['atk', 'spa', 'spd', 'spe'] as const) expect(user.opponentSet.sp[s]).toBeLessThanOrEqual(top.opponentSet.sp[s])
+    const total = Object.values(user.opponentSet.sp).reduce((a, b) => a + b, 0)
+    expect(total).toBeLessThanOrEqual(game.manifest.rules.spTotal)
+    expect({ ...user.opponentSet, sp: undefined, nature: undefined }).toEqual({ ...top.opponentSet, sp: undefined, nature: undefined })
+    const nature = game.data.natures[user.opponentSet.nature]
+    expect(nature.plus !== 'def' && nature.minus !== 'def').toBe(true)
+  })
+
+  it('대표 성격이 키 능력치(H·B)에 보정이 없으면 성격을 그대로 두고, 있으면 무보정으로 바꾼다(합성 상대)', () => {
+    const e = entryOf(opp)
+    const make = (spread: string) => {
+      const view = syntheticView(game, bo1.meta, [syntheticEntry(e, { spreads: { kept: [[spread, 0.9]], keptShare: 0.9, excludedShare: 0 } })])
+      const plan = planTab({ ...input({ mySet: GARCHOMP, filters: { topN: 30, selected: [opp] }, addedBundles: [added({ hp: 4, def: 4 })] }), view }, 'attack')
+      return ladderCards(plan, 'physical').find((c) => c.bundle.userAdded !== undefined) as CardSpec
+    }
+    expect(make('jolly:2/32/0/0/0/32').opponentSet.nature).toBe('jolly')
+    const neutralized = make('impish:32/0/32/0/2/0').opponentSet
+    const n = game.data.natures[neutralized.nature]
+    expect(n.plus === undefined || n.plus === n.minus).toBe(true)
+    // 키 밖 SP는 대표 그대로, 합이 상한을 넘지 않으면 덜어 내지 않는다.
+    expect(neutralized.sp).toEqual({ hp: 4, atk: 0, def: 4, spa: 0, spd: 2, spe: 0 })
+    // 합이 넘으면 키 밖 능력치(큰 것부터)에서 덜어 낸다: 2+32+0+0+0+32 → H32 B32면 A·S에서 34 덜기.
+    const trimmed = (() => {
+      const view = syntheticView(game, bo1.meta, [syntheticEntry(e, { spreads: { kept: [['jolly:2/32/0/0/0/32', 0.9]], keptShare: 0.9, excludedShare: 0 } })])
+      const plan = planTab({ ...input({ mySet: GARCHOMP, filters: { topN: 30, selected: [opp] }, addedBundles: [added({ hp: 32, def: 32 })] }), view }, 'attack')
+      return (ladderCards(plan, 'physical').find((c) => c.bundle.userAdded !== undefined) as CardSpec).opponentSet.sp
+    })()
+    expect(trimmed.hp + trimmed.def).toBe(64)
+    expect(Object.values(trimmed).reduce((a, b) => a + b, 0)).toBe(game.manifest.rules.spTotal)
+    expect(trimmed).toEqual({ hp: 32, atk: 0, def: 32, spa: 0, spd: 0, spe: 2 })
+  })
+
+  it('관측 묶음과 키가 같거나 앞선 추가와 같으면 새 카드를 만들지 않고, 키 능력치 집합·SP 범위가 틀리면 받지 않는다', () => {
+    const base = planWith([])
+    const observed = ladderCards(base, 'physical')
+    const neutralObserved = observed.find((c) => c.bundle.stats.every((s) => s.nature === 'neutral')) as CardSpec
+    const sp = Object.fromEntries(neutralObserved.bundle.stats.map((s) => [s.stat, s.sp]))
+    const count = (bs: AddedBundle[]) => ladderCards(planWith(bs), 'physical').length
+    expect(count([added(sp)])).toBe(observed.length)
+    expect(count([added({ hp: 7, def: 7 }), added({ hp: 7, def: 7 })])).toBe(observed.length + 1)
+    for (const bad of [{ hp: 7 }, { hp: 7, def: 7, spe: 0 }, { hp: 7, spd: 7 }, { hp: 33, def: 0 }, { hp: -1, def: 0 }, { hp: 1.5, def: 0 }] as Record<string, number>[]) {
+      expect(count([added(bad)]), JSON.stringify(bad)).toBe(observed.length)
+    }
+  })
+
+  it('목록 밖 타겟(커스텀)에는 사용자 카드가 생기지 않는다', () => {
+    const plan = planTab(
+      input({ mySet: GARCHOMP, customTargets: [{ rosterId: 'rotomwash', moves: ['hydropump'], edits: {} }], addedBundles: [added({ hp: 1, def: 1 }, { opponentId: 'rotomwash' })] }),
+      'attack',
+    )
+    expect(plan.cards.filter((c) => c.opponent.source === 'custom').every((c) => c.bundle.userAdded === undefined)).toBe(true)
+    expect(plan.cards.some((c) => c.bundle.userAdded !== undefined)).toBe(false)
+  })
+
+  it('끝까지 계산하면 사용자 카드는 그 상대가 보이는 한 선택지로 남고(변화 없음이어도), 그룹 맨 앞·기본 선택은 관측 최대 묶음', () => {
+    // H32 B32(무보정)과 H0 B0: 둘 중 적어도 하나는 지진 판정이 바뀌지 않을 수 있어도 선택지로 남아야 한다.
+    const bs = [added({ hp: 32, def: 32 }), added({ hp: 0, def: 0 })]
+    const view = buildTabView(input({ mySet: GARCHOMP, filters: { topN: 30, selected: [opp] }, addedBundles: bs }), 'attack')
+    expect(view.complete).toBe(true)
+    const [g] = groupCards(view.cards.filter((c) => c.category === 'physical'))
+    expect(g).toBeDefined()
+    expect(g.options.slice(0, 2).map((o) => o.bundle.userAdded)).toEqual([0, 1])
+    expect(g.options.slice(0, 2).map((o) => o.id)).toEqual(bs.map((b) => addedBundleCardId(b, Object.entries(b.sp).map(([stat, sp]) => ({ stat, sp: sp as number })))))
+    for (const o of g.options.slice(0, 2)) expect(o.rows.length).toBeGreaterThan(0)
+    const d = defaultOption(g)
+    expect(d.bundle.userAdded).toBeUndefined()
+    expect(d.bundle.share).toBe(Math.max(...g.options.filter((o) => o.bundle.userAdded === undefined && !o.bundle.minority).map((o) => o.bundle.share as number)))
   })
 })

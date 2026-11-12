@@ -444,3 +444,51 @@ describe('assembleTab: 성격 변형(무보정·상승)', () => {
     expect(v.complete).toBe(true)
   })
 })
+
+describe('assembleTab: 변화 없음 배분도 선택지(같은 상대의 다른 카드가 보일 때)', () => {
+  const same = (c: ReturnType<typeof card>, opponent: string) => ({ ...c, opponent: { ...c.opponent, id: opponent } })
+  const rows = [
+    row({ id: 'a', cardId: 'A', stat: 'hp', side: 'defender' }),
+    row({ id: 'b', cardId: 'B', stat: 'hp', side: 'defender' }),
+    row({ id: 'c', cardId: 'C', stat: 'hp', side: 'defender' }),
+  ]
+  const p = plan({
+    mySide: 'defender',
+    cards: [same(card({ id: 'A', rowIds: ['a'] }), 'x'), same(card({ id: 'B', order: 1, rowIds: ['b'] }), 'x'), same(card({ id: 'C', order: 2, rowIds: ['c'] }), 'y')],
+    rows,
+  })
+  const flat = bands([[32, 'p']])
+  const stage1 = [ends('a', 'p', 'q'), ends('b', 'p', 'p'), ends('c', 'p', 'p')]
+
+  it('완료: 다른 배분이 보이는 상대의 변화 없음 카드는 변화 없음 행·고정 판정 headline으로 들어오고 요약에서 빠진다', () => {
+    const v = assembleTab(p, resultMap(...stage1, swept('a', bands([[10, 'p'], [32, 'q']])), swept('b', flat), swept('c', flat)))
+    expect(v.complete).toBe(true)
+    expect(v.cards.map((c) => c.id)).toEqual(['A', 'B'])
+    const b = v.cards[1]
+    expect(b.rows.map((r) => [r.id, r.status, r.noChange, r.current.category])).toEqual([['b', 'ok', true, 'p']])
+    expect(b.rows[0].cells).toHaveLength(33)
+    expect(b.headline).toEqual({ kind: 'no-change', fixed: ['p'] })
+    expect([b.hiddenNoChangeRows, b.moreRows]).toEqual([0, 0])
+    // 어떤 카드도 변화가 없는 상대(y)는 지금처럼 빠지고 요약에 남는다.
+    expect(v.noChange.items.map((i) => [i.cardId, i.kind])).toEqual([['C', 'row']])
+    expect(v.noChange).toMatchObject({ rows: 1, cards: 1 })
+  })
+
+  it('보이는 카드가 없으면 같은 상대라도 빠진다(행 단위 가시성 = 그 상대 카드 중 하나라도 변화 있음)', () => {
+    const v = assembleTab(p, resultMap(ends('a', 'p', 'p'), ends('b', 'p', 'p'), ends('c', 'p', 'p'), swept('a', flat), swept('b', flat), swept('c', flat)))
+    expect(v.complete).toBe(true)
+    expect(v.cards).toEqual([])
+    expect(v.noChange).toMatchObject({ rows: 3, cards: 3 })
+  })
+
+  it('3단계 확인 스윕 전에는 잠정 행(갱신 중)으로 들어오고, 그 상대가 보이기 전(1·2단계 중)에는 넣지 않는다', () => {
+    const early = assembleTab(p, resultMap(...stage1))
+    expect(early.cards).toEqual([])
+    const v = assembleTab(p, resultMap(...stage1, swept('a', bands([[10, 'p'], [32, 'q']]))))
+    expect(v.complete).toBe(false)
+    expect(v.cards.map((c) => c.id)).toEqual(['A', 'B'])
+    expect(v.cards[1].rows.map((r) => [r.id, r.status])).toEqual([['b', 'pending']])
+    expect(v.cards[1].headline).toEqual({ kind: 'updating' })
+    expect(v.noChange.items).toEqual([])
+  })
+})

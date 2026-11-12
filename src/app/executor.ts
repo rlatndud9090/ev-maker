@@ -1,6 +1,6 @@
 // 세 탭의 행 작업을 시간 조각으로 나눠 계산하고 탭 뷰를 외부 저장소로 내는 실행기(React 없음).
-import { TABS, assembleTab, computeRowTask, createLruCache, mayUnlockPair, pendingTasks, planTab, taskKey } from '../cards'
-import type { CardInput, JudgementCache, PendingTasks, RowTask, RowTaskResult, Tab, TabPlan, TabView } from '../cards'
+import { TABS, computeRowTask, createLruCache, createTabAssembler, mayUnlockPair, planTab, primaryCardIds, taskCardId, taskKey } from '../cards'
+import type { CardInput, JudgementCache, PendingTasks, RowTask, RowTaskResult, Tab, TabAssembler, TabPlan, TabView } from '../cards'
 import type { SpTable } from '../core'
 import type { Scheduler } from './scheduler'
 
@@ -42,14 +42,20 @@ export const DEFAULT_SLICE_MS = 12
 export const COMPUTE_START_MARK = 'cards:compute-start'
 
 type Stage = 0 | 1 | 2 | 3 | 4
+/** 0 = 먼저 계산할 카드(primaryCardIds: 상대·분류마다 최대 묶음·사용자 추가·커스텀), 1 = 나머지 묶음 */
+type Tier = 0 | 1
 const STAGE_KEYS = ['stage1', 'stage2', 'stage3', 'stage4', 'stage5'] as const
+const TIERS: readonly Tier[] = [0, 1]
 
 interface TabRun {
   plan: TabPlan | null
+  /** 카드별 남은 작업·조립 캐시(결과가 바뀐 카드만 다시 계산) */
+  assembler: TabAssembler | null
+  primary: ReadonlySet<string>
   results: Map<string, RowTaskResult>
-  /** 마지막 pendingTasks 결과와 단계별 소비 위치 */
-  queue: PendingTasks
-  pos: [number, number, number, number, number]
+  /** 층별 마지막 남은 작업 목록과 단계별 소비 위치 */
+  queue: [PendingTasks, PendingTasks]
+  pos: [[number, number, number, number, number], [number, number, number, number, number]]
   /** probe·fixed(가장 센 기술 고르기)·extreme·ends 결과나 쌍의 마지막 행 sweep·variant 결과가 대기열을 바꿨을 수 있음 */
   dirty: boolean
   fatal: boolean
@@ -66,38 +72,61 @@ interface Run {
 }
 
 type Unit = { tab: Tab; kind: 'plan' } | { tab: Tab; kind: 'task'; task: RowTask }
+type Slot = readonly [Tab, Stage, Tier]
 
 const EMPTY_QUEUE: PendingTasks = { stage1: [], stage2: [], stage3: [], stage4: [], stage5: [] }
 const IDLE: TabViewState = { kind: 'idle' }
 
 function newTabRun(): TabRun {
-  return { plan: null, results: new Map(), queue: EMPTY_QUEUE, pos: [0, 0, 0, 0, 0], dirty: false, fatal: false, version: 0, assembled: null }
+  return {
+    plan: null,
+    assembler: null,
+    primary: new Set(),
+    results: new Map(),
+    queue: [EMPTY_QUEUE, EMPTY_QUEUE],
+    pos: [
+      [0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0],
+    ],
+    dirty: false,
+    fatal: false,
+    version: 0,
+    assembled: null,
+  }
 }
 
-/** 활성 탭 1·2단계 → 나머지 탭(TABS 순) 1·2단계 → 활성 탭 3·4·5단계(확인 스윕·성격 변형·쌍) → 나머지 탭 3·4·5단계. */
-function priority(active: Tab): ReadonlyArray<readonly [Tab, Stage]> {
+/**
+ * 활성 탭 1·2단계(먼저 계산할 카드 → 나머지 묶음) → 나머지 탭(TABS 순) 1·2단계 → 활성 탭 3·4·5단계(확인 스윕·성격 변형·쌍) → 나머지 탭 3·4·5단계.
+ * 3·4·5단계도 단계마다 먼저 계산할 카드가 앞선다.
+ */
+function priority(active: Tab): readonly Slot[] {
   const others = TABS.filter((t) => t !== active)
-  const late = (t: Tab) => [[t, 2] as const, [t, 3] as const, [t, 4] as const]
-  return [[active, 0], [active, 1], ...others.flatMap((t) => [[t, 0] as const, [t, 1] as const]), ...late(active), ...others.flatMap(late)]
+  const early = (t: Tab): Slot[] => [[t, 0, 0], [t, 1, 0], [t, 0, 1], [t, 1, 1]]
+  const late = (t: Tab): Slot[] => ([2, 3, 4] as const).flatMap((s) => TIERS.map((tier): Slot => [t, s, tier]))
+  return [...early(active), ...others.flatMap(early), ...late(active), ...others.flatMap(late)]
 }
 
 function refresh(t: TabRun): void {
-  if (t.plan === null) return
-  t.queue = pendingTasks(t.plan, t.results)
-  t.pos = [0, 0, 0, 0, 0]
+  if (t.plan === null || t.assembler === null) return
+  const primary = t.primary
+  t.queue = [t.assembler.pending(t.results, (id) => primary.has(id)), t.assembler.pending(t.results, (id) => !primary.has(id))]
+  t.pos = [
+    [0, 0, 0, 0, 0],
+    [0, 0, 0, 0, 0],
+  ]
   t.dirty = false
 }
 
 function remaining(t: TabRun, stage: Stage): number {
-  return t.queue[STAGE_KEYS[stage]].length - t.pos[stage]
+  return TIERS.reduce<number>((n, tier) => n + t.queue[tier][STAGE_KEYS[stage]].length - t.pos[tier][stage], 0)
 }
 
-/** 그 단계의 다음 작업을 소비한다. 목록을 다 쓰면 낡은 대기열만 다시 만든다. */
-function take(t: TabRun, stage: Stage): RowTask | null {
+/** 그 단계·층의 다음 작업을 소비한다. 목록을 다 쓰면 낡은 대기열만 다시 만든다. */
+function take(t: TabRun, stage: Stage, tier: Tier): RowTask | null {
   for (;;) {
-    const list = t.queue[STAGE_KEYS[stage]]
-    while (t.pos[stage] < list.length) {
-      const task = list[t.pos[stage]++]
+    const list = t.queue[tier][STAGE_KEYS[stage]]
+    while (t.pos[tier][stage] < list.length) {
+      const task = list[t.pos[tier][stage]++]
       if (!t.results.has(taskKey(task))) return task
     }
     if (!t.dirty) return null
@@ -161,10 +190,10 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
 
   function assemble(run: Run, tab: Tab, sp: SpTable | null): void {
     const t = run.tabs[tab]
-    if (t.plan === null || t.fatal) return
+    if (t.plan === null || t.assembler === null || t.fatal) return
     try {
       const f = flags(t)
-      publish(run, tab, assembleTab(t.plan, t.results, sp ?? undefined))
+      publish(run, tab, t.assembler.assemble(t.results, sp ?? undefined))
       t.assembled = { version: t.version, sp, ...f }
     } catch (e) {
       fail(run, tab, e)
@@ -200,12 +229,12 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
   }
 
   function nextUnit(run: Run): Unit | null {
-    for (const [tab, stage] of priority(snapshot.activeTab)) {
+    for (const [tab, stage, tier] of priority(snapshot.activeTab)) {
       const t = run.tabs[tab]
       if (t.fatal) continue
       if (t.plan === null) return { tab, kind: 'plan' }
       try {
-        const task = take(t, stage)
+        const task = take(t, stage, tier)
         if (task !== null) return { tab, kind: 'task', task }
       } catch (e) {
         fail(run, tab, e)
@@ -218,12 +247,16 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
     const t = run.tabs[unit.tab]
     try {
       if (unit.kind === 'plan') {
-        t.plan = planTab(run.input, unit.tab)
+        const plan = planTab(run.input, unit.tab)
+        t.plan = plan
+        t.assembler = createTabAssembler(plan)
+        t.primary = primaryCardIds(plan)
         refresh(t)
         return
       }
-      if (t.plan === null) throw new Error(`${unit.tab} 탭 계획 없이 작업이 나왔다`)
+      if (t.plan === null || t.assembler === null) throw new Error(`${unit.tab} 탭 계획 없이 작업이 나왔다`)
       t.results.set(taskKey(unit.task), computeRowTask(t.plan, unit.task, cache))
+      t.assembler.invalidate(taskCardId(t.plan, unit.task))
       t.version++
       const k = unit.task.kind
       if (k === 'probe' || k === 'fixed' || k === 'ends' || k === 'extreme' || mayUnlockPair(t.plan, t.results, unit.task)) t.dirty = true

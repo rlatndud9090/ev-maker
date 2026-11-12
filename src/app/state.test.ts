@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_CRITERIA, DEFAULT_ROLL_STEPS, DEFAULT_TOP_N } from '../cards'
+import { DEFAULT_CRITERIA, DEFAULT_ROLL_STEPS, DEFAULT_TOP_N, type AddedBundle } from '../cards'
+import type { StatId } from '../data/schema'
 import { realData } from '../cards/testing'
 import { toPokemonSet } from '../ui/setDraft'
 import { EXAMPLE_DRAFT } from './example'
@@ -19,6 +20,8 @@ describe('initialState', () => {
     expect(s.filters).toEqual({ topN: DEFAULT_TOP_N, selected: [] })
     expect(s.conditions).toEqual({ myTailwind: false, opponentTailwind: false })
     expect(s.customTargets).toEqual([])
+    expect(s.addedBundles).toEqual([])
+    expect(s.criteria.bundleShareMin).toBe(0.05)
     expect(s.rollSteps).toBe(14)
     expect(s.rollSteps).toBe(DEFAULT_ROLL_STEPS)
     expect(s.generation).toBe(0)
@@ -46,10 +49,11 @@ describe('reducer', () => {
 
   it('표시 기준 변경은 세대를 올리고 범위 밖 값은 무시한다', () => {
     const s = start()
-    const next = reducer(s, { type: 'set-criteria', criteria: { bundleShareMin: 0.1, cardsPerCategory: 2 } })
-    expect(next.criteria).toEqual({ ...DEFAULT_CRITERIA, bundleShareMin: 0.1, cardsPerCategory: 2 })
+    const next = reducer(s, { type: 'set-criteria', criteria: { bundleShareMin: 0.1 } })
+    expect(next.criteria).toEqual({ ...DEFAULT_CRITERIA, bundleShareMin: 0.1 })
+    expect(Object.keys(next.criteria).sort()).toEqual(['bundleShareMin', 'rankShareMin', 'scarfShareMin'])
     expect(next.generation).toBe(1)
-    for (const criteria of [{ bundleShareMin: NaN }, { rankShareMin: 1.5 }, { scarfShareMin: -0.1 }, { cardsPerCategory: 0 }, { cardsPerCategory: 2.5 }]) {
+    for (const criteria of [{ bundleShareMin: NaN }, { bundleShareMin: 1.01 }, { rankShareMin: 1.5 }, { scarfShareMin: -0.1 }]) {
       expect(reducer(next, { type: 'set-criteria', criteria })).toBe(next)
     }
     expect(reducer(next, { type: 'set-criteria', criteria: { bundleShareMin: 0.1 } })).toBe(next)
@@ -131,6 +135,55 @@ describe('reducer', () => {
     const removed = reducer(edited, { type: 'remove-custom-target', rosterId: 'rotomwash' })
     expect(removed.customTargets).toEqual([])
     expect(reducer(removed, { type: 'remove-custom-target', rosterId: 'rotomwash' })).toBe(removed)
+  })
+
+  describe('사용자 추가 배분', () => {
+    const hb = (hp: number, def: number): AddedBundle => ({ tab: 'attack', opponentId: 'garchomp', category: 'physical', sp: { hp, def } })
+    const add = (bundle: AddedBundle, keyStats: StatId[] = ['hp', 'def']): AppAction => ({ type: 'add-bundle', bundle, keyStats, spMax: 32 })
+
+    it('0~32 정수·키 능력치 집합이 같을 때만 추가 순으로 담고 세대를 올린다', () => {
+      const s = start()
+      const one = reducer(s, add(hb(0, 32)))
+      expect(one.addedBundles).toEqual([hb(0, 32)])
+      expect(one.generation).toBe(1)
+      const two = reducer(one, add(hb(32, 0)))
+      expect(two.addedBundles).toEqual([hb(0, 32), hb(32, 0)])
+      expect(two.generation).toBe(2)
+      // 경계값 0·32는 받는다(위에서), 그 밖은 무시
+      for (const bad of [hb(-1, 0), hb(33, 0), hb(1.5, 0), hb(NaN, 0), hb(0, Infinity)]) expect(reducer(s, add(bad))).toBe(s)
+    })
+
+    it('키 능력치 집합이 다르거나 비었으면 무시', () => {
+      const s = start()
+      expect(reducer(s, add(hb(0, 0), ['hp']))).toBe(s)
+      expect(reducer(s, add(hb(0, 0), ['hp', 'spd']))).toBe(s)
+      expect(reducer(s, add({ ...hb(0, 0), sp: { hp: 0 } }))).toBe(s)
+      expect(reducer(s, add({ ...hb(0, 0), sp: {} }, []))).toBe(s)
+      expect(reducer(s, add({ ...hb(0, 0), opponentId: '' }))).toBe(s)
+    })
+
+    it('같은 (탭, 상대, 분류, SP)는 중복으로 무시, 하나라도 다르면 따로 담는다', () => {
+      const one = reducer(start(), add(hb(4, 8)))
+      expect(reducer(one, add(hb(4, 8)))).toBe(one)
+      const otherTab = reducer(one, add({ ...hb(4, 8), tab: 'defense' }))
+      const otherCategory = reducer(one, add({ ...hb(4, 8), category: 'special' }))
+      expect(otherTab.addedBundles).toHaveLength(2)
+      expect(otherCategory.addedBundles).toHaveLength(2)
+    })
+
+    it('삭제는 같은 배분만 지우고, 없으면 그대로', () => {
+      const two = run(start(), add(hb(0, 32)), add(hb(32, 0)))
+      const removed = reducer(two, { type: 'remove-bundle', bundle: hb(0, 32) })
+      expect(removed.addedBundles).toEqual([hb(32, 0)])
+      expect(removed.generation).toBe(two.generation + 1)
+      expect(reducer(removed, { type: 'remove-bundle', bundle: hb(0, 32) })).toBe(removed)
+    })
+
+    it('toCardInput이 추가 배분을 그대로 넘긴다', () => {
+      const { game, bo1 } = realData()
+      const s = reducer(start(), add(hb(0, 32)))
+      expect(toCardInput(s, game, bo1).addedBundles).toEqual([hb(0, 32)])
+    })
   })
 })
 

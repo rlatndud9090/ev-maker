@@ -50,12 +50,28 @@ export function basisText(game: Snapshot, basis: RankBasis | ScarfBasis): string
  * 기술 라벨의 랭크: 기술 사용자의 공격 능력치 랭크는 부호만(own "+2"), 그 밖의 랭크는 rest "내 B+2 상대 S−1".
  * 기술 사용자는 탭으로 정해진다(공격·스피드 탭은 나, 방어 탭은 상대). 공격 능력치는 행 refs.offense(사용자 쪽일 때만).
  */
-export function moveRankParts(tab: Tab, row: Pick<RowView, 'basis'> & { refs?: Pick<MoveStatRefs, 'offense'> }): { own?: string; rest: string } {
+type RankRefs = Pick<MoveStatRefs, 'offense' | 'defense' | 'attackerStats' | 'defenderStats' | 'speedDependent'>
+
+/** 판정에 쓰이는 능력치의 랭크만 남긴다. refs가 없으면(스피드 탭) S만. */
+function relevantBoosts(b: BoostTable, keep: ReadonlySet<string>): BoostTable {
+  return Object.fromEntries(Object.entries(b).filter(([s]) => keep.has(s))) as BoostTable
+}
+
+export function moveRankParts(tab: Tab, row: Pick<RowView, 'basis'> & { refs?: RankRefs }): { own?: string; rest: string } {
   const basis = row.basis
   if (basis === undefined || basis.kind !== 'rank') return { rest: '' }
-  const mine: BoostTable = { ...basis.myBoosts }
-  const theirs: BoostTable = { ...basis.opponentBoosts }
-  const offense = row.refs?.offense
+  const refs = row.refs
+  // 기술 사용자(공격·스피드 탭은 나, 방어 탭은 상대)와 대상 각각 판정에 관여하는 능력치
+  const userKeep = new Set<string>(refs === undefined ? ['spe'] : [...refs.attackerStats, ...(refs.offense?.owner === 'self' ? [refs.offense.stat] : [])])
+  const targetKeep = new Set<string>(refs === undefined ? ['spe'] : [...refs.defenderStats, ...(refs.defense ? [refs.defense] : [])])
+  if (refs?.speedDependent) {
+    userKeep.add('spe')
+    targetKeep.add('spe')
+  }
+  const meUser = tab !== 'defense'
+  const mine: BoostTable = relevantBoosts(basis.myBoosts, meUser ? userKeep : targetKeep)
+  const theirs: BoostTable = relevantBoosts(basis.opponentBoosts, meUser ? targetKeep : userKeep)
+  const offense = refs?.offense
   let own: string | undefined
   if (offense?.owner === 'self') {
     const user = tab === 'defense' ? theirs : mine

@@ -229,6 +229,45 @@ export function cardPending(plan: TabPlan, card: CardSpec, results: ResultMap): 
   return { stage1, stage2, stage3, stage4, stage5 }
 }
 
+/** 작업이 속한 카드 id(그 결과가 바뀌면 그 카드만 다시 조립하면 된다). */
+export function taskCardId(plan: TabPlan, task: RowTask): string {
+  switch (task.kind) {
+    case 'probe':
+      if (task.target === 'row') return plan.rows[task.id].cardId
+      if (task.target === 'filter') return plan.filters[task.id].cardId
+      return plan.probes[task.id].cardId
+    case 'ends':
+    case 'sweep':
+    case 'variant':
+      return plan.rows[task.rowId].cardId
+    case 'extreme':
+    case 'pair':
+      return plan.filters[task.filterId].cardId
+    case 'fixed':
+      return plan.fixed[task.fixedId].cardId
+  }
+}
+
+/**
+ * 먼저 계산할 카드: 래더 상대·분류마다 관측 최대 묶음 카드(계획 순 첫 관측 카드 = 기본 선택)와 사용자 추가 배분 카드, 커스텀 카드 전부.
+ * 나머지(낮은 점유율 묶음)는 같은 단계 안에서 뒤로 미룬다(첫 카드·체감 속도용, 판정 결과는 같다).
+ */
+export function primaryCardIds(plan: TabPlan): Set<string> {
+  const out = new Set<string>()
+  const seen = new Set<string>()
+  for (const card of plan.cards) {
+    if (card.opponent.source !== 'ladder' || card.bundle.userAdded !== undefined) {
+      out.add(card.id)
+      continue
+    }
+    const k = JSON.stringify([card.opponent.id, card.category])
+    if (seen.has(k)) continue
+    seen.add(k)
+    out.add(card.id)
+  }
+  return out
+}
+
 /** 카드 순 → 행 순. 결과(오류 포함)가 있는 작업은 다시 내지 않는다. */
 export function pendingTasks(plan: TabPlan, results: ResultMap): PendingTasks {
   const stage1: RowTask[] = []

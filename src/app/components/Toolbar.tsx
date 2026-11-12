@@ -242,13 +242,6 @@ export function Toolbar({ customButtonRef, ...p }: Props) {
             onValue={(v) => dispatch({ type: 'set-criteria', criteria: { bundleShareMin: v } })}
           />
           <NumberField
-            label="배분 선택지 수"
-            value={state.criteria.cardsPerCategory}
-            min={1}
-            step={1}
-            onValue={(v) => dispatch({ type: 'set-criteria', criteria: { cardsPerCategory: v } })}
-          />
-          <NumberField
             label="랭업 최소사용률(%)"
             value={state.criteria.rankShareMin}
             toText={toPercentInput}

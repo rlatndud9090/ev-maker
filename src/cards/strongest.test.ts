@@ -10,6 +10,7 @@ import { planTab } from './plan'
 import { computeRowTask } from './rowTask'
 import { candidateStates, pendingTasks, probeKey, taskKey } from './schedule'
 import { cardInput } from './testing'
+import { DEFAULT_CRITERIA } from './types'
 import type { CardInput, CardSpec, CompactCell, ConditionGroup, MoveCandidate, RowTaskResult, Tab, TabPlan, TabView } from './types'
 
 
@@ -263,13 +264,29 @@ function movesByCondition(card: ReturnType<typeof cardOf>): Map<string, Set<stri
 describe('실데이터: 카드·조건당 가장 센 기술(+선공기)', () => {
   const example = cardInput({ mySet: F12.sneasler.mySet })
 
-  it('포푸니크: 분함의발구르기만 계산하고(드래곤클로·지진·스톤샤워 행 없음) 그 행이 변화 없음이라 카드가 목록에서 빠진다', () => {
+  it('포푸니크: 분함의발구르기만 계산하고(드래곤클로·지진·스톤샤워 행 없음) 그 행이 변화 없음 — 기본 기준(5%)에선 다른 포푸니크 배분도 변화 없음이라 카드가 목록에서 빠진다', () => {
     const { plan: p, view } = run('example', example, 'attack')
     const c = cardOf(p, view, F12.sneasler.opponent, 'physical')
     expect(c.spec.conditions.map((g) => g.candidates.map((x) => x.moveId))).toEqual([['earthquake', 'dragonclaw', 'rockslide', 'stompingtantrum']])
+    expect(view.cards.some((x) => x.opponent.id === c.spec.opponent.id)).toBe(false)
     expect(c.card).toBeUndefined()
     expect(c.items.map((i) => [i.kind, i.moveId, i.sweepStat, i.fixed])).toEqual([['row', F12.sneasler.chosen, 'atk', 'guaranteed-ohko']])
     for (const m of F12.sneasler.dropped) expect(view.noChange.items.some((i) => i.cardId === c.spec.id && i.moveId === m)).toBe(false)
+  })
+
+  it('포푸니크(배분 기준 0.5%): 판정이 바뀌는 다른 포푸니크 배분이 보이면 같은 카드가 변화 없음 선택지로 남는다', () => {
+    const { plan: p, view } = run('example-bundle-0.005', cardInput({ mySet: F12.sneasler.mySet, criteria: { ...DEFAULT_CRITERIA, bundleShareMin: 0.005 } }), 'attack')
+    const c = cardOf(p, view, F12.sneasler.opponent, 'physical')
+    expect(c.spec.conditions.map((g) => g.candidates.map((x) => x.moveId))).toEqual([['earthquake', 'dragonclaw', 'rockslide', 'stompingtantrum']])
+    // 같은 상대의 다른 카드에 변화 있는 행이 있다(그래서 이 카드도 선택지).
+    const others = view.cards.filter((x) => x.opponent.id === c.spec.opponent.id && x.id !== c.spec.id)
+    expect(others.some((x) => x.rows.some((r) => !r.noChange))).toBe(true)
+    expect(c.card?.rows.map((r) => [r.moveId, r.noChange, r.current.category])).toEqual([[F12.sneasler.chosen, true, 'guaranteed-ohko']])
+    expect(c.card?.headline).toEqual({ kind: 'no-change', fixed: ['guaranteed-ohko'] })
+    expect(c.card?.hiddenNoChangeRows).toBe(0)
+    // 보이는 카드의 행은 요약에서 빠진다.
+    expect(c.items).toEqual([])
+    for (const m of F12.sneasler.dropped) expect(c.card?.rows.some((r) => r.moveId === m)).toBe(false)
   })
 
   it('포푸니크 brave:29/32/5: 1타 확률·최대 대미지 비율 동률이면 슬롯이 앞선 지진', () => {
@@ -323,5 +340,32 @@ describe('실데이터: 카드·조건당 가장 센 기술(+선공기)', () => 
       // 다른 분류 카드의 기본 조건 기술(사이코쇼크 / 사이코키네시스)은 더 약해 행도 요약도 없다.
       expect(movesByCondition(cardOf(p, view, F12.spSwitch.opponent, empty)).get('base'), label).toBeUndefined()
     }
+  })
+})
+
+describe('극단 필터에 걸린 선공기 행(변화 없음 행으로 보이는 카드)', () => {
+  it('고른 필터·선공기 필터가 둘 다 극단 필터에 걸리면 변화 없음 행 둘, 선공기 쪽만 keptAsPriority', () => {
+    const f1 = filter('f1', 'c', 0)
+    const f2 = filter('f2', 'c', 1)
+    const dRows = [
+      row({ id: 'h1', cardId: 'c', side: 'defender', stat: 'hp', gate: 'f1' }),
+      row({ id: 'd1', cardId: 'c', side: 'defender', stat: 'def', gate: 'f1', order: 1 }),
+      row({ id: 'h2', cardId: 'c', side: 'defender', stat: 'hp', gate: 'f2', order: 2 }),
+      row({ id: 'd2', cardId: 'c', side: 'defender', stat: 'def', gate: 'f2', order: 3 }),
+    ]
+    const c = card({ id: 'c', source: 'custom', rowIds: dRows.map((r) => r.id), filterIds: ['f1', 'f2'], conditions: [group(cand('f1', false, 'filter'), cand('f2', true, 'filter'))] })
+    const pl = plan({ cards: [c], rows: dRows, filters: [f1, f2], mySide: 'defender' })
+    const results = new Map<string, RowTaskResult>([
+      [taskKey({ kind: 'probe', target: 'filter', id: 'f1' }), probe('f1', 0, 70)],
+      [taskKey({ kind: 'probe', target: 'filter', id: 'f2' }), probe('f2', 0, 40)],
+      [taskKey({ kind: 'extreme', filterId: 'f1' }), { kind: 'extreme', filterId: 'f1', low: { sp: 0, category: 'k' }, high: { sp: 32, category: 'k' } }],
+      [taskKey({ kind: 'extreme', filterId: 'f2' }), { kind: 'extreme', filterId: 'f2', low: { sp: 0, category: 'k' }, high: { sp: 32, category: 'k' } }],
+    ])
+    const v = assembleTab(pl, results)
+    expect(v.complete).toBe(true)
+    expect(v.cards[0].rows.map((r) => [r.id, r.noChange, r.keptAsPriority ?? false])).toEqual([
+      [JSON.stringify(['filter', 'f1']), true, false],
+      [JSON.stringify(['filter', 'f2']), true, true],
+    ])
   })
 })

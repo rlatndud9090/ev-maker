@@ -7,6 +7,7 @@ import {
   ROLL_STEPS,
   DEFAULT_TOP_N,
   MAX_CUSTOM_MOVES,
+  type AddedBundle,
   type CardConditions,
   type CardFilters,
   type CustomTarget,
@@ -30,6 +31,8 @@ export interface AppState {
   criteria: DisplayCriteria
   filters: CardFilters
   customTargets: readonly CustomTarget[]
+  /** 사용자가 직접 추가한 래더 상대 배분(추가 순, 메모리에만 둔다) */
+  addedBundles: readonly AddedBundle[]
   /** 계산 입력이 바뀔 때만 +1(탭 전환·같은 값 확정은 그대로) */
   generation: number
 }
@@ -51,6 +54,16 @@ export type AppAction =
   | { type: 'edit-preset'; rosterId: string; key: string; edit: PresetEdit }
   /** 0개 또는 초과면 무시(최소 1개 유지) */
   | { type: 'set-custom-moves'; rosterId: string; moves: readonly string[] }
+  /**
+   * sp 키가 keyStats와 같은 집합이 아니거나 값이 0~spMax 정수가 아니면 무시. 같은 (탭, 상대, 분류, SP)가 이미 있으면 무시.
+   * keyStats = 그 카드 묶음의 키 능력치, spMax = 레귤레이션 능력치당 SP 상한.
+   * 상태는 계획을 모르므로(계층: cards ← app) 이 검증은 호출자가 준 값 기준의 1차 거름이다. 최종 권한은 계획(plan.userSeeds)이
+   * 갖는다 — 게임의 키 능력치 집합·SP 상한과 맞지 않거나 관측 묶음과 키가 같은 항목은 카드를 만들지 않는다(화면은 같은 키의
+   * 관측 묶음을 고른다: cards chosenOption). 그런 항목은 상태에 남아 기준이 바뀌어 관측 묶음이 빠지면 다시 카드가 된다.
+   */
+  | { type: 'add-bundle'; bundle: AddedBundle; keyStats: readonly StatId[]; spMax: number }
+  /** 같은 (탭, 상대, 분류, SP)를 지운다. 없으면 무시 */
+  | { type: 'remove-bundle'; bundle: AddedBundle }
 
 export function initialState(regulation: string): AppState {
   return {
@@ -63,6 +76,7 @@ export function initialState(regulation: string): AppState {
     criteria: { ...DEFAULT_CRITERIA },
     filters: { topN: DEFAULT_TOP_N, selected: [] },
     customTargets: [],
+    addedBundles: [],
     generation: 0,
   }
 }
@@ -83,12 +97,30 @@ function validCriteria(c: Partial<DisplayCriteria>): boolean {
   if (c.bundleShareMin !== undefined && !isRatio(c.bundleShareMin)) return false
   if (c.rankShareMin !== undefined && !isRatio(c.rankShareMin)) return false
   if (c.scarfShareMin !== undefined && !isRatio(c.scarfShareMin)) return false
-  if (c.cardsPerCategory !== undefined && !isPositiveInt(c.cardsPerCategory)) return false
   return true
 }
 
 const validMoves = (moves: readonly string[]): boolean =>
   moves.length >= 1 && moves.length <= MAX_CUSTOM_MOVES && new Set(moves).size === moves.length && moves.every((m) => typeof m === 'string' && m !== '')
+
+/** 같은 (탭, 상대, 분류, SP) 배분인지 */
+export function sameBundle(a: AddedBundle, b: AddedBundle): boolean {
+  if (a.tab !== b.tab || a.opponentId !== b.opponentId || a.category !== b.category) return false
+  const ka = Object.keys(a.sp) as StatId[]
+  const kb = Object.keys(b.sp) as StatId[]
+  return ka.length === kb.length && ka.every((k) => a.sp[k] === b.sp[k])
+}
+
+function validBundle(bundle: AddedBundle, keyStats: readonly StatId[], spMax: number): boolean {
+  if (typeof bundle.opponentId !== 'string' || bundle.opponentId === '') return false
+  const keys = Object.keys(bundle.sp) as StatId[]
+  const expected = new Set(keyStats)
+  if (expected.size === 0 || keys.length !== expected.size || !keys.every((k) => expected.has(k))) return false
+  return keys.every((k) => {
+    const v = bundle.sp[k]
+    return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= spMax
+  })
+}
 
 function updateTarget(state: AppState, rosterId: string, f: (t: CustomTarget) => CustomTarget): AppState {
   const i = state.customTargets.findIndex((t) => t.rosterId === rosterId)
@@ -139,5 +171,15 @@ export function reducer(state: AppState, action: AppAction): AppState {
     case 'set-custom-moves':
       if (!validMoves(action.moves)) return state
       return updateTarget(state, action.rosterId, (t) => ({ ...t, moves: [...action.moves] }))
+    case 'add-bundle': {
+      const b = action.bundle
+      if (!validBundle(b, action.keyStats, action.spMax) || state.addedBundles.some((x) => sameBundle(x, b))) return state
+      const added: AddedBundle = { tab: b.tab, opponentId: b.opponentId, category: b.category, sp: { ...b.sp } }
+      return bump(state, { addedBundles: [...state.addedBundles, added] })
+    }
+    case 'remove-bundle': {
+      const next = state.addedBundles.filter((x) => !sameBundle(x, action.bundle))
+      return next.length === state.addedBundles.length ? state : bump(state, { addedBundles: next })
+    }
   }
 }

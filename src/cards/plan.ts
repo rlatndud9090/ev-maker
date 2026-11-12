@@ -2,6 +2,7 @@
 import {
   CoreError,
   CoreInputError,
+  STAT_IDS,
   checkSpeedSupport,
   moveStatRefs,
   normalizeRollSteps,
@@ -17,8 +18,8 @@ import type { MetaEntry } from '../data/meta-schema'
 import { NO_ITEM } from '../data/meta-schema'
 import type { Snapshot, StatId } from '../data/schema'
 import { observedSpreadAssumption, representativeAssumption, resolveAssumption, type Assumption } from '../meta'
-import { bundleStats, bundlesOf } from './bundles'
-import { cardId as makeCardId, presetKey, rowId } from './ids'
+import { bundleStats, bundlesOf, natureSign } from './bundles'
+import { addedBundleKey, addedCardId, cardId as makeCardId, presetKey, rowId } from './ids'
 import { presetAssumption } from './presets'
 import { ladderMeans, rankVariants, setMeansCandidates, type CardRefStats, type MeansCandidate } from './rank'
 import type { BoostStat } from './rankMeans'
@@ -178,16 +179,53 @@ class PlanBuilder {
   ladderSeeds(entry: MetaEntry, category: Category | null, keyStats: readonly StatId[]): CardSeed[] {
     const { game, input } = this
     const bundles = bundlesOf(game, entry, keyStats, input.criteria)
+    let observed: CardSeed[]
     if (bundles.length === 0) {
       const a = representativeAssumption(input.view, entry.id)
       const stats = bundleStats(game, keyStats, a.set.nature, a.set.sp)
       const bundle: BundleSpec = { key: JSON.stringify(stats), stats, share: 0, retention: entry.spreads.keptShare, minority: true }
-      return [this.seed(category, bundle, a)]
+      observed = [this.seed(category, bundle, a)]
+    } else {
+      observed = bundles.map((bundle) => {
+        const idx = entry.spreads.kept.findIndex(([key]) => key === bundle.representativeSpread)
+        return this.seed(category, bundle, observedSpreadAssumption(input.view, entry.id, idx))
+      })
     }
-    return bundles.map((bundle) => {
-      const idx = entry.spreads.kept.findIndex(([key]) => key === bundle.representativeSpread)
-      return this.seed(category, bundle, observedSpreadAssumption(input.view, entry.id, idx))
+    return [...observed, ...this.userSeeds(entry, category, keyStats, observed)]
+  }
+
+  /**
+   * 사용자 추가 배분(이 탭·상대·분류, 추가 순). 가정 세트 = 대표(최고 점유율) 묶음 가정에서 키 능력치 SP만 바꾸고,
+   * 대표 성격이 키 능력치에 보정을 주면 무보정 성격으로 바꾼다. SP 합이 상한을 넘으면 키가 아닌 능력치(큰 것부터)에서 덜어 낸다.
+   * 키 능력치 집합이 다르거나 SP가 0~최대 정수가 아니면 받지 않고, 관측 묶음·앞선 추가와 키가 같으면 새 카드를 만들지 않는다.
+   */
+  userSeeds(entry: MetaEntry, category: Category | null, keyStats: readonly StatId[], observed: readonly CardSeed[]): CardSeed[] {
+    const { game, input } = this
+    const base = observed[0]?.assumption
+    if (base === undefined) return []
+    const { spTotal, spMaxPerStat } = game.manifest.rules
+    const keys = new Set(keyStats)
+    const seen = new Set(observed.map((s) => s.bundle.key))
+    const out: CardSeed[] = []
+    ;(input.addedBundles ?? []).forEach((added, index) => {
+      if (added.tab !== this.tab || added.opponentId !== entry.id || added.category !== category) return
+      const given = Object.keys(added.sp) as StatId[]
+      if (given.length !== keys.size || !given.every((s) => keys.has(s))) return
+      if (!given.every((s) => isSp(added.sp[s], spMaxPerStat))) return
+      const stats = STAT_IDS.filter((s) => keys.has(s)).map((stat) => ({ stat, sp: added.sp[stat] as number, nature: 'neutral' as const }))
+      const key = addedBundleKey(stats)
+      if (seen.has(key)) return
+      seen.add(key)
+      const touchesKey = keyStats.some((s) => natureSign(game, base.set.nature, s) !== 'neutral')
+      const nature = touchesKey ? neutralNature(game, base.set.nature) : base.set.nature
+      const sp = { ...base.set.sp } as SpTable
+      for (const st of stats) sp[st.stat] = st.sp
+      trimSp(sp, keys, spTotal)
+      const assumption: Assumption = { ...base, set: { ...base.set, nature, sp } }
+      delete assumption.share
+      out.push(this.seed(category, { key, stats, minority: false, userAdded: index }, assumption))
     })
+    return out
   }
 
   customSeeds(target: CustomTarget, category: Category | null, keyStats: readonly StatId[]): CardSeed[] {
@@ -220,8 +258,12 @@ class PlanBuilder {
   /** 카드를 만들고 rows/filters/fixed를 채울 수 있게 빈 목록을 돌려준다. */
   openCard(opp: Opponent, seed: CardSeed, notices: readonly MoveNotice[]): CardSpec {
     const bundlePart = seed.bundle.presetIndex ?? seed.bundle.key
+    // 사용자 추가 배분은 'user' 표지를 붙여 같은 키의 관측 묶음 카드와 id가 겹치지 않게 한다.
     const card: CardSpec = {
-      id: makeCardId([this.tab, opp.header.source, opp.header.id, seed.category, bundlePart]),
+      id:
+        seed.bundle.userAdded === undefined
+          ? makeCardId([this.tab, opp.header.source, opp.header.id, seed.category, bundlePart])
+          : addedCardId(this.tab, opp.header.id, seed.category, seed.bundle.key),
       order: this.cards.length,
       opponent: opp.header,
       category: seed.category,
@@ -532,6 +574,26 @@ class PlanBuilder {
 }
 
 const unique = <T>(xs: readonly T[]): T[] => [...new Set(xs)]
+const isSp = (v: unknown, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= max
+
+/** 보정 없는 성격(스냅샷 성격 id 정렬 순 첫 번째). 없으면 원래 성격. */
+function neutralNature(game: Snapshot, fallback: string): string {
+  const natures = game.data.natures
+  return Object.keys(natures).sort().find((id) => natures[id].plus === undefined || natures[id].plus === natures[id].minus) ?? fallback
+}
+
+/** SP 합이 total을 넘으면 키 밖 능력치에서 큰 것부터(동률 STAT_IDS 순) 덜어 낸다(제자리 수정). */
+function trimSp(sp: SpTable, keys: ReadonlySet<StatId>, total: number): void {
+  let over = STAT_IDS.reduce((a, s) => a + sp[s], 0) - total
+  const others = STAT_IDS.filter((s) => !keys.has(s))
+  while (over > 0) {
+    const s = others.reduce<StatId | undefined>((best, x) => (sp[x] > 0 && (best === undefined || sp[x] > sp[best]) ? x : best), undefined)
+    if (s === undefined) return
+    const cut = Math.min(over, sp[s])
+    sp[s] -= cut
+    over -= cut
+  }
+}
 const meansParts = (b: RankBasis): string[] => [b.owner, b.means.kind, b.means.id]
 
 function emptyPlan(input: CardInput, tab: Tab, mySp: SpTable, status: TabPlan['status'], conflicts: string[]): TabPlan {

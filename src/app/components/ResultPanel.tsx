@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, type Dispatch } from 'react'
 import type { PokemonSet } from '../../core'
-import { groupCards, type CustomTarget, type Tab } from '../../cards'
+import { chosenOption, groupCards, type CustomTarget, type Tab } from '../../cards'
 import type { Snapshot } from '../../data/schema'
 import { namesOf } from '../../ui/names'
 import { progressText } from '../../ui/format'
@@ -125,8 +125,7 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
               {view.cards.length === 0 && !view.stage12Done && <p className="hint">카드를 계산하는 중…</p>}
               <ol className="cards">
                 {groups.map((g) => {
-                  const id = chosen.get(scoped(g.key))
-                  const c = g.options.find((o) => o.id === id) ?? g.options[0]
+                  const c = chosenOption(g, tab, chosen.get(scoped(g.key)))
                   return (
                     <CardItem
                       key={scoped(g.key)}

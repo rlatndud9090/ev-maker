@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { groupCards } from './groups'
+import { addedBundleCardId } from './ids'
+import { chosenOption, defaultOption, groupCards } from './groups'
 import type { CardView, PresetIndex } from './types'
 
 let seq = 0
@@ -78,5 +79,54 @@ describe('groupCards', () => {
   it('래더와 커스텀의 같은 id는 다른 그룹', () => {
     const groups = groupCards([view({ opp: 'x', id: 'l' }), view({ opp: 'x', source: 'custom', id: 'c', preset: 0 })])
     expect(groups.map((g) => ids(g.options))).toEqual([['l'], ['c']])
+  })
+})
+
+describe('groupCards: 사용자 추가 배분', () => {
+  const user = (o: Parameters<typeof view>[0] & { added: number }): CardView => {
+    const c = view(o)
+    return { ...c, bundle: { ...c.bundle, share: undefined, userAdded: o.added } }
+  }
+
+  it('사용자 추가 배분이 맨 앞(추가 순), 그다음 점유율 내림차순, 소수 배분 맨 뒤', () => {
+    const cards = [
+      view({ id: 'lo', opp: 'x', share: 0.1 }),
+      user({ id: 'u1', opp: 'x', added: 1 }),
+      view({ id: 'm', opp: 'x', share: 0.004, minority: true }),
+      view({ id: 'hi', opp: 'x', share: 0.5 }),
+      user({ id: 'u0', opp: 'x', added: 0 }),
+    ]
+    const [grp] = groupCards(cards)
+    expect(ids(grp.options)).toEqual(['u0', 'u1', 'hi', 'lo', 'm'])
+  })
+
+  it('기본 선택은 사용자 추가 배분이 아닌 첫 선택지(최고 점유율)', () => {
+    const [grp] = groupCards([user({ id: 'u0', opp: 'x', added: 0 }), view({ id: 'lo', opp: 'x', share: 0.1 }), view({ id: 'hi', opp: 'x', share: 0.5 })])
+    expect(grp.options[0].id).toBe('u0')
+    expect(defaultOption(grp).id).toBe('hi')
+    const [plain] = groupCards([view({ id: 'a', opp: 'y', share: 0.2 }), view({ id: 'b', opp: 'y', share: 0.3 })])
+    expect(defaultOption(plain).id).toBe('b')
+    const [onlyUser] = groupCards([user({ id: 'u', opp: 'z', added: 0 })])
+    expect(defaultOption(onlyUser).id).toBe('u')
+  })
+
+  it('chosenOption: 있는 id는 그대로, 사라진 사용자 카드 id는 같은 SP의 무보정 관측 묶음으로, 그것도 없으면 기본', () => {
+    const neutral = view({ id: 'obs', opp: 'x', share: 0.1 })
+    const statsN = [
+      { stat: 'hp' as const, sp: 31, nature: 'neutral' as const },
+      { stat: 'def' as const, sp: 3, nature: 'neutral' as const },
+    ]
+    const obs: CardView = { ...neutral, bundle: { ...neutral.bundle, stats: statsN } }
+    const plus: CardView = { ...obs, id: 'obs+', bundle: { ...obs.bundle, stats: [statsN[0], { ...statsN[1], nature: 'plus' }] } }
+    const top = view({ id: 'top', opp: 'x', share: 0.6 })
+    const [grp] = groupCards([top, plus, obs])
+    const userId = addedBundleCardId({ tab: 'attack', opponentId: 'x', category: 'physical' }, statsN)
+    expect(chosenOption(grp, 'attack', 'obs+').id).toBe('obs+')
+    expect(chosenOption(grp, 'attack', undefined).id).toBe('top')
+    expect(chosenOption(grp, 'attack', userId).id).toBe('obs')
+    // 다른 탭의 id는 매칭되지 않는다 → 기본
+    expect(chosenOption(grp, 'defense', userId).id).toBe('top')
+    const [noMatch] = groupCards([top, plus])
+    expect(chosenOption(noMatch, 'attack', userId).id).toBe('top')
   })
 })

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { mayUnlockPair, neededVariants, nextStage, pendingTasks, rowChanges, rowJudgements, taskKey } from './schedule'
+import { mayUnlockPair, neededVariants, nextStage, pendingTasks, primaryCardIds, rowChanges, rowJudgements, taskCardId, taskKey } from './schedule'
+import { createTabAssembler } from './assemble'
 import { card, ends, extreme, failed, filter, fixed, fixedResult, pairResult, plan, resultMap, row, swept, bands, variantSwept } from './__fixtures__/handPlan'
 
 describe('taskKey', () => {
@@ -211,5 +212,61 @@ describe('4단계: 성격 변형 스윕', () => {
     ])
     const allFlat = resultMap(...base, variantSwept('g1', 'plus', flat), variantSwept('g2', 'plus', flat))
     expect(pendingTasks(pd, allFlat).stage5).toEqual([])
+  })
+})
+
+describe('primaryCardIds·taskCardId·증분 pending', () => {
+  const as = (c: ReturnType<typeof card>, opponent: string, patch: Partial<ReturnType<typeof card>['bundle']> = {}, category: 'physical' | 'special' = 'physical') => ({
+    ...c,
+    category,
+    opponent: { ...c.opponent, id: opponent },
+    bundle: { ...c.bundle, ...patch },
+  })
+  const p = plan({
+    cards: [
+      as(card({ id: 'x1', rowIds: ['r1'] }), 'x', { share: 0.5 }),
+      as(card({ id: 'x2', order: 1, rowIds: ['r2'] }), 'x', { share: 0.1 }),
+      as(card({ id: 'x3', order: 2 }), 'x', { share: 0.3 }, 'special'),
+      as(card({ id: 'xu', order: 3 }), 'x', { userAdded: 0 }),
+      as(card({ id: 'y1', order: 4, filterIds: ['fy'], fixedIds: ['xy'] }), 'y', { share: 0.2 }),
+      card({ id: 'c1', order: 5, source: 'custom' }),
+      card({ id: 'c2', order: 6, source: 'custom' }),
+    ],
+    rows: [row({ id: 'r1', cardId: 'x1', stat: 'atk' }), row({ id: 'r2', cardId: 'x2', stat: 'atk' })],
+    filters: [filter('fy', 'y1')],
+    fixed: [fixed('xy', 'y1')],
+  })
+
+  it('래더 상대·분류마다 계획 순 첫 관측 카드 + 사용자 추가 카드 + 커스텀 카드 전부', () => {
+    expect([...primaryCardIds(p)]).toEqual(['x1', 'x3', 'xu', 'y1', 'c1', 'c2'])
+  })
+
+  it('작업 → 카드 id', () => {
+    expect(taskCardId(p, { kind: 'ends', rowId: 'r2' })).toBe('x2')
+    expect(taskCardId(p, { kind: 'sweep', rowId: 'r1', stage: 3 })).toBe('x1')
+    expect(taskCardId(p, { kind: 'variant', rowId: 'r1', nature: 'plus' })).toBe('x1')
+    expect(taskCardId(p, { kind: 'extreme', filterId: 'fy' })).toBe('y1')
+    expect(taskCardId(p, { kind: 'pair', filterId: 'fy', nature: 'neutral' })).toBe('y1')
+    expect(taskCardId(p, { kind: 'fixed', fixedId: 'xy' })).toBe('y1')
+    expect(taskCardId(p, { kind: 'probe', target: 'row', id: 'r2' })).toBe('x2')
+    expect(taskCardId(p, { kind: 'probe', target: 'filter', id: 'fy' })).toBe('y1')
+  })
+
+  it('증분 조립기의 pending은 결과가 바뀐 카드만 invalidate해도 pendingTasks와 같고, 카드 필터로 층을 나눈다', () => {
+    const asm = createTabAssembler(p)
+    const results = new Map()
+    expect(asm.pending(results)).toEqual(pendingTasks(p, results))
+    for (const r of [ends('r1', 'a', 'b'), extreme('fy', 'k', 'k'), fixedResult('xy', 'q')]) {
+      const [k, v] = [...resultMap(r)][0]
+      results.set(k, v)
+    }
+    for (const id of ['x1', 'y1']) asm.invalidate(id)
+    expect(asm.pending(results)).toEqual(pendingTasks(p, results))
+    const primary = primaryCardIds(p)
+    const first = asm.pending(results, (id) => primary.has(id))
+    const rest = asm.pending(results, (id) => !primary.has(id))
+    expect(first.stage1).toEqual([])
+    expect(first.stage2).toEqual([{ kind: 'sweep', rowId: 'r1', stage: 2 }])
+    expect(rest.stage1).toEqual([{ kind: 'ends', rowId: 'r2' }])
   })
 })

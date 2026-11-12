@@ -1,11 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { TABS, assembleTab, buildTabView, computeRowTask, createLruCache, nextStage, pendingTasks, planTab, taskKey } from '../cards'
+import { TABS, assembleTab, buildTabView, computeRowTask, createLruCache, nextStage, pendingTasks, planTab, primaryCardIds, taskCardId, taskKey } from '../cards'
 import type { CardInput, JudgementCache, RowTaskResult, Tab, TabView } from '../cards'
 import { cardInput, realData } from '../cards/testing'
 import type { PokemonSet, SpTable } from '../core'
 import { createExecutor } from './executor'
 import type { Executor, ExecutorSnapshot, TabViewState } from './executor'
 import type { Scheduler } from './scheduler'
+
+// 실행기가 부르는 행 작업 순서를 보기 위해 원래 구현을 감싼 스파이(동작은 같다).
+vi.mock('../cards', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('../cards')>()
+  return { ...mod, computeRowTask: vi.fn(mod.computeRowTask) }
+})
 
 const { game } = realData()
 const reg = game.manifest.regulation.id
@@ -162,6 +168,27 @@ describe('createExecutor', () => {
       expect(at(`${active}:12`)).toBeLessThan(at(`${t}:view`))
       expect(at(`${t}:12`)).toBeLessThan(at(`${active}:done`))
     }
+  })
+
+  it('단계 안 두 층: 상대·분류마다 최대 묶음 카드(먼저 계산할 카드)의 1·2단계 작업이 나머지 묶음 작업보다 모두 먼저, 최종 뷰는 그대로', async () => {
+    const plan = planTab(inputA, 'attack')
+    const primary = primaryCardIds(plan)
+    expect(primary.size).toBeLessThan(plan.cards.length)
+    const calls = vi.mocked(computeRowTask).mock.calls.length
+    const m = manualScheduler()
+    executor = createExecutor({ scheduler: m.scheduler, sliceMs: 1, now: tickingClock() })
+    executor.setInput(inputA, 1)
+    await runToEnd(m)
+    const attack = vi
+      .mocked(computeRowTask)
+      .mock.calls.slice(calls)
+      .filter(([p]) => p.tab === 'attack')
+      .map(([p, task]) => ({ primary: primary.has(taskCardId(p, task)), early: task.kind !== 'variant' && task.kind !== 'pair' && !(task.kind === 'sweep' && task.stage === 3) }))
+    const firstSecondary = attack.findIndex((c) => !c.primary)
+    const lastPrimaryEarly = attack.findLastIndex((c) => c.primary && c.early)
+    expect(firstSecondary).toBeGreaterThan(0)
+    expect(lastPrimaryEarly).toBeLessThan(firstSecondary)
+    expect(viewOf(executor.getSnapshot().tabs.attack)).toEqual(buildTabView(inputA, 'attack'))
   })
 
   it('활성 탭을 바꾸면 그 탭의 1·2단계가 먼저 끝난다', async () => {

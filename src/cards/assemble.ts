@@ -6,7 +6,6 @@ import {
   cardPending,
   filterState,
   neededVariants,
-  pendingTasks,
   probeKey,
   rowChanges,
   rowJudgements,
@@ -14,6 +13,7 @@ import {
   type CandidateState,
   type RowJudgements,
 } from './schedule'
+import { groupKey } from './groups'
 import { cellLabel, pairTarget, singleTarget } from './target'
 import { NATURE_VARIANTS } from './types'
 import type {
@@ -26,9 +26,11 @@ import type {
   Headline,
   NoChangeItem,
   PairPoint,
+  PendingTasks,
   ResultMap,
   RowKind,
   RowSpec,
+  RowTask,
   RowView,
   TabPlan,
   TabStatus,
@@ -38,6 +40,7 @@ import type {
 
 const KIND_RANK: Readonly<Record<RowKind, number>> = { base: 0, rank: 1, scarf: 2, 'non-scarf': 2 }
 const STAT_KEYS: readonly StatId[] = ['hp', 'atk', 'def', 'spa', 'spd', 'spe']
+const STAGE_KEYS = ['stage1', 'stage2', 'stage3', 'stage4', 'stage5'] as const
 
 interface Ctx {
   plan: TabPlan
@@ -51,6 +54,8 @@ interface CardBuild {
   displayed: boolean
   /** 모든 작업이 끝났고 표시 행이 없는 래더 카드(요약 M) */
   emptyDone: boolean
+  /** 이 카드의 1·2단계 작업이 끝남 */
+  settled: boolean
   items: NoChangeItem[]
   mySetReasons: ErrorReason[]
 }
@@ -184,13 +189,19 @@ function cardError(card: CardSpec): ErrorReason {
   return card.error
 }
 
-function buildCard(ctx: Ctx, card: CardSpec): CardBuild {
+/**
+ * keep = 변화 없음 선택지로 보이는 래더 카드: 커스텀 카드처럼 변화 없음 행·잠정 행을 rows에 남기고 요약 항목은 내지 않는다
+ * (그 상대의 다른 카드가 보일 때만 assembleTab이 다시 조립한다).
+ */
+function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, keep = false): CardBuild {
   const { plan, results } = ctx
   const ladder = card.opponent.source === 'ladder'
+  /** 변화 없음 행을 요약으로 빼는 카드(keep이 아닌 래더) */
+  const hide = ladder && !keep
   const base = { id: card.id, order: card.order, state: card.state, notices: card.notices, opponent: card.opponent, category: card.category, bundle: card.bundle }
   if (card.state === 'error') {
     const view: CardView = { ...base, error: cardError(card), rows: [], hiddenNoChangeRows: 0, headline: headlineOf(card, []), moreRows: 0 }
-    return { view, displayed: true, emptyDone: false, items: [], mySetReasons: [] }
+    return { view, displayed: true, emptyDone: false, settled: true, items: [], mySetReasons: [] }
   }
 
   const rows: RowView[] = []
@@ -228,7 +239,7 @@ function buildCard(ctx: Ctx, card: CardSpec): CardBuild {
     const state: CandidateState | undefined = states.get(candidate)
     if (state === 'dropped') continue
     if (state === 'probing') {
-      if (!ladder) rows.push(bareRow(ctx, headOf(spec), 'pending'))
+      if (!hide) rows.push(bareRow(ctx, headOf(spec), 'pending'))
       continue
     }
     if (state === 'error') {
@@ -252,8 +263,13 @@ function buildCard(ctx: Ctx, card: CardSpec): CardBuild {
         const filter = plan.filters[spec.gate]
         const head = filterHead(spec.gate, spec.order)
         if (f.kind === 'error') rows.push(bareRow(ctx, head, 'error', { error: fail(f.result.reason) }))
-        else if (ladder) items.push(item('extreme-filter', f.result.low.category, { rowKind: head.kind, moveId: filter.moveId, basis: filter.basis }))
-        else rows.push(bareRow(ctx, head, 'ok', { category: f.result.low.category, noChange: true }))
+        else if (hide) items.push(item('extreme-filter', f.result.low.category, { rowKind: head.kind, moveId: filter.moveId, basis: filter.basis }))
+        else {
+          const blocked = bareRow(ctx, head, 'ok', { category: f.result.low.category, noChange: true })
+          // 가장 센 기술이 아니지만 선공기라 남은 극단 필터 행도 선공기 표지를 단다(스윕 행과 같은 규칙).
+          if (state === 'priority') blocked.keptAsPriority = true
+          rows.push(blocked)
+        }
         continue
       }
     }
@@ -272,7 +288,7 @@ function buildCard(ctx: Ctx, card: CardSpec): CardBuild {
     const swept = results.get(taskKey({ kind: 'sweep', rowId, stage: 2 }))
     if (swept === undefined) {
       // 변형 범위 끝(무보정 0·상승 최대)이 같은 래더 행은 3단계 확인 전까지 잠정 제외한다.
-      if (rowChanges(ends, { variantsDone: false }) || !ladder) rows.push(bareRow(ctx, headOf(spec), 'pending'))
+      if (rowChanges(ends, { variantsDone: false }) || !hide) rows.push(bareRow(ctx, headOf(spec), 'pending'))
       continue
     }
     if (swept.kind === 'error') {
@@ -285,8 +301,8 @@ function buildCard(ctx: Ctx, card: CardSpec): CardBuild {
     const j = rowJudgements(plan, results, rowId)
     const same = !rowChanges(ends, j)
     // 현재 성격으로는 같아도 성격 변형 스윕이 남았으면 래더 행은 잠정 제외(변화 없음 확정 전)한다.
-    if (same && ladder && !j.variantsDone) continue
-    if (same && ladder) {
+    if (same && hide && !j.variantsDone) continue
+    if (same && hide) {
       items.push(item('row', first.category, { rowKind: spec.kind, moveId: spec.moveId, sweepStat: stat, basis: spec.basis }))
       continue
     }
@@ -303,12 +319,12 @@ function buildCard(ctx: Ctx, card: CardSpec): CardBuild {
     const state = states.get(fixedId)
     if (state === 'dropped') return
     if (r === undefined || state === 'probing') {
-      if (!ladder) rows.push(bareRow(ctx, head, 'pending'))
+      if (!hide) rows.push(bareRow(ctx, head, 'pending'))
     } else if (r.kind === 'error') {
       rows.push(bareRow(ctx, head, 'error', { error: fail(r.reason) }))
     } else if (r.kind !== 'fixed') {
       throw new Error(`고정 판정 ${fixedId}의 결과 종류가 ${r.kind}다`)
-    } else if (ladder) {
+    } else if (hide) {
       items.push(item('sp-independent', r.cell.category, { moveId: spec.moveId }))
     } else {
       const row = bareRow(ctx, head, 'ok', { category: r.cell.category, noChange: true })
@@ -318,7 +334,6 @@ function buildCard(ctx: Ctx, card: CardSpec): CardBuild {
   })
 
   rows.sort((a, b) => a.order - b.order)
-  const pending = cardPending(plan, card, results)
   const settled = pending.stage1.length === 0 && pending.stage2.length === 0
   const allDone = settled && pending.stage3.length === 0 && pending.stage4.length === 0 && pending.stage5.length === 0
   const shown = rows.filter((r) => !r.noChange).length
@@ -334,8 +349,9 @@ function buildCard(ctx: Ctx, card: CardSpec): CardBuild {
   return {
     view,
     // 커스텀 카드도 다른 분류 기술이 가장 세 행이 하나도 남지 않으면 뺀다(그 상대의 다른 분류 카드가 보인다).
-    displayed: ladder ? settled && visible : visible,
-    emptyDone: ladder && allDone && !visible,
+    displayed: hide ? settled && visible : visible,
+    emptyDone: hide && allDone && !visible,
+    settled,
     items,
     mySetReasons: reasons,
   }
@@ -355,65 +371,143 @@ function withoutUndefined<T extends object>(obj: T): T {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as T
 }
 
-function progressCount(plan: TabPlan, results: ResultMap): number {
+/** 한 카드의 끝난 작업 수(진행률 분자). */
+function cardDone(plan: TabPlan, card: CardSpec, results: ResultMap): number {
+  if (card.state === 'error') return 0
   let done = 0
   const has = (key: string) => (results.has(key) ? 1 : 0)
-  for (const card of plan.cards) {
-    if (card.state === 'error') continue
-    for (const group of card.conditions) {
-      for (const c of group.candidates) if (c.target !== 'fixed') done += has(probeKey(c))
-    }
-    for (const filterId of card.filterIds) {
-      done += has(taskKey({ kind: 'extreme', filterId }))
-      for (const nature of NATURE_VARIANTS) done += has(taskKey({ kind: 'pair', filterId, nature }))
-    }
-    for (const rowId of card.rowIds) {
-      done += has(taskKey({ kind: 'ends', rowId })) + has(taskKey({ kind: 'sweep', rowId, stage: 2 }))
-      for (const nature of neededVariants(plan, plan.rows[rowId])) done += has(taskKey({ kind: 'variant', rowId, nature }))
-    }
-    for (const fixedId of card.fixedIds) done += has(taskKey({ kind: 'fixed', fixedId }))
+  for (const group of card.conditions) {
+    for (const c of group.candidates) if (c.target !== 'fixed') done += has(probeKey(c))
   }
+  for (const filterId of card.filterIds) {
+    done += has(taskKey({ kind: 'extreme', filterId }))
+    for (const nature of NATURE_VARIANTS) done += has(taskKey({ kind: 'pair', filterId, nature }))
+  }
+  for (const rowId of card.rowIds) {
+    done += has(taskKey({ kind: 'ends', rowId })) + has(taskKey({ kind: 'sweep', rowId, stage: 2 }))
+    for (const nature of neededVariants(plan, plan.rows[rowId])) done += has(taskKey({ kind: 'variant', rowId, nature }))
+  }
+  for (const fixedId of card.fixedIds) done += has(taskKey({ kind: 'fixed', fixedId }))
   return done
 }
 
-/** displaySp 기본값은 계획 시점 SP. 카드 순서는 계획 순서 그대로다. */
-export function assembleTab(plan: TabPlan, results: ResultMap, displaySp: SpTable = plan.mySp): TabView {
-  const pending = pendingTasks(plan, results)
-  const done = progressCount(plan, results)
-  const shell = {
-    tab: plan.tab,
-    rollSteps: plan.rollSteps,
-    source: plan.source,
-    progress: { done, total: done + pending.stage1.length + pending.stage2.length + pending.stage3.length + pending.stage4.length + pending.stage5.length },
-    stage12Done: pending.stage1.length === 0 && pending.stage2.length === 0,
-    complete:
-      pending.stage1.length === 0 && pending.stage2.length === 0 && pending.stage3.length === 0 && pending.stage4.length === 0 && pending.stage5.length === 0,
-    customTargetConflicts: plan.customTargetConflicts,
-    notices: plan.notices,
-  }
-  const empty = { rows: 0, cards: 0, items: [] }
-  if (plan.status.kind !== 'ok') return { ...shell, status: plan.status, cards: [], noChange: empty }
+/** 카드별 조립 캐시 항목. 카드 결과가 바뀌면(invalidate) 통째로 버린다. */
+interface CardMemo {
+  pending: PendingTasks
+  done: number
+  /** 그 표시용 SP로 조립한 카드(SP가 바뀌면 다시) */
+  build?: CardBuild
+  /** 변화 없음 선택지로 다시 조립한 카드(필요할 때만) */
+  kept?: CardBuild
+}
 
-  const ctx: Ctx = { plan, results, displaySp, spSum: STAT_KEYS.reduce((s, k) => s + displaySp[k], 0) }
-  const builds = plan.cards.map((card) => buildCard(ctx, card))
-  const reasons: ErrorReason[] = []
-  const seen = new Set<string>()
-  for (const r of builds.flatMap((b) => b.mySetReasons)) {
-    const k = JSON.stringify([r.code, r.field ?? null, r.message])
-    if (!seen.has(k)) {
-      seen.add(k)
-      reasons.push(r)
+/**
+ * 한 탭 계획의 증분 조립기. 카드 판정은 그 카드 작업 결과에만 기대므로, 결과가 바뀐 카드(invalidate)만 다시 계산하고
+ * 나머지 카드의 남은 작업·진행 수·조립 결과는 재사용한다. 결과 맵을 바꾸는 쪽이 그 작업의 카드를 invalidate해야 한다.
+ */
+export interface TabAssembler {
+  invalidate(cardId: string): void
+  /** pendingTasks(plan, results)와 같은 값(카드 순 → 행 순). only가 있으면 그 카드들만 */
+  pending(results: ResultMap, only?: (cardId: string) => boolean): PendingTasks
+  assemble(results: ResultMap, displaySp?: SpTable): TabView
+}
+
+const sameSp = (a: SpTable, b: SpTable): boolean => STAT_KEYS.every((k) => a[k] === b[k])
+
+export function createTabAssembler(plan: TabPlan): TabAssembler {
+  const memo = new Map<string, CardMemo>()
+  let builtSp: SpTable | null = null
+  const entry = (card: CardSpec, results: ResultMap): CardMemo => {
+    let m = memo.get(card.id)
+    if (m === undefined) {
+      m = { pending: cardPending(plan, card, results), done: cardDone(plan, card, results) }
+      memo.set(card.id, m)
     }
+    return m
   }
-  if (reasons.length > 0) {
-    const status: TabStatus = { kind: 'my-set-error', reasons }
-    return { ...shell, status, cards: [], noChange: empty }
-  }
-  const items = builds.flatMap((b) => b.items)
   return {
-    ...shell,
-    status: plan.status,
-    cards: builds.filter((b) => b.displayed).map((b) => b.view),
-    noChange: { rows: items.length, cards: builds.filter((b) => b.emptyDone).length, items },
+    invalidate(cardId) {
+      memo.delete(cardId)
+    },
+    pending(results, only) {
+      const out = { stage1: [] as RowTask[], stage2: [] as RowTask[], stage3: [] as RowTask[], stage4: [] as RowTask[], stage5: [] as RowTask[] }
+      for (const card of plan.cards) {
+        if (only !== undefined && !only(card.id)) continue
+        const p = entry(card, results).pending
+        for (const k of STAGE_KEYS) for (const t of p[k]) out[k].push(t)
+      }
+      return out
+    },
+    assemble(results, displaySp = plan.mySp) {
+      if (builtSp === null || !sameSp(builtSp, displaySp)) {
+        for (const m of memo.values()) {
+          delete m.build
+          delete m.kept
+        }
+        builtSp = { ...displaySp }
+      }
+      const entries = plan.cards.map((card) => entry(card, results))
+      let done = 0
+      const left = { stage1: 0, stage2: 0, stage3: 0, stage4: 0, stage5: 0 }
+      for (const m of entries) {
+        done += m.done
+        for (const k of STAGE_KEYS) left[k] += m.pending[k].length
+      }
+      const total = done + left.stage1 + left.stage2 + left.stage3 + left.stage4 + left.stage5
+      const stage12Done = left.stage1 === 0 && left.stage2 === 0
+      const shell = {
+        tab: plan.tab,
+        rollSteps: plan.rollSteps,
+        source: plan.source,
+        progress: { done, total },
+        stage12Done,
+        complete: stage12Done && left.stage3 === 0 && left.stage4 === 0 && left.stage5 === 0,
+        customTargetConflicts: plan.customTargetConflicts,
+        notices: plan.notices,
+      }
+      const empty = { rows: 0, cards: 0, items: [] }
+      if (plan.status.kind !== 'ok') return { ...shell, status: plan.status, cards: [], noChange: empty }
+
+      const ctx: Ctx = { plan, results, displaySp, spSum: STAT_KEYS.reduce((sum, k) => sum + displaySp[k], 0) }
+      const first = plan.cards.map((card, i) => {
+        const m = entries[i]
+        m.build ??= buildCard(ctx, card, m.pending)
+        return m.build
+      })
+      // 변화 없음 배분도 선택지: 같은 상대의 다른 카드가 보이면, 1·2단계가 끝났는데 표시 행이 없는 래더 카드를 변화 없음 행과 함께 넣는다.
+      const shown = new Set(first.filter((b) => b.displayed && b.view.opponent.source === 'ladder').map((b) => groupKey(b.view.opponent)))
+      const builds = first.map((b, i) => {
+        const card = plan.cards[i]
+        if (b.displayed || card.opponent.source !== 'ladder' || !b.settled || !shown.has(groupKey(card.opponent))) return b
+        const m = entries[i]
+        m.kept ??= buildCard(ctx, card, m.pending, true)
+        return m.kept.displayed ? m.kept : b
+      })
+      const reasons: ErrorReason[] = []
+      const seen = new Set<string>()
+      for (const r of builds.flatMap((b) => b.mySetReasons)) {
+        const k = JSON.stringify([r.code, r.field ?? null, r.message])
+        if (!seen.has(k)) {
+          seen.add(k)
+          reasons.push(r)
+        }
+      }
+      if (reasons.length > 0) {
+        const status: TabStatus = { kind: 'my-set-error', reasons }
+        return { ...shell, status, cards: [], noChange: empty }
+      }
+      const items = builds.flatMap((b) => b.items)
+      return {
+        ...shell,
+        status: plan.status,
+        cards: builds.filter((b) => b.displayed).map((b) => b.view),
+        noChange: { rows: items.length, cards: builds.filter((b) => b.emptyDone).length, items },
+      }
+    },
   }
+}
+
+/** displaySp 기본값은 계획 시점 SP. 카드 순서는 계획 순서 그대로다(한 번 조립: 캐시 없음). */
+export function assembleTab(plan: TabPlan, results: ResultMap, displaySp: SpTable = plan.mySp): TabView {
+  return createTabAssembler(plan).assemble(results, displaySp)
 }

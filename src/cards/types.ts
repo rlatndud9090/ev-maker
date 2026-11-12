@@ -12,10 +12,8 @@ export type Category = 'physical' | 'special'
 export const CATEGORY_ORDER: readonly Category[] = ['physical', 'special']
 
 export interface DisplayCriteria {
-  /** 묶음 점유율 기준(0~1, 이상이면 카드) */
+  /** 묶음 점유율 기준(0~1, 이상이면 배분 선택지. 상한 없음) */
   bundleShareMin: number
-  /** 포켓몬·분류당 카드 상한(정수 ≥ 1) */
-  cardsPerCategory: number
   /** 상대 랭크 수단 점유율 기준(0~1, 이상) */
   rankShareMin: number
   /** 구애스카프 점유율 기준(0~1, 이상) */
@@ -23,7 +21,6 @@ export interface DisplayCriteria {
 }
 export const DEFAULT_CRITERIA: Readonly<DisplayCriteria> = Object.freeze({
   bundleShareMin: 0.05,
-  cardsPerCategory: 3,
   rankShareMin: 0.1,
   scarfShareMin: 0.1,
 })
@@ -66,6 +63,18 @@ export interface CustomTarget {
   edits: Readonly<Record<string, PresetEdit>>
 }
 
+/**
+ * 사용자가 직접 추가한 래더 상대 배분(목록 밖 타겟은 프리셋이 있어 받지 않는다).
+ * sp 키 = 그 (탭, 분류) 카드의 묶음 키 능력치 전부(각 0~spMaxPerStat 정수). 성격은 키 능력치에 보정 없음.
+ */
+export interface AddedBundle {
+  tab: Tab
+  /** 래더 메타 항목 id */
+  opponentId: string
+  category: Category | null
+  sp: Readonly<Partial<Record<StatId, number>>>
+}
+
 export interface CardInput {
   game: Snapshot
   view: MetaView
@@ -78,6 +87,8 @@ export interface CardInput {
   filters: CardFilters
   /** 추가한 순서 */
   customTargets: readonly CustomTarget[]
+  /** 사용자 추가 배분(추가 순). 없으면 빈 배열 */
+  addedBundles?: readonly AddedBundle[]
 }
 
 export interface ErrorReason {
@@ -234,6 +245,8 @@ export interface BundleSpec {
   representativeSpread?: string
   /** 커스텀만 */
   presetIndex?: PresetIndex
+  /** 래더만: 사용자가 직접 추가한 배분(점유율 없음). 값은 addedBundles 안 추가 순번(0부터) */
+  userAdded?: number
 }
 
 /** 이름은 화면이 src/ui 이름 색인으로 id에서 만든다 */
@@ -419,7 +432,7 @@ export interface RowView {
   /** pending = 판정 전, stale = 드래그로 낡음(칸·경계는 계획 시점 값 그대로) */
   status: 'ok' | 'stale' | 'error' | 'pending'
   error?: ErrorReason
-  /** 커스텀 카드에서만 true(현재·무보정·상승 성격 칸이 모두 같음, 또는 극단 필터에 걸린 기술) */
+  /** 커스텀 카드·변화 없음 선택지 래더 카드에서만 true(현재·무보정·상승 성격 칸이 모두 같음, 또는 극단 필터에 걸린 기술) */
   noChange: boolean
   /** 33칸(스윕이 끝난 ok/stale 행만, 아니면 빈 배열) */
   cells: readonly CellView[]
@@ -460,7 +473,7 @@ export type Headline =
   | { kind: 'row'; rowId: string }
   | { kind: 'error'; reason: ErrorReason }
   | { kind: 'updating' }
-  /** 커스텀 카드: 모든 행이 변화 없음. fixed는 고정 범주 목록 */
+  /** 커스텀 카드·변화 없음 선택지 래더 카드: 모든 행이 변화 없음. fixed는 고정 범주 목록 */
   | { kind: 'no-change'; fixed: readonly string[] }
 export interface CardView {
   id: string
@@ -471,7 +484,7 @@ export interface CardView {
   opponent: OpponentHeader
   category: Category | null
   bundle: BundleSpec
-  /** 표시 행(기본·랭크·스카프·계산 불가 + 커스텀이면 변화 없음 행), 카드 안 순서 */
+  /** 표시 행(기본·랭크·스카프·계산 불가 + 커스텀·변화 없음 선택지 래더 카드면 변화 없음 행), 카드 안 순서 */
   rows: readonly RowView[]
   /** 래더 카드 안에서 뺀 변화 없음 행 수 */
   hiddenNoChangeRows: number
@@ -493,9 +506,9 @@ export interface NoChangeItem {
   fixed: string
 }
 export interface NoChangeSummary {
-  /** 행 N개(극단 필터·내 SP 무관 항목은 1건 = 1행) */
+  /** 목록에서 빠진 변화 없음 행만(변화 없음 선택지로 보이는 카드의 행은 그 카드 rows에 있다). 행 N개(극단 필터·내 SP 무관 항목은 1건 = 1행) */
   rows: number
-  /** 카드 M장(표시 행이 하나도 남지 않은 래더 카드 수) */
+  /** 카드 M장(표시 행이 하나도 남지 않아 목록에서 빠진 래더 카드 수. 변화 없음 선택지로 보이는 카드는 세지 않는다) */
   cards: number
   items: readonly NoChangeItem[]
 }

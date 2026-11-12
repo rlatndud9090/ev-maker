@@ -29,14 +29,14 @@ export function bundleStats(
 }
 
 /**
- * 묶음을 점유율 내림(동률 대표 배분 키 순)으로 정렬해, 기준 이상을 상한까지 낸다.
+ * 묶음을 점유율 내림(동률 대표 배분 키 순)으로 정렬해, 기준 이상을 전부 낸다(상한 없음).
  * 기준 이상이 없으면 최대 묶음 1장을 minority로 낸다. 보존 배분이 없으면 빈 배열.
  */
 export function bundlesOf(
   game: Snapshot,
   entry: MetaEntry,
   keyStats: readonly StatId[],
-  criteria: DisplayCriteria,
+  criteria: Pick<DisplayCriteria, 'bundleShareMin'>,
 ): BundleSpec[] {
   const groups = new Map<string, { stats: BundleStat[]; share: number; rep: { key: string; share: number } }>()
   for (const [spreadKey, share] of entry.spreads.kept) {
@@ -62,7 +62,7 @@ export function bundlesOf(
     minority,
     representativeSpread: b.rep,
   })
-  const passing = all.filter((b) => b.share >= criteria.bundleShareMin).slice(0, criteria.cardsPerCategory)
+  const passing = all.filter((b) => b.share >= criteria.bundleShareMin)
   if (passing.length > 0) return passing.map((b) => toSpec(b, false))
   return all.length > 0 ? [toSpec(all[0], true)] : []
 }

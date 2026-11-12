@@ -15,5 +15,6 @@ export function toCardInput(state: AppState, game: Snapshot, view: MetaView): Ca
     criteria: state.criteria,
     filters: state.filters,
     customTargets: state.customTargets,
+    addedBundles: state.addedBundles,
   }
 }
