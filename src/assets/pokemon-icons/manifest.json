@@ -1,0 +1,2834 @@
+{
+  "entries": {
+    "abomasnow": {
+      "height": 128,
+      "pokeapiId": 460,
+      "sha256": "5eb9d43f3343052d22fe8c86594e26002dd4de1f58b42428afda7fbf3d4918eb",
+      "src": "460",
+      "via": "form",
+      "width": 128
+    },
+    "abomasnowmega": {
+      "height": 128,
+      "pokeapiId": 10060,
+      "sha256": "e9b5785c42ecc18c124d02be56ca62ad26feb0b37aa496b8da0d796ea54239f9",
+      "src": "10060",
+      "via": "form",
+      "width": 128
+    },
+    "absol": {
+      "height": 128,
+      "pokeapiId": 359,
+      "sha256": "f92e39dc8c70ee9c3a0b6d94a4bfccb0eaceeea0fd325a24a650a3ab93d3658c",
+      "src": "359",
+      "via": "form",
+      "width": 128
+    },
+    "absolmega": {
+      "height": 128,
+      "pokeapiId": 10057,
+      "sha256": "f04d971349f4d792a6f1b19541dbfbac5cd5210cbb00e302050724af0b0edad8",
+      "src": "10057",
+      "via": "form",
+      "width": 128
+    },
+    "absolmegaz": {
+      "height": 128,
+      "pokeapiId": 10307,
+      "sha256": "bec0ef9b0b55f55970a65e72c07d327e800db6884e939e29681b39ca1a63952f",
+      "src": "10307",
+      "via": "form",
+      "width": 128
+    },
+    "aegislash": {
+      "height": 128,
+      "pokeapiId": 681,
+      "sha256": "aed233a1fab9d902d54681c424a50346b9e98d4ef0758c0dc8232944a55b831f",
+      "src": "681",
+      "via": "num",
+      "width": 128
+    },
+    "aerodactyl": {
+      "height": 128,
+      "pokeapiId": 142,
+      "sha256": "9616a51497b217231eb27705a3e061ed140c60a81de8d5822f9882a50d9290c3",
+      "src": "142",
+      "via": "form",
+      "width": 128
+    },
+    "aerodactylmega": {
+      "height": 128,
+      "pokeapiId": 10042,
+      "sha256": "50a258e4094a2e96a20c956740134705a13aa1863b6721ec99068c4b8d8115a9",
+      "src": "10042",
+      "via": "form",
+      "width": 128
+    },
+    "aggron": {
+      "height": 128,
+      "pokeapiId": 306,
+      "sha256": "c80ba5ce02182f294421972b71effa0bab1df9ab91572d1ee6fb14de235f3256",
+      "src": "306",
+      "via": "form",
+      "width": 128
+    },
+    "aggronmega": {
+      "height": 128,
+      "pokeapiId": 10053,
+      "sha256": "32aa99a8d3214190a1aaa0c20d6c7f99a8ea6102117660ac132ecf00071f8271",
+      "src": "10053",
+      "via": "form",
+      "width": 128
+    },
+    "alakazam": {
+      "height": 128,
+      "pokeapiId": 65,
+      "sha256": "88276b486a15462e23b5f728669f26ac5ce0200d5779f481132343ca6eac94f2",
+      "src": "65",
+      "via": "form",
+      "width": 128
+    },
+    "alakazammega": {
+      "height": 128,
+      "pokeapiId": 10037,
+      "sha256": "b1f3a042a5ab069836b990099693f7e236183d85440c03b4d4eabcc083273383",
+      "src": "10037",
+      "via": "form",
+      "width": 128
+    },
+    "alcremie": {
+      "height": 128,
+      "pokeapiId": 869,
+      "sha256": "0ec93bc6678cf76c1b6ca403ec3a6153693353753da2e21f89790db7a3d1aeb4",
+      "src": "869",
+      "via": "num",
+      "width": 128
+    },
+    "altaria": {
+      "height": 128,
+      "pokeapiId": 334,
+      "sha256": "c2fff633e34b736661a484fc50646dafb7c0868e0733604469d5047545a87152",
+      "src": "334",
+      "via": "form",
+      "width": 128
+    },
+    "altariamega": {
+      "height": 128,
+      "pokeapiId": 10067,
+      "sha256": "33a04d27febee04e083e20e7f95e3c896be8c21f8df3a7676f6f4fe7addfedcd",
+      "src": "10067",
+      "via": "form",
+      "width": 128
+    },
+    "ampharos": {
+      "height": 128,
+      "pokeapiId": 181,
+      "sha256": "2bb413d1ff01b0d03453b880ca306a0cc6510027e1d46321ce3a6c268703a6b1",
+      "src": "181",
+      "via": "form",
+      "width": 128
+    },
+    "ampharosmega": {
+      "height": 128,
+      "pokeapiId": 10045,
+      "sha256": "2ef519155d3c31bf86f43ce4cd89e3c77cda78d2d477e5ce815d71a755378d73",
+      "src": "10045",
+      "via": "form",
+      "width": 128
+    },
+    "annihilape": {
+      "height": 128,
+      "pokeapiId": 979,
+      "sha256": "db2163a117f068bc8990ee3dd37ebe3835d04509b8bd246efb9ba42b36c22601",
+      "src": "979",
+      "via": "form",
+      "width": 128
+    },
+    "appletun": {
+      "height": 128,
+      "pokeapiId": 842,
+      "sha256": "93070a96943188cdc7c6d8304554443b3b22d1d3d7e759efe2ddd72f56463f73",
+      "src": "842",
+      "via": "form",
+      "width": 128
+    },
+    "araquanid": {
+      "height": 128,
+      "pokeapiId": 752,
+      "sha256": "121ddca09474b0e4d0ff32664ce8a11c5c1f7789c165128bc2d47db194edb325",
+      "src": "752",
+      "via": "form",
+      "width": 128
+    },
+    "arbok": {
+      "height": 128,
+      "pokeapiId": 24,
+      "sha256": "33069ba8f13e85a5942b4b19269e48255b060fbc69ee735dca6752ca9c4bef84",
+      "src": "24",
+      "via": "form",
+      "width": 128
+    },
+    "arboliva": {
+      "height": 128,
+      "pokeapiId": 930,
+      "sha256": "64c9acc8ef467a729bc5320eee90c8d2a860b1f82b1ae9e6d6f0268f965e84a5",
+      "src": "930",
+      "via": "form",
+      "width": 128
+    },
+    "arcanine": {
+      "height": 128,
+      "pokeapiId": 59,
+      "sha256": "fd48a3fa5dc58451eaa0357474c1bd6a95f65b215b3c09c148382b88e7c9dddf",
+      "src": "59",
+      "via": "form",
+      "width": 128
+    },
+    "arcaninehisui": {
+      "height": 128,
+      "pokeapiId": 10230,
+      "sha256": "a786c6cb0294f3bc5ea4690bfba637fd17527de897ffc09a170be45bfd779c5a",
+      "src": "10230",
+      "via": "form",
+      "width": 128
+    },
+    "archaludon": {
+      "height": 128,
+      "pokeapiId": 1018,
+      "sha256": "6d2cc80b8a4a2470d85b6ce15513b7ad60b60ac9a844308a8fb1c780ff803e1a",
+      "src": "1018",
+      "via": "form",
+      "width": 128
+    },
+    "ariados": {
+      "height": 128,
+      "pokeapiId": 168,
+      "sha256": "5dc639d284adb800f1044bd6b7eec90f7080cdb05b4e56e712455489d978897e",
+      "src": "168",
+      "via": "form",
+      "width": 128
+    },
+    "armarouge": {
+      "height": 128,
+      "pokeapiId": 936,
+      "sha256": "bb03201b207577ed6da2285df798b5dfb6513d393d98d131933cedfc63f8874d",
+      "src": "936",
+      "via": "form",
+      "width": 128
+    },
+    "aromatisse": {
+      "height": 128,
+      "pokeapiId": 683,
+      "sha256": "ee6db11e54f2050c5ae0e91ac88970112c01703a30280499e5d4035fa50ac6c5",
+      "src": "683",
+      "via": "form",
+      "width": 128
+    },
+    "audino": {
+      "height": 128,
+      "pokeapiId": 531,
+      "sha256": "524175fcbc7cdddb646dcb4afaccd43dfaee04504d45e94f71affbee685d43c2",
+      "src": "531",
+      "via": "form",
+      "width": 128
+    },
+    "audinomega": {
+      "height": 128,
+      "pokeapiId": 10069,
+      "sha256": "a9ee931911009c6e60a572168c4bbb18587b9336e1cf0e072b6e66d4fa98df30",
+      "src": "10069",
+      "via": "form",
+      "width": 128
+    },
+    "aurorus": {
+      "height": 128,
+      "pokeapiId": 699,
+      "sha256": "a271ad3d40281b21698ecc2905f898a707e3a791ccd994575af01924119d1cb9",
+      "src": "699",
+      "via": "form",
+      "width": 128
+    },
+    "avalugg": {
+      "height": 128,
+      "pokeapiId": 713,
+      "sha256": "b731a88717b9dd2db96fd30f9baac24617d70a35716c822ccb77ad85d5d441c3",
+      "src": "713",
+      "via": "form",
+      "width": 128
+    },
+    "avalugghisui": {
+      "height": 128,
+      "pokeapiId": 10243,
+      "sha256": "25a6cd23a1981a05b8b9a571427acf3941d3d079411e960f326015f8515c8852",
+      "src": "10243",
+      "via": "form",
+      "width": 128
+    },
+    "azumarill": {
+      "height": 128,
+      "pokeapiId": 184,
+      "sha256": "f0ddb85e8c592f07706d91b544a83241ab5fe8f5f516c75f9883ddf49fbdccb1",
+      "src": "184",
+      "via": "form",
+      "width": 128
+    },
+    "banette": {
+      "height": 128,
+      "pokeapiId": 354,
+      "sha256": "6020ccbfd9e255b218c19fba39a1f34720f29c9e1368775a5b4b81f774cdd08e",
+      "src": "354",
+      "via": "form",
+      "width": 128
+    },
+    "banettemega": {
+      "height": 128,
+      "pokeapiId": 10056,
+      "sha256": "c2a50d8460d60f73a0e186b8672873cc9399c3611b4a8c7f2648ffc7a35ab20b",
+      "src": "10056",
+      "via": "form",
+      "width": 128
+    },
+    "barbaracle": {
+      "height": 128,
+      "pokeapiId": 689,
+      "sha256": "1d6c1f9ae5482c541051ef9b10967e169318a88c203989bb150394a91294be94",
+      "src": "689",
+      "via": "form",
+      "width": 128
+    },
+    "barbaraclemega": {
+      "height": 128,
+      "pokeapiId": 10298,
+      "sha256": "50d380da1a1a57494ff27951b431f5a861f21e67eebfa658acd5990c5781b2c4",
+      "src": "10298",
+      "via": "form",
+      "width": 128
+    },
+    "basculegion": {
+      "height": 128,
+      "pokeapiId": 902,
+      "sha256": "e2c4a3e1de9634552631620a9711691a77a4d4c053817fbe2b9a04d8ae5fc8a5",
+      "src": "902",
+      "via": "num",
+      "width": 128
+    },
+    "basculegionf": {
+      "height": 128,
+      "pokeapiId": 10248,
+      "sha256": "26de5a0ed9843f7c4313779e40c34116bacbb9991833a3b6820ebed43ffcf838",
+      "src": "10248",
+      "via": "hand",
+      "width": 128
+    },
+    "bastiodon": {
+      "height": 128,
+      "pokeapiId": 411,
+      "sha256": "2883dd8cee533b40d2f423a10d0eabbe0351d4666643013cbaf14130c995d60c",
+      "src": "411",
+      "via": "form",
+      "width": 128
+    },
+    "baxcalibur": {
+      "height": 128,
+      "pokeapiId": 998,
+      "sha256": "a5bb21273a3208edb52b95065c739360a05e253766d9e13d849898d593cb43d1",
+      "src": "998",
+      "via": "form",
+      "width": 128
+    },
+    "baxcaliburmega": {
+      "height": 128,
+      "pokeapiId": 10325,
+      "sha256": "0bf2355d559d65fced374cb4e1497cb62e0c6f16c5aa7b3ff1209a3b62dfe75f",
+      "src": "10325",
+      "via": "form",
+      "width": 128
+    },
+    "beartic": {
+      "height": 128,
+      "pokeapiId": 614,
+      "sha256": "e52b1815d92be98b07cdb915cb29e0349edb404f8ea7aedc202812e848a6f6dd",
+      "src": "614",
+      "via": "form",
+      "width": 128
+    },
+    "beedrill": {
+      "height": 128,
+      "pokeapiId": 15,
+      "sha256": "5e8e2fca1578c81f8a96f95017c50044e7ddb9e14d5f9eb6fa2935971f3d347b",
+      "src": "15",
+      "via": "form",
+      "width": 128
+    },
+    "beedrillmega": {
+      "height": 128,
+      "pokeapiId": 10090,
+      "sha256": "9533d1ff2ebc39c668838959c1c8fab87c729507a2c90d5fcadada6f76a3066f",
+      "src": "10090",
+      "via": "form",
+      "width": 128
+    },
+    "bellibolt": {
+      "height": 128,
+      "pokeapiId": 939,
+      "sha256": "b89d5ea0242e09404dc8f56dba6833e1e79d1f4fe2101cf8d6cf02655b8ac0dc",
+      "src": "939",
+      "via": "form",
+      "width": 128
+    },
+    "blastoise": {
+      "height": 128,
+      "pokeapiId": 9,
+      "sha256": "b99ed9329850b3f04b1bcde1784aa36b5ff4e60f0c91be26246d33beccec5447",
+      "src": "9",
+      "via": "form",
+      "width": 128
+    },
+    "blastoisemega": {
+      "height": 128,
+      "pokeapiId": 10036,
+      "sha256": "d7a79b8be7dc226d7f5f9150da7e3967417a2aac101f90f00e8c59ef07bd3179",
+      "src": "10036",
+      "via": "form",
+      "width": 128
+    },
+    "blaziken": {
+      "height": 128,
+      "pokeapiId": 257,
+      "sha256": "dfb95b91d9bd9ea3c32af4f28e16f53ee1613c0d2f9be0632cc570483cebbcb1",
+      "src": "257",
+      "via": "form",
+      "width": 128
+    },
+    "blazikenmega": {
+      "height": 128,
+      "pokeapiId": 10050,
+      "sha256": "2307ebff4a73b5c4249db98f69c21e6c0749a68ec5621ed6c116c7a6f83a3813",
+      "src": "10050",
+      "via": "form",
+      "width": 128
+    },
+    "camerupt": {
+      "height": 128,
+      "pokeapiId": 323,
+      "sha256": "59e5eef0f9814c8c55a5fc89c56d27a30a85babf8a257436af1ba81b0ea5fa1e",
+      "src": "323",
+      "via": "form",
+      "width": 128
+    },
+    "cameruptmega": {
+      "height": 128,
+      "pokeapiId": 10087,
+      "sha256": "6de91a5895b884cd42a13855a003f55a6e8d55d677cdfaf27aa76ac60fade405",
+      "src": "10087",
+      "via": "form",
+      "width": 128
+    },
+    "castform": {
+      "height": 128,
+      "pokeapiId": 351,
+      "sha256": "d573c6b5db3f8a43197df500ac23a071f298762db35370d48895378bfc337203",
+      "src": "351",
+      "via": "form",
+      "width": 128
+    },
+    "ceruledge": {
+      "height": 128,
+      "pokeapiId": 937,
+      "sha256": "355c74986e4ce81d020c5bd4080d713cd5fde7b8067234dcbc9544a855435c2a",
+      "src": "937",
+      "via": "form",
+      "width": 128
+    },
+    "chandelure": {
+      "height": 128,
+      "pokeapiId": 609,
+      "sha256": "1cf1651ae182f17a337806a647ac116117797989816b5d10d4d16570b0070996",
+      "src": "609",
+      "via": "form",
+      "width": 128
+    },
+    "chandeluremega": {
+      "height": 128,
+      "pokeapiId": 10291,
+      "sha256": "7546ea871de7294a3380c6bcd5c0f5d6571c7e2a172abb41c499515f339da117",
+      "src": "10291",
+      "via": "form",
+      "width": 128
+    },
+    "charizard": {
+      "height": 128,
+      "pokeapiId": 6,
+      "sha256": "0469fe60c9f9af7f60576b4d34aabfbdee30b1624d984cf8902be8cac0c4aa18",
+      "src": "6",
+      "via": "form",
+      "width": 128
+    },
+    "charizardmegax": {
+      "height": 128,
+      "pokeapiId": 10034,
+      "sha256": "01202db41eff28ee9d1eaad4bffacd099fd212c952fed0b74519b978223e4b71",
+      "src": "10034",
+      "via": "form",
+      "width": 128
+    },
+    "charizardmegay": {
+      "height": 128,
+      "pokeapiId": 10035,
+      "sha256": "ad10a58f04504ff6da76e885b71fc742b5270c43889e289db2879071c600612f",
+      "src": "10035",
+      "via": "form",
+      "width": 128
+    },
+    "chesnaught": {
+      "height": 128,
+      "pokeapiId": 652,
+      "sha256": "e6decda39a06ab6150fea5b45ec28754ab2e8a2b6447a438022bf718e9424a4d",
+      "src": "652",
+      "via": "form",
+      "width": 128
+    },
+    "chesnaughtmega": {
+      "height": 128,
+      "pokeapiId": 10292,
+      "sha256": "8e9a8258bfa8c24e80a7bb4ce6f4783d19de89c0e247923033379de95937dd35",
+      "src": "10292",
+      "via": "form",
+      "width": 128
+    },
+    "chimecho": {
+      "height": 128,
+      "pokeapiId": 358,
+      "sha256": "94da91043a1d42966e5d48955c754faab2f79395d4e0ff23aac840cd8f92383c",
+      "src": "358",
+      "via": "form",
+      "width": 128
+    },
+    "chimechomega": {
+      "height": 128,
+      "pokeapiId": 10306,
+      "sha256": "dad0ab2c1ac780582d4297e7c1fa6310cbda37f5b2da70c8bd8243e45e005cae",
+      "src": "10306",
+      "via": "form",
+      "width": 128
+    },
+    "cinderace": {
+      "height": 128,
+      "pokeapiId": 815,
+      "sha256": "84e90908352fa25088e58fbeeb6728b8552f4569df6ba6b53031abfdf657bf79",
+      "src": "815",
+      "via": "form",
+      "width": 128
+    },
+    "clawitzer": {
+      "height": 128,
+      "pokeapiId": 693,
+      "sha256": "209087d0ec89476680eedc0fb0cd860b6536d9c7175acda1cdd895c7fcc25912",
+      "src": "693",
+      "via": "form",
+      "width": 128
+    },
+    "clefable": {
+      "height": 128,
+      "pokeapiId": 36,
+      "sha256": "7e51ab03328f86645ad6f45bb1d62940d165a1bafffd0b3e873eebe5c424d19a",
+      "src": "36",
+      "via": "form",
+      "width": 128
+    },
+    "clefablemega": {
+      "height": 128,
+      "pokeapiId": 10278,
+      "sha256": "2503d8e0917973b0fd2f08ff40918d3672a8720c5290b04eb94b9b5bb7c7661b",
+      "src": "10278",
+      "via": "form",
+      "width": 128
+    },
+    "cofagrigus": {
+      "height": 128,
+      "pokeapiId": 563,
+      "sha256": "48c2e95aa345b42210781dbed4172c4f2f84c4e3be2405606d263e6c0346b434",
+      "src": "563",
+      "via": "form",
+      "width": 128
+    },
+    "conkeldurr": {
+      "height": 128,
+      "pokeapiId": 534,
+      "sha256": "19636e165bb95721e4447e86c8c01652e0af1de12a0016fe14cd10268d473bcb",
+      "src": "534",
+      "via": "form",
+      "width": 128
+    },
+    "corviknight": {
+      "height": 128,
+      "pokeapiId": 823,
+      "sha256": "d0f36f62fb21b87742bef209e92499a47813882ad70996b6731bff082101c84d",
+      "src": "823",
+      "via": "form",
+      "width": 128
+    },
+    "crabominable": {
+      "height": 128,
+      "pokeapiId": 740,
+      "sha256": "7517d3e47f9d977d9d5697f9ed64e2ed699e826a3390d0c4957a4986d16d6f5d",
+      "src": "740",
+      "via": "form",
+      "width": 128
+    },
+    "crabominablemega": {
+      "height": 128,
+      "pokeapiId": 10315,
+      "sha256": "391cee8b884c9046cdf0aaa33be4e3d4adef264b0b09477624acd9241916cfab",
+      "src": "10315",
+      "via": "form",
+      "width": 128
+    },
+    "decidueye": {
+      "height": 128,
+      "pokeapiId": 724,
+      "sha256": "d3a4a67440e9510a2e24b00a86a7dc44f011c7a4784d531b0d6e2ac033714891",
+      "src": "724",
+      "via": "form",
+      "width": 128
+    },
+    "decidueyehisui": {
+      "height": 128,
+      "pokeapiId": 10244,
+      "sha256": "109eb5db244f53d392a130ff50d935f3f422baf8b2f056ba9132628f946759e0",
+      "src": "10244",
+      "via": "form",
+      "width": 128
+    },
+    "dedenne": {
+      "height": 128,
+      "pokeapiId": 702,
+      "sha256": "f9d8745c0d9c0877ee3f12d00f0569539a5bdd39b06c1a48d2fd67a06b04f043",
+      "src": "702",
+      "via": "form",
+      "width": 128
+    },
+    "delphox": {
+      "height": 128,
+      "pokeapiId": 655,
+      "sha256": "55baee693656f71a8df1319566b712159a2d25caf73bd0c7eb0f0db2faf69ef6",
+      "src": "655",
+      "via": "form",
+      "width": 128
+    },
+    "delphoxmega": {
+      "height": 128,
+      "pokeapiId": 10293,
+      "sha256": "d663ac94ccda6ecdc20447b3ea23c778bbc0d81e2be50a4aa275aaa8c403b249",
+      "src": "10293",
+      "via": "form",
+      "width": 128
+    },
+    "diggersby": {
+      "height": 128,
+      "pokeapiId": 660,
+      "sha256": "e183e7933011e12dc40a24edffbbaacdf7be05b8839374c089ea3480393d4fad",
+      "src": "660",
+      "via": "form",
+      "width": 128
+    },
+    "ditto": {
+      "height": 128,
+      "pokeapiId": 132,
+      "sha256": "8d0ddf2a89c8e101bb72dd1461f7bff0aa19df226048ae87765cf26dd110ae36",
+      "src": "132",
+      "via": "form",
+      "width": 128
+    },
+    "dragalge": {
+      "height": 128,
+      "pokeapiId": 691,
+      "sha256": "451a33d96067db28c3e3ccf9a622dac32c8f3166ec03884d400da4c5874deab1",
+      "src": "691",
+      "via": "form",
+      "width": 128
+    },
+    "dragalgemega": {
+      "height": 128,
+      "pokeapiId": 10299,
+      "sha256": "1cc6c4cebb7305fdf4da2584e32de5b2f9d1a3429042e8027556edab2b084bfa",
+      "src": "10299",
+      "via": "form",
+      "width": 128
+    },
+    "dragapult": {
+      "height": 128,
+      "pokeapiId": 887,
+      "sha256": "4471c60c1c0617f123bd1ef03fa9803509ba9105763dd4624760c0766bca7483",
+      "src": "887",
+      "via": "form",
+      "width": 128
+    },
+    "dragonite": {
+      "height": 128,
+      "pokeapiId": 149,
+      "sha256": "31e58f7dc8842d1c33fe98d12516571b59b9dbe748f5ebf8055f4b32f2a40add",
+      "src": "149",
+      "via": "form",
+      "width": 128
+    },
+    "dragonitemega": {
+      "height": 128,
+      "pokeapiId": 10281,
+      "sha256": "e768b241eee2fa4109ea3377ecf24bf0fcd9b78df158d56765354de9317489b6",
+      "src": "10281",
+      "via": "form",
+      "width": 128
+    },
+    "drampa": {
+      "height": 128,
+      "pokeapiId": 780,
+      "sha256": "23c7d9dec45403dd5f91e01c06069330be84b7c608c71fcaed87e58bb247aefe",
+      "src": "780",
+      "via": "form",
+      "width": 128
+    },
+    "drampamega": {
+      "height": 128,
+      "pokeapiId": 10302,
+      "sha256": "28cb7269eb4dfe1216b1c18501a97a9aff83e19225f590fc5044c82ad9121659",
+      "src": "10302",
+      "via": "form",
+      "width": 128
+    },
+    "eelektross": {
+      "height": 128,
+      "pokeapiId": 604,
+      "sha256": "091703856ba12a1dae4235dd98e2156c94b7055bb3c2141fa7435ae1d4f3a0c9",
+      "src": "604",
+      "via": "form",
+      "width": 128
+    },
+    "eelektrossmega": {
+      "height": 128,
+      "pokeapiId": 10290,
+      "sha256": "d468c73703bea8b6a962aeac93f6b75081c7a575acd9060f102f543d72d7f1c5",
+      "src": "10290",
+      "via": "form",
+      "width": 128
+    },
+    "emboar": {
+      "height": 128,
+      "pokeapiId": 500,
+      "sha256": "5e821d0d4b585d3bcab3f19493fd3eee62cd60d2ed26889b6846e9c2ede168f1",
+      "src": "500",
+      "via": "form",
+      "width": 128
+    },
+    "emboarmega": {
+      "height": 128,
+      "pokeapiId": 10286,
+      "sha256": "bca0d60b28c5fd5bdb3dbf156c49a23510dbcbdb2d5152c5eda8f2a5566fb94c",
+      "src": "10286",
+      "via": "form",
+      "width": 128
+    },
+    "emolga": {
+      "height": 128,
+      "pokeapiId": 587,
+      "sha256": "fead49b692a03258afde4c6a58f1a702e0d343fbe49da50d52d597c71d2acd2e",
+      "src": "587",
+      "via": "form",
+      "width": 128
+    },
+    "empoleon": {
+      "height": 128,
+      "pokeapiId": 395,
+      "sha256": "133f1d07e1634970e4f10f726782220bf9f8dd2028008e5c61e23379d9dab96a",
+      "src": "395",
+      "via": "form",
+      "width": 128
+    },
+    "espathra": {
+      "height": 128,
+      "pokeapiId": 956,
+      "sha256": "4e1810b5fa5075aa54d881bf7c6374f19dcf2fcb377fb515ee45e4f5b5bcccee",
+      "src": "956",
+      "via": "form",
+      "width": 128
+    },
+    "espeon": {
+      "height": 128,
+      "pokeapiId": 196,
+      "sha256": "dc65a6b1c5ed96b34607b4f0b6a6a157dbc7c52d49e7a2081479802f3b1c10be",
+      "src": "196",
+      "via": "form",
+      "width": 128
+    },
+    "excadrill": {
+      "height": 128,
+      "pokeapiId": 530,
+      "sha256": "0d688c2ce306567ac364ee85c7dde40402ae7cb4b0532e0ba5716312db653bfa",
+      "src": "530",
+      "via": "form",
+      "width": 128
+    },
+    "excadrillmega": {
+      "height": 128,
+      "pokeapiId": 10287,
+      "sha256": "c5abce6648471c8c9eaa16557d48c7e4ae2564243f6f68e99ec07ef08ae43597",
+      "src": "10287",
+      "via": "form",
+      "width": 128
+    },
+    "falinks": {
+      "height": 128,
+      "pokeapiId": 870,
+      "sha256": "51263f3848cac11c741d9ddf1ce8c93246da72bf306402c6609734b38f71e16a",
+      "src": "870",
+      "via": "form",
+      "width": 128
+    },
+    "falinksmega": {
+      "height": 128,
+      "pokeapiId": 10303,
+      "sha256": "21d2e549b93177e2c56eab4deb63c54be421d6a346e1fd313f6032d7bc4886c8",
+      "src": "10303",
+      "via": "form",
+      "width": 128
+    },
+    "farfetchd": {
+      "height": 128,
+      "pokeapiId": 83,
+      "sha256": "6416ffc8fe33758a06c1c635c33314cd4f9af37537fa5e7d76276727bac98e76",
+      "src": "83",
+      "via": "form",
+      "width": 128
+    },
+    "farigiraf": {
+      "height": 128,
+      "pokeapiId": 981,
+      "sha256": "1a2ab6fd398bd251dd7fd01c91539ce44bda32df29360a21bfe5d022b2c4f197",
+      "src": "981",
+      "via": "form",
+      "width": 128
+    },
+    "feraligatr": {
+      "height": 128,
+      "pokeapiId": 160,
+      "sha256": "c6081f5c0591b1644b2a66e0406958ec816c9327fc9a24058e1938b0fc5fa3b7",
+      "src": "160",
+      "via": "form",
+      "width": 128
+    },
+    "feraligatrmega": {
+      "height": 128,
+      "pokeapiId": 10283,
+      "sha256": "63e79438bb6d2b0ad993918941d36378a997e6dad37669f05a5a33cf1cfe793c",
+      "src": "10283",
+      "via": "form",
+      "width": 128
+    },
+    "flapple": {
+      "height": 128,
+      "pokeapiId": 841,
+      "sha256": "a2b98d14af3e28e74a05cea6ef16b5effe1bb03c3514f7827e4e219dcb8d6927",
+      "src": "841",
+      "via": "form",
+      "width": 128
+    },
+    "flareon": {
+      "height": 128,
+      "pokeapiId": 136,
+      "sha256": "cffe90e097f05058ee612c98a48a415f6bc3c3a672e9c6321ad35daa137ac12f",
+      "src": "136",
+      "via": "form",
+      "width": 128
+    },
+    "floetteeternal": {
+      "height": 128,
+      "pokeapiId": 10061,
+      "sha256": "69e010716277a2a0049e90c745b62719b928130bc3f23a74d519c571e6b82645",
+      "src": "10061",
+      "via": "form",
+      "width": 128
+    },
+    "floettemega": {
+      "height": 128,
+      "pokeapiId": 10296,
+      "sha256": "07eaa55c97418ad9973f9a5e3bab2e30c9c8d3fc521487c2d2256b94dd26f5a4",
+      "src": "10296",
+      "via": "form",
+      "width": 128
+    },
+    "florges": {
+      "height": 128,
+      "pokeapiId": 671,
+      "sha256": "bf1475da251dc0e1d80618f1c80e1f399568484ea0b4e8afb62824bb5c85f657",
+      "src": "671",
+      "via": "num",
+      "width": 128
+    },
+    "forretress": {
+      "height": 128,
+      "pokeapiId": 205,
+      "sha256": "ed2112106772183c16630980434b5cbd111ebfb08ab887afaa0edfac918e3f5e",
+      "src": "205",
+      "via": "form",
+      "width": 128
+    },
+    "froslass": {
+      "height": 128,
+      "pokeapiId": 478,
+      "sha256": "fd6848b98aa05efdebc6c4cd240941c19e5caa3545017a9ab8b81b5818f05046",
+      "src": "478",
+      "via": "form",
+      "width": 128
+    },
+    "froslassmega": {
+      "height": 128,
+      "pokeapiId": 10285,
+      "sha256": "c5ce2d5c397a22a9cd81ca4eeaf7e0ce459704c3603fd10b424b4092fce77a60",
+      "src": "10285",
+      "via": "form",
+      "width": 128
+    },
+    "furfrou": {
+      "height": 128,
+      "pokeapiId": 676,
+      "sha256": "29cb99689454cfd65506d6dcfe0611d28b1236b9ed730cb849f4967994b02f03",
+      "src": "676",
+      "via": "num",
+      "width": 128
+    },
+    "gallade": {
+      "height": 128,
+      "pokeapiId": 475,
+      "sha256": "7ff224b9980abac405b180bf7b9ce1e9ccf3176cd4fabec4042f7d0ba18c2c85",
+      "src": "475",
+      "via": "form",
+      "width": 128
+    },
+    "gallademega": {
+      "height": 128,
+      "pokeapiId": 10068,
+      "sha256": "0a8a6c90d2923fabb7184ed067805a20896fda5ab99caefa2ca57dc57d929d11",
+      "src": "10068",
+      "via": "form",
+      "width": 128
+    },
+    "garbodor": {
+      "height": 128,
+      "pokeapiId": 569,
+      "sha256": "bf11c57897e705f9062d82b5793516cc72e60f980b8c5ad03800094c2a1adee1",
+      "src": "569",
+      "via": "form",
+      "width": 128
+    },
+    "garchomp": {
+      "height": 128,
+      "pokeapiId": 445,
+      "sha256": "498cc49476340e461e2e4122fdc7b33495b271c63ac436209146f82e07f7f7fb",
+      "src": "445",
+      "via": "form",
+      "width": 128
+    },
+    "garchompmega": {
+      "height": 128,
+      "pokeapiId": 10058,
+      "sha256": "dda20e7d34368fc4fedd5cb4ec099ec70a694c182657d1ba25aa874b8c6f4a79",
+      "src": "10058",
+      "via": "form",
+      "width": 128
+    },
+    "garchompmegaz": {
+      "height": 128,
+      "pokeapiId": 10309,
+      "sha256": "b43681a389493bec6dc57a28062e178d51ddf64e05a9bacef18dc8bad59662c1",
+      "src": "10309",
+      "via": "form",
+      "width": 128
+    },
+    "gardevoir": {
+      "height": 128,
+      "pokeapiId": 282,
+      "sha256": "602f41e9a1cb1efacd3884a3afa8b3197605b30af038b415aac88714197ad372",
+      "src": "282",
+      "via": "form",
+      "width": 128
+    },
+    "gardevoirmega": {
+      "height": 128,
+      "pokeapiId": 10051,
+      "sha256": "e37e7d1d02bfed8dcdad09214acb39e45c730af91afbdc19cb5ee3f8e989796f",
+      "src": "10051",
+      "via": "form",
+      "width": 128
+    },
+    "garganacl": {
+      "height": 128,
+      "pokeapiId": 934,
+      "sha256": "3391b0d78f5ed1b9f9a417e721b0255149cd045c5409a825717fb1ad7770f8e5",
+      "src": "934",
+      "via": "form",
+      "width": 128
+    },
+    "gengar": {
+      "height": 128,
+      "pokeapiId": 94,
+      "sha256": "7e1ea82f4326027d50ea91bad9392a117dc37456d95f33ff42bafa7c90cbfb40",
+      "src": "94",
+      "via": "form",
+      "width": 128
+    },
+    "gengarmega": {
+      "height": 128,
+      "pokeapiId": 10038,
+      "sha256": "d5fb6639661d827d276592684ef90bc30d1b4c1b6246c9c4a87ccfb9df638bec",
+      "src": "10038",
+      "via": "form",
+      "width": 128
+    },
+    "gholdengo": {
+      "height": 128,
+      "pokeapiId": 1000,
+      "sha256": "f29202716aff6d6221cdf1cdc4d53598297a52cb09e37862fe13c1f4260a1ea3",
+      "src": "1000",
+      "via": "form",
+      "width": 128
+    },
+    "glaceon": {
+      "height": 128,
+      "pokeapiId": 471,
+      "sha256": "86145f49cf35076592e780c797c8798c75efa889e7e8905fef61c39e5e062f0c",
+      "src": "471",
+      "via": "form",
+      "width": 128
+    },
+    "glalie": {
+      "height": 128,
+      "pokeapiId": 362,
+      "sha256": "0edf86758d20a5de7450da8f738e506588668e6bfb8349d1362985c3075079e5",
+      "src": "362",
+      "via": "form",
+      "width": 128
+    },
+    "glaliemega": {
+      "height": 128,
+      "pokeapiId": 10074,
+      "sha256": "0ccd4039d6e32900cc96c35f0076827f92f9cf0d685e5cf177ecec0e679703a5",
+      "src": "10074",
+      "via": "form",
+      "width": 128
+    },
+    "glimmora": {
+      "height": 128,
+      "pokeapiId": 970,
+      "sha256": "07a4ecac16e4488597b86dc5017fd48d2cbb54baf49a9cf264366fecc911657e",
+      "src": "970",
+      "via": "form",
+      "width": 128
+    },
+    "glimmoramega": {
+      "height": 128,
+      "pokeapiId": 10321,
+      "sha256": "f9a5f17325c1293e7245bfc2735deabf8e725b94afed7f787edf097310b8f103",
+      "src": "10321",
+      "via": "form",
+      "width": 128
+    },
+    "gliscor": {
+      "height": 128,
+      "pokeapiId": 472,
+      "sha256": "c2aaa72f109f51d33005f7a718cd400c75e4cf13f6b21cc889b9ca1fa83548c5",
+      "src": "472",
+      "via": "form",
+      "width": 128
+    },
+    "gogoat": {
+      "height": 128,
+      "pokeapiId": 673,
+      "sha256": "d902e79818b6ce0afabdf710d6647916836ebba7799915b53ad8f8e03226e60e",
+      "src": "673",
+      "via": "form",
+      "width": 128
+    },
+    "golisopod": {
+      "height": 128,
+      "pokeapiId": 768,
+      "sha256": "0aa2454ab12046e3bca90f3dc6fd10ce24036b92a23622325bda12ca9f8c4f0d",
+      "src": "768",
+      "via": "form",
+      "width": 128
+    },
+    "golisopodmega": {
+      "height": 128,
+      "pokeapiId": 10316,
+      "sha256": "f2bb8ee8eae7664d3bbfca328a535946166f88d3198add6d6873c903eebdace9",
+      "src": "10316",
+      "via": "form",
+      "width": 128
+    },
+    "golurk": {
+      "height": 128,
+      "pokeapiId": 623,
+      "sha256": "d17fcd3ea9d8aecdfa2bce4124dfb7f78f6ed8d00fb3c94f52a373a3dcdbd2c4",
+      "src": "623",
+      "via": "form",
+      "width": 128
+    },
+    "golurkmega": {
+      "height": 128,
+      "pokeapiId": 10313,
+      "sha256": "57e8fecd8818c72edf47661930a8de778e35dcbb6c68aa03642caf295dcf6ebf",
+      "src": "10313",
+      "via": "form",
+      "width": 128
+    },
+    "goodra": {
+      "height": 128,
+      "pokeapiId": 706,
+      "sha256": "100720845f691585857304fe0c67ee4f00d2a64c538992d51646de5f1b404abc",
+      "src": "706",
+      "via": "form",
+      "width": 128
+    },
+    "goodrahisui": {
+      "height": 128,
+      "pokeapiId": 10242,
+      "sha256": "a573f4dc5746dbd7294b90707313170a2da46e1b531f7ec35b5c9974505ac6e8",
+      "src": "10242",
+      "via": "form",
+      "width": 128
+    },
+    "gourgeist": {
+      "height": 128,
+      "pokeapiId": 711,
+      "sha256": "7ba1b3b6cf6fe90c440e86b85be610d2217b82b6da3ef15d3f08be570b57817e",
+      "src": "711",
+      "via": "num",
+      "width": 128
+    },
+    "gourgeistlarge": {
+      "height": 128,
+      "pokeapiId": 10031,
+      "sha256": "0edf057b44b1c5fbb193e850fb17930338bea87014c74b4d658b53619d336e64",
+      "src": "10031",
+      "via": "form",
+      "width": 128
+    },
+    "gourgeistsmall": {
+      "height": 128,
+      "pokeapiId": 10030,
+      "sha256": "7f977d2a1b4694d669d2d316d08eaa9a873b0d82a25d2d8e09b5920fe2920824",
+      "src": "10030",
+      "via": "form",
+      "width": 128
+    },
+    "gourgeistsuper": {
+      "height": 128,
+      "pokeapiId": 10032,
+      "sha256": "fdec076ea5c4a2dd5f06c003ffb5a400504c0713d9b2116f180a51dc7d81817d",
+      "src": "10032",
+      "via": "form",
+      "width": 128
+    },
+    "grapploct": {
+      "height": 128,
+      "pokeapiId": 853,
+      "sha256": "04d2c8f22de6aeff1ece7d14ae4d41a732173b29c5321243005293543cd5026d",
+      "src": "853",
+      "via": "form",
+      "width": 128
+    },
+    "greninja": {
+      "height": 128,
+      "pokeapiId": 658,
+      "sha256": "5e955a273000302f1eeb1df0eeff6d6785780bd496985e0156fcae442c109fe3",
+      "src": "658",
+      "via": "form",
+      "width": 128
+    },
+    "greninjamega": {
+      "height": 128,
+      "pokeapiId": 10294,
+      "sha256": "79120806192bb90e15f184f0f4c1f07de5deb95bac111f9e0032d2ff3319ac84",
+      "src": "10294",
+      "via": "form",
+      "width": 128
+    },
+    "grimmsnarl": {
+      "height": 128,
+      "pokeapiId": 861,
+      "sha256": "4cc060a154deeb1e02e517c612b6313ac764ada40be710b639251306638d0ad9",
+      "src": "861",
+      "via": "form",
+      "width": 128
+    },
+    "gyarados": {
+      "height": 128,
+      "pokeapiId": 130,
+      "sha256": "ae4104ec3c8af289f2f6d722e76eab7527778b7af3c7543729c915a97a637ce2",
+      "src": "130",
+      "via": "form",
+      "width": 128
+    },
+    "gyaradosmega": {
+      "height": 128,
+      "pokeapiId": 10041,
+      "sha256": "f621f72142c921cd6429812881f7f34c09b030c5ff90b7b5ccb9bba49fdf5bf7",
+      "src": "10041",
+      "via": "form",
+      "width": 128
+    },
+    "hatterene": {
+      "height": 128,
+      "pokeapiId": 858,
+      "sha256": "3d16a0992a3f281b2d120513ac05776bbd09eb9a50687a48a4a1f3c5272458c0",
+      "src": "858",
+      "via": "form",
+      "width": 128
+    },
+    "hawlucha": {
+      "height": 128,
+      "pokeapiId": 701,
+      "sha256": "9c072bc06dc1bc859dd3c9383179fff2e0f348af0437956c498ea088398170db",
+      "src": "701",
+      "via": "form",
+      "width": 128
+    },
+    "hawluchamega": {
+      "height": 128,
+      "pokeapiId": 10300,
+      "sha256": "2d5315836523380a50911091f36794158a195499285f36dba1c752664142f169",
+      "src": "10300",
+      "via": "form",
+      "width": 128
+    },
+    "heliolisk": {
+      "height": 128,
+      "pokeapiId": 695,
+      "sha256": "1fa60c8b634e0ba3aee0b01896111598f2fc8a1570c01d84d67cf9603bfaca92",
+      "src": "695",
+      "via": "form",
+      "width": 128
+    },
+    "heracross": {
+      "height": 128,
+      "pokeapiId": 214,
+      "sha256": "8442fd90d56093bbed1a3180393b99b6cfab3a1524e4bfec589547c09ea1c300",
+      "src": "214",
+      "via": "form",
+      "width": 128
+    },
+    "heracrossmega": {
+      "height": 128,
+      "pokeapiId": 10047,
+      "sha256": "ead2c309b9b87881cb7e2c76cccdeac062e7c9ccf76c18ed9ccf580b1bf8c317",
+      "src": "10047",
+      "via": "form",
+      "width": 128
+    },
+    "hippowdon": {
+      "height": 128,
+      "pokeapiId": 450,
+      "sha256": "7b8ddc6ab2073388e05b917e5bb338ba362439ce5e92007561d4d4fe88b2b90c",
+      "src": "450",
+      "via": "form",
+      "width": 128
+    },
+    "houndoom": {
+      "height": 128,
+      "pokeapiId": 229,
+      "sha256": "b89bcdc512624b8fc91825cd4901802bc553b3886ba9f9cf8884255f1d109c21",
+      "src": "229",
+      "via": "form",
+      "width": 128
+    },
+    "houndoommega": {
+      "height": 128,
+      "pokeapiId": 10048,
+      "sha256": "2f730e812d1a02828d82a30de7c5c865b822ae35e442a544d185a6e6dce103b8",
+      "src": "10048",
+      "via": "form",
+      "width": 128
+    },
+    "houndstone": {
+      "height": 128,
+      "pokeapiId": 972,
+      "sha256": "0c978116c0e71ef9a5f2fc956a3a4a76bcd60029dd8b9ca664530c511f5065fe",
+      "src": "972",
+      "via": "form",
+      "width": 128
+    },
+    "hydrapple": {
+      "height": 128,
+      "pokeapiId": 1019,
+      "sha256": "334f0b84979133bf79b4adcc2a0398e474985c1339793a7fccd495e7946337a5",
+      "src": "1019",
+      "via": "form",
+      "width": 128
+    },
+    "hydreigon": {
+      "height": 128,
+      "pokeapiId": 635,
+      "sha256": "e33f6d925e27251dd4ec4531f70bd698ca103523445ee235408e38df7d2e612c",
+      "src": "635",
+      "via": "form",
+      "width": 128
+    },
+    "incineroar": {
+      "height": 128,
+      "pokeapiId": 727,
+      "sha256": "921b75451aedc70a71c767eec38c3f8d67e59dc4b82f82deae7aac09766cbcb3",
+      "src": "727",
+      "via": "form",
+      "width": 128
+    },
+    "indeedee": {
+      "height": 128,
+      "pokeapiId": 876,
+      "sha256": "cb02f39a51ba28b5a1bbc77dc0bee096c4c1c6ee5cab20f8df95dd69697c84e4",
+      "src": "876",
+      "via": "num",
+      "width": 128
+    },
+    "indeedeef": {
+      "height": 128,
+      "pokeapiId": 10186,
+      "sha256": "7cd712c9e985b712e39173d7f99fa4648c4527c4c89eb1bc7d73a802967b5944",
+      "src": "10186",
+      "via": "hand",
+      "width": 128
+    },
+    "infernape": {
+      "height": 128,
+      "pokeapiId": 392,
+      "sha256": "1464c6470bd613b981239d00c20e4d92e63cf9eb3f9e6ecc68b32e12fd536eb4",
+      "src": "392",
+      "via": "form",
+      "width": 128
+    },
+    "inteleon": {
+      "height": 128,
+      "pokeapiId": 818,
+      "sha256": "2b2c1bec5fb1e55bf0d7e3fdd39179d962e5e959b426c36d90c2f22771a84f45",
+      "src": "818",
+      "via": "form",
+      "width": 128
+    },
+    "jolteon": {
+      "height": 128,
+      "pokeapiId": 135,
+      "sha256": "3e2cb39c6a521a0d0b9ba66344867234b8e49df0a949118b21408edcf8fc31a3",
+      "src": "135",
+      "via": "form",
+      "width": 128
+    },
+    "kangaskhan": {
+      "height": 128,
+      "pokeapiId": 115,
+      "sha256": "e0f3d506474f41e93d610faafdb94eb8889f0ad7f5b270a9e743fff827621ff1",
+      "src": "115",
+      "via": "form",
+      "width": 128
+    },
+    "kangaskhanmega": {
+      "height": 128,
+      "pokeapiId": 10039,
+      "sha256": "d6b2c21a6f7ae9bdd9dc4d157efa6e8f3762d5eaa0ed119f9aaac65c7ee1a2b3",
+      "src": "10039",
+      "via": "form",
+      "width": 128
+    },
+    "kingambit": {
+      "height": 128,
+      "pokeapiId": 983,
+      "sha256": "0d6b224e9918d95a79cb95ddbf92b53c524d20ae0156e37b02021a6cbaea1d5a",
+      "src": "983",
+      "via": "form",
+      "width": 128
+    },
+    "kleavor": {
+      "height": 128,
+      "pokeapiId": 900,
+      "sha256": "b74278296954469f7d6522876bdb0b3b9c9aec7222a0f22760f590cbb196abee",
+      "src": "900",
+      "via": "form",
+      "width": 128
+    },
+    "klefki": {
+      "height": 128,
+      "pokeapiId": 707,
+      "sha256": "6b871ad091c5d879d02c1d97c9c9d44941ea9f43ce56e251aea55973dfb7a947",
+      "src": "707",
+      "via": "form",
+      "width": 128
+    },
+    "kommoo": {
+      "height": 128,
+      "pokeapiId": 784,
+      "sha256": "e0e25755270f4129d75b07506964b960e3a0b4e05c44d13416ce94c5e9e7da94",
+      "src": "784",
+      "via": "form",
+      "width": 128
+    },
+    "krookodile": {
+      "height": 128,
+      "pokeapiId": 553,
+      "sha256": "db7c5309edb3ececbce05abb780d9c6928b1c5f8906efad12d48b590356ff5e7",
+      "src": "553",
+      "via": "form",
+      "width": 128
+    },
+    "leafeon": {
+      "height": 128,
+      "pokeapiId": 470,
+      "sha256": "671d5e5785bac8429ef61a0c64f66a70fc2eeb3d3fc713b6cb10eea22eedbbd1",
+      "src": "470",
+      "via": "form",
+      "width": 128
+    },
+    "liepard": {
+      "height": 128,
+      "pokeapiId": 510,
+      "sha256": "274793853013871c004a635c9c14b26dd4e708aa0295354ad9d43f205e87e073",
+      "src": "510",
+      "via": "form",
+      "width": 128
+    },
+    "lopunny": {
+      "height": 128,
+      "pokeapiId": 428,
+      "sha256": "1a063421da849476740ddd229e7629025cdeab3def7d501831554b2558bbf266",
+      "src": "428",
+      "via": "form",
+      "width": 128
+    },
+    "lopunnymega": {
+      "height": 128,
+      "pokeapiId": 10088,
+      "sha256": "f815c1c767baf7c8638d932b102509d9ae1307ee96897ecbb7242b15f5b14c11",
+      "src": "10088",
+      "via": "form",
+      "width": 128
+    },
+    "lucario": {
+      "height": 128,
+      "pokeapiId": 448,
+      "sha256": "16c349e5d50bcf23380912b724478af46bfcb77db058bceda7e1267673bf295e",
+      "src": "448",
+      "via": "form",
+      "width": 128
+    },
+    "lucariomega": {
+      "height": 128,
+      "pokeapiId": 10059,
+      "sha256": "bf2da49a3210bcd91f95221eb582592a1db9ba83b5d44965ab1ed32320c345e3",
+      "src": "10059",
+      "via": "form",
+      "width": 128
+    },
+    "lucariomegaz": {
+      "height": 128,
+      "pokeapiId": 10310,
+      "sha256": "587400dd6f13d8836128eefbacfb22100b9e283119acbfb0415b0ae8c150506b",
+      "src": "10310",
+      "via": "form",
+      "width": 128
+    },
+    "luxray": {
+      "height": 128,
+      "pokeapiId": 405,
+      "sha256": "4c20eee8e923c91f92257d8e84ab973fb5a69e345bace0657c43955ace99daa5",
+      "src": "405",
+      "via": "form",
+      "width": 128
+    },
+    "lycanroc": {
+      "height": 128,
+      "pokeapiId": 745,
+      "sha256": "0703f3334af731071a018228920986377d14bc233d234a7efbdb66e3d6772a2a",
+      "src": "745",
+      "via": "num",
+      "width": 128
+    },
+    "lycanrocdusk": {
+      "height": 128,
+      "pokeapiId": 10152,
+      "sha256": "d4301cb1b9c652249ec6ba35f866d5243f002df3884becfbf080025b7f9e3f47",
+      "src": "10152",
+      "via": "form",
+      "width": 128
+    },
+    "lycanrocmidnight": {
+      "height": 128,
+      "pokeapiId": 10126,
+      "sha256": "359fd53e4e43b5400c098e75b167752bb7f39ef6c4deda9faa32d5908fe9642c",
+      "src": "10126",
+      "via": "form",
+      "width": 128
+    },
+    "mabosstiff": {
+      "height": 128,
+      "pokeapiId": 943,
+      "sha256": "5d3e9ad4a30c714a5bd38f0de15cba64aa9e30e1e8910c0576379fbe12f491eb",
+      "src": "943",
+      "via": "form",
+      "width": 128
+    },
+    "machamp": {
+      "height": 128,
+      "pokeapiId": 68,
+      "sha256": "62f4f489d1a55ca7b2b297054427cf8eeac9c5d5ed835cad79cbb2eabc0165e7",
+      "src": "68",
+      "via": "form",
+      "width": 128
+    },
+    "malamar": {
+      "height": 128,
+      "pokeapiId": 687,
+      "sha256": "b084984ccac4e86738035b4e7d4ea60a733c1596f6d6141b1d9432b74752e4e7",
+      "src": "687",
+      "via": "form",
+      "width": 128
+    },
+    "malamarmega": {
+      "height": 128,
+      "pokeapiId": 10297,
+      "sha256": "1552597f2732a287571894eeab884da43d7ccb643cc0c592cb07486ff0b96cf9",
+      "src": "10297",
+      "via": "form",
+      "width": 128
+    },
+    "mamoswine": {
+      "height": 128,
+      "pokeapiId": 473,
+      "sha256": "c3a9db44053e499b9ed7881e35fd83813ab161fb1179dcca8490bf576d9b12b1",
+      "src": "473",
+      "via": "form",
+      "width": 128
+    },
+    "manectric": {
+      "height": 128,
+      "pokeapiId": 310,
+      "sha256": "48a6dde64cd1e3eda80b9c84fe64df78c11f41fc49dbb1563bd33b49815df29a",
+      "src": "310",
+      "via": "form",
+      "width": 128
+    },
+    "manectricmega": {
+      "height": 128,
+      "pokeapiId": 10055,
+      "sha256": "e73b870777d3c659b6db14aa486bf3abfac2264ef5802331da341ea1912bc1e5",
+      "src": "10055",
+      "via": "form",
+      "width": 128
+    },
+    "maushold": {
+      "height": 128,
+      "pokeapiId": 10257,
+      "sha256": "fb69cf3104b5a974e180d64f092767d389284e1d199de1604363ec7b71e88c57",
+      "src": "10257",
+      "via": "hand",
+      "width": 128
+    },
+    "mausholdfour": {
+      "height": 128,
+      "pokeapiId": 925,
+      "sha256": "31cbb9b010dfde1f62d4606325ff07b8daac2b01b371beff2dfb8378041e40b3",
+      "src": "925",
+      "via": "hand",
+      "width": 128
+    },
+    "mawile": {
+      "height": 128,
+      "pokeapiId": 303,
+      "sha256": "45f711100e8f7f53f2d36bcaf0204f917ed0d62a7f525ef97f7134abf66d3751",
+      "src": "303",
+      "via": "form",
+      "width": 128
+    },
+    "mawilemega": {
+      "height": 128,
+      "pokeapiId": 10052,
+      "sha256": "5afdf2b81d87f857c67b6438fecc698dc6f9c81ffe3e594970320ee9aa5a977b",
+      "src": "10052",
+      "via": "form",
+      "width": 128
+    },
+    "medicham": {
+      "height": 128,
+      "pokeapiId": 308,
+      "sha256": "33bd55ddc05808a968cc2d1ff4e3da1ee7a8e7cee4b91b65be411c26309fd5a7",
+      "src": "308",
+      "via": "form",
+      "width": 128
+    },
+    "medichammega": {
+      "height": 128,
+      "pokeapiId": 10054,
+      "sha256": "49607d2c6d1a47f6e43a7c8de11ac2a8c58cfd8aaaac23614c2566cda09f3014",
+      "src": "10054",
+      "via": "form",
+      "width": 128
+    },
+    "meganium": {
+      "height": 128,
+      "pokeapiId": 154,
+      "sha256": "32273e03a049bf4b673eeefd047b8ea438231d545feb1900b5dc7b42567fa601",
+      "src": "154",
+      "via": "form",
+      "width": 128
+    },
+    "meganiummega": {
+      "height": 128,
+      "pokeapiId": 10282,
+      "sha256": "ae0fb4e27636d21df6880d5ba376ac374318bc8dec1505c74da7f8efb4da7cbe",
+      "src": "10282",
+      "via": "form",
+      "width": 128
+    },
+    "meowscarada": {
+      "height": 128,
+      "pokeapiId": 908,
+      "sha256": "f6db8163fc18434b73a28bc4587c417ee18a676300a2c24d29f6580ce3a7ba0c",
+      "src": "908",
+      "via": "form",
+      "width": 128
+    },
+    "meowstic": {
+      "height": 128,
+      "pokeapiId": 678,
+      "sha256": "5484ae874911c5a3dbaeb2b7deb65ca057e9746a38bd67990b488627b4294417",
+      "src": "678",
+      "via": "num",
+      "width": 128
+    },
+    "meowsticf": {
+      "height": 128,
+      "pokeapiId": 10025,
+      "sha256": "1c3b0b241b01a8449e30c3cf15f52697a3b97ad084f4b2c95ec299c0c735deb9",
+      "src": "10025",
+      "via": "hand",
+      "width": 128
+    },
+    "meowsticfmega": {
+      "height": 128,
+      "pokeapiId": 10326,
+      "sha256": "22c7815382908c9299f09add43e684f13eed29ac41c304f073f1b8973af03510",
+      "src": "10326",
+      "via": "hand",
+      "width": 128
+    },
+    "meowsticmmega": {
+      "height": 128,
+      "pokeapiId": 10314,
+      "sha256": "22c7815382908c9299f09add43e684f13eed29ac41c304f073f1b8973af03510",
+      "src": "10314",
+      "via": "hand",
+      "width": 128
+    },
+    "metagross": {
+      "height": 128,
+      "pokeapiId": 376,
+      "sha256": "c29a27a429b7a065b2687c3f0f27858388846a81ec27680979bb06713de246f3",
+      "src": "376",
+      "via": "form",
+      "width": 128
+    },
+    "metagrossmega": {
+      "height": 128,
+      "pokeapiId": 10076,
+      "sha256": "c3ab509c96e40eae69aa013ab8472ef1d542fbd97f044159d81449099231ea31",
+      "src": "10076",
+      "via": "form",
+      "width": 128
+    },
+    "milotic": {
+      "height": 128,
+      "pokeapiId": 350,
+      "sha256": "da02c20842a0c9da846911a39aad5bbb227e6bccec3d7c512b6227f54ed8192a",
+      "src": "350",
+      "via": "form",
+      "width": 128
+    },
+    "mimikyu": {
+      "height": 128,
+      "pokeapiId": 778,
+      "sha256": "06c923c53b3b2d6725821f6728f4a0ada39cbfa4a2069abf029347b032d9fa21",
+      "src": "778",
+      "via": "num",
+      "width": 128
+    },
+    "morpeko": {
+      "height": 128,
+      "pokeapiId": 877,
+      "sha256": "b7e5b76da97cdf730641d2ef84b6a661ac101691f46193ae2ffbb175040305c1",
+      "src": "877",
+      "via": "num",
+      "width": 128
+    },
+    "mrmime": {
+      "height": 128,
+      "pokeapiId": 122,
+      "sha256": "39f3b42a4ac764c92e9391f96bd748e264bc7e60558fc38fccf6a27e2790638c",
+      "src": "122",
+      "via": "form",
+      "width": 128
+    },
+    "mrrime": {
+      "height": 128,
+      "pokeapiId": 866,
+      "sha256": "fcd75e9c4ab88c84fc11b6066bdf5d860511cfafbfd5e24c1a2386284f95cf10",
+      "src": "866",
+      "via": "form",
+      "width": 128
+    },
+    "mudsdale": {
+      "height": 128,
+      "pokeapiId": 750,
+      "sha256": "d351fcd420e4fc66c5f30e24b952beb290d9dd86dc39649bd03c36e41c124146",
+      "src": "750",
+      "via": "form",
+      "width": 128
+    },
+    "musharna": {
+      "height": 128,
+      "pokeapiId": 518,
+      "sha256": "241349c264119debdaf2c1d94685780555778fba6c7e1917e1a9011f7ac49e64",
+      "src": "518",
+      "via": "form",
+      "width": 128
+    },
+    "ninetales": {
+      "height": 128,
+      "pokeapiId": 38,
+      "sha256": "add6733a0be8e7343931cfa84310f31e9af7bb491a7cf06d035d05ad0bda22ef",
+      "src": "38",
+      "via": "form",
+      "width": 128
+    },
+    "ninetalesalola": {
+      "height": 128,
+      "pokeapiId": 10104,
+      "sha256": "7ae19bee837c1f7659fa6f23896032b5dd266cde4b077857a175ddabc26942d8",
+      "src": "10104",
+      "via": "form",
+      "width": 128
+    },
+    "noivern": {
+      "height": 128,
+      "pokeapiId": 715,
+      "sha256": "7339c5b57a3c65548053132b0ec9349046bc1b36fe4bf4e15298350e2a362870",
+      "src": "715",
+      "via": "form",
+      "width": 128
+    },
+    "oranguru": {
+      "height": 128,
+      "pokeapiId": 765,
+      "sha256": "5c44e13e493f4348212dad71758c17b5e175805e65ae0757b06f2b889b6e83f3",
+      "src": "765",
+      "via": "form",
+      "width": 128
+    },
+    "orthworm": {
+      "height": 128,
+      "pokeapiId": 968,
+      "sha256": "eb87c2e6ad90581dbd987bb5283c4d43e72a883e75f1085c567f345b73152384",
+      "src": "968",
+      "via": "form",
+      "width": 128
+    },
+    "overqwil": {
+      "height": 128,
+      "pokeapiId": 904,
+      "sha256": "c99c32204cbf65c36b5351419224d44d56b1feaef58224a0a2afef11e23e84af",
+      "src": "904",
+      "via": "form",
+      "width": 128
+    },
+    "palafin": {
+      "height": 128,
+      "pokeapiId": 964,
+      "sha256": "1d5eeba8f37563237ba61b576f04e7961811ff336da693bd074cf71636de9779",
+      "src": "964",
+      "via": "num",
+      "width": 128
+    },
+    "pangoro": {
+      "height": 128,
+      "pokeapiId": 675,
+      "sha256": "e0427c67e3fe0f4743f2afd369831d57be3afa89ef3a201c6dae4f1f4803b13d",
+      "src": "675",
+      "via": "form",
+      "width": 128
+    },
+    "passimian": {
+      "height": 128,
+      "pokeapiId": 766,
+      "sha256": "58a0a238af90fe17462bfd514b2deb8b9839f2635e3c06a8d2517980c354b6c4",
+      "src": "766",
+      "via": "form",
+      "width": 128
+    },
+    "pawmot": {
+      "height": 128,
+      "pokeapiId": 923,
+      "sha256": "a20af4b45be046dfe310449a0ecc13b5ebbce2a3cb674e2d7e358df815f34910",
+      "src": "923",
+      "via": "form",
+      "width": 128
+    },
+    "pelipper": {
+      "height": 128,
+      "pokeapiId": 279,
+      "sha256": "e7c87bdf2991ccaf8028ab58d98bc5dd19b05e2e670e2efde375c27e604e1681",
+      "src": "279",
+      "via": "form",
+      "width": 128
+    },
+    "perrserker": {
+      "height": 128,
+      "pokeapiId": 863,
+      "sha256": "8a4ae3918866c78aa6ce36b86bfbf883e468bc305d75933c2c90a5942c2e6fff",
+      "src": "863",
+      "via": "form",
+      "width": 128
+    },
+    "persian": {
+      "height": 128,
+      "pokeapiId": 53,
+      "sha256": "82af0b8a02b6e8a30ccabd0e1721a68c5dd56d8dcda130354ae873bda6bd3edb",
+      "src": "53",
+      "via": "form",
+      "width": 128
+    },
+    "persianalola": {
+      "height": 128,
+      "pokeapiId": 10108,
+      "sha256": "dc2c27ca1362b169404b275d7658a331d55359b0ab18cf14cbe8af60583023dd",
+      "src": "10108",
+      "via": "form",
+      "width": 128
+    },
+    "pidgeot": {
+      "height": 128,
+      "pokeapiId": 18,
+      "sha256": "b5cd5cc54d989e05c626bc12b81fbd62daa8ba5ad8b9243795d8ac379c3a02f6",
+      "src": "18",
+      "via": "form",
+      "width": 128
+    },
+    "pidgeotmega": {
+      "height": 128,
+      "pokeapiId": 10073,
+      "sha256": "39cbd30cecf2f1fad30118d7401482814c1ca6de22cfff82ad38ff7347bbb6dd",
+      "src": "10073",
+      "via": "form",
+      "width": 128
+    },
+    "pikachu": {
+      "height": 128,
+      "pokeapiId": 25,
+      "sha256": "0ce16ff07f6374bd57a433280ec3a41cdced18f0b1e2907d9963d60992808536",
+      "src": "25",
+      "via": "form",
+      "width": 128
+    },
+    "pincurchin": {
+      "height": 128,
+      "pokeapiId": 871,
+      "sha256": "8de045f858dc3aca8c1eaaacf14e7c86c89a0f0f06cf716c313f1383ca6c49fd",
+      "src": "871",
+      "via": "form",
+      "width": 128
+    },
+    "pinsir": {
+      "height": 128,
+      "pokeapiId": 127,
+      "sha256": "3df98ab9d98765609f8fa8a97cb248faf777a236d7afccc69968eda43ddc6116",
+      "src": "127",
+      "via": "form",
+      "width": 128
+    },
+    "pinsirmega": {
+      "height": 128,
+      "pokeapiId": 10040,
+      "sha256": "8b9e330eafa0c6e4010b0beede0cbd715b50a4efe51cee98fb48ed295a8cb093",
+      "src": "10040",
+      "via": "form",
+      "width": 128
+    },
+    "politoed": {
+      "height": 128,
+      "pokeapiId": 186,
+      "sha256": "5f716605195285569a657ad4bbe3022741ef947dfc1f29ae8d9d66a73da54cbb",
+      "src": "186",
+      "via": "form",
+      "width": 128
+    },
+    "polteageist": {
+      "height": 128,
+      "pokeapiId": 855,
+      "sha256": "033098c760a1430f0fdd805456cc9b1e9477e4bfe36d584eb69ba766a2cf0efd",
+      "src": "855",
+      "via": "num",
+      "width": 128
+    },
+    "polteageistantique": {
+      "height": 128,
+      "pokeapiId": 855,
+      "sha256": "033098c760a1430f0fdd805456cc9b1e9477e4bfe36d584eb69ba766a2cf0efd",
+      "src": "855-antique",
+      "via": "form",
+      "width": 128
+    },
+    "primarina": {
+      "height": 128,
+      "pokeapiId": 730,
+      "sha256": "d1c908ab4be7c855a5b30c359d4a96e0979ab51b2cba365fcdb5a07f2cb21134",
+      "src": "730",
+      "via": "form",
+      "width": 128
+    },
+    "pyroar": {
+      "height": 128,
+      "pokeapiId": 668,
+      "sha256": "9ca913bb8be0224e76e70f80d7eb87d7a6d7d64fa6a9dfc42b52dc8e39beb687",
+      "src": "668",
+      "via": "num",
+      "width": 128
+    },
+    "pyroarmega": {
+      "height": 128,
+      "pokeapiId": 10295,
+      "sha256": "3588ad086ec29a19dd1be5fa3e61d130b71d01bd72bfa408765e3d4e94d01e8c",
+      "src": "10295",
+      "via": "form",
+      "width": 128
+    },
+    "quaquaval": {
+      "height": 128,
+      "pokeapiId": 914,
+      "sha256": "9ff961c2d4c0150e2bac0cc012c7c2b745807e5d362be3512f95b39bcd918766",
+      "src": "914",
+      "via": "form",
+      "width": 128
+    },
+    "qwilfish": {
+      "height": 128,
+      "pokeapiId": 211,
+      "sha256": "74ccbf2fe06646373a7df70130d6666044e8e1235f2f44847ab83af950e55926",
+      "src": "211",
+      "via": "form",
+      "width": 128
+    },
+    "raichu": {
+      "height": 128,
+      "pokeapiId": 26,
+      "sha256": "878e098a1d6d83dc07dc356a155f66f4cd5a4dfbd39865f3dd16dee45db4bac9",
+      "src": "26",
+      "via": "form",
+      "width": 128
+    },
+    "raichualola": {
+      "height": 128,
+      "pokeapiId": 10100,
+      "sha256": "9c768a30dad9de7f2cbecbf32f9c28ebc878f19e3ec4e9c48c6f8ed0779763dc",
+      "src": "10100",
+      "via": "form",
+      "width": 128
+    },
+    "raichumegax": {
+      "height": 128,
+      "pokeapiId": 10304,
+      "sha256": "2b61a0b03759d5639d9fcbcb61ea2810dac95b6384d7ced967a1b7b2a8bc9f24",
+      "src": "10304",
+      "via": "form",
+      "width": 128
+    },
+    "raichumegay": {
+      "height": 128,
+      "pokeapiId": 10305,
+      "sha256": "7bf548c3488b905d00c6cccf541f565e9b34f6b8d0a1f7a80c48881229f78a3d",
+      "src": "10305",
+      "via": "form",
+      "width": 128
+    },
+    "rampardos": {
+      "height": 128,
+      "pokeapiId": 409,
+      "sha256": "152bcddb3566a470f09e4ece63bd305edbe829df75bda46be7686df00ff23f0e",
+      "src": "409",
+      "via": "form",
+      "width": 128
+    },
+    "reuniclus": {
+      "height": 128,
+      "pokeapiId": 579,
+      "sha256": "fc3bfddffe2930e4ecf06979653e0511960dc15264777c60b9e2084a9559c73f",
+      "src": "579",
+      "via": "form",
+      "width": 128
+    },
+    "rhyperior": {
+      "height": 128,
+      "pokeapiId": 464,
+      "sha256": "1ace99da8224ba6c32595a7afdf73a7bb7831b43084c37d1e2f220e95fa35c20",
+      "src": "464",
+      "via": "form",
+      "width": 128
+    },
+    "rillaboom": {
+      "height": 128,
+      "pokeapiId": 812,
+      "sha256": "ae9914dfdb94509a733a9e850b69c50c0be08b9f376f89ab0c8b4e70ec6fd1b1",
+      "src": "812",
+      "via": "form",
+      "width": 128
+    },
+    "roserade": {
+      "height": 128,
+      "pokeapiId": 407,
+      "sha256": "dcb84abb89fab55925af9945fcb654698374fd0da919451f0777a765dc00a14e",
+      "src": "407",
+      "via": "form",
+      "width": 128
+    },
+    "rotom": {
+      "height": 128,
+      "pokeapiId": 479,
+      "sha256": "907eecb68d7c271c847646edaaae3345b06aca3959a2c67102d9cfb7fb83bbb9",
+      "src": "479",
+      "via": "form",
+      "width": 128
+    },
+    "rotomfan": {
+      "height": 128,
+      "pokeapiId": 10011,
+      "sha256": "3a9e404b425cf939dcc4820f3f2dd8c1d297deb3c85adf02d6cb3efc1d75bd8f",
+      "src": "10011",
+      "via": "form",
+      "width": 128
+    },
+    "rotomfrost": {
+      "height": 128,
+      "pokeapiId": 10010,
+      "sha256": "68d0916ada3e295689332caefe4c1df66f975b83cb4a207c7335e013ca74f927",
+      "src": "10010",
+      "via": "form",
+      "width": 128
+    },
+    "rotomheat": {
+      "height": 128,
+      "pokeapiId": 10008,
+      "sha256": "91aac7d99704d28eb31eec2dc38992e873400cb4a05e72bce94d2fa7dac72399",
+      "src": "10008",
+      "via": "form",
+      "width": 128
+    },
+    "rotommow": {
+      "height": 128,
+      "pokeapiId": 10012,
+      "sha256": "31abccd102d2529eee48291b529ee4ad491afdbb5c4833e25931c85d163cd2d5",
+      "src": "10012",
+      "via": "form",
+      "width": 128
+    },
+    "rotomwash": {
+      "height": 128,
+      "pokeapiId": 10009,
+      "sha256": "cd073b643b472226a3cc35bc4ca32a8b5181cfe34e690211031c62bde612cdb1",
+      "src": "10009",
+      "via": "form",
+      "width": 128
+    },
+    "runerigus": {
+      "height": 128,
+      "pokeapiId": 867,
+      "sha256": "152d444273042b0ce2c327e872a26b8bc0b2bcb5448fa280232a2b918ba9eb51",
+      "src": "867",
+      "via": "form",
+      "width": 128
+    },
+    "sableye": {
+      "height": 128,
+      "pokeapiId": 302,
+      "sha256": "cd84fae80969dd4c67795b08d4dfbdf17ac145096b058ff2d1bcf87f099169ba",
+      "src": "302",
+      "via": "form",
+      "width": 128
+    },
+    "sableyemega": {
+      "height": 128,
+      "pokeapiId": 10066,
+      "sha256": "f52580e7cc6058a3f5734037ed8a32ba7896826bb8108cc7a341c564c1277bd6",
+      "src": "10066",
+      "via": "form",
+      "width": 128
+    },
+    "salamence": {
+      "height": 128,
+      "pokeapiId": 373,
+      "sha256": "8b4944ac3f6dd776e6f82b90eadb6187309cf61d5122a05043b028e211436635",
+      "src": "373",
+      "via": "form",
+      "width": 128
+    },
+    "salamencemega": {
+      "height": 128,
+      "pokeapiId": 10089,
+      "sha256": "933c60b7005241d9b9d045f5c01c784f48df4c1e7755bc6bf1df966bb7aa582f",
+      "src": "10089",
+      "via": "form",
+      "width": 128
+    },
+    "salazzle": {
+      "height": 128,
+      "pokeapiId": 758,
+      "sha256": "abb7652136df78470c2c4910c265e324cc006e0dc29b5fbed75d1c6787cf3a5b",
+      "src": "758",
+      "via": "form",
+      "width": 128
+    },
+    "samurott": {
+      "height": 128,
+      "pokeapiId": 503,
+      "sha256": "11e16e9379e5addc9d958504e4fde670bfec77ea4b784f7f73b76617122fb4f9",
+      "src": "503",
+      "via": "form",
+      "width": 128
+    },
+    "samurotthisui": {
+      "height": 128,
+      "pokeapiId": 10236,
+      "sha256": "5c5a947adbdda9548eeef838258cc330280391f5a38f7e8a86e9b1e5846e8b41",
+      "src": "10236",
+      "via": "form",
+      "width": 128
+    },
+    "sandaconda": {
+      "height": 128,
+      "pokeapiId": 844,
+      "sha256": "7aa29d0b35ec2c7c861b9ae130835b16b582baf9d53d239a0bbcdf9f1e3ec4d7",
+      "src": "844",
+      "via": "form",
+      "width": 128
+    },
+    "sceptile": {
+      "height": 128,
+      "pokeapiId": 254,
+      "sha256": "02923fb7940923a994b485c4339f76e9e956770581e5208ccee0118ed5f130c9",
+      "src": "254",
+      "via": "form",
+      "width": 128
+    },
+    "sceptilemega": {
+      "height": 128,
+      "pokeapiId": 10065,
+      "sha256": "c84ce0e9253d230b6f81907e30640c9fc0f270b596c2ae27a57aed2d64cac7df",
+      "src": "10065",
+      "via": "form",
+      "width": 128
+    },
+    "scizor": {
+      "height": 128,
+      "pokeapiId": 212,
+      "sha256": "eeb2293ee0483dca6d3c342cd7c7b902d4496954574c5050a602b68c094161a0",
+      "src": "212",
+      "via": "form",
+      "width": 128
+    },
+    "scizormega": {
+      "height": 128,
+      "pokeapiId": 10046,
+      "sha256": "88fd9abeafbdc5a152db6e7b2201dd88c3155882ea81204c10a82b2885c226b5",
+      "src": "10046",
+      "via": "form",
+      "width": 128
+    },
+    "scolipede": {
+      "height": 128,
+      "pokeapiId": 545,
+      "sha256": "079eb2814e823818d137265751c9269c8ed3f76a0d1f3e121548afca9afe22ed",
+      "src": "545",
+      "via": "form",
+      "width": 128
+    },
+    "scolipedemega": {
+      "height": 128,
+      "pokeapiId": 10288,
+      "sha256": "fa24fb4152a0eb3441b39a338d8b60986ce3cdf1635acf2b29a3c701b37bfdfc",
+      "src": "10288",
+      "via": "form",
+      "width": 128
+    },
+    "scovillain": {
+      "height": 128,
+      "pokeapiId": 952,
+      "sha256": "5ed26b273b9dd54ad4d1343b33d5926713af6ae76fb0f969e8a4d6b107bffaad",
+      "src": "952",
+      "via": "form",
+      "width": 128
+    },
+    "scovillainmega": {
+      "height": 128,
+      "pokeapiId": 10320,
+      "sha256": "4bb2c21dd0bc09c0d9c1c6d550dd1c0575858b026a36988a9fa1a79ac35a6658",
+      "src": "10320",
+      "via": "form",
+      "width": 128
+    },
+    "scrafty": {
+      "height": 128,
+      "pokeapiId": 560,
+      "sha256": "f46f2d754fec4a33f75d408e06f7d221f34ad426348a942a1bc2fbdd636a08ac",
+      "src": "560",
+      "via": "form",
+      "width": 128
+    },
+    "scraftymega": {
+      "height": 128,
+      "pokeapiId": 10289,
+      "sha256": "e30fcc9136413f87fa634fbafcc058d332602aa108e29168ebb5d4f7b962211e",
+      "src": "10289",
+      "via": "form",
+      "width": 128
+    },
+    "serperior": {
+      "height": 128,
+      "pokeapiId": 497,
+      "sha256": "7313d0eae50b36e30cb02af3b281da15ae9e33f84de31b75177c86db10baaf7f",
+      "src": "497",
+      "via": "form",
+      "width": 128
+    },
+    "sharpedo": {
+      "height": 128,
+      "pokeapiId": 319,
+      "sha256": "c93a8ba8da463f176b01a3f4a2c6f75feddd825f851e1f73fd48bd06be37f2e6",
+      "src": "319",
+      "via": "form",
+      "width": 128
+    },
+    "sharpedomega": {
+      "height": 128,
+      "pokeapiId": 10070,
+      "sha256": "e4f4958bc16d9def869123bc05520f5a2f8e6dcd90f71198ad798e40e78aa160",
+      "src": "10070",
+      "via": "form",
+      "width": 128
+    },
+    "simipour": {
+      "height": 128,
+      "pokeapiId": 516,
+      "sha256": "6b0d960806a81b564c62785164493fc96ad42e97c733f3a1854545f661747d97",
+      "src": "516",
+      "via": "form",
+      "width": 128
+    },
+    "simisage": {
+      "height": 128,
+      "pokeapiId": 512,
+      "sha256": "5f52569f3aab697e72be41942ee85142eae04ea4105fba824a9a4e63f1016f8e",
+      "src": "512",
+      "via": "form",
+      "width": 128
+    },
+    "simisear": {
+      "height": 128,
+      "pokeapiId": 514,
+      "sha256": "8876c2234b018803b47bb81a9a98102a6fa2d0aafb67e10fde188c4cde64f4a3",
+      "src": "514",
+      "via": "form",
+      "width": 128
+    },
+    "sinistcha": {
+      "height": 128,
+      "pokeapiId": 1013,
+      "sha256": "fdc715d78178f08b65d2b985b61c75f7580014ca971afa67f3043f2974bc92d3",
+      "src": "1013",
+      "via": "num",
+      "width": 128
+    },
+    "sinistchamasterpiece": {
+      "height": 128,
+      "pokeapiId": 1013,
+      "sha256": "fdc715d78178f08b65d2b985b61c75f7580014ca971afa67f3043f2974bc92d3",
+      "src": "1013-masterpiece",
+      "via": "form",
+      "width": 128
+    },
+    "sirfetchd": {
+      "height": 128,
+      "pokeapiId": 865,
+      "sha256": "d41b87ae43bcfdf3fa5869471059d02b03795045c636ee08724fb98578d7b564",
+      "src": "865",
+      "via": "form",
+      "width": 128
+    },
+    "skarmory": {
+      "height": 128,
+      "pokeapiId": 227,
+      "sha256": "f12cd6b5aad107d05397389a6d049e58e526a15526114829cf649a12e8418c51",
+      "src": "227",
+      "via": "form",
+      "width": 128
+    },
+    "skarmorymega": {
+      "height": 128,
+      "pokeapiId": 10284,
+      "sha256": "8cc58f0819c4141089d8f9b1cd15d17da76857672d0065dc5bec1d0422b6fba6",
+      "src": "10284",
+      "via": "form",
+      "width": 128
+    },
+    "skeledirge": {
+      "height": 128,
+      "pokeapiId": 911,
+      "sha256": "7474b52c7c6808889736a36ae449b83240238ac64c99ca052086e056c96ab1fd",
+      "src": "911",
+      "via": "form",
+      "width": 128
+    },
+    "slowbro": {
+      "height": 128,
+      "pokeapiId": 80,
+      "sha256": "d69e6dc15e98ef9a176fcd7b51df65477eca34db4280ce10e342f7e5fee4b7cc",
+      "src": "80",
+      "via": "form",
+      "width": 128
+    },
+    "slowbrogalar": {
+      "height": 128,
+      "pokeapiId": 10165,
+      "sha256": "81b8f12eb74cabbb23dd498245851a7b6657125057fe15a4057357e01a20cdcd",
+      "src": "10165",
+      "via": "form",
+      "width": 128
+    },
+    "slowbromega": {
+      "height": 128,
+      "pokeapiId": 10071,
+      "sha256": "f75391020e69ae479340f191f105e63c55bcede1a2292cb3284241999ff83f08",
+      "src": "10071",
+      "via": "form",
+      "width": 128
+    },
+    "slowking": {
+      "height": 128,
+      "pokeapiId": 199,
+      "sha256": "8717d0be6b7faa97a3148cbb6e903c83b375899ab5a99e8b196287bb977301ca",
+      "src": "199",
+      "via": "form",
+      "width": 128
+    },
+    "slowkinggalar": {
+      "height": 128,
+      "pokeapiId": 10172,
+      "sha256": "1cd0a9bcdfa7a833df4c9c2279f11ba39a8299b6692e4bb4548616eeb4f439eb",
+      "src": "10172",
+      "via": "form",
+      "width": 128
+    },
+    "slurpuff": {
+      "height": 128,
+      "pokeapiId": 685,
+      "sha256": "9828b167c4e06a23c8a63d2f25fc98cb40d56d246770b8b57fa5e4d0b2840ca3",
+      "src": "685",
+      "via": "form",
+      "width": 128
+    },
+    "sneasler": {
+      "height": 128,
+      "pokeapiId": 903,
+      "sha256": "ea6c8ec017c5ac1ab448ba17785866f3574abbfceb2921b7e9259d87ae69d742",
+      "src": "903",
+      "via": "form",
+      "width": 128
+    },
+    "snorlax": {
+      "height": 128,
+      "pokeapiId": 143,
+      "sha256": "a281c72b59474d88ca947401662aef8782de15c0dead9ba8e775f98bc7e12ed6",
+      "src": "143",
+      "via": "form",
+      "width": 128
+    },
+    "spiritomb": {
+      "height": 128,
+      "pokeapiId": 442,
+      "sha256": "da2a208d69986860209da962396fbc7a7e3280517970265c69b25a187d83abf5",
+      "src": "442",
+      "via": "form",
+      "width": 128
+    },
+    "squawkabilly": {
+      "height": 128,
+      "pokeapiId": 931,
+      "sha256": "dc851315e4e3cd2767c730aa2644a6d63c0e6dd0fcfa9038e0b4ead5e30772d5",
+      "src": "931",
+      "via": "num",
+      "width": 128
+    },
+    "squawkabillyblue": {
+      "height": 128,
+      "pokeapiId": 10260,
+      "sha256": "5f8922616081213c76efd9823b348fee7e2570f872b6a9b78b089ebaf6bf4fb2",
+      "src": "10260",
+      "via": "hand",
+      "width": 128
+    },
+    "squawkabillywhite": {
+      "height": 128,
+      "pokeapiId": 10262,
+      "sha256": "7e6af9e745ff403cc9434b21cbbb0c715abbb49edb8a8966eb1dc7957dad265c",
+      "src": "10262",
+      "via": "hand",
+      "width": 128
+    },
+    "squawkabillyyellow": {
+      "height": 128,
+      "pokeapiId": 10261,
+      "sha256": "7064f98a5823caef575f92438ef6485b928d6dfc809ede45456e00f46e7596fa",
+      "src": "10261",
+      "via": "hand",
+      "width": 128
+    },
+    "staraptor": {
+      "height": 128,
+      "pokeapiId": 398,
+      "sha256": "1468ac1c016fd392d8ead7c16a005bce90bbad0be76331e3fe61cdda0980a572",
+      "src": "398",
+      "via": "form",
+      "width": 128
+    },
+    "staraptormega": {
+      "height": 128,
+      "pokeapiId": 10308,
+      "sha256": "6d732c2aa9fdf381152d431b742a839c06fd5d5d51d980a33afe97e717a23efa",
+      "src": "10308",
+      "via": "form",
+      "width": 128
+    },
+    "starmie": {
+      "height": 128,
+      "pokeapiId": 121,
+      "sha256": "b86550b33bf0cec8184b897919462defeccb8ea746dc93413e54af995c69ec25",
+      "src": "121",
+      "via": "form",
+      "width": 128
+    },
+    "starmiemega": {
+      "height": 128,
+      "pokeapiId": 10280,
+      "sha256": "840543f641d664ff42d264d7d06b7ecdb6a2cde42d89f78634665f9b7feb4575",
+      "src": "10280",
+      "via": "form",
+      "width": 128
+    },
+    "steelix": {
+      "height": 128,
+      "pokeapiId": 208,
+      "sha256": "1d9e8318dd0c1b76fdec6a7f9b33ec1c839a798a0a63b253bbfc91ad2347ee4b",
+      "src": "208",
+      "via": "form",
+      "width": 128
+    },
+    "steelixmega": {
+      "height": 128,
+      "pokeapiId": 10072,
+      "sha256": "f382c9beeba99975916dfe4f10a12810978742fcf7c8cec68e1af9f8b3cf68fb",
+      "src": "10072",
+      "via": "form",
+      "width": 128
+    },
+    "stunfisk": {
+      "height": 128,
+      "pokeapiId": 618,
+      "sha256": "d7d28c93e9febd39e4293e9d3a2a731e2cc41a392ab02bfa14efe1b353603f49",
+      "src": "618",
+      "via": "form",
+      "width": 128
+    },
+    "stunfiskgalar": {
+      "height": 128,
+      "pokeapiId": 10180,
+      "sha256": "d2cae58b720a8590fcfd38fb3736a9926d6d03169f1c7f0eb9bdb39d5c1b9e54",
+      "src": "10180",
+      "via": "form",
+      "width": 128
+    },
+    "swalot": {
+      "height": 128,
+      "pokeapiId": 317,
+      "sha256": "67123eb0c02792a33cfcaa63a31fca87a1b115a98cdeac6c987c0dfa202e36ab",
+      "src": "317",
+      "via": "form",
+      "width": 128
+    },
+    "swampert": {
+      "height": 128,
+      "pokeapiId": 260,
+      "sha256": "90ac490ce766279d07ac30c76c42bdd11ba1153769bd4db077944cb075acf70e",
+      "src": "260",
+      "via": "form",
+      "width": 128
+    },
+    "swampertmega": {
+      "height": 128,
+      "pokeapiId": 10064,
+      "sha256": "96933962507c5c6c0196ea05659582e98118225b3b43cd93570ef5c40eaf3ec0",
+      "src": "10064",
+      "via": "form",
+      "width": 128
+    },
+    "sylveon": {
+      "height": 128,
+      "pokeapiId": 700,
+      "sha256": "1029a4f4cd00ce9239826a388c5f09251ba709611e49ab285a4182005805e1df",
+      "src": "700",
+      "via": "form",
+      "width": 128
+    },
+    "talonflame": {
+      "height": 128,
+      "pokeapiId": 663,
+      "sha256": "820f6c8c761918cfa554b8a52d444500a6e3bb9c224da4c6523a916bece9a88d",
+      "src": "663",
+      "via": "form",
+      "width": 128
+    },
+    "tauros": {
+      "height": 128,
+      "pokeapiId": 128,
+      "sha256": "36ab6b75b8625117603b2e6854d6df0471d8ea2a7f569eb4454b5a6585c9b2b4",
+      "src": "128",
+      "via": "form",
+      "width": 128
+    },
+    "taurospaldeaaqua": {
+      "height": 128,
+      "pokeapiId": 10252,
+      "sha256": "c7166081495519c5f1975df70c5acd3c32cd23257ccf81b378bdb6cea69612df",
+      "src": "10252",
+      "via": "hand",
+      "width": 128
+    },
+    "taurospaldeablaze": {
+      "height": 128,
+      "pokeapiId": 10251,
+      "sha256": "d3b394d28d2bee001199238e97229ac2b8c2c68e79205f73a1b1f508274b38ed",
+      "src": "10251",
+      "via": "hand",
+      "width": 128
+    },
+    "taurospaldeacombat": {
+      "height": 128,
+      "pokeapiId": 10250,
+      "sha256": "7df553f71e284f2debc82faa8e7d4c441efdee9802ee4c96fc9c9482073259c0",
+      "src": "10250",
+      "via": "hand",
+      "width": 128
+    },
+    "thievul": {
+      "height": 128,
+      "pokeapiId": 828,
+      "sha256": "fe1fbcee00d1ccf96a058c87272f69b2ec0de27310deb12da84d3679bd773eca",
+      "src": "828",
+      "via": "form",
+      "width": 128
+    },
+    "tinkaton": {
+      "height": 128,
+      "pokeapiId": 959,
+      "sha256": "9218ffce496fe2977fd0ffb2a0bbf6b33f577f40b11eff311fe93b116d25c68f",
+      "src": "959",
+      "via": "form",
+      "width": 128
+    },
+    "torkoal": {
+      "height": 128,
+      "pokeapiId": 324,
+      "sha256": "55eca238185a20812d2591497104ac54025dc365b8608eebf65b27cb488138b1",
+      "src": "324",
+      "via": "form",
+      "width": 128
+    },
+    "torterra": {
+      "height": 128,
+      "pokeapiId": 389,
+      "sha256": "849c2c645622540faacd148a1e5d7b088c412e56bd54c081b6e703ab090edd3c",
+      "src": "389",
+      "via": "form",
+      "width": 128
+    },
+    "toucannon": {
+      "height": 128,
+      "pokeapiId": 733,
+      "sha256": "68238a041276d9b31089838f958e5763bb7e918cea595c10190e487d16f0d189",
+      "src": "733",
+      "via": "form",
+      "width": 128
+    },
+    "toxapex": {
+      "height": 128,
+      "pokeapiId": 748,
+      "sha256": "8102c35bd5953fd75915ac57d8aa357edbae34fdd1cc330afdcccf380801d9d9",
+      "src": "748",
+      "via": "form",
+      "width": 128
+    },
+    "toxicroak": {
+      "height": 128,
+      "pokeapiId": 454,
+      "sha256": "e06fa1f389d660e0d27b3a476fab1b7c538cf1d9be8a92fa209f7b62242cdbce",
+      "src": "454",
+      "via": "form",
+      "width": 128
+    },
+    "toxtricity": {
+      "height": 128,
+      "pokeapiId": 849,
+      "sha256": "395695f0817af85025f826450b9610cd8d98c57a53592874663d1bffad90a608",
+      "src": "849",
+      "via": "num",
+      "width": 128
+    },
+    "toxtricitylowkey": {
+      "height": 128,
+      "pokeapiId": 10184,
+      "sha256": "40bc35f75cdaa3e13ecbe2a3fec942bfce8ff93c502e242e4667dc8ba342a2de",
+      "src": "10184",
+      "via": "form",
+      "width": 128
+    },
+    "trevenant": {
+      "height": 128,
+      "pokeapiId": 709,
+      "sha256": "ac0980f7ca3ca1c1afc4316edf30218af406cde43ccc7240d1fa7369deee05ba",
+      "src": "709",
+      "via": "form",
+      "width": 128
+    },
+    "tsareena": {
+      "height": 128,
+      "pokeapiId": 763,
+      "sha256": "e941802343af25a9bf8faabfa4f933dc4700287282170c104e47091c5b2700ab",
+      "src": "763",
+      "via": "form",
+      "width": 128
+    },
+    "typhlosion": {
+      "height": 128,
+      "pokeapiId": 157,
+      "sha256": "0614acec33c547f01cb77085c24f3825716cd636055519746a7320450c12a926",
+      "src": "157",
+      "via": "form",
+      "width": 128
+    },
+    "typhlosionhisui": {
+      "height": 128,
+      "pokeapiId": 10233,
+      "sha256": "2631a601d236fa2eb61b06d7e82982e3229d13d5471b76d110460f9ad0d996c9",
+      "src": "10233",
+      "via": "form",
+      "width": 128
+    },
+    "tyranitar": {
+      "height": 128,
+      "pokeapiId": 248,
+      "sha256": "ec07f82a9eb88be169188008b49afd3a5ac78b09f02c4b8827fad8622e3333c4",
+      "src": "248",
+      "via": "form",
+      "width": 128
+    },
+    "tyranitarmega": {
+      "height": 128,
+      "pokeapiId": 10049,
+      "sha256": "ac709de5d00f972ef3409be8f1d3c71ddf911159dc776c469e66059891834a87",
+      "src": "10049",
+      "via": "form",
+      "width": 128
+    },
+    "tyrantrum": {
+      "height": 128,
+      "pokeapiId": 697,
+      "sha256": "646ac8d4c9db4719c824f214895bd23366444b894fd4c24260139303c0629ff7",
+      "src": "697",
+      "via": "form",
+      "width": 128
+    },
+    "umbreon": {
+      "height": 128,
+      "pokeapiId": 197,
+      "sha256": "e19c0b8ed93c16bc7f1780f28e887c7eff73ed75d8e473dc530dda0f688c09ad",
+      "src": "197",
+      "via": "form",
+      "width": 128
+    },
+    "vanilluxe": {
+      "height": 128,
+      "pokeapiId": 584,
+      "sha256": "f9f41a4ca095a74246f1c7e4dd8609a752a29abb1c0e84e993becd4831eacf0c",
+      "src": "584",
+      "via": "form",
+      "width": 128
+    },
+    "vaporeon": {
+      "height": 128,
+      "pokeapiId": 134,
+      "sha256": "227e35ded7c9e2b15733fc82840b692e3fd12e9676f2e51fd928debb019f77c7",
+      "src": "134",
+      "via": "form",
+      "width": 128
+    },
+    "venusaur": {
+      "height": 128,
+      "pokeapiId": 3,
+      "sha256": "5c167508bd14db56358e42e1b2cd6a673a40aaf90d9f71e5279a57160c100629",
+      "src": "3",
+      "via": "form",
+      "width": 128
+    },
+    "venusaurmega": {
+      "height": 128,
+      "pokeapiId": 10033,
+      "sha256": "a6b8f738d126250bd64724ee5a2918c4167e155a443a746514e302235d310c7a",
+      "src": "10033",
+      "via": "form",
+      "width": 128
+    },
+    "victreebel": {
+      "height": 128,
+      "pokeapiId": 71,
+      "sha256": "4196693ae3c0f9050219d5d3ac46bebeea9c509e3da82ccfd785f56e72c41d08",
+      "src": "71",
+      "via": "form",
+      "width": 128
+    },
+    "victreebelmega": {
+      "height": 128,
+      "pokeapiId": 10279,
+      "sha256": "845681afe55b8c6db2ac74b97441166da1caa55aec157f045a011812606f398b",
+      "src": "10279",
+      "via": "form",
+      "width": 128
+    },
+    "vileplume": {
+      "height": 128,
+      "pokeapiId": 45,
+      "sha256": "1e4ace9d246f76852bc7689c82e3c890be8b871cd6673b1b8c54ee5cceb535f8",
+      "src": "45",
+      "via": "form",
+      "width": 128
+    },
+    "vivillon": {
+      "height": 128,
+      "pokeapiId": 666,
+      "sha256": "f500f5fc7aa4c0e5b967bf8e4966206d4d4c6ca61a5e9a4180b559e74c77563e",
+      "src": "666",
+      "via": "num",
+      "width": 128
+    },
+    "vivillonfancy": {
+      "height": 120,
+      "pokeapiId": 666,
+      "sha256": "597486cf419ffddd70ddee91ae07ac9c2a7ee053a2a4579d62aeda085d77e6e2",
+      "src": "666-fancy",
+      "via": "form",
+      "width": 128
+    },
+    "vivillonpokeball": {
+      "height": 120,
+      "pokeapiId": 666,
+      "sha256": "b58aff96fb8d6220550184f9176c0db5c039d4454462ae0258b8eab9d8f754a1",
+      "src": "666-poke-ball",
+      "via": "form",
+      "width": 128
+    },
+    "volcarona": {
+      "height": 128,
+      "pokeapiId": 637,
+      "sha256": "d88e2725e7e31a97350e68f03b47c14a3adc8a50953332dd9482f6524e42e4c3",
+      "src": "637",
+      "via": "form",
+      "width": 128
+    },
+    "watchog": {
+      "height": 128,
+      "pokeapiId": 505,
+      "sha256": "c8c11afbd1238a3148425182317cc4fd0f5a4b1a87b1bd9fb7f99f62fa2cc06b",
+      "src": "505",
+      "via": "form",
+      "width": 128
+    },
+    "weavile": {
+      "height": 128,
+      "pokeapiId": 461,
+      "sha256": "b61933ad30af89f926d800aef4bd9e81fb7556b26d852b6fe1cbd1d217f0a10d",
+      "src": "461",
+      "via": "form",
+      "width": 128
+    },
+    "whimsicott": {
+      "height": 128,
+      "pokeapiId": 547,
+      "sha256": "a031ba4d3724ca30423eae6c352c417d34070474680d62633e617c979c17979c",
+      "src": "547",
+      "via": "form",
+      "width": 128
+    },
+    "wigglytuff": {
+      "height": 128,
+      "pokeapiId": 40,
+      "sha256": "d2ac592b404f938c6ceb6308ce622b69e373c061e3037eac059f15f81aeb4e02",
+      "src": "40",
+      "via": "form",
+      "width": 128
+    },
+    "wyrdeer": {
+      "height": 128,
+      "pokeapiId": 899,
+      "sha256": "d7cf5241de7115c1ce2c38cbbaa959d994d97cdc81103f52b9e3771ec7a90a71",
+      "src": "899",
+      "via": "form",
+      "width": 128
+    },
+    "zoroark": {
+      "height": 128,
+      "pokeapiId": 571,
+      "sha256": "e9c8380129fe3f5a6dda60cf51cb39aeea1b4c8a667fd3a9814b377e9cd4e5e8",
+      "src": "571",
+      "via": "form",
+      "width": 128
+    },
+    "zoroarkhisui": {
+      "height": 128,
+      "pokeapiId": 10239,
+      "sha256": "a3d32faea4e9189153daed462457e05d9514a45b7208897cb09ed3d47211096c",
+      "src": "10239",
+      "via": "form",
+      "width": 128
+    }
+  },
+  "missing": [],
+  "sameImage": [
+    [
+      "meowsticfmega",
+      "meowsticmmega"
+    ],
+    [
+      "polteageist",
+      "polteageistantique"
+    ],
+    [
+      "sinistcha",
+      "sinistchamasterpiece"
+    ]
+  ],
+  "source": {
+    "commit": "ba403973fdf9d0ac59175813861e6a1f8ed5020c",
+    "dir": "sprites/pokemon/versions/generation-ix/champions/icons",
+    "idMapping": "PokeAPI/pokeapi data/v2/csv/pokemon_forms.csv @ e5b79b2e15d7c50735a945936afd4cd1cfd94eae (sha256 99bf8f7ad4dc1f2e291357a090cef6a575623ec3cbf9030d0e33656e6e608ae2) + 손 매핑 13건",
+    "repo": "PokeAPI/sprites",
+    "url": "https://raw.githubusercontent.com/PokeAPI/sprites/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-ix/champions/icons/{src}.png"
+  }
+}

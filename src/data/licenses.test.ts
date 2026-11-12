@@ -4,7 +4,7 @@ import { PROJECT_ROOT, buildLicenses, readProjectJson } from '../../scripts/data
 import { META_SCHEMA_VERSION } from './meta-schema'
 import type { MetaIndex } from './meta-schema'
 
-const KNOWN = ['MIT', 'BSD-3-Clause', 'ISC', 'Apache-2.0', '0BSD', 'BSD-2-Clause']
+const KNOWN = ['MIT', 'BSD-3-Clause', 'ISC', 'Apache-2.0', '0BSD', 'BSD-2-Clause', 'CC0-1.0']
 const config = readProjectJson('scripts/data/sources.config.json')
 const POKEAPI_TEXT = 'PokeAPI license text\n'
 
@@ -100,6 +100,37 @@ describe('buildLicenses 메타 출처', () => {
   it('자산 고지 원문에 설정의 저작권 표기가 없으면 실패한다', () => {
     const bad = { ...config as object, assets: [{ ...(config as { assets: object[] }).assets[0], copyright: 'Copyright (c) 1999 Nobody' }] }
     expect(() => buildLicenses(PROJECT_ROOT, bad, POKEAPI_TEXT, metaIndex)).toThrow(/저작권 표기/)
+  })
+
+  it('포켓몬 아이콘(PokeAPI sprites, CC0)·도구 아이콘(Bulbagarden, 출처 표기만)이 asset 항목·고지 원문으로 나온다', () => {
+    const { licenses, notices } = buildLicenses(PROJECT_ROOT, config, POKEAPI_TEXT, metaIndex)
+    expect(licenses.entries.find((e) => e.id === 'asset:pokeapi-champions-icons')).toMatchObject({
+      kind: 'asset',
+      license: 'CC0-1.0',
+      version: 'ba403973fdf9d0ac59175813861e6a1f8ed5020c',
+      source: 'https://github.com/PokeAPI/sprites/tree/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-ix/champions/icons',
+    })
+    expect(licenses.entries.find((e) => e.id === 'asset:bulbagarden-champions-bag')).toMatchObject({
+      kind: 'asset',
+      license: 'NOASSERTION',
+      attributionOnly: true,
+      source: 'https://archives.bulbagarden.net/wiki/Category:Champions_Bag_sprites',
+      version: '2026-11-12 수집',
+    })
+    const sprites = notices.split('\n### ').find((s) => s.startsWith('PokeAPI sprites'))
+    expect(sprites).toContain('All image contents within are Copyright The Pokémon Company.')
+    expect(sprites).toContain('CC0 1.0 Universal')
+    const bag = notices.split('\n### ').find((s) => s.startsWith('Bulbagarden Archives'))
+    expect(bag).toContain('© Nintendo / Creatures Inc. / GAME FREAK inc.')
+    expect(bag).toContain('오픈 라이선스가 아니다')
+  })
+
+  it('attributionOnly 자산은 license NOASSERTION·수집일이 있어야 한다', () => {
+    const assets = (config as { assets: { id: string }[] }).assets
+    const bag = assets.find((a) => a.id === 'asset:bulbagarden-champions-bag')!
+    const withBag = (patch: object) => ({ ...(config as object), assets: assets.map((a) => (a === bag ? { ...bag, ...patch } : a)) })
+    expect(() => buildLicenses(PROJECT_ROOT, withBag({ license: 'MIT' }), POKEAPI_TEXT, metaIndex)).toThrow(/NOASSERTION/)
+    expect(() => buildLicenses(PROJECT_ROOT, withBag({ retrievedAt: '' }), POKEAPI_TEXT, metaIndex)).toThrow(/retrievedAt/)
   })
 
   it('메타 인덱스 schemaVersion이 다르면 실패한다', () => {

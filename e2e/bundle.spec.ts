@@ -50,3 +50,21 @@ test('타입 아이콘 18개는 data URI로 번들되고, 아이콘을 외부 UR
   expect(text.match(/https?:\/\/[^\s"'`)]*\.svg\b/g) ?? []).toEqual([])
   expect(text).not.toMatch(/raw\.githubusercontent\.com\/partywhale/)
 })
+
+test('포켓몬·도구 PNG는 별도 정적 파일(data URI로 JS에 넣지 않음)이고 외부 이미지 URL이 없다', () => {
+  const files = readdirSync(join(DIST, 'assets'))
+  // 빌드는 내용이 같은 파일을 하나로 낸다(예: 메가냐오닉스 수컷·암컷 아이콘이 같은 그림): 매니페스트의 서로 다른 sha256 수만큼
+  const manifestShas = ['pokemon-icons', 'item-icons'].flatMap((d) =>
+    Object.values(
+      (JSON.parse(readFileSync(join(DIST, '..', 'src/assets', d, 'manifest.json'), 'utf8')) as { entries: Record<string, { sha256: string }> }).entries,
+    ).map((e) => e.sha256),
+  )
+  // 매니페스트 항목 수 = 저장소의 PNG 수(로스터가 바뀌어도 고칠 필요 없게 디스크와 대조)
+  const srcPngs = ['pokemon-icons', 'item-icons'].flatMap((d) => readdirSync(join(DIST, '..', 'src/assets', d)).filter((f) => f.endsWith('.png')))
+  expect(manifestShas.length).toBe(srcPngs.length)
+  expect(files.filter((f) => f.endsWith('.png')).length).toBe(new Set(manifestShas).size)
+  const text = ['index.html', ...files.filter((f) => /\.(js|css)$/.test(f)).map((f) => `assets/${f}`)].map(read).join('\n')
+  expect(text).not.toContain('data:image/png')
+  expect(text).not.toMatch(/raw\.githubusercontent\.com\/PokeAPI\/sprites/)
+  expect(text).not.toMatch(/archives\.bulbagarden\.net\/(w\/index\.php|media)/)
+})

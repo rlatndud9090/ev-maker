@@ -13,6 +13,7 @@ import { STAT_SHORT } from '../../ui/format'
 import { draftFieldOf, koReason, type DraftField } from '../../ui/koErrors'
 import type { AppAction } from '../state'
 import { Combobox } from './Combobox'
+import { PokemonIcon } from './PokemonIcon'
 import { TAB_LABEL, meansLabel } from './text'
 
 interface Props {
@@ -202,7 +203,10 @@ export function MySetPanel({ game, view, draft, dispatch, reasons, onDisplaySp }
         <FieldAlerts game={game} reasons={reasons} field="other" set={set} />
         <div className="chips">
           <div className="chip-field wide-chip">
-            <Combobox label="종" hideLabel index={speciesIndex} value={draft.species} placeholder="포켓몬 검색(메가 폼 포함)" labelOf={names.species.label} onCommit={onSpecies} />
+            <div className="species-row">
+              <PokemonIcon speciesId={speciesId} size={56} className="my-mon-icon" />
+              <Combobox label="종" hideLabel index={speciesIndex} value={draft.species} placeholder="포켓몬 검색(메가 폼 포함)" labelOf={names.species.label} onCommit={onSpecies} />
+            </div>
             <FieldAlerts game={game} reasons={reasons} field="species" set={set} />
             <FieldAlerts game={game} reasons={reasons} field="mega" set={set} />
           </div>

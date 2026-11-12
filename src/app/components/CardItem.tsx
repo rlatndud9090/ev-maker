@@ -2,12 +2,14 @@ import { memo, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProp
 import { addedBundleCardId, defaultOption, isPinned, pinOf, type AddedBundle, type CardGroup, type CardView, type CustomTarget, type RowView, type Tab } from '../../cards'
 import type { Snapshot, StatId } from '../../data/schema'
 import { namesOf } from '../../ui/names'
+import { itemIconUrl } from '../../ui/images'
 import { STAT_SHORT, bundleText, categoryBadge, fixedText, koBadge, orderBadge, shareText, type KoBadge } from '../../ui/format'
 import { STAT_LABEL } from '../../ui/labels'
 import { koReason } from '../../ui/koErrors'
 import type { AppAction } from '../state'
 import { CustomEditor } from './CustomEditor'
 import { RowDetail } from './RowDetail'
+import { PokemonIcon } from './PokemonIcon'
 import { MoveLabel, PriorityTag, VariableTag } from './MoveLabel'
 import { itemKeyLabel, moveNoticeText } from './text'
 
@@ -192,14 +194,19 @@ const stop = (e: MouseEvent) => e.stopPropagation()
 const berryName = (game: Snapshot, item: string): string => game.data.items[item]?.name.ko ?? item
 
 /**
- * 반감열매 행 이름 옆 배지 "(마코)": 열매 이름에서 "열매"를 뗀 짧은 이름. 나중에 도구 이미지로 바꿀 자리라 data-item-id를 단다.
- * 보이는 글자는 스크린 리더에서 숨기고 "마코열매 지닌 경우"로 읽힌다.
+ * 반감열매 행 이름 옆 배지: 도구 이미지(Champions 가방 스프라이트, 툴팁 "마코열매"). 이미지가 없으면 열매 이름에서 "열매"를 뗀 "(마코)".
+ * 보이는 그림·글자는 스크린 리더에서 숨기고 "마코열매 지닌 경우"로 읽힌다. data-item-id는 도구 id.
  */
 function BerryBadge({ game, item }: { game: Snapshot; item: string }) {
   const name = berryName(game, item)
+  const url = itemIconUrl(item)
   return (
-    <span className="berry-badge" data-testid="berry-badge" data-item-id={item} title={`${name} 지닌 경우`}>
-      <span aria-hidden="true">({name.replace(/열매$/, '')})</span>
+    <span className={`berry-badge${url === undefined ? '' : ' berry-badge-img'}`} data-testid="berry-badge" data-item-id={item} title={url === undefined ? `${name} 지닌 경우` : name}>
+      {url === undefined ? (
+        <span aria-hidden="true">({name.replace(/열매$/, '')})</span>
+      ) : (
+        <img className="item-icon" src={url} alt="" width={22} height={22} loading="lazy" decoding="async" draggable={false} data-item-icon={item} />
+      )}
       <span className="sr-only">{name} 지닌 경우</span>
     </span>
   )
@@ -675,6 +682,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
       {/* 행 어디를 눌러도 펼친다. 키보드·스크린 리더는 이름 칸 버튼(클릭이 이 줄로 버블돼 한 번만 토글). */}
       <div className="card-line" onClick={() => onToggle(group.key)}>
         <button type="button" className="card-toggle card-who" aria-expanded={expanded} aria-controls={detailId} aria-describedby={describedBy}>
+          <PokemonIcon speciesId={card.opponent.id} size={32} lazy />
           <span className="card-name">
             <SpeciesName label={names.species.label(card.opponent.id)} />
             {group.berry !== undefined && (

@@ -1,0 +1,155 @@
+{
+  "entries": {
+    "babiriberry": {
+      "file": "Bag_Babiri_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "e3afe74a9fefa163f5ce9d740af7bcf8552de3da",
+      "sha256": "7492dcb7ef721f6e9e41275305512f43e0082910aea8ad5f6d2fbce45c4cb8be",
+      "uploadedAt": "2026-04-08T04:34:45Z",
+      "width": 48
+    },
+    "chartiberry": {
+      "file": "Bag_Charti_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "e4551043d638a2ff8092dd8a5ece4b8dd750b916",
+      "sha256": "80a30c52b1724f0b64d7aae0562d1e96441d4285dc8118650e70178eee67e882",
+      "uploadedAt": "2026-04-08T04:33:15Z",
+      "width": 48
+    },
+    "chilanberry": {
+      "file": "Bag_Chilan_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "221e8d1fdf49d249879d8b754443fdf9a1172493",
+      "sha256": "ef5089e27a72879de3513276b13d84ffe9b48c9dc00b0a4c7b666d2afc206a75",
+      "uploadedAt": "2026-04-08T04:35:08Z",
+      "width": 48
+    },
+    "chopleberry": {
+      "file": "Bag_Chople_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "f3a35b6cd70b5ed6f1f1b4a0cc9c8f8f93e80a5f",
+      "sha256": "200295152726af67edb17301f0505d91437fe45c54675556da781f1450b51b39",
+      "uploadedAt": "2026-04-08T04:30:25Z",
+      "width": 48
+    },
+    "cobaberry": {
+      "file": "Bag_Coba_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "ef56d0f51ae6fbb46cef61548af2534cdcb7d120",
+      "sha256": "641b8cdc78e5790f5691a3ad33bec5061bf4ca404c23688e0bedb273b7cf9bf3",
+      "uploadedAt": "2026-04-08T04:31:45Z",
+      "width": 48
+    },
+    "colburberry": {
+      "file": "Bag_Colbur_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "ee264a446d8e8921dc9c235cfd583226b3611e46",
+      "sha256": "67f203bcccca843b0f17b58c0f71b71cc6fc5b865a426118ca42e99e44c89d56",
+      "uploadedAt": "2026-04-08T04:34:20Z",
+      "width": 48
+    },
+    "habanberry": {
+      "file": "Bag_Haban_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "2ce4af1d7ca42ac24728013291e395a38c22bfb1",
+      "sha256": "59b1c8a746f684c2dd0706a84876c438ab7e89219c4c0141fd47f5cc09fba9e8",
+      "uploadedAt": "2026-04-08T04:33:58Z",
+      "width": 48
+    },
+    "kasibberry": {
+      "file": "Bag_Kasib_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "f14d042043d2bb667f636815020e230f833c63ef",
+      "sha256": "0d3b4bf155774414c3fdf1f963532e8c0bac3dd85698ef7ea5a011defa861df6",
+      "uploadedAt": "2026-04-08T04:33:37Z",
+      "width": 48
+    },
+    "kebiaberry": {
+      "file": "Bag_Kebia_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "6c9f9f2f56035e84d772f8f46f3c2af6b0617ade",
+      "sha256": "c302aaaf1f12aec557ceba0f4c73cbc88f4967a84d318d11879bb6a40f75f1ec",
+      "uploadedAt": "2026-04-08T04:30:55Z",
+      "width": 48
+    },
+    "occaberry": {
+      "file": "Bag_Occa_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "0d89617a6613780e7df5da311370ce6a9cf1f907",
+      "sha256": "f8a6ebbcb1d165ac326747f5695d2077222d0c484b6788ea7db6e9f8dfbf555a",
+      "uploadedAt": "2026-04-08T04:27:34Z",
+      "width": 48
+    },
+    "passhoberry": {
+      "file": "Bag_Passho_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "4504d70817306fbff4e5215d1d18d47ddbbb2473",
+      "sha256": "c3f712ef7372398c44b0b3baf2fae2946251d5ccbd8a91caf0e4413294806119",
+      "uploadedAt": "2026-04-08T04:28:13Z",
+      "width": 48
+    },
+    "payapaberry": {
+      "file": "Bag_Payapa_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "852129d100619cf299152e4c671de3da7b538c72",
+      "sha256": "d7b4e4f04f3b31feac9c3d7c278d538d73d2935df96e27240a2a8bbaebb694e4",
+      "uploadedAt": "2026-04-08T04:32:18Z",
+      "width": 48
+    },
+    "rindoberry": {
+      "file": "Bag_Rindo_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "c28a356eb9905ab283052ee6b802719d36c9624e",
+      "sha256": "a15e7c9af1980d9d7a2b415a706531db5f1f49a1251fdcdc6e94e5c44cad43ea",
+      "uploadedAt": "2026-04-08T04:29:17Z",
+      "width": 48
+    },
+    "roseliberry": {
+      "file": "Bag_Roseli_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "4cbe95093a89353823a97a9e40e92df6dae19add",
+      "sha256": "ed7e649e6c068eaf21fa0969f10323f7c4f7447ed872bddec3592fb1c9040c41",
+      "uploadedAt": "2026-04-08T04:35:49Z",
+      "width": 48
+    },
+    "shucaberry": {
+      "file": "Bag_Shuca_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "cceb586a2804c32963404d22929d40e16dbdf31e",
+      "sha256": "4b07cddeda2f9f8b5525c4c4491bab6712540dcf9bd1519eea19cbf19467cbe4",
+      "uploadedAt": "2026-04-08T04:31:29Z",
+      "width": 48
+    },
+    "tangaberry": {
+      "file": "Bag_Tanga_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "978034ab5b3cdb2cbc801165ee0aa107ffcdadc3",
+      "sha256": "0f58df6f63a9adcbba6b347994f56cffb294aa81d5d35106ea6c2aaf76802f0b",
+      "uploadedAt": "2026-04-08T04:32:58Z",
+      "width": 48
+    },
+    "wacanberry": {
+      "file": "Bag_Wacan_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "725e36350d8a709682f75b0be613e4ec20495f6b",
+      "sha256": "ca6a3c188e6644d05367a4147fb17a26122da2b08004daacae655dbd612d29d5",
+      "uploadedAt": "2026-04-08T04:28:55Z",
+      "width": 48
+    },
+    "yacheberry": {
+      "file": "Bag_Yache_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "8960dd7f2a719f14d27549bbb75f8c7fbb9fb280",
+      "sha256": "4014d678560f682bebdd124511daa0b39e587002f54e476e7ee8b97c0d22a902",
+      "uploadedAt": "2026-04-08T04:29:34Z",
+      "width": 48
+    }
+  },
+  "missing": [],
+  "source": {
+    "category": "https://archives.bulbagarden.net/wiki/Category:Champions_Bag_sprites",
+    "pinning": "entries.uploadedAt·sha1 = 받은 시점 원천 판(MediaWiki imageinfo). 판이 바뀌면 gen:images가 다시 받고 경고한다.",
+    "site": "Bulbagarden Archives",
+    "url": "https://archives.bulbagarden.net/w/index.php?title=Special:FilePath&file=%7Bfile%7D"
+  }
+}

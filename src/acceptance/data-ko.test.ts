@@ -320,7 +320,7 @@ describe('수용 기준: 배포 산출물(자동 확인 가능한 부분)', () =
     expect(lic.entries.length).toBeGreaterThan(0)
     for (const e of lic.entries) {
       if (e.attributionOnly) expect(e.license, e.id).toBe('NOASSERTION')
-      else expect(['MIT', 'BSD-3-Clause', 'ISC', 'Apache-2.0'], e.id).toContain(e.license)
+      else expect(['MIT', 'BSD-3-Clause', 'ISC', 'Apache-2.0', 'CC0-1.0'], e.id).toContain(e.license)
       expect(e.source, e.id).toMatch(/^(https?:\/\/|github:|npm:)\S+/)
     }
     const ids = lic.entries.map((e) => e.id)

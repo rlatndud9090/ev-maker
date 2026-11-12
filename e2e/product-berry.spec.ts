@@ -58,7 +58,12 @@ test.describe('공격 탭 상대 도구: 기합의띠 없음 · 반감열매 별
     await expect(berry).toHaveAttribute('data-berry', 'colburberry')
     const badge = berry.getByTestId('berry-badge')
     await expect(badge).toHaveAttribute('data-item-id', 'colburberry')
-    await expect(badge.locator('[aria-hidden="true"]')).toHaveText('(마코)')
+    // 배지는 열매 이미지(Champions 가방 스프라이트, 툴팁 "마코열매"), 이미지는 장식(alt="")이고 접근 이름은 숨김 글자가 낸다
+    const icon = badge.locator('img[data-item-icon="colburberry"]')
+    await expect(icon).toHaveAttribute('alt', '')
+    await expect(badge).toHaveAttribute('title', '마코열매')
+    await expect(badge).not.toContainText('(마코)')
+    await expect.poll(() => icon.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(48)
     await expect(berry.locator('.card-name')).toContainText('대쓰여너')
     await expect(berry.locator('.card-toggle')).toHaveAccessibleName(/^대쓰여너.*마코열매 지닌 경우/)
     // 사용률 순: 원래 행 바로 뒤
