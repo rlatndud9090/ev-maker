@@ -18,6 +18,7 @@ import type { MetaEntry } from '../data/meta-schema'
 import { NO_ITEM } from '../data/meta-schema'
 import type { Snapshot, StatId } from '../data/schema'
 import { observedSpreadAssumption, representativeAssumption, resolveAssumption, type Assumption } from '../meta'
+import { berryActivates, resistBerriesOf } from './berries'
 import { bundleStats, bundlesOf, natureSign } from './bundles'
 import { addedBundleKey, addedCardId, cardId as makeCardId, presetKey, rowId } from './ids'
 import { presetAssumption } from './presets'
@@ -30,6 +31,7 @@ import {
   CATEGORY_ORDER,
   type BundleSpec,
   type CardInput,
+  type BerryVariant,
   type CardSpec,
   type Category,
   type ConditionGroup,
@@ -239,6 +241,33 @@ class PlanBuilder {
     })
   }
 
+  /** 가정 세트의 도구만 바꾼 씨앗(undefined = 도구 없음). 다시 해석한다 */
+  withItem(seed: CardSeed, item: string | undefined): CardSeed {
+    const set = { ...seed.assumption.set }
+    if (item === undefined) delete set.item
+    else set.item = item
+    return this.seed(seed.category, seed.bundle, { ...seed.assumption, set })
+  }
+
+  /**
+   * 공격 탭 래더 상대의 반감열매 변형: 도구 분포에서 점유율 berryShareMin 이상인 반감열매마다, 내 공격기 중 그 열매가 발동하는 기술(triggers).
+   * 발동할 기술이 하나도 없으면 변형을 만들지 않는다(그 열매는 판정에 관여하지 않는다). 메가 항목(메가스톤 고정)·목록 밖 타겟은 없다.
+   * 대상 타입·특성(서투름이면 열매 무효)은 해석된 씨앗(관측 배분 대표 세트) 기준.
+   */
+  berryVariants(opp: Opponent, seeds: readonly CardSeed[], slots: readonly MoveSlot[]): (BerryVariant & { triggers: string[] })[] {
+    const entry = opp.entry
+    if (entry === undefined || entry.mega !== undefined) return []
+    const resolved = seeds.find((s) => s.resolved !== undefined)?.resolved
+    if (resolved === undefined) return []
+    const user = { types: this.me.species.types, ability: this.me.ability }
+    const out: (BerryVariant & { triggers: string[] })[] = []
+    for (const b of resistBerriesOf(entry.items.shares, this.input.criteria.berryShareMin)) {
+      const triggers = slots.filter((s) => berryActivates(this.game, s.moveId, b.item, user, { types: resolved.species.types, ability: resolved.ability })).map((s) => s.moveId)
+      if (triggers.length > 0) out.push({ ...b, triggers })
+    }
+    return out
+  }
+
   seed(category: Category | null, bundle: BundleSpec, assumption: Assumption): CardSeed {
     const r = resolveAssumption(this.game, assumption)
     if (!r.usable) return { category, bundle, assumption, error: errorReasons(r.error)[0] }
@@ -258,14 +287,15 @@ class PlanBuilder {
   }
 
   /** 카드를 만들고 rows/filters/fixed를 채울 수 있게 빈 목록을 돌려준다. */
-  openCard(opp: Opponent, seed: CardSeed, notices: readonly MoveNotice[]): CardSpec {
+  openCard(opp: Opponent, seed: CardSeed, notices: readonly MoveNotice[], berry?: BerryVariant & { triggers: readonly string[] }): CardSpec {
     const bundlePart = seed.bundle.presetIndex ?? seed.bundle.key
-    // 사용자 추가 배분은 'user' 표지를 붙여 같은 키의 관측 묶음 카드와 id가 겹치지 않게 한다.
+    const parts = [this.tab, opp.header.source, opp.header.id, seed.category, bundlePart]
+    // 사용자 추가 배분은 'user' 표지를 붙여 같은 키의 관측 묶음 카드와 id가 겹치지 않게 한다. 반감열매 변형은 'berry' + 열매 id를 붙인다.
     const card: CardSpec = {
       id:
         seed.bundle.userAdded === undefined
-          ? makeCardId([this.tab, opp.header.source, opp.header.id, seed.category, bundlePart])
-          : addedCardId(this.tab, opp.header.id, seed.category, seed.bundle.key),
+          ? makeCardId(berry === undefined ? parts : [...parts, 'berry', berry.item])
+          : addedCardId(this.tab, opp.header.id, seed.category, seed.bundle.key, berry?.item),
       order: this.cards.length,
       opponent: opp.header,
       category: seed.category,
@@ -279,6 +309,7 @@ class PlanBuilder {
       conditions: [],
     }
     if (seed.error) card.error = seed.error
+    if (berry !== undefined) card.berry = { item: berry.item, share: berry.share, triggers: [...berry.triggers] }
     if (seed.resolved) {
       const mine = { types: this.me.species.types, ability: this.me.ability }
       const theirs = { types: seed.resolved.species.types, ability: seed.resolved.ability }
@@ -362,8 +393,8 @@ class PlanBuilder {
    * all = 내 공격기 전부(슬롯 순). 이 카드 분류의 기술만 행을 만들고, 다른 분류 기술은 비교 전용 후보로만 넣어
    * 조건마다 4개 기술 전부에서 가장 센 기술을 고른다(사용자 피드백 2026-11-11).
    */
-  attackCard(opp: Opponent, seed: CardSeed, all: readonly MoveSlot[]): void {
-    const card = this.openCard(opp, seed, [])
+  attackCard(opp: Opponent, seed: CardSeed, all: readonly MoveSlot[], berry?: BerryVariant & { triggers: readonly string[] }): void {
+    const card = this.openCard(opp, seed, [], berry)
     const resolved = seed.resolved
     if (!resolved) return
     const oppSet = seed.assumption.set
@@ -624,14 +655,14 @@ function planHead(input: CardInput, tab: Tab, mySp: SpTable) {
   }
 }
 
-/** 공격측이 나면 attacker 순풍 = 내 순풍. 나머지 조건은 코어 기본값. */
+/**
+ * 스피드 탭: 공격측(나) attacker 순풍 = 내 순풍, defender 순풍 = 상대 순풍. 순풍 토글은 스피드 탭에서만 보이므로 공격·방어 탭은
+ * 순풍 없음으로 계산한다(화면에 없는 입력이 판정·캐시 키에 섞이지 않게. 자이로볼 등 스피드 의존 위력도 순풍 없음 가정). 나머지 조건은 코어 기본값.
+ */
 function conditionsFor(input: CardInput, tab: Tab): BattleConditions {
-  const meAttacking = tab !== 'defense'
+  if (tab !== 'speed') return { attacker: { tailwind: false }, defender: { tailwind: false } }
   const { myTailwind, opponentTailwind } = input.conditions
-  return {
-    attacker: { tailwind: meAttacking ? myTailwind : opponentTailwind },
-    defender: { tailwind: meAttacking ? opponentTailwind : myTailwind },
-  }
+  return { attacker: { tailwind: myTailwind }, defender: { tailwind: opponentTailwind } }
 }
 
 /** 상위 N 또는 선택 종(사용률 순) + 목록 밖 타겟(추가 순). 목록 안 종 타겟은 충돌로 돌린다. */
@@ -691,8 +722,17 @@ export function planTab(input: CardInput, tab: Tab): TabPlan {
     const slots = b.myAttackSlots(tabNotices)
     const categories = CATEGORY_ORDER.filter((c) => slots.some((s) => s.refs?.defense === defenseStatOf(c)))
     for (const opp of opponents) {
-      for (const category of categories) {
-        for (const seed of seedsOf(opp, category, ['hp', defenseStatOf(category)])) b.attackCard(opp, seed, slots)
+      // 상대(맞는 쪽) 도구 중 내 대미지·1타 판정에 관여하는 건 반감열매·기합의띠뿐이고 기합의띠는 고려하지 않는다(사용자 피드백 2026-11-12):
+      // 래더 기본 카드는 도구 없음(메가 항목은 메가스톤 유지), 반감열매는 점유율 기준을 넘는 것마다 별도 변형 카드(원래 카드 바로 뒤).
+      // 목록 밖 타겟은 사용자가 고른 프리셋 도구 그대로다.
+      const strip = opp.entry !== undefined && opp.entry.mega === undefined
+      const seeds = categories.map((category) => {
+        const raw = seedsOf(opp, category, ['hp', defenseStatOf(category)])
+        return strip ? raw.map((s) => (s.assumption.set.item === undefined ? s : b.withItem(s, undefined))) : raw
+      })
+      seeds.forEach((list) => list.forEach((seed) => b.attackCard(opp, seed, slots)))
+      for (const berry of b.berryVariants(opp, seeds.flat(), slots)) {
+        seeds.forEach((list) => list.forEach((seed) => b.attackCard(opp, b.withItem(seed, berry.item), slots, berry)))
       }
     }
   } else if (tab === 'defense') {

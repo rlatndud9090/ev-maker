@@ -188,6 +188,23 @@ function SpeciesName({ label }: { label: string }) {
 
 const stop = (e: MouseEvent) => e.stopPropagation()
 
+/** 반감열매 한국어 이름(스냅샷에 없으면 id) */
+const berryName = (game: Snapshot, item: string): string => game.data.items[item]?.name.ko ?? item
+
+/**
+ * 반감열매 행 이름 옆 배지 "(마코)": 열매 이름에서 "열매"를 뗀 짧은 이름. 나중에 도구 이미지로 바꿀 자리라 data-item-id를 단다.
+ * 보이는 글자는 스크린 리더에서 숨기고 "마코열매 지닌 경우"로 읽힌다.
+ */
+function BerryBadge({ game, item }: { game: Snapshot; item: string }) {
+  const name = berryName(game, item)
+  return (
+    <span className="berry-badge" data-testid="berry-badge" data-item-id={item} title={`${name} 지닌 경우`}>
+      <span aria-hidden="true">({name.replace(/열매$/, '')})</span>
+      <span className="sr-only">{name} 지닌 경우</span>
+    </span>
+  )
+}
+
 const SP_TEXT = /^\d+$/
 
 /**
@@ -289,7 +306,7 @@ function bundleActions({ tab, group, card, onSelect, dispatch }: ActionProps, sp
     } else if (spMax !== undefined) {
       const added: AddedBundle = { tab, opponentId: card.opponent.id, category: card.category, sp }
       dispatch({ type: 'add-bundle', bundle: added, keyStats: stats.map((s) => s.stat), spMax })
-      onSelect(group.key, addedBundleCardId(added, stats))
+      onSelect(group.key, addedBundleCardId(added, stats, card.berry?.item))
     }
     done?.()
     if (existing === undefined) rememberFocusReturn(returnKey)
@@ -645,6 +662,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
       data-card-id={card.id}
       data-group-key={group.key}
       data-opponent={card.opponent.id}
+      data-berry={group.berry?.item}
       data-category={card.category ?? 'none'}
       data-origin={ladder ? 'ladder' : 'custom'}
       data-rank={ladder ? card.opponent.rank : undefined}
@@ -659,6 +677,12 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
         <button type="button" className="card-toggle card-who" aria-expanded={expanded} aria-controls={detailId} aria-describedby={describedBy}>
           <span className="card-name">
             <SpeciesName label={names.species.label(card.opponent.id)} />
+            {group.berry !== undefined && (
+              <>
+                {' '}
+                <BerryBadge game={game} item={group.berry.item} />
+              </>
+            )}
           </span>
           {!ladder && (
             <span className="card-meta">
@@ -744,7 +768,8 @@ function sameProps(a: Props, b: Props): boolean {
   if (a.game !== b.game || a.tab !== b.tab || a.card !== b.card || a.rollSteps !== b.rollSteps || a.expanded !== b.expanded) return false
   if (a.onToggle !== b.onToggle || a.onSelect !== b.onSelect || a.target !== b.target || a.dispatch !== b.dispatch || a.groupLabelId !== b.groupLabelId) return false
   if (a.group === b.group) return true
-  if (a.group.key !== b.group.key || a.group.opponent !== b.group.opponent || a.group.options.length !== b.group.options.length) return false
+  if (a.group.key !== b.group.key || a.group.opponent !== b.group.opponent || a.group.berry?.item !== b.group.berry?.item || a.group.options.length !== b.group.options.length)
+    return false
   if (a.group.pinned.length !== b.group.pinned.length || !a.group.pinned.every((id, i) => id === b.group.pinned[i])) return false
   return a.group.options.every((o, i) => o === b.group.options[i])
 }

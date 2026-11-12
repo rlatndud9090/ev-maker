@@ -199,7 +199,8 @@ function candidateRefs(moveId: string, mine: boolean): ReturnType<typeof moveSta
  * 선공기만 남긴다. 후보는 분류를 가로지른 상대 한 마리의 기술 전부다(사용자 피드백 2026-11-11): 다른 분류 기술은 이 카드의 대표 세트·같은 조건 세트로
  * 판정하고, 그 기술이 고르면 이 카드의 행은 빠진다. 무효는 버리고 코어가 거부하면 error. 키 = 공격 탭 행·고정 id, 방어 탭 필터 id.
  */
-function corePicks(plan: TabPlan, card: CardSpec, meta: MetaView): Map<string, CorePick> {
+/** bestOut: 조건 그룹('base' 또는 랭크 수단 키) → 고른 가장 센 기술 id(무효뿐이면 첫 무효 후보) */
+function corePicks(plan: TabPlan, card: CardSpec, meta: MetaView, bestOut?: Map<string, string>): Map<string, CorePick> {
   type Cand = { id: string; moveId: string; order: number; user: PokemonSet; target: PokemonSet; judge: () => ReturnType<typeof judgeDamage> }
   type Sets = { side: 'attacker' | 'defender'; attacker: PokemonSet; defender: PokemonSet; conditions: RowSpec['conditions']; herb: boolean }
   const groups = new Map<string, Cand[]>()
@@ -248,7 +249,7 @@ function corePicks(plan: TabPlan, card: CardSpec, meta: MetaView): Map<string, C
     }
   }
   const out = new Map<string, CorePick>()
-  for (const cands of groups.values()) {
+  for (const [groupKey, cands] of groups) {
     const scored: { c: Cand; p: number; max: number }[] = []
     let firstImmune: Cand | undefined
     for (const c of [...cands].sort((a, b) => a.order - b.order)) {
@@ -266,6 +267,8 @@ function corePicks(plan: TabPlan, card: CardSpec, meta: MetaView): Map<string, C
     for (const x of scored) if (x === best || priorityRowWorthy(x.c)) out.set(x.c.id, 'kept')
     // 모든 후보가 무효면(계산 불가 후보 없음) 첫 무효 후보(행이 "무효" 판정으로 남는다)
     if (best === undefined && firstImmune !== undefined && cands.every((c) => out.get(c.id) !== 'error')) out.set(firstImmune.id, 'kept')
+    const bestMove = best?.c.moveId ?? (cands.every((c) => out.get(c.id) !== 'error') ? firstImmune?.moveId : undefined)
+    if (bestMove !== undefined) bestOut?.set(groupKey, bestMove)
   }
   return out
 }
@@ -286,12 +289,22 @@ function expectMatchesCore(plan: TabPlan, view: TabView, meta: MetaView = bo1): 
   for (const card of plan.cards) {
     if (card.opponent.source !== 'ladder') continue
     if (card.state === 'error') {
-      perCard.push({ id: card.id, group: JSON.stringify([card.opponent.source, card.opponent.id]), shown: 1, items: [] })
+      // 반감열매 변형의 해석 실패는 기본 카드가 같은 이유로 보이므로 보이지 않는다.
+      perCard.push({ id: card.id, group: JSON.stringify([card.opponent.source, card.opponent.id]), shown: card.berry === undefined ? 1 : 0, items: [] })
       continue
     }
     const start = items.length
     let shown = 0
-    const picks = corePicks(plan, card, meta)
+    const bestMoves = new Map<string, string>()
+    const picks = corePicks(plan, card, meta, bestMoves)
+    // 반감열매 변형: 기본 조건의 가장 센 기술(코어 재판정)에 열매가 발동하지 않으면 그 카드는 보이지 않는다.
+    if (card.berry !== undefined) {
+      const chosen = bestMoves.get('base')
+      if (chosen === undefined || !card.berry.triggers.includes(chosen)) {
+        perCard.push({ id: card.id, group: JSON.stringify([card.opponent.source, card.opponent.id, card.berry.item]), shown: 0, items: [] })
+        continue
+      }
+    }
     const viewCard = view.cards.find((c) => c.id === card.id)
     const gates = new Map<string, 'passed' | 'shown' | 'hidden'>()
     for (const rowId of card.rowIds) {
@@ -302,6 +315,11 @@ function expectMatchesCore(plan: TabPlan, view: TabView, meta: MetaView = bo1): 
       }
       const pick = picks.get(spec.gate ?? rowId)
       if (pick === 'dropped') {
+        expect(viewCard?.rows.find((x) => x.id === rowId), rowId).toBeUndefined()
+        continue
+      }
+      // 반감열매 변형 안에서도 조건별 가장 센 기술(선공기 포함)에 열매가 발동하지 않으면 그 행은 기본 카드와 같은 판정이라 뺀다.
+      if (card.berry !== undefined && pick === 'kept' && spec.moveId !== undefined && !card.berry.triggers.includes(spec.moveId)) {
         expect(viewCard?.rows.find((x) => x.id === rowId), rowId).toBeUndefined()
         continue
       }
@@ -355,6 +373,7 @@ function expectMatchesCore(plan: TabPlan, view: TabView, meta: MetaView = bo1): 
     for (const fixedId of card.fixedIds) {
       if (picks.get(fixedId) === 'dropped') continue
       const f = plan.fixed[fixedId]
+      if (card.berry !== undefined && picks.get(fixedId) === 'kept' && !card.berry.triggers.includes(f.moveId)) continue
       const c = coreCategory(() => judgeDamage(game, 'attacker', f.attacker, f.defender, f.moveId, f.conditions, undefined, { rollSteps: N }))
       if (c === null) shown++
       else items.push(JSON.stringify([card.id, 'sp-independent', f.moveId, null, c, null]))

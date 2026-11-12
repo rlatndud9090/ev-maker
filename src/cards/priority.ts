@@ -21,7 +21,7 @@ export function keepsPriorityRow(game: Snapshot, moveId: string, user: PriorityU
   if (move.priority <= 0) return false
   try {
     const type = attackMoveType(moveId, move.type, user.ability)
-    const eff = attackEffectiveness(type, targetTypes, user.ability)
+    const eff = attackEffectiveness(type, targetTypes, user.ability, moveId)
     if (eff > 1) return true
     return user.types.includes(type) && eff >= 1
   } catch {

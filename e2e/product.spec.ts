@@ -258,15 +258,43 @@ test.describe('제품 화면', () => {
     expect(over.filter((c) => c.sp <= current).every((c) => !c.over)).toBe(true)
     expect(over.filter((c) => c.sp > current).every((c) => c.over)).toBe(true)
     await expect(row.locator('.band-legend')).toContainText('빗금 = 예산 밖')
-    // 띠가 자체 가로 스크롤 컨테이너 안에 있다.
-    await expect(row.locator('.band-scroll .band')).toHaveCount(1)
+    // 띠는 색 칸만(칸 안 숫자·기호 없음), 스크롤 상자 없이 한 줄. 아래 0·16·32 눈금.
+    await expect(row.locator('.band')).toHaveCount(1)
+    await expect(row.locator('.band-scroll')).toHaveCount(0)
+    expect(await cells.evaluateAll((els) => els.map((e) => e.textContent).join(''))).toBe('')
+    await expect(row.locator('.band-ticks')).toHaveText('01632')
+    // 칸 title = 그 칸 SP와 판정(칸 순서 = SP 0~32, title SP = data-sp)
+    const titles = await cells.evaluateAll((els) => els.map((e) => [Number((e as HTMLElement).dataset.sp), e.getAttribute('title') ?? '', (e as HTMLElement).dataset.category ?? '']))
+    expect(titles.map(([sp]) => sp)).toEqual(Array.from({ length: 33 }, (_, i) => i))
+    for (const [sp, title] of titles) expect(title).toMatch(new RegExp(`^SP ${sp}: ${TIER}`))
+    // 같은 판정 칸은 같은 title 판정, 범례 범위와 칸 판정이 맞는다.
+    const spans = await row.locator('.band-legend .span:not(.over-key)').allTextContents()
+    for (const text of spans) {
+      const m = /^\s*(\d+)(?:~(\d+))? (.+)$/.exec(text)!
+      const from = Number(m[1])
+      const to = m[2] === undefined ? from : Number(m[2])
+      const labels = new Set(titles.filter(([sp]) => (sp as number) >= from && (sp as number) <= to).map(([, t]) => (t as string).replace(/^SP \d+: /, '').replace(/ \(.*\)$/, '')))
+      expect(labels.size, text).toBe(1)
+    }
+    // 예산 밖 구간은 칸 툴팁에만 있던 필요 SP 범위를 범례 텍스트로도 보인다(터치·키보드 사용자). H2라 SP n 칸은 n−2 필요.
+    const overSpans = await row.locator('.band-legend .span.over').allTextContents()
+    expect(overSpans.length).toBeGreaterThan(0)
+    for (const text of overSpans) {
+      const m = /^\s*(\d+)(?:~(\d+))? .+ · 다른 능력치에서 (\d+)(?:~(\d+))? 필요$/.exec(text)
+      expect(m, text).not.toBeNull()
+      const [from, to] = [Number(m![1]), m![2] === undefined ? Number(m![1]) : Number(m![2])]
+      const needs = titles.filter(([sp]) => (sp as number) >= from && (sp as number) <= to).map(([, t]) => Number(/다른 능력치에서 (\d+) 필요/.exec(t as string)?.[1] ?? 0)).filter((n) => n > 0)
+      expect([Number(m![3]), m![4] === undefined ? Number(m![3]) : Number(m![4])], text).toEqual([Math.min(...needs), Math.max(...needs)])
+    }
+    await expect(row.locator('.band-legend .over-key .over-swatch')).toHaveCount(1)
+    await expect(row.locator('.band-legend .over-key')).not.toContainText('마우스')
     // 판정은 색만이 아니라 텍스트 라벨로도 보인다(AC19).
     // 현재 판정은 목표 문구와 같은 5단 단계명(한 줄 한 어휘).
     await expect(row.locator('.row-judge')).toHaveText(new RegExp(`현재 H\\d+ ${TIER} 변동 가능 · `))
     // 상세 행도 경계 문구 대신 H·B/D 함께 조정한 최소 조합 목표 — 무보정 / B·D 상승(사용자 피드백 2026-11-11 2차).
     await expect(row.getByTestId('row-target')).toHaveText(new RegExp(`^ · ${targetPattern('H\\d+ [BD]\\d+')}$`))
     await expect(row.locator('.row-judge')).not.toContainText(/까지 줄여도|부터/)
-    await expect(cells.first()).toHaveAttribute('title', new RegExp(`^0: ${TIER}`))
+    await expect(cells.first()).toHaveAttribute('title', new RegExp(`^SP 0: ${TIER}`))
     await expect(row.locator('.band-legend .span').first()).toHaveText(new RegExp(`\\d+(~\\d+)? ${TIER}`))
     // 띠 칸 색은 결과 배지와 같은 5색(판정 → 색 한 가지 대응).
     const tones = await cells.evaluateAll((els) => els.map((e) => [(e as HTMLElement).dataset.category, [...e.classList].find((c) => c.startsWith('ko-'))]))

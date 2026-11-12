@@ -52,9 +52,9 @@ describe('reducer', () => {
     const s = start()
     const next = reducer(s, { type: 'set-criteria', criteria: { bundleShareMin: 0.1 } })
     expect(next.criteria).toEqual({ ...DEFAULT_CRITERIA, bundleShareMin: 0.1 })
-    expect(Object.keys(next.criteria).sort()).toEqual(['bundleShareMin', 'rankShareMin', 'scarfShareMin'])
+    expect(Object.keys(next.criteria).sort()).toEqual(['berryShareMin', 'bundleShareMin', 'rankShareMin', 'scarfShareMin'])
     expect(next.generation).toBe(1)
-    for (const criteria of [{ bundleShareMin: NaN }, { bundleShareMin: 1.01 }, { rankShareMin: 1.5 }, { scarfShareMin: -0.1 }]) {
+    for (const criteria of [{ bundleShareMin: NaN }, { bundleShareMin: 1.01 }, { rankShareMin: 1.5 }, { scarfShareMin: -0.1 }, { berryShareMin: 2 }]) {
       expect(reducer(next, { type: 'set-criteria', criteria })).toBe(next)
     }
     expect(reducer(next, { type: 'set-criteria', criteria: { bundleShareMin: 0.1 } })).toBe(next)

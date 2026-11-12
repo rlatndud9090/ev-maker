@@ -1,7 +1,7 @@
-import { memo, useLayoutEffect, useRef } from 'react'
+import { memo, type CSSProperties } from 'react'
 import { cellLabel, type CellView, type RowView, type Tab } from '../../cards'
 import type { Snapshot } from '../../data/schema'
-import { categoryLabel, categorySymbol, categoryTone, currentText, fixedText, spanText, spansOf, targetSegments, type TargetLike, type TargetSegment } from '../../ui/format'
+import { categoryLabel, categorySymbol, categoryTone, currentText, fixedText, spanNeedText, spanText, spansOf, targetSegments, type TargetLike, type TargetSegment } from '../../ui/format'
 import { koReason } from '../../ui/koErrors'
 import { PriorityTag, VariableTag } from './MoveLabel'
 import { ROW_KIND_LABEL, basisText, rowRefsNote, rowTitle } from './text'
@@ -19,50 +19,42 @@ function TierChip({ tab, category }: { tab: Tab; category: string }) {
   )
 }
 
-/** 띠 스크롤 상자의 양 끝에 더 있는 칸이 있으면 data-more-left/right(가장자리 그라데이션 표시). React 상태 없이 DOM 속성만 바꾼다 */
-function markEdges(el: HTMLElement) {
-  const max = el.scrollWidth - el.clientWidth
-  el.toggleAttribute('data-more-left', el.scrollLeft > 1)
-  el.toggleAttribute('data-more-right', el.scrollLeft < max - 1)
+/** 띠 눈금(칸 아래 작은 숫자): 0·가운데·끝 SP */
+const tickSps = (cells: readonly CellView[]): number[] => {
+  if (cells.length === 0) return []
+  const last = cells.length - 1
+  return [...new Set([0, Math.floor(last / 2), last])].map((i) => cells[i].sp)
 }
 
-function Band({ tab, cells, current }: { tab: Tab; cells: readonly CellView[]; current: number }) {
-  const ref = useRef<HTMLDivElement>(null)
-  // 띠가 상자보다 넓으면(상세 오른쪽 열) 처음 그릴 때 현재 칸이 보이게 옮긴다. 이후 스크롤은 사용자 몫.
-  useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const cur = el.querySelector<HTMLElement>('[aria-current="true"]')
-    if (cur && el.scrollWidth > el.clientWidth) {
-      const left = cur.offsetLeft - el.offsetLeft
-      if (left + cur.offsetWidth > el.clientWidth) el.scrollLeft = left + cur.offsetWidth / 2 - el.clientWidth / 2
-    }
-    markEdges(el)
-  }, [])
+/**
+ * 0~최대 SP 구간 띠: 칸 안에는 글자 없이 판정 색(결과 배지와 같은 5색)만, 칸 사이 틈은 둔다. 칸은 오른쪽 열 폭에 맞춰
+ * 줄어들어(1fr) 가로 스크롤이 없다. 현재 칸은 진한 외곽선, 예산 밖은 빗금. 판정 문구는 칸 title("SP n: 판정")·위 판정 줄·아래 범례에 있다
+ * (색만으로 정보를 전하지 않는다). 칸은 포커스 대상이 아니다.
+ */
+function Band({ cells, current }: { cells: readonly CellView[]; current: number }) {
+  const ticks = tickSps(cells)
   return (
-    <div className="band-wrap">
-      <div className="band-scroll" ref={ref} onScroll={(e) => markEdges(e.currentTarget)}>
-        <ol className="band">
-          {cells.map((c) => (
-            <li
-              key={c.sp}
-              data-testid="band-cell"
-              data-sp={c.sp}
-              data-category={c.category}
-              data-over-budget={c.overBudget ? 'true' : 'false'}
-              aria-current={c.sp === current ? 'true' : undefined}
-              className={`cell ko-${categoryTone(c.category)}${c.overBudget ? ' over' : ''}${c.sp === current ? ' current' : ''}`}
-              title={`${c.sp}: ${categoryLabel(c.category)}${c.need > 0 ? ` (다른 능력치에서 ${c.need} 필요)` : ''}`}
-            >
-              <span className="cell-sp">{c.sp}</span>
-              <span className="cell-sym" aria-hidden="true">
-                {categorySymbol(tab, c.category)}
-              </span>
-              {/* 좁은 칸이라 숫자만(범례가 뜻을 풀고, 칸 title에 전체 문구) */}
-              {c.need > 0 && <span className="cell-need">−{c.need}</span>}
-            </li>
-          ))}
-        </ol>
+    <div className="band-wrap" style={{ '--band-cells': cells.length } as CSSProperties}>
+      <ol className="band">
+        {cells.map((c) => (
+          <li
+            key={c.sp}
+            data-testid="band-cell"
+            data-sp={c.sp}
+            data-category={c.category}
+            data-over-budget={c.overBudget ? 'true' : 'false'}
+            aria-current={c.sp === current ? 'true' : undefined}
+            className={`cell ko-${categoryTone(c.category)}${c.overBudget ? ' over' : ''}${c.sp === current ? ' current' : ''}`}
+            title={`SP ${c.sp}: ${categoryLabel(c.category)}${c.need > 0 ? ` (다른 능력치에서 ${c.need} 필요)` : ''}`}
+          />
+        ))}
+      </ol>
+      <div className="band-ticks" aria-hidden="true">
+        {ticks.map((sp, i) => (
+          <span key={sp} className="band-tick num" style={{ gridColumn: cells.findIndex((c) => c.sp === sp) + 1 }} data-edge={i === 0 ? 'start' : i === ticks.length - 1 ? 'end' : undefined}>
+            {sp}
+          </span>
+        ))}
       </div>
     </div>
   )
@@ -143,15 +135,23 @@ export const RowDetail = memo(function RowDetail({ game, tab, row }: Props) {
               </span>
             )}
           </p>
-          <Band tab={tab} cells={row.cells} current={row.current.sp} />
+          <Band cells={row.cells} current={row.current.sp} />
           <p className="band-legend">
-            {spans.map((s) => (
-              <span key={s.from} className={s.overBudget ? 'span over' : 'span'}>
-                <TierChip tab={tab} category={s.category} />{' '}
-                {spanText(s)}
+            {spans.map((s) => {
+              const need = spanNeedText(s)
+              return (
+                <span key={s.from} className={s.overBudget ? 'span over' : 'span'}>
+                  <span className={`tier-swatch ko-${categoryTone(s.category)}`} aria-hidden="true" />{' '}
+                  {spanText(s)}
+                  {need !== undefined && <span className="span-need"> · {need}</span>}
+                </span>
+              )
+            })}
+            {row.cells.some((c) => c.overBudget) && (
+              <span className="span over-key">
+                <span className="tier-swatch over-swatch" aria-hidden="true" /> 빗금 = 예산 밖(다른 능력치에서 SP를 빼야 닿는 칸)
               </span>
-            ))}
-            {row.cells.some((c) => c.overBudget) && <span className="span over-key">빗금 = 예산 밖(칸 아래 −n = 다른 능력치에서 빼야 할 SP)</span>}
+            )}
           </p>
         </>
       )}

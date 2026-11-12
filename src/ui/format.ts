@@ -120,6 +120,8 @@ export interface SpanLike {
   sp: number
   category: string
   overBudget: boolean
+  /** 예산 밖 칸이면 다른 능력치에서 빼야 할 SP */
+  need?: number
 }
 
 export interface Span {
@@ -128,6 +130,8 @@ export interface Span {
   category: string
   /** 이 구간에 예산 밖 칸이 섞여 있는지 */
   overBudget: boolean
+  /** 이 구간 예산 밖 칸의 필요 SP 범위(다른 능력치에서 빼야 할 SP). 필요 SP가 있는 칸이 없으면 없다 */
+  need?: { from: number; to: number }
 }
 
 /** 연속한 같은 범주 칸을 구간으로 묶는다(띠 범례). */
@@ -135,17 +139,27 @@ export function spansOf(cells: readonly SpanLike[]): Span[] {
   const out: Span[] = []
   for (const c of cells) {
     const last = out[out.length - 1]
+    let span: Span
     if (last !== undefined && last.category === c.category && last.to === c.sp - 1) {
       last.to = c.sp
       last.overBudget ||= c.overBudget
+      span = last
     } else {
-      out.push({ from: c.sp, to: c.sp, category: c.category, overBudget: c.overBudget })
+      span = { from: c.sp, to: c.sp, category: c.category, overBudget: c.overBudget }
+      out.push(span)
     }
+    const need = c.need ?? 0
+    if (c.overBudget && need > 0) span.need = span.need === undefined ? { from: need, to: need } : { from: Math.min(span.need.from, need), to: Math.max(span.need.to, need) }
   }
   return out
 }
 
-export const spanText = (s: Span): string => `${s.from === s.to ? s.from : `${s.from}~${s.to}`} ${categoryLabel(s.category)}`
+const rangeText = (from: number, to: number): string => (from === to ? `${from}` : `${from}~${to}`)
+
+export const spanText = (s: Span): string => `${rangeText(s.from, s.to)} ${categoryLabel(s.category)}`
+
+/** 범례의 예산 밖 구간 보조 문구 "다른 능력치에서 3~15 필요"(칸 툴팁에만 있던 정보를 화면 텍스트로) */
+export const spanNeedText = (s: Span): string | undefined => (s.need === undefined ? undefined : `다른 능력치에서 ${rangeText(s.need.from, s.need.to)} 필요`)
 
 export type KoBadgeTone = 'red' | 'orange' | 'yellow' | 'lime' | 'green' | 'gray'
 

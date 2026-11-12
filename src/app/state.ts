@@ -123,6 +123,7 @@ function validCriteria(c: Partial<DisplayCriteria>): boolean {
   if (c.bundleShareMin !== undefined && !isRatio(c.bundleShareMin)) return false
   if (c.rankShareMin !== undefined && !isRatio(c.rankShareMin)) return false
   if (c.scarfShareMin !== undefined && !isRatio(c.scarfShareMin)) return false
+  if (c.berryShareMin !== undefined && !isRatio(c.berryShareMin)) return false
   return true
 }
 
@@ -217,8 +218,11 @@ export function reducer(state: AppState, action: AppAction): AppState {
     case 'pin-bundle': {
       const p = action.pin
       if (typeof p.opponentId !== 'string' || p.opponentId === '' || typeof p.key !== 'string' || p.key === '') return state
+      if (p.item !== undefined && (typeof p.item !== 'string' || p.item === '')) return state
       if (state.pinnedBundles.some((x) => samePin(x, p))) return state
-      return { ...state, pinnedBundles: [...state.pinnedBundles, { tab: p.tab, opponentId: p.opponentId, category: p.category, key: p.key }] }
+      const pin: PinnedBundle = { tab: p.tab, opponentId: p.opponentId, category: p.category, key: p.key }
+      if (p.item !== undefined) pin.item = p.item
+      return { ...state, pinnedBundles: [...state.pinnedBundles, pin] }
     }
     case 'unpin-bundle': {
       const pinnedBundles = state.pinnedBundles.filter((x) => !samePin(x, action.pin))

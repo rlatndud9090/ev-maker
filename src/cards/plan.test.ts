@@ -216,21 +216,36 @@ describe('planTab: 공격 탭', () => {
     }
   })
 
-  it('조건: 공격측이 나 → attacker 순풍 = 내 순풍', () => {
-    const p = planTab(input({ mySet: PLAIN, conditions: { myTailwind: true, opponentTailwind: false } }), 'attack')
+  it('조건: 순풍 토글은 스피드 탭 전용이라 공격 탭은 순풍 없음으로 계산한다', () => {
+    const p = planTab(input({ mySet: PLAIN, conditions: { myTailwind: true, opponentTailwind: true } }), 'attack')
+    expect(Object.values(p.rows).length).toBeGreaterThan(0)
+    for (const r of Object.values(p.rows)) expect(r.conditions).toEqual({ attacker: { tailwind: false }, defender: { tailwind: false } })
+  })
+
+  it('조건: 스피드 탭은 attacker(나) 순풍 = 내 순풍, defender 순풍 = 상대 순풍', () => {
+    const p = planTab(input({ mySet: PLAIN, conditions: { myTailwind: true, opponentTailwind: false } }), 'speed')
+    expect(Object.values(p.rows).length).toBeGreaterThan(0)
     for (const r of Object.values(p.rows)) expect(r.conditions).toEqual({ attacker: { tailwind: true }, defender: { tailwind: false } })
   })
 
-  it('정렬: 사용률 내림 → 종 id → 분류(물리 → 특수) → 묶음 점유율 내림, order = 인덱스', () => {
+  it('정렬: 사용률 내림 → 종 id → 기본 카드 → 반감열매 변형(열매 점유율 내림) → 분류(물리 → 특수) → 묶음 점유율 내림, order = 인덱스', () => {
     plan.cards.forEach((c, i) => expect(c.order).toBe(i))
     const cat = (c: CardSpec) => (c.category === 'physical' ? 0 : 1)
+    const berry = (a: CardSpec, b: CardSpec) =>
+      a.berry === undefined || b.berry === undefined
+        ? (a.berry === undefined ? 0 : 1) - (b.berry === undefined ? 0 : 1)
+        : b.berry.share - a.berry.share || (a.berry.item < b.berry.item ? -1 : a.berry.item > b.berry.item ? 1 : 0)
     for (let i = 1; i < plan.cards.length; i++) {
       const a = plan.cards[i - 1]
       const b = plan.cards[i]
       const ua = a.opponent.usage as number
       const ub = b.opponent.usage as number
       const cmp =
-        ub - ua || (a.opponent.id < b.opponent.id ? -1 : a.opponent.id > b.opponent.id ? 1 : 0) || cat(a) - cat(b) || (b.bundle.share ?? 0) - (a.bundle.share ?? 0)
+        ub - ua ||
+        (a.opponent.id < b.opponent.id ? -1 : a.opponent.id > b.opponent.id ? 1 : 0) ||
+        berry(a, b) ||
+        cat(a) - cat(b) ||
+        (b.bundle.share ?? 0) - (a.bundle.share ?? 0)
       expect(cmp).toBeLessThanOrEqual(0)
     }
   })
@@ -314,9 +329,10 @@ describe('planTab: 방어 탭', () => {
     expect(c.filterIds.map((id) => plan.filters[id].order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
   })
 
-  it('조건: 공격측이 상대 → attacker 순풍 = 상대 순풍', () => {
-    const p = planTab(input({ mySet: PLAIN, conditions: { myTailwind: true, opponentTailwind: false } }), 'defense')
-    for (const r of Object.values(p.rows)) expect(r.conditions).toEqual({ attacker: { tailwind: false }, defender: { tailwind: true } })
+  it('조건: 방어 탭도 순풍 없음으로 계산한다(순풍 토글은 스피드 탭 전용)', () => {
+    const p = planTab(input({ mySet: PLAIN, conditions: { myTailwind: true, opponentTailwind: true } }), 'defense')
+    expect(Object.values(p.rows).length).toBeGreaterThan(0)
+    for (const r of Object.values(p.rows)) expect(r.conditions).toEqual({ attacker: { tailwind: false }, defender: { tailwind: false } })
   })
 
   it('상대 속임수 행은 내 A에 의존하고 묶음 키에 보태지 않는다', () => {

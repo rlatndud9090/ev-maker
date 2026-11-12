@@ -5,42 +5,53 @@ import { cards, combo, findOverlaps, mySet, openProduct, selectTab, waitComplete
 const listBox = (page: Page) => page.getByTestId('result-box')
 const listScroll = (page: Page) => page.getByTestId('result-scroll')
 
-// AC18: 폭 400px·1280px에서 본문 가로 스크롤 없음(0~32 띠 .band-scroll만 자체 스크롤), 라벨·컨트롤 겹침 없음.
+// AC18: 폭 400px·1280px에서 본문 가로 스크롤 없음, 라벨·컨트롤 겹침 없음. 0~32 띠는 상세 오른쪽 열 폭에 맞춰 줄어들어 스크롤이 없다
+// (사용자 피드백 2026-11-12: 칸 안 숫자·기호 없이 색만, 칸 사이 틈은 유지).
 const CONTROLS = 'main[data-app="product"] :is(label, h1, h2, legend, button, [role="tab"], select, input, [data-testid="meta-source"], [data-testid="sp-remaining"])'
 
 for (const width of [400, 1280]) {
   test.describe(`제품 화면 ${width}px`, () => {
     test.use({ viewport: { width, height: 900 } })
 
-    test(`${width}px: 본문 가로 스크롤 0, 라벨·컨트롤 겹침 0, 띠만 자체 가로 스크롤`, async ({ page }) => {
+    test(`${width}px: 본문 가로 스크롤 0, 라벨·컨트롤 겹침 0, 띠도 가로 스크롤 없음(색 칸·틈 유지)`, async ({ page }) => {
       await openProduct(page)
       await selectTab(page, '방어')
       await waitComplete(page)
       const card = cards(page).and(page.locator('[data-variable="true"]')).first()
       await card.locator('button[aria-expanded]').first().click()
       await expect(card.getByTestId('band-cell').first()).toBeVisible()
-      // 상세 오른쪽 열의 띠가 상자보다 넓으면: 처음 열 때 현재 칸이 보이고, 더 있는 쪽 가장자리 표시(data-more-*)가 붙는다.
-      const bands = await card.locator('.band-scroll').evaluateAll((els) =>
+      // 상세 오른쪽 열의 띠: 33칸이 오른쪽 열(판정 영역) 안에 다 들어오고(스크롤 상자 없음), 칸 안 글자 없음, 칸 사이 틈 1px 이상.
+      await expect(card.locator('.band-scroll')).toHaveCount(0)
+      const bands = await card.locator('.band').evaluateAll((els) =>
         els.map((el) => {
-          const box = el.getBoundingClientRect()
-          const cur = el.querySelector('[aria-current="true"]')!.getBoundingClientRect()
-          const wider = el.scrollWidth > el.clientWidth
-          return { wider, curVisible: cur.left >= box.left - 0.5 && cur.right <= box.right + 0.5, marked: el.hasAttribute('data-more-left') || el.hasAttribute('data-more-right') }
+          const panel = el.closest('[data-testid="bundle-panel"]')!.getBoundingClientRect()
+          const cells = [...el.querySelectorAll('[data-testid="band-cell"]')].map((c) => c.getBoundingClientRect())
+          const scrollers = []
+          for (let p = el.parentElement; p && !p.matches('[data-testid="bundle-panel"]'); p = p.parentElement) if (p.scrollWidth > p.clientWidth + 1) scrollers.push(p.className)
+          const gaps = cells.slice(1).map((c, i) => c.left - cells[i].right)
+          return {
+            count: cells.length,
+            inside: cells.every((c) => c.left >= panel.left - 0.5 && c.right <= panel.right + 0.5),
+            bandFits: el.scrollWidth <= el.clientWidth + 1,
+            scrollers,
+            text: el.textContent,
+            minGap: Math.min(...gaps) >= 0.9,
+            sameRow: cells.every((c) => Math.abs(c.top - cells[0].top) < 0.5),
+            width: cells[0].width,
+          }
         }),
       )
       expect(bands.length).toBeGreaterThan(0)
-      for (const b of bands) expect(b).toEqual({ wider: b.wider, curVisible: true, marked: b.wider })
+      for (const b of bands) {
+        expect({ ...b, width: undefined }).toEqual({ count: 33, inside: true, bandFits: true, scrollers: [], text: '', minGap: true, sameRow: true, width: undefined })
+        expect(b.width).toBeGreaterThan(2)
+      }
       await page.getByRole('button', { name: '포켓몬 추가', exact: true }).click()
 
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
       expect(overflow).toBeLessThanOrEqual(0)
-      // 띠 칸의 넘침은 .band-scroll 안에 갇힌다.
-      const leaks = await page.evaluate(() =>
-        [...document.querySelectorAll('.band-scroll')].filter((el) => {
-          const r = el.getBoundingClientRect()
-          return r.right > window.innerWidth + 1 || getComputedStyle(el).overflowX === 'visible'
-        }).length,
-      )
+      // 띠는 화면 안에 있다.
+      const leaks = await page.evaluate(() => [...document.querySelectorAll('.band')].filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1).length)
       expect(leaks).toBe(0)
       expect(await findOverlaps(page, CONTROLS)).toEqual([])
       // 접힌 줄: 결과(배지 + 변동 가능)가 "외 n행"과 겹치지 않고, 이름(폼 꼬리 포함)은 1280px에서 한 줄.

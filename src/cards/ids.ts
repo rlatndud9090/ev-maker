@@ -22,9 +22,12 @@ export function addedBundleKey(stats: readonly { stat: string; sp: number }[]): 
   return JSON.stringify(stats.map((s) => ({ stat: s.stat, sp: s.sp, nature: 'neutral' })))
 }
 
-/** 사용자 추가 배분 카드 id: 관측 묶음 카드 id 뒤에 'user' 표지를 붙여 같은 키의 관측 카드와 겹치지 않는다. */
-export function addedCardId(tab: Tab, opponentId: string, category: Category | null, bundleKey: string): string {
-  return cardId([tab, 'ladder', opponentId, category, bundleKey, 'user'])
+/**
+ * 사용자 추가 배분 카드 id: 관측 묶음 카드 id 뒤에 'user' 표지를 붙여 같은 키의 관측 카드와 겹치지 않는다.
+ * 반감열매 변형 카드(berry = 열매 id)는 뒤에 그 열매를 붙인다(같은 직접 추가 배분이 기본 행·열매 행에 함께 생긴다).
+ */
+export function addedCardId(tab: Tab, opponentId: string, category: Category | null, bundleKey: string, berry?: string): string {
+  return cardId(berry === undefined ? [tab, 'ladder', opponentId, category, bundleKey, 'user'] : [tab, 'ladder', opponentId, category, bundleKey, 'user', berry])
 }
 
 /** 직접 추가 배분의 고정 항목(키 = 그 배분 카드의 묶음 키: 키 능력치 STAT_IDS 순, 무보정) */
@@ -33,11 +36,15 @@ export function addedBundlePin(added: AddedBundle): PinnedBundle {
   return { tab: added.tab, opponentId: added.opponentId, category: added.category, key: addedBundleKey(stats) }
 }
 
-/** 같은 (탭, 상대, 분류, 묶음 키) 고정인지 */
+/** 같은 (탭, 상대, 분류, 묶음 키, 반감열매 행) 고정인지 */
 export const samePin = (a: PinnedBundle, b: PinnedBundle): boolean =>
-  a.tab === b.tab && a.opponentId === b.opponentId && a.category === b.category && a.key === b.key
+  a.tab === b.tab && a.opponentId === b.opponentId && a.category === b.category && a.key === b.key && (a.item ?? null) === (b.item ?? null)
 
 /** 화면이 추가 직후(계산이 끝나기 전) 그 카드를 미리 고를 때 쓰는 id. 계획(plan)과 같은 규칙이다. */
-export function addedBundleCardId(added: { tab: Tab; opponentId: string; category: Category | null }, stats: readonly { stat: string; sp: number }[]): string {
-  return addedCardId(added.tab, added.opponentId, added.category, addedBundleKey(stats))
+export function addedBundleCardId(
+  added: { tab: Tab; opponentId: string; category: Category | null },
+  stats: readonly { stat: string; sp: number }[],
+  berry?: string,
+): string {
+  return addedCardId(added.tab, added.opponentId, added.category, addedBundleKey(stats), berry)
 }

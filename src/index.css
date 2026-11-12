@@ -1007,6 +1007,16 @@ td.src {
   width: 6rem;
 }
 
+/* 최소 사용률(%) 입력: 라벨 폭만큼만 차지하고 값 칸은 2~4자리 폭(통계 설정 네 칸이 넓은 화면에서 한 줄에 들어가게) */
+.tool-row .num-field.share-field {
+  width: auto;
+  white-space: nowrap;
+}
+
+.tool-row .num-field.share-field input {
+  width: 5.5rem;
+}
+
 .inline-select select {
   width: auto;
 }
@@ -1748,6 +1758,14 @@ td.src {
   letter-spacing: -0.01em;
 }
 
+/* 반감열매 행 배지 "(마코)": 이름 옆 작은 보통 굵기(나중에 도구 이미지 자리) */
+.card-name .berry-badge {
+  font-size: 0.8em;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .ko-badge {
   font-size: 0.78rem;
   font-weight: 700;
@@ -1997,98 +2015,78 @@ td.src {
   color: var(--tier-ink);
 }
 
-/* 띠가 상자보다 넓으면 더 있는 쪽 가장자리를 흐리게(스크롤 가능 표시, data-more-left/right는 RowDetail이 단다) */
-.band-wrap {
-  position: relative;
-  min-width: 0;
-}
-
-.band-wrap:has(> .band-scroll[data-more-left])::before,
-.band-wrap:has(> .band-scroll[data-more-right])::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0.2rem;
-  width: 1.6rem;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.band-wrap:has(> .band-scroll[data-more-left])::before {
-  left: 0;
-  background: linear-gradient(to left, transparent, var(--card));
-}
-
-.band-wrap:has(> .band-scroll[data-more-right])::after {
-  right: 0;
-  background: linear-gradient(to right, transparent, var(--card));
-}
-
-.band-scroll {
-  overflow-x: auto;
-  max-width: 100%;
-  padding-bottom: 0.2rem;
-}
-
-/* 상세 오른쪽 열(왼쪽에 배분 목록)에서는 칸을 좁혀 한눈에 더 많은 SP를 본다 */
-.bundle-panel .band {
-  grid-template-columns: repeat(33, minmax(1.35rem, 1fr));
-  min-width: calc(33 * 1.35rem + 32px);
-}
-
-.bundle-panel .band .cell {
-  font-size: 0.68rem;
-}
-
 /* 목표 문구의 SP 조합("H0 B0+")은 한 덩어리로만 줄바꿈 */
 .sp-combo {
   white-space: nowrap;
+}
+
+/* 0~최대 SP 구간 띠: 글자 없는 색 칸(스펙트럼), 칸 사이 틈 유지, 오른쪽 열 폭에 맞춰 줄어들어 가로 스크롤 없음 */
+.band-wrap {
+  min-width: 0;
+  /* 현재 칸 외곽선(2px + 간격 1px)이 띠 끝에서 잘리지 않게 */
+  padding: 3px 3px 0;
+  --band-cells: 33;
+}
+
+.band,
+.band-ticks {
+  display: grid;
+  grid-template-columns: repeat(var(--band-cells), minmax(0, 1fr));
+  gap: 2px;
 }
 
 .band {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
-  grid-template-columns: repeat(33, minmax(1.7rem, 1fr));
-  gap: 1px;
-  min-width: calc(33 * 1.7rem + 32px);
 }
 
 .band .cell {
-  display: grid;
-  justify-items: center;
-  padding: 0.1rem 0;
-  font-size: 0.72rem;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-  border-radius: 4px;
-  /* 파스텔 판정 면 위 글자는 라이트·다크 모두 어두운 잉크(대비 ≥ 4.5:1) */
-  color: var(--tier-ink);
+  height: 1.25rem;
+  border-radius: 2px;
 }
 
-.band .cell.over {
-  background-image: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.18) 0 2px, transparent 2px 6px);
+/* 예산 밖 빗금: 띠 칸과 범례 견본이 같은 무늬 */
+.band .cell.over,
+.over-swatch {
+  background-image: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.22) 0 2px, transparent 2px 5px);
 }
 
+/* 현재 칸: 진한 외곽선(띠 위로 살짝 키워 좁은 칸에서도 보이게) */
 .band .cell.current {
-  outline: 2px solid var(--tier-ink);
-  outline-offset: -2px;
-  font-weight: 700;
+  outline: 2px solid var(--text-strong);
+  outline-offset: 1px;
+  position: relative;
+  z-index: 1;
 }
 
-.cell-sp {
-  color: var(--tier-ink-muted);
+.band-ticks {
+  margin-top: 0.1rem;
+  font-size: 0.62rem;
+  line-height: 1;
+  color: var(--muted);
 }
 
-.cell-sym {
-  font-size: 0.85rem;
-}
-
-.cell-need {
+.band-tick {
+  justify-self: center;
   white-space: nowrap;
-  font-size: 0.55rem;
-  color: var(--tier-ink-muted);
+}
+
+.band-tick[data-edge='start'] {
+  justify-self: start;
+}
+
+.band-tick[data-edge='end'] {
+  justify-self: end;
+}
+
+/* 범례의 판정 색 견본 */
+.tier-swatch {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  border-radius: 2px;
+  vertical-align: -0.05em;
 }
 
 .band-legend {
@@ -2101,6 +2099,17 @@ td.src {
 
 .band-legend .span.over {
   text-decoration: underline dotted;
+}
+
+.band-legend .span-need {
+  color: var(--muted);
+}
+
+/* 범례의 빗금 견본: 무늬가 보이게 판정 색 견본보다 조금 크고 테두리를 둔다 */
+.over-swatch {
+  width: 1.1em;
+  border: 1px solid var(--muted);
+  background-color: transparent;
 }
 
 .custom-editor {

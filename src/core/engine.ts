@@ -80,12 +80,20 @@ export function attackMoveType(moveId: string, baseType: string, ability: string
 }
 
 /**
- * 공격측 특성을 넣은 상성 배율: attackMoveType으로 바꾼 타입의 기본 상성, 배짱·심안이면 노말·격투 기술의 고스트 무효를 등배로.
- * 방어측 특성(부유 등)·도구·필드는 넣지 않는다. 엔진 타입표에 없는 타입은 CoreError(ENGINE_UNSUPPORTED).
+ * 공격측 특성을 넣은 상성 배율(엔진 getMoveEffectiveness와 같은 타입별 곱): attackMoveType으로 바꾼 타입의 기본 상성, 배짱·심안이면
+ * 노말·격투 기술의 고스트 무효를 등배로. moveId를 주면 기술별 특례도 넣는다(프리즈드라이: 물에 2배, 플라잉프레스: 비행 상성을 곱함,
+ * 니힐라이트: 페어리에 등배). 방어측 특성(부유 등)·도구·필드는 넣지 않는다. 엔진 타입표에 없는 타입은 CoreError(ENGINE_UNSUPPORTED).
  */
-export function attackEffectiveness(moveType: string, defenderTypes: readonly string[], ability: string): number {
+export function attackEffectiveness(moveType: string, defenderTypes: readonly string[], ability: string, moveId?: string): number {
   const revealed = GHOST_REVEALING_ABILITIES.includes(abilityKey(ability)) && (moveType === 'Normal' || moveType === 'Fighting')
-  return typeEffectiveness(moveType, revealed ? defenderTypes.filter((t) => t !== 'Ghost') : defenderTypes)
+  const move = moveId === undefined ? '' : toID(ENGINE_ALIASES.moves?.[moveId] ?? moveId)
+  return defenderTypes.reduce((m, d) => {
+    if (revealed && d === 'Ghost') return m
+    if (move === 'freezedry' && d === 'Water') return m * 2
+    if (move === 'nihillight' && d === 'Fairy') return m
+    const e = typeEffectiveness(moveType, [d])
+    return m * (move === 'flyingpress' ? e * typeEffectiveness('Flying', [d]) : e)
+  }, 1)
 }
 
 /** 엔진은 overrides.types를 배열 깊은 병합하고 clone()마다 재병합하므로, 인스턴스와 그 사본에 타입을 다시 고정한다. */

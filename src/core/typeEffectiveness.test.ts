@@ -37,4 +37,18 @@ describe('attackMoveType·attackEffectiveness(공격측 특성 타입 변화)', 
     expect(attackEffectiveness('Normal', ['Ghost'], 'innerfocus')).toBe(0)
     expect(attackEffectiveness('Dark', ['Ghost'], 'scrappy')).toBe(2)
   })
+
+  it('기술 id를 주면 엔진 기술별 특례(프리즈드라이·플라잉프레스·니힐라이트)를 넣는다', () => {
+    // 프리즈드라이: 물에 2배(물/고스트 대쓰여너 → 2배, 기본 표로는 0.5배)
+    expect(attackEffectiveness('Ice', ['Water', 'Ghost'], 'snowwarning')).toBe(0.5)
+    expect(attackEffectiveness('Ice', ['Water', 'Ghost'], 'snowwarning', 'freezedry')).toBe(2)
+    expect(attackEffectiveness('Ice', ['Water', 'Ground'], 'snowwarning', 'freezedry')).toBe(4)
+    // 플라잉프레스: 격투 × 비행 상성(풀 = 1 × 2, 노말/비행 = 2 × 1, 바위 = 2 × 0.5)
+    expect(attackEffectiveness('Fighting', ['Grass'], 'unburden', 'flyingpress')).toBe(2)
+    expect(attackEffectiveness('Fighting', ['Grass'], 'unburden')).toBe(1)
+    expect(attackEffectiveness('Fighting', ['Rock'], 'unburden', 'flyingpress')).toBe(1)
+    expect(attackEffectiveness('Fighting', ['Ghost'], 'scrappy', 'flyingpress')).toBe(1)
+    // 그 밖의 기술은 기본 표 그대로
+    expect(attackEffectiveness('Ice', ['Water'], 'snowwarning', 'icebeam')).toBe(0.5)
+  })
 })

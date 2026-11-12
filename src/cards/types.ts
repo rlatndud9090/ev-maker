@@ -18,11 +18,14 @@ export interface DisplayCriteria {
   rankShareMin: number
   /** 구애스카프 점유율 기준(0~1, 이상) */
   scarfShareMin: number
+  /** 반감열매 점유율 기준(0~1, 이상이면 공격 탭에 그 열매를 지닌 별도 행) */
+  berryShareMin: number
 }
 export const DEFAULT_CRITERIA: Readonly<DisplayCriteria> = Object.freeze({
   bundleShareMin: 0.05,
   rankShareMin: 0.1,
   scarfShareMin: 0.1,
+  berryShareMin: 0.05,
 })
 
 export interface CardFilters {
@@ -85,6 +88,8 @@ export interface PinnedBundle {
   opponentId: string
   category: Category | null
   key: string
+  /** 반감열매 행(공격 탭 열매 변형)의 고정이면 그 열매 id. 기본 행 고정은 없음 */
+  item?: string
 }
 
 export interface CardInput {
@@ -292,6 +297,14 @@ export interface ConditionGroup {
   candidates: readonly MoveCandidate[]
 }
 
+/** 공격 탭 반감열매 변형: 상대가 이 열매를 지닌 가정(기본 카드는 상대 도구 없음). 화면에서 별도 행이다 */
+export interface BerryVariant {
+  /** 반감열매 도구 id */
+  item: string
+  /** 그 도구의 분포 점유율 */
+  share: number
+}
+
 export interface CardSpec {
   id: string
   /** 탭 안 정렬 순번 */
@@ -310,6 +323,11 @@ export interface CardSpec {
   fixedIds: readonly string[]
   /** 조건별 기술 후보(스피드 탭·error 카드는 빈 배열). 후보가 아닌 행(계획 단계 계산 불가)은 그대로 표시한다 */
   conditions: readonly ConditionGroup[]
+  /**
+   * 반감열매 변형 카드만. triggers = 이 카드 대표 세트에 그 열매가 발동하는 내 기술 id(berryActivates).
+   * 조립은 기본 조건의 가장 센 기술이 triggers에 없으면 이 카드를 보이지 않는다(열매가 판정에 관여하지 않는 행은 별도 행일 필요가 없다)
+   */
+  berry?: BerryVariant & { triggers: readonly string[] }
 }
 
 export interface TabPlan {
@@ -509,6 +527,8 @@ export interface CardView {
   opponent: OpponentHeader
   category: Category | null
   bundle: BundleSpec
+  /** 반감열매 변형 카드(별도 행)면 그 열매 */
+  berry?: BerryVariant
   /** 표시 행(조건별 가장 센 기술·선공기 행 조건을 채운 선공기·계산 불가, 변화 없음 행 포함), 카드 안 순서 */
   rows: readonly RowView[]
   /**

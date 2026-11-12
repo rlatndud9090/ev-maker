@@ -16,6 +16,7 @@ import {
   rollChanceText,
   refsNote,
   shareText,
+  spanNeedText,
   spanText,
   spansOf,
   targetSegments,
@@ -164,6 +165,23 @@ describe('spansOf', () => {
     ])
     expect(spanText({ from: 5, to: 5, category: 'first', overBudget: false })).toBe('5 선공')
     expect(spanText({ from: 0, to: 22, category: 'guaranteed-survive', overBudget: false })).toBe('0~22 확정견딤')
+  })
+
+  it('예산 밖 칸의 필요 SP 범위를 구간에 모아 범례 문구로 쓴다', () => {
+    const cells = [
+      { sp: 0, category: 'a', overBudget: false, need: 0 },
+      { sp: 1, category: 'b', overBudget: false, need: 0 },
+      { sp: 2, category: 'b', overBudget: true, need: 3 },
+      { sp: 3, category: 'b', overBudget: true, need: 4 },
+      { sp: 4, category: 'c', overBudget: true, need: 5 },
+    ]
+    const spans = spansOf(cells)
+    expect(spans).toEqual([
+      { from: 0, to: 0, category: 'a', overBudget: false },
+      { from: 1, to: 3, category: 'b', overBudget: true, need: { from: 3, to: 4 } },
+      { from: 4, to: 4, category: 'c', overBudget: true, need: { from: 5, to: 5 } },
+    ])
+    expect(spans.map(spanNeedText)).toEqual([undefined, '다른 능력치에서 3~4 필요', '다른 능력치에서 5 필요'])
   })
 })
 

@@ -87,6 +87,11 @@ const SORT_OPTIONS: readonly { mode: SortMode; label: string }[] = [
   { mode: 'result', label: '계산결과순' },
 ]
 
+const TAILWIND_OPTIONS: readonly { side: 'me' | 'opponent'; label: string }[] = [
+  { side: 'me', label: '내 순풍' },
+  { side: 'opponent', label: '상대 순풍' },
+]
+
 /** 작은 굵은 라벨 + 컨트롤 줄. 줄 이름 = 라벨(스크린 리더가 묶음으로 읽는다) */
 function ToolRow({ id, label, testId, children }: { id: string; label: string; testId: string; children: ReactNode }) {
   return (
@@ -109,6 +114,7 @@ function ShareField({ label, value, onValue }: { label: string; value: number; o
     <>
       <NumberField
         label={`${label} 최소(%)`}
+        className="share-field"
         describedBy={hintId}
         value={value}
         toText={toPercentInput}
@@ -126,7 +132,7 @@ function ShareField({ label, value, onValue }: { label: string; value: number; o
 }
 
 /**
- * 결과 목록 위 설정: 탭 줄 → 통계 설정(형식·기준 월·최소 사용률 3종) → 표시 설정(상위 N·정렬·판정 기준·순풍) → 포켓몬 찾기(단독 줄).
+ * 결과 목록 위 설정: 탭 줄 → 통계 설정(형식·기준 월·최소 사용률 4종) → 표시 설정(상위 N·정렬·판정 기준(공격·방어 탭)·순풍(스피드 탭)) → 포켓몬 찾기(단독 줄).
  */
 export function Toolbar(p: Props) {
   const { game, view, state, dispatch } = p
@@ -211,6 +217,7 @@ export function Toolbar(p: Props) {
           <ShareField label="SP 배분" value={state.criteria.bundleShareMin} onValue={(v) => dispatch({ type: 'set-criteria', criteria: { bundleShareMin: v } })} />
           <ShareField label="랭크업 기술" value={state.criteria.rankShareMin} onValue={(v) => dispatch({ type: 'set-criteria', criteria: { rankShareMin: v } })} />
           <ShareField label="구애스카프" value={state.criteria.scarfShareMin} onValue={(v) => dispatch({ type: 'set-criteria', criteria: { scarfShareMin: v } })} />
+          <ShareField label="반감열매" value={state.criteria.berryShareMin} onValue={(v) => dispatch({ type: 'set-criteria', criteria: { berryShareMin: v } })} />
         </ToolRow>
 
         <ToolRow id={`${uid}-display`} label="표시 설정" testId="tool-row-display">
@@ -234,22 +241,31 @@ export function Toolbar(p: Props) {
             </div>
           </div>
           {state.tab !== 'speed' && <RollThresholdField key={state.tab} tab={state.tab} rollSteps={state.rollSteps} dispatch={dispatch} />}
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={state.conditions.myTailwind}
-              onChange={(e) => dispatch({ type: 'set-tailwind', side: 'me', on: e.target.checked })}
-            />
-            내 순풍
-          </label>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={state.conditions.opponentTailwind}
-              onChange={(e) => dispatch({ type: 'set-tailwind', side: 'opponent', on: e.target.checked })}
-            />
-            상대 순풍
-          </label>
+          {/* 순풍은 스피드 판정에만 관여해 스피드 탭에서만 보인다(다른 탭에서는 숨길 뿐 상태 값은 유지). */}
+          {state.tab === 'speed' && (
+            <div className="sort-field">
+              <span id={`${uid}-tailwind`} className="sort-label">
+                순풍
+              </span>
+              <div className="segmented tailwind-toggles" role="group" aria-labelledby={`${uid}-tailwind`} data-testid="tailwind-toggles">
+                {TAILWIND_OPTIONS.map((o) => {
+                  const on = o.side === 'me' ? state.conditions.myTailwind : state.conditions.opponentTailwind
+                  return (
+                    <button
+                      key={o.side}
+                      type="button"
+                      aria-pressed={on}
+                      data-side={o.side}
+                      data-testid="tailwind-toggle"
+                      onClick={() => dispatch({ type: 'set-tailwind', side: o.side, on: !on })}
+                    >
+                      {o.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </ToolRow>
 
         <div className="tool-row tool-row-search" data-testid="tool-row-search">

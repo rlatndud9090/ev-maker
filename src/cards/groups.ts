@@ -1,22 +1,27 @@
 import { addedCardId, addedBundleKey, samePin } from './ids'
-import type { CardView, OpponentHeader, PinnedBundle, Tab } from './types'
+import type { BerryVariant, CardView, OpponentHeader, PinnedBundle, Tab } from './types'
 
-/** 화면 한 행: 같은 상대 포켓몬(출처+id)의 카드들을 배분 선택지로 묶은 것. */
+/** 화면 한 행: 같은 상대 포켓몬(출처+id)·같은 반감열매 변형의 카드들을 배분 선택지로 묶은 것. */
 export interface CardGroup {
-  /** JSON.stringify([opponent.source, opponent.id]) */
+  /** JSON.stringify([opponent.source, opponent.id]), 반감열매 행은 JSON.stringify([source, id, 열매 id]) */
   key: string
   opponent: OpponentHeader
+  /** 반감열매 행(공격 탭)이면 그 열매 */
+  berry?: BerryVariant
   /** 배분 선택지: 고정 배분(고정한 순) → 관측 배분(사용률 순) → 소수 배분 */
   options: readonly CardView[]
   /** 고정된 선택지 카드 id(options 순). 직접 추가 배분은 늘 고정이다 */
   pinned: readonly string[]
 }
 
-export const groupKey = (opponent: OpponentHeader): string => JSON.stringify([opponent.source, opponent.id])
+export const groupKey = (opponent: OpponentHeader, berry?: string): string =>
+  JSON.stringify(berry === undefined ? [opponent.source, opponent.id] : [opponent.source, opponent.id, berry])
 
-/** 화면 배분 카드 → 그 카드의 고정 항목(래더만 고정할 수 있다) */
+/** 화면 배분 카드 → 그 카드의 고정 항목(래더만 고정할 수 있다). 반감열매 행 고정은 그 열매를 담아 기본 행 고정과 따로다 */
 export function pinOf(tab: Tab, card: CardView): PinnedBundle {
-  return { tab, opponentId: card.opponent.id, category: card.category, key: card.bundle.key }
+  const pin: PinnedBundle = { tab, opponentId: card.opponent.id, category: card.category, key: card.bundle.key }
+  if (card.berry !== undefined) pin.item = card.berry.item
+  return pin
 }
 
 /** 고정 없이: 래더는 사용자 추가 배분(추가 순) → 소수 배분이 아닌 것 점유율 내림차순 → 소수 배분. 커스텀: 프리셋 순. 동률은 원래 순서. */
@@ -53,11 +58,11 @@ function pinIndex(tab: Tab | undefined, pins: readonly PinnedBundle[], card: Car
  * (상태는 추가와 함께 고정하므로 보통은 pins에 있다).
  */
 export function groupCards(cards: readonly CardView[], tab?: Tab, pins: readonly PinnedBundle[] = []): CardGroup[] {
-  const byKey = new Map<string, { opponent: OpponentHeader; options: CardView[] }>()
+  const byKey = new Map<string, { opponent: OpponentHeader; berry?: BerryVariant; options: CardView[] }>()
   for (const card of cards) {
-    const key = groupKey(card.opponent)
+    const key = groupKey(card.opponent, card.berry?.item)
     const g = byKey.get(key)
-    if (g === undefined) byKey.set(key, { opponent: card.opponent, options: [card] })
+    if (g === undefined) byKey.set(key, card.berry === undefined ? { opponent: card.opponent, options: [card] } : { opponent: card.opponent, berry: card.berry, options: [card] })
     else g.options.push(card)
   }
   return [...byKey].map(([key, g]) => {
@@ -78,7 +83,9 @@ export function groupCards(cards: readonly CardView[], tab?: Tab, pins: readonly
       }
       return compareBase(a, b)
     })
-    return { key, opponent: g.opponent, options, pinned: options.filter((o) => rank(o) >= 0).map((o) => o.id) }
+    const group: CardGroup = { key, opponent: g.opponent, options, pinned: options.filter((o) => rank(o) >= 0).map((o) => o.id) }
+    if (g.berry !== undefined) group.berry = g.berry
+    return group
   })
 }
 
@@ -109,7 +116,7 @@ export function chosenOption(group: CardGroup, tab: Tab, id: string | undefined)
       o.opponent.source === 'ladder' &&
       o.bundle.userAdded === undefined &&
       o.bundle.stats.every((s) => s.nature === 'neutral') &&
-      addedCardId(tab, o.opponent.id, o.category, addedBundleKey(o.bundle.stats)) === id,
+      addedCardId(tab, o.opponent.id, o.category, addedBundleKey(o.bundle.stats), o.berry?.item) === id,
   )
   return same ?? defaultOption(group)
 }

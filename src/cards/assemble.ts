@@ -38,6 +38,8 @@ import type {
   TargetView,
 } from './types'
 
+/** 계획의 기본 조건 그룹 id(plan BASE_CONDITION과 같은 값) */
+const BASE_CONDITION_ID = JSON.stringify(['base'])
 const KIND_RANK: Readonly<Record<RowKind, number>> = { base: 0, rank: 1, scarf: 2, 'non-scarf': 2 }
 const STAT_KEYS: readonly StatId[] = ['hp', 'atk', 'def', 'spa', 'spd', 'spe']
 const STAGE_KEYS = ['stage1', 'stage2', 'stage3', 'stage4', 'stage5'] as const
@@ -239,11 +241,21 @@ function cardError(card: CardSpec): ErrorReason {
 function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks): CardBuild {
   const { plan, results } = ctx
   const ladder = card.opponent.source === 'ladder'
-  const base = { id: card.id, order: card.order, state: card.state, notices: card.notices, opponent: card.opponent, category: card.category, bundle: card.bundle }
+  const base: Pick<CardView, 'id' | 'order' | 'state' | 'notices' | 'opponent' | 'category' | 'bundle' | 'berry'> = {
+    id: card.id,
+    order: card.order,
+    state: card.state,
+    notices: card.notices,
+    opponent: card.opponent,
+    category: card.category,
+    bundle: card.bundle,
+  }
+  if (card.berry !== undefined) base.berry = { item: card.berry.item, share: card.berry.share }
   if (card.state === 'error') {
     const headline = headlineOf(card, [])
     const view: CardView = { ...base, error: cardError(card), rows: [], headline, variable: false, moreRows: 0 }
-    return { view, displayed: true, mySetReasons: [] }
+    // 반감열매 변형의 해석 실패는 기본 카드가 같은 이유로 보이므로 따로 보이지 않는다.
+    return { view, displayed: card.berry === undefined, mySetReasons: [] }
   }
 
   const rows: RowView[] = []
@@ -278,6 +290,7 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks): CardBuild {
     const candidate = spec.gate ?? rowId
     const state: CandidateState | undefined = states.get(candidate)
     if (state === 'dropped') continue
+    if (berryIdle(card, spec.moveId, state)) continue
     if (state === 'probing') {
       rows.push(bareRow(ctx, headOf(spec), 'pending'))
       continue
@@ -354,6 +367,7 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks): CardBuild {
     const r = results.get(taskKey({ kind: 'fixed', fixedId }))
     const state = states.get(fixedId)
     if (state === 'dropped') return
+    if (berryIdle(card, spec.moveId, state)) return
     if (r === undefined || state === 'probing') {
       rows.push(bareRow(ctx, head, 'pending'))
     } else if (r.kind === 'error') {
@@ -373,8 +387,28 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks): CardBuild {
   const view: CardView = { ...base, rows, headline, variable: isVariable(rows), moreRows: Math.max(0, rows.length - 1) }
   // 안내(notices)가 있는 카드는 행이 없어도 표시한다: 카드 머리가 안내의 유일한 화면 경로다(AC 11a).
   // 다른 분류 기술이 가장 세 행이 하나도 남지 않은 카드는 뺀다(그 상대의 다른 분류 카드가 보인다).
-  const visible = rows.length > 0 || card.notices.length > 0
+  const visible = (rows.length > 0 || card.notices.length > 0) && (card.berry === undefined || berryEngaged(card, states))
   return { view, displayed: ladder ? settled && visible : visible, mySetReasons: reasons }
+}
+
+/**
+ * 반감열매 변형 카드가 보일 자격: 기본 조건에서 고른 가장 센 기술(다른 분류 비교 후보 포함)이 그 열매가 발동하는 기술(triggers)이다.
+ * 아직 고르지 못했거나(판정 중·계산 불가) 열매가 발동하지 않는 기술이 가장 세면 열매는 판정에 관여하지 않아 보이지 않는다.
+ */
+export function berryEngaged(card: CardSpec, states: ReadonlyMap<string, CandidateState>): boolean {
+  if (card.berry === undefined) return true
+  const base = card.conditions.find((g) => g.id === BASE_CONDITION_ID)
+  const chosen = base?.candidates.find((c) => states.get(c.id) === 'chosen')
+  return chosen !== undefined && card.berry.triggers.includes(chosen.moveId)
+}
+
+/**
+ * 반감열매 변형 카드 안에서 열매가 관여하지 않는 행: 조건별로 고른 가장 센 기술(또는 함께 남긴 선공기)이 그 열매가 발동하지 않는 기술이면
+ * 그 행은 기본 카드의 같은 조건 행과 판정이 같으므로 열매 카드에서 뺀다(랭크 조건 행 포함). 아직 고르지 못한 후보(판정 중)는 남긴다.
+ */
+export function berryIdle(card: CardSpec, moveId: string | undefined, state: CandidateState | undefined): boolean {
+  if (card.berry === undefined || moveId === undefined) return false
+  return (state === 'chosen' || state === 'priority') && !card.berry.triggers.includes(moveId)
 }
 
 /** 계획은 기본 행을 슬롯 순(공격 탭 내 기술 슬롯, 방어 탭 상대 기술 사용률 순)으로 먼저 쌓는다. */

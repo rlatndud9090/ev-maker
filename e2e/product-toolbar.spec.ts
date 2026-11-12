@@ -95,25 +95,39 @@ test.describe('설정 영역 3줄', () => {
     const box = (await page.getByTestId('result-box').boundingBox())!
     expect(ys[2]).toBeLessThan(box.y)
 
-    // 1행: 형식 · 기준 월 · 최소 사용률 3종(SP 배분 · 랭크업 기술 · 구애스카프) 순
+    // 1행: 형식 · 기준 월 · 최소 사용률 4종(SP 배분 · 랭크업 기술 · 구애스카프 · 반감열매) 순
     const statNames = await stats.locator('select, input').evaluateAll((els) => els.map((e) => (e as HTMLElement).getAttribute('aria-label') ?? e.closest('label')?.firstChild?.textContent?.trim()))
-    expect(statNames).toEqual(['형식', '기준 월', 'SP 배분 최소(%)', '랭크업 기술 최소(%)', '구애스카프 최소(%)'])
+    expect(statNames).toEqual(['형식', '기준 월', 'SP 배분 최소(%)', '랭크업 기술 최소(%)', '구애스카프 최소(%)', '반감열매 최소(%)'])
     await expect(combo(stats, '형식')).toHaveValue('bo1')
     await expect(combo(stats, '기준 월')).toBeVisible()
     await expect(spin(stats, 'SP 배분 최소(%)')).toHaveValue('5')
     await expect(spin(stats, '랭크업 기술 최소(%)')).toHaveValue('10')
     await expect(spin(stats, '구애스카프 최소(%)')).toHaveValue('10')
+    await expect(spin(stats, '반감열매 최소(%)')).toHaveValue('5')
     await expect(stats).toContainText('통계 설정')
     // 보이는 라벨이 그대로 접근 이름(WCAG 2.5.3), "사용률" 뜻은 설명으로
-    for (const name of ['SP 배분', '랭크업 기술', '구애스카프']) {
+    for (const name of ['SP 배분', '랭크업 기술', '구애스카프', '반감열매']) {
       await expect(spin(stats, `${name} 최소(%)`)).toHaveAccessibleDescription(new RegExp(`^${name} 최소 사용률\\(%\\)`))
     }
 
-    // 2행: 상위 N → 정렬(사용률/계산결과순) → 고난수 기준 → 내 순풍 → 상대 순풍
-    const displayOrder = await display.locator('input, [data-testid="sort-toggle"]').evaluateAll((els) =>
-      els.map((e) => (e.matches('[data-testid="sort-toggle"]') ? '정렬' : e.closest('label')?.firstChild?.textContent?.trim() || e.closest('label')?.textContent?.trim())),
-    )
-    expect(displayOrder).toEqual(['상위 N', '정렬', '고난수 1타 기준', '내 순풍', '상대 순풍'])
+    // 2행: 상위 N → 정렬(사용률/계산결과순) → 고난수 기준(공격·방어 탭). 순풍 토글은 스피드 탭에서만(고난수 기준 대신)
+    const displayOrder = () =>
+      display.locator('input, [data-testid="sort-toggle"], [data-testid="tailwind-toggles"]').evaluateAll((els) =>
+        els.map((e) =>
+          e.matches('[data-testid="sort-toggle"]')
+            ? '정렬'
+            : e.matches('[data-testid="tailwind-toggles"]')
+              ? `순풍:${[...e.querySelectorAll('button')].map((b) => b.textContent).join('/')}`
+              : e.closest('label')?.firstChild?.textContent?.trim() || e.closest('label')?.textContent?.trim(),
+        ),
+      )
+    expect(await displayOrder()).toEqual(['상위 N', '정렬', '고난수 1타 기준'])
+    await expect(display.getByRole('checkbox')).toHaveCount(0)
+    await selectTab(page, '방어')
+    expect(await displayOrder()).toEqual(['상위 N', '정렬', '고난수 견딤 기준'])
+    await selectTab(page, '스피드')
+    expect(await displayOrder()).toEqual(['상위 N', '정렬', '순풍:내 순풍/상대 순풍'])
+    await selectTab(page, '공격')
     await expect(display.getByRole('group', { name: '정렬', exact: true }).getByRole('button')).toHaveText(['사용률', '계산결과순'])
     await expect(sortButton(page, '사용률')).toHaveAttribute('aria-pressed', 'true')
     await expect(sortButton(page, '계산결과순')).toHaveAttribute('aria-pressed', 'false')
@@ -348,7 +362,12 @@ test.describe('정렬: 계산결과순', () => {
     await expect(row.locator('.bundle-btn')).toBeFocused()
     // 화면도 그 행으로 따라간다
     await expect(row.locator('.bundle-btn')).toBeInViewport()
-    const name = (await row.locator('.card-name').textContent())!.trim()
+    // 이름 칸의 포켓몬 이름(반감열매 행이면 배지를 뺀 이름)
+    const name = (await row.locator('.card-name').evaluate((el) => {
+      const c = el.cloneNode(true) as HTMLElement
+      c.querySelector('[data-testid="berry-badge"]')?.remove()
+      return c.textContent ?? ''
+    })).trim()
     await expect(page.getByTestId('sort-moved')).toContainText(name)
     await expect(page.getByTestId('sort-moved')).toContainText(/(까지 가능|변동 없음) 그룹으로 옮겼습니다/)
     await expect(page.getByTestId('sort-moved')).toHaveAttribute('aria-live', 'polite')
@@ -375,8 +394,11 @@ test.describe('정렬: 계산결과순', () => {
       }
       new MutationObserver(read).observe(document.querySelector('[data-testid="tab-panel"]')!, { childList: true, subtree: true })
     })
-    const wind = rowGroup(page, '표시 설정').getByRole('checkbox', { name: '상대 순풍', exact: true })
-    await wind.check()
+    await selectTab(page, '스피드')
+    await waitComplete(page)
+    const wind = rowGroup(page, '순풍').getByRole('button', { name: '상대 순풍', exact: true })
+    await wind.click()
+    await expect(wind).toHaveAttribute('aria-pressed', 'true')
     await waitComplete(page)
     await expect(page.getByTestId('sort-group').filter({ hasText: '계산 중' })).toHaveCount(0)
     expect(seen.has('pending-not-last')).toBe(false)
