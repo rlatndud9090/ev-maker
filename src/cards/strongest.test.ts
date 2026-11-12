@@ -298,13 +298,20 @@ describe('실데이터: 카드·조건당 가장 센 기술(+선공기)', () => 
     expect([...(movesByCondition(cardOf(p, view, F12.slotTie.opponent, 'physical')).get('base') ?? [])]).toEqual([F12.slotTie.chosen])
   })
 
-  it('방어 탭 메가플라엣테: 둘 다 확정1타면 최대 대미지 비율이 큰 파멸의빛만(기본·명상 조건 각각)', () => {
+  it('방어 탭 메가플라엣테: 기본 조건은 최대 대미지 비율이 큰 파멸의빛만, 명상 조건은 동시채용 하한 미달인 파멸의빛을 빼고 고른다', () => {
     const { plan: p, view } = run('example', example, 'defense')
     const c = cardOf(p, view, F12.maxPercentTie.opponent, 'special')
-    expect(c.spec.conditions.map((g) => g.candidates.length)).toEqual([5, 5])
+    // 실제 통계 명상 70.68% × 파멸의빛 26.38% → 하한 0 < 10%, 드레인키스 25.26%도 미달. 문포스 79.85%·매지컬샤인 93.67%만 남는다.
+    expect(c.spec.conditions.map((g) => g.candidates.map((x) => x.moveId).sort())).toEqual([
+      ['dazzlinggleam', 'drainingkiss', 'lightofruin', 'moonblast', 'psychic'],
+      ['dazzlinggleam', 'moonblast'],
+    ])
     const by = movesByCondition(c)
     expect([...by.keys()].sort()).toEqual(['base', 'calmmind'])
-    for (const moves of by.values()) expect([...moves]).toEqual([F12.maxPercentTie.chosen])
+    expect([...(by.get('base') ?? [])]).toEqual([F12.maxPercentTie.chosen])
+    const cm = [...(by.get('calmmind') ?? [])]
+    // 남은 문포스·매지컬샤인 중 명상 C+1 조건에서 가장 센 기술은 문포스(실제 통계·계산 2026-11-12)
+    expect(cm).toEqual(['moonblast'])
   })
 
   it('방어 탭 대도각참: 상위 5 후보 중 도각참(가장 셈)과 기습(선공기)만, 아이언헤드·안다리걸기 없음', () => {

@@ -72,8 +72,35 @@ export const RANK_MEANS: readonly RankMeansDef[] = [
   rise('flamecharge', 'move', { spe: 1 }),
   rise('trailblaze', 'move', { spe: 1 }),
   rise('aquastep', 'move', { spe: 1 }),
+  rise('aurawheel', 'move', { spe: 1 }),
+  rise('rapidspin', 'move', { spe: 1 }),
+  /** 다단 공격 뒤 1회 */
+  rise('scaleshot', 'move', { spe: 1, def: -1 }),
+  rise('psyshieldbash', 'move', { def: 1 }),
+  rise('acidarmor', 'move', { def: 2 }),
+  rise('shelter', 'move', { def: 2 }),
+  rise('cottonguard', 'move', { def: 3 }),
+  rise('cosmicpower', 'move', { def: 1, spd: 1 }),
+  /** 1회 축적 기준 */
+  rise('stockpile', 'move', { def: 1, spd: 1 }),
+  /** 다음 전기 기술 위력 2배는 랭크가 아니라 보지 않는다 */
+  rise('charge', 'move', { spd: 1 }),
+  rise('rockpolish', 'move', { spe: 2 }),
+  rise('shiftgear', 'move', { atk: 1, spe: 2 }),
+  rise('noretreat', 'move', { atk: 1, def: 1, spa: 1, spd: 1, spe: 1 }),
+  /** HP 절반 대가(HP가 절반 초과일 때 성공) */
+  rise('bellydrum', 'move', { atk: 6 }),
   rise('speedboost', 'ability', { spe: 1 }),
 ]
+
+/**
+ * 스냅샷에서 자기 랭크를 올리지만 수단 목록에 넣지 않는 기술과 이유(목록 고정 테스트가 본다).
+ * 메테오빔·일렉트로빔: 엔진이 그 공격 자체에 C+1을 적용하므로 수단으로 넣으면 이중 적용된다.
+ */
+export const RANK_MEANS_EXCLUDED: Readonly<Record<string, string>> = {
+  meteorbeam: 'engine-applies-boost',
+  electroshot: 'engine-applies-boost',
+}
 
 export type ReactionEffect =
   /** 상대가 낮춘 하락 차단. stats가 없으면 전부 */
@@ -229,17 +256,37 @@ export function applyMeans(
   return def ? effectOf(def, user, target) : null
 }
 
-/** 세트의 기술·계산 특성 중 수단 목록에 있는 것(특성 → 기술 슬롯 순). */
+/**
+ * 랭크 행을 만드는 수단인가: 그 쪽이 스스로 골라 자기 자신에게 거는 랭크 변화(target self — 랭크업 변화기·자기 강화 공격기·가속)만.
+ * 상대에게 거는 하락(위협·막말내뱉기·애교 등)과 그에 대한 반응(오기·승기 등)은 SP 배분 기준이 아니라 행을 만들지 않는다
+ * (사용자 피드백 2026-11-12. 위협은 추후 과제). 하락 데이터·반응 규칙은 applyMeans용으로 남긴다.
+ */
+export function isActiveMeans(means: MeansRef): boolean {
+  return findMeans(means)?.target === 'self'
+}
+
+/**
+ * 나온 첫 턴에만 성공하는 기술(만나자마자·속이기). 스냅샷 flags에 해당 성질이 없어 상수로 둔다.
+ * 같은 사용자의 랭크업 기술을 쓴 뒤에는 쓸 수 없으므로 그 랭크 조건의 판정 기술이 되지 않는다(등장 특성 수단과는 양립).
+ */
+export const FIRST_TURN_ONLY_MOVES: readonly string[] = ['fakeout', 'firstimpression']
+
+/** 수단 사용자의 기술 moveId가 그 수단의 랭크 조건에서 판정 기술이 될 수 있는가(기술 수단 × 첫 턴 전용 기술만 불가). */
+export function usableAfterMeans(means: MeansRef, moveId: string): boolean {
+  return means.kind !== 'move' || !FIRST_TURN_ONLY_MOVES.includes(moveId)
+}
+
+/** 세트의 기술·계산 특성 중 능동 수단(isActiveMeans, 특성 → 기술 슬롯 순). */
 export function setMeans(r: Pick<ResolvedSet, 'ability' | 'set'>): MeansRef[] {
   const out: MeansRef[] = []
-  if (findMeans({ kind: 'ability', id: r.ability })) out.push({ kind: 'ability', id: r.ability })
-  for (const id of r.set.moves) if (findMeans({ kind: 'move', id })) out.push({ kind: 'move', id })
+  if (isActiveMeans({ kind: 'ability', id: r.ability })) out.push({ kind: 'ability', id: r.ability })
+  for (const id of r.set.moves) if (isActiveMeans({ kind: 'move', id })) out.push({ kind: 'move', id })
   return out
 }
 
 /**
- * 내 수단이 랭크 행을 더하는 탭(설정 칩 알림용). 상대 반응이 없는 기준으로 바뀐 능력치를 본다.
- * 공격 탭 = 내 공격기 공격 능력치·상대 방어 능력치, 방어 탭 = 내 B·D·상대 A·C, 스피드 탭 = 양쪽 S.
+ * 내 능동 수단이 랭크 행을 더하는 탭(설정 칩 알림용). 반응 없는 기준으로 바뀐 내 능력치를 본다.
+ * 공격 탭 = 내 공격기 공격 능력치, 방어 탭 = 내 B·D, 스피드 탭 = 내 S.
  * 내 세트가 무효면 빈 배열.
  */
 export function myMeansNotes(game: Snapshot, set: PokemonSet): Array<{ means: MeansRef; tabs: Tab[] }> {
@@ -251,14 +298,10 @@ export function myMeansNotes(game: Snapshot, set: PokemonSet): Array<{ means: Me
     throw e
   }
   const myOffense = new Set<BoostStat>()
-  const oppDefense = new Set<BoostStat>()
   for (const id of me.set.moves) {
     const refs = moveStatRefs(game, id)
     if (refs.categoryVaries || !refs.offense || !refs.defense) continue
-    if (refs.offense.owner === 'self') {
-      myOffense.add(refs.offense.stat)
-      oppDefense.add(refs.defense)
-    }
+    if (refs.offense.owner === 'self') myOffense.add(refs.offense.stat)
   }
   const neutral: Holder = { ability: '', item: undefined }
   const out: Array<{ means: MeansRef; tabs: Tab[] }> = []
@@ -267,11 +310,10 @@ export function myMeansNotes(game: Snapshot, set: PokemonSet): Array<{ means: Me
     const eff = def ? effectOf(def, me, neutral) : null
     if (!eff) continue
     const mine = BOOST_STATS.filter((s) => eff.userBoosts[s])
-    const theirs = BOOST_STATS.filter((s) => eff.targetBoosts[s])
     const hits: Record<Tab, boolean> = {
-      attack: mine.some((s) => myOffense.has(s)) || theirs.some((s) => oppDefense.has(s)),
-      defense: mine.some((s) => s === 'def' || s === 'spd') || theirs.some((s) => s === 'atk' || s === 'spa'),
-      speed: mine.includes('spe') || theirs.includes('spe'),
+      attack: mine.some((s) => myOffense.has(s)),
+      defense: mine.some((s) => s === 'def' || s === 'spd'),
+      speed: mine.includes('spe'),
     }
     const tabs = TABS.filter((t) => hits[t])
     if (tabs.length > 0) out.push({ means, tabs })

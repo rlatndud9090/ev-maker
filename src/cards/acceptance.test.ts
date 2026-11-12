@@ -631,8 +631,14 @@ describe('AC5 방어 탭 극단 필터(F3)', () => {
     const { plan, view } = run('example', top(EXAMPLE_SET), 'defense')
     // F3.plusOnly(문포스)는 같은 카드의 파멸의빛이 더 세서 행이 없다(2026-11-11 가장 센 기술 하나)
     const weaker = cardBySpread(plan, view, F3.plusOnly.opponent, 'special')
-    expect(rowsFor(view, F3.plusOnly.opponent.id).some((r) => r.moveId === F3.plusOnly.move)).toBe(false)
-    expect(weaker.card?.rows.some((r) => r.moveId === F3.plusOnly.move) ?? false).toBe(false)
+    // 기본 조건 행은 없다. 명상 조건은 파멸의빛이 동시채용 하한 미달이라 문포스가 가장 센 기술이 된다(아래, 2026-11-12)
+    expect(rowsFor(view, F3.plusOnly.opponent.id).some((r) => r.moveId === F3.plusOnly.move && r.kind === 'base')).toBe(false)
+    expect(weaker.card?.rows.some((r) => r.moveId === F3.plusOnly.move && r.kind === 'base') ?? false).toBe(false)
+    // 명상 조건은 문포스가 가장 센 기술이고 이 카드에서는 극단 필터 1행(변화 없음)이다
+    const calm = (weaker.card?.rows ?? []).filter((r) => r.kind === 'rank')
+    expect(calm.map((r) => [r.moveId, r.basis?.kind === 'rank' ? r.basis.means.id : null, r.sweepStat, r.noChange])).toEqual([
+      [F3.plusOnly.move, 'calmmind', undefined, true],
+    ])
     const c = F3.plusOnlyStrongest
     const { spec, card } = cardBySpread(plan, view, c.opponent, 'special')
     expect(noChangeRows(view).some((i) => i.cardId === spec.id && i.kind === 'extreme-filter' && i.moveId === c.move && i.rowKind === 'base')).toBe(false)
@@ -815,45 +821,41 @@ describe('AC8 랭크 행(F5)', () => {
   const intimidateRows = (view: TabView, id: string) =>
     rowsFor(view, id).filter((r) => r.basis?.kind === 'rank' && r.basis.means.id === F5.threat.ability && r.basis.owner === 'opponent')
 
-  it('위협 ≥ 10% 상대 카드에 랭크 행, 수단·점유율 표시, 오기면 A+1·아니면 A−1', () => {
+  it('상대 위협·막말내뱉기(≥ 10%)는 공격 탭 랭크 행이 아니다(내 오기 발동 "+1" 행 없음, 2026-11-12 능동 랭크업만)', () => {
     for (const [label, s] of [
       ['defiant', F5.defiant],
       ['non-defiant', F5.nonDefiant],
     ] as const) {
       const { plan, view } = run(`F5-${label}`, only(s.mySet, [F5.threat.opponent]), 'attack')
-      const rows = intimidateRows(view, F5.threat.opponent)
-      expect(rows.length, label).toBeGreaterThan(0)
-      for (const r of rows) {
-        const basis = r.basis as RankBasis
-        expect(basis.share).toBe(F5.threat.share)
-        expect(basis.myBoosts).toEqual(s.myBoosts)
-        expect(basis.reactions).toEqual(label === 'defiant' ? ['defiant'] : [])
-      }
-      // 표시된 랭크 행 칸 = 같은 랭크를 넣은 코어 스윕
-      for (const card of view.cards) {
-        const spec = plan.cards.find((c) => c.id === card.id) as CardSpec
-        for (const r of card.rows.filter((x) => x.kind === 'rank' && x.cells.length > 0)) {
-          const b = r.basis as RankBasis
-          const direct = sweepDamage(
-            game,
-            { side: 'attacker', stat: r.sweepStat as StatId },
-            { ...s.mySet, boosts: b.myBoosts },
-            { ...spec.opponentSet, boosts: b.opponentBoosts },
-            r.moveId as string,
-            { attacker: { tailwind: false }, defender: { tailwind: false } },
-            undefined,
-            OVER,
-          )
-          expect(r.cells.map((c) => c.category)).toEqual(categoriesOf(direct))
-        }
-      }
+      expect(rowsFor(view, F5.threat.opponent).length, label).toBeGreaterThan(0)
+      expect(intimidateRows(view, F5.threat.opponent), label).toEqual([])
+      expect(Object.values(plan.rows).some((r) => r.basis?.kind === 'rank'), label).toBe(false)
+      expect(Object.values(plan.rows).some((r) => r.basis?.kind === 'rank' && r.basis.reactions.includes('defiant')), label).toBe(false)
     }
   })
 
-  it('위협 < 10% 상대(선택 필터)에는 위협 랭크 행이 없다', () => {
-    const { view } = run('F5-below', only(F5.defiant.mySet, [F5.threatBelow.opponent]), 'attack')
-    expect(rowsFor(view, F5.threatBelow.opponent).length).toBeGreaterThan(0)
-    expect(intimidateRows(view, F5.threatBelow.opponent)).toEqual([])
+  it('내 칼춤 랭크 행 칸 = 같은 랭크를 넣은 코어 스윕(어흥염 상대)', () => {
+    const s = F5.swordsDance
+    const { plan, view } = run('F5-sd-core', only(s.mySet, [F5.threat.opponent]), 'attack')
+    const shown = view.cards.flatMap((c) => c.rows.filter((x) => x.kind === 'rank' && x.cells.length > 0))
+    expect(shown.length).toBeGreaterThan(0)
+    for (const card of view.cards) {
+      const spec = plan.cards.find((c) => c.id === card.id) as CardSpec
+      for (const r of card.rows.filter((x) => x.kind === 'rank' && x.cells.length > 0)) {
+        const b = r.basis as RankBasis
+        const direct = sweepDamage(
+          game,
+          { side: 'attacker', stat: r.sweepStat as StatId },
+          { ...s.mySet, boosts: b.myBoosts },
+          { ...spec.opponentSet, boosts: b.opponentBoosts },
+          r.moveId as string,
+          { attacker: { tailwind: false }, defender: { tailwind: false } },
+          undefined,
+          OVER,
+        )
+        expect(r.cells.map((c) => c.category)).toEqual(categoriesOf(direct))
+      }
+    }
   })
 
   it('내 칼춤 → 공격 탭 물리 카드마다 A+2 랭크 행(점유율 없음), 칼춤이 없으면 없다', () => {
@@ -966,19 +968,18 @@ describe('AC11 목록 밖 타겟(F6·F10)', () => {
     }
   })
 
-  it('스피드 탭: 타겟 기술의 랭크 수단(일렉트릭네트)이 사용자 지정 랭크 행(점유율 없음)이 되고 판정 = 코어', () => {
+  it('스피드 탭: 타겟 기술의 상대 하락기(일렉트릭네트)는 랭크 행이 아니고(능동 랭크업만), 기본 행 판정 = 코어', () => {
     const { plan, view } = run('custom-rotom', top(EXAMPLE_SET, { customTargets: [target] }), 'speed')
     const cards = customCards(view)
     expect(cards).toHaveLength(3)
     for (const c of cards) {
-      const rank = c.rows.filter((r) => r.kind === 'rank')
-      expect(rank).toHaveLength(1)
-      const b = rank[0].basis as RankBasis
-      expect(b).toMatchObject({ means: { kind: 'move', id: F10.rankMeans }, owner: 'opponent', myBoosts: { spe: -1 } })
-      expect(b.share).toBeUndefined()
+      expect(c.rows.filter((r) => r.kind === 'rank')).toEqual([])
+      expect(Object.values(plan.rows).some((r) => r.cardId === c.id && r.basis?.kind === 'rank' && r.basis.means.id === F10.rankMeans)).toBe(false)
+      const base = c.rows.filter((r) => r.kind === 'base')
+      expect(base).toHaveLength(1)
       const spec = plan.cards.find((x) => x.id === c.id) as CardSpec
-      const direct = sweepSpeed(game, { ...EXAMPLE_SET, boosts: b.myBoosts }, { ...spec.opponentSet, boosts: b.opponentBoosts }, undefined, OVER)
-      expect(rank[0].cells.map((x) => x.category)).toEqual(categoriesOf(direct))
+      const direct = sweepSpeed(game, EXAMPLE_SET, spec.opponentSet, undefined, OVER)
+      expect(base[0].cells.map((x) => x.category)).toEqual(categoriesOf(direct))
     }
   })
 
@@ -1222,10 +1223,14 @@ describe('AC15 표시 기준 3개를 바꾸면 결과가 그에 맞게 바뀐다
     expect(def.cards.length).toBeGreaterThan(plan.cards.length)
   })
 
-  it('랭크 기준: 위협 점유율보다 높이면 위협 랭크 행이 사라진다', () => {
-    const { view } = run('rank-1', only(F5.defiant.mySet, [F5.threat.opponent], { criteria: criteria({ rankShareMin: 1 }) }), 'attack')
-    expect(rowsFor(view, F5.threat.opponent).length).toBeGreaterThan(0)
-    expect(rowsFor(view, F5.threat.opponent).some((r) => r.basis?.kind === 'rank' && r.basis.owner === 'opponent')).toBe(false)
+  it('랭크 기준: 상대 나비춤 점유율 이하면 스피드 탭 랭크 행, 점유율보다 높이면 사라진다', () => {
+    const quiver = (rankShareMin: number) =>
+      rowsFor(run(`rank-${rankShareMin}`, only(EXAMPLE_SET, ['volcarona'], { criteria: criteria({ rankShareMin }) }), 'speed').view, 'volcarona').filter(
+        (r) => r.basis?.kind === 'rank' && r.basis.owner === 'opponent' && r.basis.means.id === 'quiverdance',
+      )
+    const share = (bo1.entry('volcarona') as MetaEntry).moves.shares.quiverdance
+    expect(quiver(share).length).toBeGreaterThan(0)
+    expect(quiver(share + 0.0001)).toEqual([])
   })
 
   it('스카프 기준: 올리면 대쓰여너 스카프 행이 사라지고, 내리면 타부자고에 생긴다', () => {

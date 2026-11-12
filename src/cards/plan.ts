@@ -22,7 +22,7 @@ import { berryActivates, resistBerriesOf } from './berries'
 import { bundleStats, bundlesOf, natureSign } from './bundles'
 import { addedBundleKey, addedCardId, cardId as makeCardId, presetKey, rowId } from './ids'
 import { presetAssumption } from './presets'
-import { ladderMeans, rankVariants, setMeansCandidates, type CardRefStats, type MeansCandidate } from './rank'
+import { TAB_MEANS_OWNERS, ladderMeans, rankMoveAllowed, rankVariants, setMeansCandidates, type CardRefStats, type MeansCandidate } from './rank'
 import type { BoostStat } from './rankMeans'
 import { natureVariants } from './natures'
 import { keepsPriorityRow, type PriorityUser } from './priority'
@@ -383,8 +383,16 @@ class PlanBuilder {
     return natureVariants(this.game, this.mySet.nature, stat, this.tab === 'defense' ? rel.defender : rel.attacker)
   }
 
+  /** 이 탭이 보는 주인의 능동 수단만(TAB_MEANS_OWNERS) 랭크 변형으로 만든다. */
   variants(opp: Opponent, resolved: ResolvedSet, refs: CardRefStats) {
-    return rankVariants(this.game, [...this.opponentMeans(opp, resolved), ...this.myMeans], this.me, resolved, refs)
+    const owners = TAB_MEANS_OWNERS[this.tab]
+    const candidates = [...(owners.includes('opponent') ? this.opponentMeans(opp, resolved) : []), ...this.myMeans].filter((c) => owners.includes(c.owner))
+    return rankVariants(this.game, candidates, this.me, resolved, refs)
+  }
+
+  /** 랭크 조건의 판정 후보 기술인가(첫 턴 전용 규칙·래더 상대 수단 동시채용 하한, rankMoveAllowed). */
+  rankMoveAllowed(opp: Opponent, basis: RankBasis, attackerOwner: MeansCandidate['owner'], moveId: string): boolean {
+    return rankMoveAllowed(basis, attackerOwner, moveId, opp.entry, this.input.criteria.rankShareMin)
   }
 
   // ---------- 탭별 행 ----------
@@ -449,6 +457,7 @@ class PlanBuilder {
       for (const slot of all) {
         // 상대 능력치를 쓰는 기술(SP 무관 판정)은 기본 조건에서만 고른다.
         if (slot.refs?.offense?.owner === 'target') continue
+        if (!this.rankMoveAllowed(opp, v.basis, 'me', slot.moveId)) continue
         const herbError = v.whiteHerbConsumed && isMultihit(this.game, slot.moveId)
         const parts = ['rank', slot.moveId, ...meansParts(v.basis)]
         if (!inCategory(slot)) {
@@ -535,6 +544,7 @@ class PlanBuilder {
     const group = (id: string, attacker: PokemonSet, defender: PokemonSet, basis: RankBasis | undefined, herbConsumed: boolean) => {
       const candidates: MoveCandidate[] = []
       for (const slot of all) {
+        if (basis && !this.rankMoveAllowed(opp, basis, 'opponent', slot.moveId)) continue
         const error = herbConsumed && isMultihit(this.game, slot.moveId) ? WHITE_HERB_MULTIHIT : undefined
         const parts = basis ? ['rank', slot.moveId, ...meansParts(basis)] : ['base', slot.moveId]
         if (!inCategory(slot)) {
@@ -562,7 +572,8 @@ class PlanBuilder {
     if (slots.length === 0) return
     const refs: CardRefStats = {
       opponent: unique(slots.filter((s) => s.refs?.offense?.owner === 'self').map((s) => s.refs?.offense?.stat as BoostStat)),
-      my: unique([def, ...(slots.some((s) => s.refs?.offense?.owner === 'target') ? (['atk'] as const) : [])]),
+      // 내 수단은 방어 랭크업(B·D)만 본다: 내 A 랭크업(칼춤 등)은 상대 속임수가 있어도 방어 탭 행을 만들지 않는다(myMeansNotes와 같은 기준).
+      my: [def],
     }
     for (const v of this.variants(opp, resolved, refs)) {
       const attacker = withBoosts(oppSet, v.basis.opponentBoosts)

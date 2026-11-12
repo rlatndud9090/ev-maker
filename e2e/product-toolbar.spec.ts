@@ -165,6 +165,8 @@ test.describe('설정 영역 3줄', () => {
       await waitComplete(page)
     }
     // 랭크업 기술 기준을 낮추면(1%) 기준 10%보다 랭크 행이 늘거나 같다: 100%로 올리면 랭크 행이 사라진다.
+    // 상대 랭크 수단은 방어·스피드 탭만 보므로(공격 탭은 내 능동 랭크업만, 2026-11-12) 방어 탭에서 센다.
+    await selectTab(page, '방어')
     const rankRows = async () => {
       await waitComplete(page)
       return cards(page).evaluateAll((els) => els.reduce((n, el) => n + Number(el.querySelector('[data-testid="card-more"]')?.textContent?.match(/\d+/)?.[0] ?? 0), 0))

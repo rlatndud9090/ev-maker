@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { validateSet, type PokemonSet } from '../core'
+import type { PokemonSet } from '../core'
 import type { MetaEntry } from '../data/meta-schema'
 import { addedBundleCardId, cardId, presetKey } from './ids'
 import { DEFENSE_MOVES, defenseMoveIds, planTab } from './plan'
+import { coAdoptionFloor } from './rank'
 import { buildTabView } from './batch'
 import { defaultOption, groupCards } from './groups'
 import { cardInput, realData, syntheticEntry, syntheticView } from './testing'
@@ -118,39 +119,41 @@ describe('planTab: 공격 탭', () => {
     }
   })
 
-  it('상대 위협(점유율 ≥ 기준) → 물리 카드 랭크 행, 상대 수단이 내 수단보다 앞', () => {
+  it('공격 탭은 내 능동 수단만: 상대 위협·막말내뱉기(하락)·상대 철벽(방어 랭크업)은 랭크 행이 아니다', () => {
     const inc = cardsOf(plan, 'incineroar').filter((c) => c.category === 'physical' && c.state === 'ok')
     expect(inc.length).toBeGreaterThan(0)
     for (const c of inc) {
       const means = rowsOf(plan, c)
         .filter((r) => r.kind === 'rank' && r.moveId === 'earthquake')
         .map((r) => (r.basis?.kind === 'rank' ? [r.basis.owner, r.basis.means.id, r.basis.share] : null))
-      expect(means).toEqual([
-        ['opponent', 'intimidate', entryOf('incineroar').abilities.intimidate],
-        ['opponent', 'partingshot', entryOf('incineroar').moves.shares.partingshot],
-        ['me', 'swordsdance', undefined],
-      ])
+      expect(means).toEqual([['me', 'swordsdance', undefined]])
     }
+    const wide = planTab(input({ mySet: GARCHOMP, filters: { topN: 40, selected: [] } }), 'attack')
+    // 메타그로스메가는 철벽을 기준 이상 쓰지만 공격 탭에 상대 방어 랭크업 행은 없다.
+    expect(entryOf('metagrossmega').moves.shares.irondefense).toBeGreaterThanOrEqual(DEFAULT_CRITERIA.rankShareMin)
+    expect(cardsOf(wide, 'metagrossmega').length).toBeGreaterThan(0)
+    expect(Object.values(wide.rows).some((r) => r.basis?.kind === 'rank' && r.basis.owner === 'opponent')).toBe(false)
   })
 
-  it('랭크 기준 경계: 점유율과 같으면 포함, 기준을 올리면 빠진다', () => {
-    const share = entryOf('incineroar').abilities.intimidate
-    const has = (rankShareMin: number) => {
-      const p = planTab(input({ mySet: PLAIN, criteria: { ...input({ mySet: PLAIN }).criteria, rankShareMin } }), 'attack')
-      return Object.values(p.rows).some((r) => r.basis?.kind === 'rank' && r.basis.means.id === 'intimidate')
-    }
-    expect(has(share)).toBe(true)
-    expect(has(share + 0.0001)).toBe(false)
-  })
-
-  it('내 오기 × 상대 위협 = A+1(반응 기록)', () => {
-    const mine = mk('kingambit', 'defiant', ['kowtowcleave', 'suckerpunch'], { nature: 'adamant' })
+  it('내 오기 × 상대 위협·막말내뱉기: 반응 랭크 행 없음(내 칼춤 행은 그대로)', () => {
+    const mine = mk('kingambit', 'defiant', ['kowtowcleave', 'suckerpunch', 'swordsdance'], { nature: 'adamant' })
     const p = planTab(input({ mySet: mine }), 'attack')
-    const r = Object.values(p.rows).find((x) => x.basis?.kind === 'rank' && x.basis.means.id === 'intimidate') as RowSpec
-    expect(r.basis).toMatchObject({ myBoosts: { atk: 1 }, reactions: ['defiant'] })
-    const plain = planTab(input({ mySet: mk('kingambit', 'pressure', ['kowtowcleave'], { nature: 'adamant' }) }), 'attack')
-    const q = Object.values(plain.rows).find((x) => x.basis?.kind === 'rank' && x.basis.means.id === 'intimidate') as RowSpec
-    expect(q.basis).toMatchObject({ myBoosts: { atk: -1 }, reactions: [] })
+    const rank = Object.values(p.rows).filter((x) => x.basis?.kind === 'rank')
+    expect(rank.length).toBeGreaterThan(0)
+    for (const r of rank) expect(r.basis).toMatchObject({ owner: 'me', means: { id: 'swordsdance' }, myBoosts: { atk: 2 }, reactions: [] })
+  })
+
+  it('내 칼춤 × 내 첫 턴 전용 기술(만나자마자): 그 랭크 조건의 행·후보 없음, 기본 조건엔 있음', () => {
+    const mine = mk('golisopod', 'emergencyexit', ['firstimpression', 'leechlife', 'swordsdance'], { nature: 'adamant' })
+    const p = planTab(input({ mySet: mine }), 'attack')
+    expect(p.status.kind).toBe('ok')
+    const rank = Object.values(p.rows).filter((r) => r.kind === 'rank')
+    expect(rank.length).toBeGreaterThan(0)
+    expect(rank.every((r) => r.moveId === 'leechlife')).toBe(true)
+    expect(Object.values(p.rows).some((r) => r.kind === 'base' && r.moveId === 'firstimpression')).toBe(true)
+    for (const c of p.cards) {
+      for (const g of c.conditions) if (g.id !== JSON.stringify(['base'])) expect(g.candidates.map((x) => x.moveId)).not.toContain('firstimpression')
+    }
   })
 
   it('사이코쇼크는 물리 카드(상대 H·B)에 들고 스윕은 내 C', () => {
@@ -315,18 +318,55 @@ describe('planTab: 방어 탭', () => {
     }
   })
 
-  it('상대 칼춤(≥10%) → 방어 탭 물리 카드 랭크 행 + 랭크 행 전용 극단 필터', () => {
+  it('상대 칼춤(≥10%) → 방어 탭 물리 카드 랭크 행(동시채용 하한 통과 기술만) + 랭크 행 전용 극단 필터', () => {
+    const e = entryOf('kingambit')
+    const a = e.moves.shares.swordsdance
+    // 실제 통계: 칼춤 12.93% × 악식 99.64%·기습 99.46%는 하한 ≥ 10%, 아이언헤드 75.94%·로킥 67.04%는 미달(대표 세트에 칼춤 없음).
+    const passing = defenseMoveIds(game, e).filter((m) => coAdoptionFloor(a, e.moves.shares[m]) >= DEFAULT_CRITERIA.rankShareMin)
+    expect(passing).toEqual(['kowtowcleave', 'suckerpunch'])
     const c = cardsOf(plan, 'kingambit').find((x) => x.state === 'ok') as CardSpec
     const rank = rowsOf(plan, c).filter((r) => r.kind === 'rank')
-    expect(rank.length).toBe(8)
+    expect(rank.map((r) => [r.moveId, r.sweep?.stat])).toEqual(passing.flatMap((m) => [[m, 'hp'], [m, 'def']]))
     for (const r of rank) {
-      expect(r.basis).toMatchObject({ owner: 'opponent', means: { id: 'swordsdance' }, opponentBoosts: { atk: 2 } })
+      expect(r.basis).toMatchObject({ owner: 'opponent', means: { id: 'swordsdance' }, opponentBoosts: { atk: 2 }, share: a })
       expect(r.attacker.boosts).toEqual({ atk: 2 })
       const f = plan.filters[r.gate as string]
       expect(f.basis).toBe(r.basis)
     }
-    expect(c.filterIds.length).toBe(8)
-    expect(c.filterIds.map((id) => plan.filters[id].order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
+    expect(c.filterIds.length).toBe(4 + passing.length)
+    expect(c.filterIds.map((id) => plan.filters[id].order)).toEqual([0, 1, 2, 3, 4, 5])
+  })
+
+  it('실데이터 갑주무사메가: 칼춤 조건에 만나자마자(첫 턴 전용) 없음, 하한 통과 기술(흡혈·아이언헤드)만', () => {
+    const e = entryOf('golisopodmega')
+    const a = e.moves.shares.swordsdance
+    const moves = defenseMoveIds(game, e)
+    expect(moves).toContain('firstimpression')
+    // 칼춤 19.45% × 흡혈 98.3% → 17.75%, × 아이언헤드 92.26% → 11.71%, × 기습 66.38%·드릴런·만나자마자 → 0
+    expect(moves.filter((m) => coAdoptionFloor(a, e.moves.shares[m]) >= DEFAULT_CRITERIA.rankShareMin).sort()).toEqual(['ironhead', 'leechlife'])
+    const p = planTab(input({ mySet: PLAIN, filters: { topN: 30, selected: ['golisopodmega'] } }), 'defense')
+    const cs = cardsOf(p, 'golisopodmega').filter((x) => x.state === 'ok')
+    expect(cs.length).toBeGreaterThan(0)
+    for (const c of cs) {
+      const rank = rowsOf(p, c).filter((r) => r.kind === 'rank')
+      expect(rank.length).toBeGreaterThan(0)
+      expect(new Set(rank.map((r) => r.moveId))).toEqual(new Set(['ironhead', 'leechlife']))
+      const sd = c.conditions.find((g) => g.id !== JSON.stringify(['base']))
+      expect(sd?.candidates.map((x) => x.moveId).sort()).toEqual(['ironhead', 'leechlife'])
+    }
+  })
+
+  it('상대(목록 밖 타겟) 칼춤 × 상대 만나자마자(첫 턴 전용): 랭크 조건 행 없음, 하한 필터는 보지 않는다', () => {
+    const target = { rosterId: 'golisopod', moves: ['firstimpression', 'leechlife', 'swordsdance'], edits: {} }
+    const p = planTab(input({ mySet: PLAIN, customTargets: [target] }), 'defense')
+    const cs = p.cards.filter((c) => c.opponent.source === 'custom' && c.state === 'ok')
+    expect(cs.length).toBeGreaterThan(0)
+    for (const c of cs) {
+      const rank = rowsOf(p, c).filter((r) => r.kind === 'rank')
+      expect(rank.length).toBeGreaterThan(0)
+      expect(rank.every((r) => r.moveId === 'leechlife' && r.basis?.kind === 'rank' && r.basis.means.id === 'swordsdance')).toBe(true)
+      expect(rowsOf(p, c).some((r) => r.kind === 'base' && r.moveId === 'firstimpression')).toBe(true)
+    }
   })
 
   it('조건: 방어 탭도 순풍 없음으로 계산한다(순풍 토글은 스피드 탭 전용)', () => {
@@ -347,6 +387,20 @@ describe('planTab: 방어 탭', () => {
       ['atk', 'def'],
       ['hp', 'atk'],
     ])
+  })
+
+  it('상대 속임수가 있어도 내 A 랭크업(칼춤)은 방어 탭 랭크 행이 아니다(내 방어 랭크업만)', () => {
+    const base = entryOf('kingambit')
+    const e = syntheticEntry(base, { id: 'kingambit', moves: { shares: { foulplay: 0.9, kowtowcleave: 0.8 }, keptShare: 1.7, excludedShare: 0 } })
+    const view = syntheticView(game, bo1.meta, [e])
+    const mine = mk('kingambit', 'defiant', ['kowtowcleave', 'swordsdance', 'irondefense'])
+    const p = planTab(input({ mySet: mine, view }), 'defense')
+    const rows = Object.values(p.rows)
+    expect(rows.some((r) => r.moveId === 'foulplay' && r.kind === 'base')).toBe(true)
+    const mineRank = rows.filter((r) => r.basis?.kind === 'rank' && r.basis.owner === 'me')
+    // 철벽(내 B 랭크업)은 행을 만들고 칼춤(내 A)은 만들지 않는다(빈 검사 방지로 철벽 행이 있음을 같이 본다)
+    expect(mineRank.length).toBeGreaterThan(0)
+    expect(mineRank.every((r) => r.basis?.kind === 'rank' && r.basis.means.id === 'irondefense')).toBe(true)
   })
 
   it('상대 목숨걸기(대미지 = 상대 HP)는 묶음 키에 상대 H를 보탠다', () => {
@@ -383,12 +437,16 @@ describe('planTab: 방어 탭', () => {
     expect(Object.values(p.rows).some((r) => r.moveId === 'rockslide')).toBe(false)
   })
 
-  it('내 위협 × 상대 오기(키라플로르 대신 대도각참) → 상대 A+1 랭크 행', () => {
-    const mine = mk('incineroar', 'intimidate', ['flareblitz'], { nature: 'careful', sp: { ...ZERO, hp: 32, spd: 32 } })
+  it('내 위협(상대에게 거는 하락)은 방어 탭 랭크 행이 아니다, 내 철벽(내 방어 랭크업)은 랭크 행', () => {
+    const intim = planTab(input({ mySet: mk('incineroar', 'intimidate', ['flareblitz'], { nature: 'careful', sp: { ...ZERO, hp: 32, spd: 32 } }) }), 'defense')
+    expect(Object.values(intim.rows).some((r) => r.basis?.kind === 'rank' && r.basis.owner === 'me')).toBe(false)
+    const mine = mk('metagross', 'clearbody', ['irondefense', 'meteormash'], { nature: 'impish', sp: { ...ZERO, hp: 32, def: 32 } })
     const p = planTab(input({ mySet: mine }), 'defense')
     const c = cardsOf(p, 'kingambit').find((x) => x.state === 'ok') as CardSpec
-    const r = rowsOf(p, c).find((x) => x.basis?.kind === 'rank' && x.basis.means.id === 'intimidate') as RowSpec
-    expect(r.basis).toMatchObject({ owner: 'me', opponentBoosts: { atk: 1 }, reactions: ['defiant'] })
+    const mineRank = rowsOf(p, c).filter((x) => x.basis?.kind === 'rank' && x.basis.owner === 'me')
+    // 내 수단은 하한 필터를 보지 않아 상대 기술 4개 × H·B 전부
+    expect(mineRank.length).toBe(8)
+    for (const x of mineRank) expect(x.basis).toMatchObject({ means: { id: 'irondefense' }, myBoosts: { def: 2 }, opponentBoosts: {} })
   })
 })
 
@@ -436,17 +494,16 @@ describe('planTab: 스피드 탭', () => {
     expect('item' in r[0].defender).toBe(false)
   })
 
-  it('스카프 행에는 랭크 행을 붙이지 않는다, 내 얼어붙은바람 → 차단·하양허브 없는 상대 모든 카드 랭크 행', () => {
-    const ability = game.data.species.abomasnow.abilities[0]
-    const mine = mk('abomasnow', ability, ['icywind', 'blizzard'], { nature: 'modest', sp: { ...ZERO, spa: 32, spe: 32 } })
+  it('스카프 행에는 랭크 행을 붙이지 않는다, 내 고속이동 → 모든 카드 랭크 행, 내 얼어붙은바람(상대 하락)은 행 없음', () => {
+    const icy = planTab(input({ mySet: mk('abomasnow', game.data.species.abomasnow.abilities[0], ['icywind', 'blizzard'], { nature: 'modest' }) }), 'speed')
+    expect(icy.cards.length).toBeGreaterThan(0)
+    expect(Object.values(icy.rows).some((r) => r.basis?.kind === 'rank' && r.basis.owner === 'me')).toBe(false)
+    const mine = mk('altaria', game.data.species.altaria.abilities[0], ['agility', 'hurricane'], { nature: 'timid', sp: { ...ZERO, spa: 32, spe: 32 } })
     const p = planTab(input({ mySet: mine }), 'speed')
-    const blockers = ['clearbody', 'whitesmoke', 'mirrorarmor']
     for (const c of p.cards.filter((x) => x.state === 'ok')) {
       const rows = rowsOf(p, c)
-      const icy = rows.filter((r) => r.basis?.kind === 'rank' && r.basis.means.id === 'icywind')
-      const r = validateSet(game, c.opponentSet)
-      const blocked = blockers.includes(r.ability) || r.item === 'whiteherb'
-      expect(icy.length).toBe(blocked ? 0 : 1)
+      const ag = rows.filter((r) => r.basis?.kind === 'rank' && r.basis.means.id === 'agility')
+      expect(ag.map((r) => r.basis)).toEqual([expect.objectContaining({ owner: 'me', myBoosts: { spe: 2 }, opponentBoosts: {} })])
       const kinds = rows.map((r) => r.kind)
       expect(kinds).toEqual([...kinds].sort((a, b) => ['base', 'rank', 'scarf', 'non-scarf'].indexOf(a) - ['base', 'rank', 'scarf', 'non-scarf'].indexOf(b)))
     }
@@ -556,20 +613,35 @@ describe('planTab: 상대 목록·목록 밖 타겟', () => {
     expect(p.cards.some((c) => c.opponent.source === 'custom')).toBe(false)
   })
 
-  it('스피드 탭 커스텀: 타겟 기술의 수단(얼어붙은바람류)이 사용자 지정 랭크 행, 스카프 행 없음', () => {
-    const p = planTab(input({ mySet: PLAIN, customTargets: [ROTOM] }), 'speed')
-    for (const c of p.cards.filter((x) => x.opponent.source === 'custom')) {
+  it('스피드 탭 커스텀: 타겟 기술의 능동 수단(용의춤)이 사용자 지정 랭크 행, 하락기(일렉트릭네트)는 행 없음, 스카프 행 없음', () => {
+    const ALTARIA = { rosterId: 'altaria', moves: ['dragondance', 'dragonclaw'], edits: {} }
+    const p = planTab(input({ mySet: PLAIN, customTargets: [ROTOM, ALTARIA] }), 'speed')
+    const custom = (id: string) => p.cards.filter((x) => x.opponent.source === 'custom' && x.opponent.id === id)
+    expect(custom('rotomwash').length).toBeGreaterThan(0)
+    for (const c of custom('rotomwash')) expect(rowsOf(p, c).map((r) => r.kind)).toEqual(['base'])
+    expect(custom('altaria').length).toBeGreaterThan(0)
+    for (const c of custom('altaria')) {
       const rows = rowsOf(p, c)
       expect(rows.map((r) => r.kind)).toEqual(['base', 'rank'])
       expect(rows[1].basis).toEqual({
         kind: 'rank',
-        means: { kind: 'move', id: 'electroweb' },
+        means: { kind: 'move', id: 'dragondance' },
         owner: 'opponent',
-        myBoosts: { spe: -1 },
-        opponentBoosts: {},
+        myBoosts: {},
+        opponentBoosts: { atk: 1, spe: 1 },
         reactions: [],
       })
     }
+  })
+
+  it('랭크 기준 경계(래더 상대 수단 점유율): 점유율과 같으면 포함, 기준을 올리면 빠진다', () => {
+    const share = entryOf('volcarona').moves.shares.quiverdance
+    const has = (rankShareMin: number) => {
+      const p = planTab(input({ mySet: PLAIN, filters: { topN: 30, selected: ['volcarona'] }, criteria: { ...DEFAULT_CRITERIA, rankShareMin } }), 'speed')
+      return Object.values(p.rows).some((r) => r.basis?.kind === 'rank' && r.basis.means.id === 'quiverdance')
+    }
+    expect(has(share)).toBe(true)
+    expect(has(share + 0.0001)).toBe(false)
   })
 
   it('해석 불가 타겟(배울 수 없는 기술)은 그 커스텀 카드만 error', () => {
