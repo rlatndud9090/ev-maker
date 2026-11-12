@@ -26,6 +26,8 @@ interface Props {
   /** 커스텀 카드면 그 타겟 */
   target?: CustomTarget
   dispatch: Dispatch<AppAction>
+  /** 계산결과순일 때 이 행이 든 그룹 제목 id(행 토글 버튼 설명에 붙여 소속을 전한다) */
+  groupLabelId?: string
 }
 
 /** 카드 줄 배지의 기준 행: 대표 행. 대표로 세울 행이 없는 카드(no-change)는 범주가 있는 첫 행. */
@@ -610,7 +612,7 @@ function BundleList({ tab, group, card, rollSteps, onSelect, dispatch, spMax, op
   )
 }
 
-export const CardItem = memo(function CardItem({ game, tab, group, card, rollSteps, expanded, onToggle, onSelect, target, dispatch }: Props) {
+export const CardItem = memo(function CardItem({ game, tab, group, card, rollSteps, expanded, onToggle, onSelect, target, dispatch, groupLabelId }: Props) {
   const names = namesOf(game)
   const ladder = card.opponent.source === 'ladder'
   const detailId = `card-detail-${encodeURIComponent(group.key)}`
@@ -626,7 +628,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
   const variableId = `${uid}-variable`
   const optionId = (i: number) => `${uid}-option-${i}`
   const selectedIndex = group.options.findIndex((o) => o.id === card.id)
-  const describedBy = [headlineId, ...(result === undefined ? [] : [resultId]), ...(card.variable ? [variableId] : [])].join(' ')
+  const describedBy = [headlineId, ...(result === undefined ? [] : [resultId]), ...(card.variable ? [variableId] : []), ...(groupLabelId === undefined ? [] : [groupLabelId])].join(' ')
   let resultBody: ReactNode = null
   if (result !== undefined) {
     resultBody = (
@@ -740,7 +742,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
  */
 function sameProps(a: Props, b: Props): boolean {
   if (a.game !== b.game || a.tab !== b.tab || a.card !== b.card || a.rollSteps !== b.rollSteps || a.expanded !== b.expanded) return false
-  if (a.onToggle !== b.onToggle || a.onSelect !== b.onSelect || a.target !== b.target || a.dispatch !== b.dispatch) return false
+  if (a.onToggle !== b.onToggle || a.onSelect !== b.onSelect || a.target !== b.target || a.dispatch !== b.dispatch || a.groupLabelId !== b.groupLabelId) return false
   if (a.group === b.group) return true
   if (a.group.key !== b.group.key || a.group.opponent !== b.group.opponent || a.group.options.length !== b.group.options.length) return false
   if (a.group.pinned.length !== b.group.pinned.length || !a.group.pinned.every((id, i) => id === b.group.pinned[i])) return false

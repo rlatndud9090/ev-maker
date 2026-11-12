@@ -147,8 +147,7 @@ test.describe('제품 화면', () => {
     await expect(sneasler.getByTestId('move-label')).toHaveText(/분함의발구르기/)
     await expect(sneasler.getByTestId('variable-tag')).toHaveCount(0)
     // 기준을 0.5%로 낮추면 판정이 바뀌는 다른 배분이 메뉴에 생긴다(그 항목에만 변동 표시).
-    await page.getByRole('button', { name: '표시 기준', exact: true }).click()
-    const min = toolbarSpin(page, '배분 최소비중(%)')
+    const min = toolbarSpin(page, 'SP 배분 최소(%)')
     await min.fill('0.5')
     await min.blur()
     await waitComplete(page)
@@ -162,7 +161,6 @@ test.describe('제품 화면', () => {
 
   test('상위 N 래더 상대는 판정 변화와 무관하게 탭마다 전부 한 행, 변동 가능 태그는 변화 있는 행에만, 기술 라벨은 모든 행(사용자 피드백 2026-11-12)', async ({ page }) => {
     await openProduct(page)
-    await page.getByRole('button', { name: '표시 기준', exact: true }).click()
     const topN = Number(await toolbarSpin(page, '상위 N').inputValue())
     expect(topN).toBe(30)
     for (const tab of ['공격', '방어', '스피드'] as const) {
@@ -294,9 +292,9 @@ test.describe('제품 화면', () => {
     expect(top10.length).toBeGreaterThan(0)
     expect(top10.every((c) => c.rank <= 10)).toBe(true)
     for (const name of outsideNames) {
-      const pick = combo(page, '포켓몬 선택')
+      const pick = combo(page, '포켓몬 찾기')
       await pick.fill(name!)
-      await page.getByRole('listbox', { name: '포켓몬 선택 후보' }).getByRole('option', { name: name!, exact: true }).click()
+      await page.getByRole('listbox', { name: '포켓몬 찾기 후보' }).getByRole('option', { name: name!, exact: true }).click()
     }
     await expect(page.getByRole('list', { name: '선택한 포켓몬' })).toContainText(outsideNames[0]!)
     await waitComplete(page)
@@ -434,7 +432,7 @@ test.describe('제품 화면', () => {
     expect(bo1 && bo3 && bo1.battles > bo3.battles, '현재 데이터: 최근 월 Bo1 판수가 Bo3보다 많다').toBe(true)
     await openProduct(page)
     await waitComplete(page)
-    await expect(combo(page, '통계 기준')).toHaveValue('bo1')
+    await expect(combo(page, '형식')).toHaveValue('bo1')
     await expect(page.getByTestId('meta-source')).toHaveText(`통계 Bo1 · ${month} · 컷 1760 · ${bo1?.format}`)
   })
 
@@ -442,7 +440,7 @@ test.describe('제품 화면', () => {
     await openProduct(page)
     const source = page.getByTestId('meta-source')
     await expect(source).toContainText('Bo1')
-    await combo(page, '통계 기준').selectOption('bo3')
+    await combo(page, '형식').selectOption('bo3')
     await expect(source).toContainText('Bo3')
     await waitComplete(page)
     await expect(cards(page).first()).toBeVisible()
@@ -454,7 +452,7 @@ test.describe('제품 화면', () => {
     await openProduct(page)
     await waitComplete(page)
     const source = page.getByTestId('meta-source')
-    const match = combo(page, '통계 기준')
+    const match = combo(page, '형식')
     await match.selectOption('bo3')
     await expect(page.getByRole('alert').filter({ hasText: '메타 통계를 불러오지 못했습니다' })).toBeVisible()
     await expect(match).toHaveValue('bo1')
@@ -1107,10 +1105,9 @@ test.describe('포켓몬마다 한 행 + 노력치 배분 선택(사용자 피�
     }
   })
 
-  test('표시 기준: "배분 선택지 수"는 없고 "배분 최소비중(%)" 기본 5', async ({ page }) => {
+  test('통계 설정: "배분 선택지 수"는 없고 "SP 배분 최소(%)" 기본 5', async ({ page }) => {
     await openProduct(page)
-    await page.getByRole('button', { name: '표시 기준', exact: true }).click()
-    await expect(toolbarSpin(page, '배분 최소비중(%)')).toHaveValue('5')
+    await expect(toolbarSpin(page, 'SP 배분 최소(%)')).toHaveValue('5')
     await expect(toolbarSpin(page, '배분 선택지 수')).toHaveCount(0)
   })
 
@@ -1146,8 +1143,7 @@ test.describe('포켓몬마다 한 행 + 노력치 배분 선택(사용자 피�
       return total
     }
     await menuTotal(5)
-    await page.getByRole('button', { name: '표시 기준', exact: true }).click()
-    const minField = toolbarSpin(page, '배분 최소비중(%)')
+    const minField = toolbarSpin(page, 'SP 배분 최소(%)')
     await minField.fill('0.5')
     await minField.blur()
     // 상한(3장)이 없으므로 기준을 0.5%로 낮추면 5행 합이 15를 넘는다(실제 스냅샷).
@@ -1157,8 +1153,7 @@ test.describe('포켓몬마다 한 행 + 노력치 배분 선택(사용자 피�
   test('묶음 기준 100%면 선택지가 하나라도 래더 배지는 버튼(직접 추가 폼), 상세 왼쪽 목록도 항목 하나 + 추가 폼', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
-    await page.getByRole('button', { name: '표시 기준', exact: true }).click()
-    const min = toolbarSpin(page, '배분 최소비중(%)')
+    const min = toolbarSpin(page, 'SP 배분 최소(%)')
     await min.fill('100')
     await min.blur()
     await waitComplete(page)

@@ -16,6 +16,7 @@ import {
   type DisplayCriteria,
   type PinnedBundle,
   type PresetEdit,
+  type SortMode,
   type Tab,
 } from '../cards'
 import type { SetDraft } from '../ui/setDraft'
@@ -44,6 +45,8 @@ export interface AppState {
    * 기준이 바뀌어도 남는 addedBundles와 같은 수명이다.
    */
   pinnedBundles: readonly PinnedBundle[]
+  /** 목록 정렬: usage = 사용률 순(계획 순서), result = 계산결과순(cards sortByResult). 계산 입력이 아니라 세대를 올리지 않는다 */
+  sortMode: SortMode
   /** 계산 입력이 바뀔 때만 +1(탭 전환·같은 값 확정은 그대로) */
   generation: number
 }
@@ -53,6 +56,7 @@ export type AppAction =
   | { type: 'commit-sp'; stat: StatId; value: number }
   | { type: 'set-meta'; meta: { match: MatchType; month: string } }
   | { type: 'set-tab'; tab: Tab }
+  | { type: 'set-sort'; mode: SortMode }
   | { type: 'set-tailwind'; side: 'me' | 'opponent'; on: boolean }
   | { type: 'set-criteria'; criteria: Partial<DisplayCriteria> }
   /** steps가 1~ROLL_STEPS−1 정수가 아니면 무시 */
@@ -98,6 +102,7 @@ export function initialState(regulation: string): AppState {
     customTargets: [],
     addedBundles: [],
     pinnedBundles: [],
+    sortMode: 'usage',
     generation: 0,
   }
 }
@@ -165,6 +170,9 @@ export function reducer(state: AppState, action: AppAction): AppState {
     }
     case 'set-tab':
       return state.tab === action.tab ? state : { ...state, tab: action.tab }
+    case 'set-sort':
+      if (action.mode !== 'usage' && action.mode !== 'result') return state
+      return state.sortMode === action.mode ? state : { ...state, sortMode: action.mode }
     case 'set-tailwind':
       return bump(state, {
         conditions: action.side === 'me' ? { ...state.conditions, myTailwind: action.on } : { ...state.conditions, opponentTailwind: action.on },

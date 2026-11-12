@@ -7,6 +7,8 @@ import { learnableMoves, searchIndexOf, searchNames } from '../../ui/search'
 import { Combobox } from './Combobox'
 
 interface Props {
+  /** 여는 버튼의 aria-controls 대상 */
+  id?: string
   game: Snapshot
   view: MetaView
   customTargets: readonly CustomTarget[]
@@ -18,7 +20,7 @@ interface Props {
 const MOVE_CHIP_LIMIT = 40
 
 /** 목록 밖 타겟 추가: 종 → 기술 1~4개 → [추가]. 기술은 자동으로 채우지 않는다. */
-export function CustomTargetPanel({ game, view, customTargets, onAdd, onCancel }: Props) {
+export function CustomTargetPanel({ id, game, view, customTargets, onAdd, onCancel }: Props) {
   const uid = useId()
   const names = namesOf(game)
   const [rosterId, setRosterId] = useState<string | null>(null)
@@ -44,6 +46,7 @@ export function CustomTargetPanel({ game, view, customTargets, onAdd, onCancel }
   return (
     <section
       ref={sectionRef}
+      id={id}
       className="custom-panel"
       role="region"
       aria-labelledby={`${uid}-h`}

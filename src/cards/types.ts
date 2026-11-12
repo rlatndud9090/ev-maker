@@ -459,6 +459,12 @@ export interface RowView {
   nearest: { up?: BoundaryView; down?: BoundaryView }
   /** "<label>: 최소 A32 / A15+". 변화 있는 ok/stale 행만, 성격 변형 결과(방어 탭은 쌍 결과)가 나온 뒤에만 */
   target?: TargetView
+  /**
+   * 도달 가능한 최선 판정: 내 SP 0~최대 × 성격(무보정·상승, 예산 무시 — 칸 표기와 같은 기준)에서 그 탭 관점 가장 유리한 판정
+   * (공격·방어 RollTier, 스피드 SpeedOrder). 변화 있는 ok·stale 행만. 방어 쌍 행(극단 필터 통과)은 높은 극단(H·B/D 최대·상승),
+   * 그 밖은 변형 범위 끝·현재·변형 스윕 칸 중 최선이며 성격 변형 스윕이 다 나온 뒤에만 붙는다. 판정을 다시 하지 않고 이미 나온 칸에서 고른다.
+   */
+  best?: string
   /** 가장 센 기술이 아니지만 선공기 행 조건을 채워 남은 행 */
   keptAsPriority?: true
   /** 칸이 없는 내 SP 무관 판정 행(공격 탭 속임수)의 판정 칸(결과 배지용) */

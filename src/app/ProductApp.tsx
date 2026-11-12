@@ -179,6 +179,7 @@ function Workspace({ boot }: { boot: Boot }) {
   const source = active.kind === 'view' ? active.view.source : sourceOf(meta.view.meta)
   const tabIdOf = (t: string) => `result-tab-${t}`
   const panelId = 'result-panel'
+  const customPanelId = 'custom-target-panel'
 
   const closeCustom = () => {
     setCustomOpen(false)
@@ -201,22 +202,7 @@ function Workspace({ boot }: { boot: Boot }) {
           selection={selection}
           tabIdOf={tabIdOf}
           panelId={panelId}
-          customOpen={customOpen}
-          onToggleCustom={() => (customOpen ? closeCustom() : setCustomOpen(true))}
-          customButtonRef={customButton}
         />
-        {customOpen && (
-          <CustomTargetPanel
-            game={game}
-            view={meta.view}
-            customTargets={customTargets}
-            onCancel={closeCustom}
-            onAdd={(rosterId, moves) => {
-              dispatch({ type: 'add-custom-target', rosterId, moves })
-              closeCustom()
-            }}
-          />
-        )}
         {metaError && <Errors title="메타 통계를 불러오지 못했습니다" lines={metaError} />}
         <ResultBox>
           <ResultPanel
@@ -229,7 +215,27 @@ function Workspace({ boot }: { boot: Boot }) {
             mySet={mySet}
             customTargets={customTargets}
             pinnedBundles={state.pinnedBundles}
+            sortMode={state.sortMode}
             dispatch={dispatch}
+            customOpen={customOpen}
+            onToggleCustom={() => (customOpen ? closeCustom() : setCustomOpen(true))}
+            customButtonRef={customButton}
+            customPanelId={customPanelId}
+            customPanel={
+              customOpen && (
+                <CustomTargetPanel
+                  id={customPanelId}
+                  game={game}
+                  view={meta.view}
+                  customTargets={customTargets}
+                  onCancel={closeCustom}
+                  onAdd={(rosterId, moves) => {
+                    dispatch({ type: 'add-custom-target', rosterId, moves })
+                    closeCustom()
+                  }}
+                />
+              )
+            }
           />
         </ResultBox>
       </div>

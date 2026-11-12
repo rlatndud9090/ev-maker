@@ -13,6 +13,7 @@ import {
   type CandidateState,
   type RowJudgements,
 } from './schedule'
+import { tierRank, type JudgementSide } from '../core'
 import { cellLabel, pairTarget, singleTarget } from './target'
 import { NATURE_VARIANTS } from './types'
 import type {
@@ -29,6 +30,7 @@ import type {
   RowKind,
   RowSpec,
   RowTask,
+  RowTaskResult,
   RowView,
   TabPlan,
   TabStatus,
@@ -103,13 +105,15 @@ function bareRow(ctx: Ctx, head: RowHead, status: RowView['status'], extra: { er
   return row
 }
 
+const sideOf = (ctx: Ctx, spec: RowSpec): JudgementSide => (spec.judge === 'speed' ? 'speed' : ctx.plan.mySide === 'attacker' ? 'attack' : 'defense')
+
 /**
  * 방어 탭(필터가 있는 행)은 성격 변형별 쌍 결과, 그 밖은 그 행의 성격 변형별 33칸에서 목표를 낸다.
  * 필요한 변형 결과(방어 탭은 두 쌍 결과)가 다 나오기 전이나 그중 오류가 있으면 목표 없음(오류를 "불가"로 보이지 않는다).
  */
 function targetOf(ctx: Ctx, spec: RowSpec, stat: StatId, j: RowJudgements, at: CellView | undefined): TargetView | undefined {
   const { plan } = ctx
-  const side = spec.judge === 'speed' ? 'speed' : plan.mySide === 'attacker' ? 'attack' : 'defense'
+  const side = sideOf(ctx, spec)
   const label = at === undefined ? undefined : cellLabel(side, at)
   if (label === undefined || spec.natures === undefined || !j.variantsDone || j.variantError) return undefined
   const plusStat = spec.natures.stat
@@ -125,6 +129,30 @@ function targetOf(ctx: Ctx, spec: RowSpec, stat: StatId, j: RowJudgements, at: C
   }
   const current = { hp: ctx.displaySp.hp, defense: ctx.displaySp[plusStat] }
   return pairTarget(points, label, plusStat, current, plan.spTotal - ctx.spSum)
+}
+
+/** 칸들 중 그 관점 가장 유리한 판정(관점 순서 밖 범주는 건너뛴다). 없으면 undefined */
+function bestOf(side: JudgementSide, cells: readonly Pick<CompactCell, 'category'>[]): string | undefined {
+  let best: string | undefined
+  for (const c of cells) {
+    const label = cellLabel(side, c)
+    if (label !== undefined && (best === undefined || tierRank(side, label) > tierRank(side, best))) best = label
+  }
+  return best
+}
+
+/**
+ * 변화 있는 행의 도달 가능한 최선 판정(RowView.best). 방어 쌍 행 = 극단 필터 높은 극단(쌍 최소 조합의 상한과 같다),
+ * 그 밖 = 변형 범위 끝·현재 성격 양 끝·현재·변형 스윕 칸 중 최선(변형 스윕이 남았으면 아직 없음, 변형 오류면 나온 칸으로).
+ */
+function bestReachable(ctx: Ctx, spec: RowSpec, ends: Extract<RowTaskResult, { kind: 'ends' }>, j: RowJudgements): string | undefined {
+  const side = sideOf(ctx, spec)
+  if (spec.gate !== undefined) {
+    const f = filterState(ctx.results, spec.gate)
+    return f.kind === 'passed' ? bestOf(side, [f.result.high, f.result.low]) : undefined
+  }
+  if (!j.variantsDone && !j.variantError) return undefined
+  return bestOf(side, [ends.range.high, ends.range.low, ends.high, ends.low, ...(j.current ?? []), ...(j.neutral ?? []), ...(j.plus ?? [])])
 }
 
 function sweptRow(ctx: Ctx, spec: RowSpec, stat: StatId, j: RowJudgements, noChange: boolean): RowView {
@@ -311,6 +339,10 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks): CardBuild {
     const same = !rowChanges(ends, j)
     const row = sweptRow(ctx, spec, stat, j, same)
     if (same && !j.variantsDone) row.provisional = true
+    if (!same) {
+      const best = bestReachable(ctx, spec, ends, j)
+      if (best !== undefined) row.best = best
+    }
     if (state === 'priority') row.keptAsPriority = true
     rows.push(row)
   }

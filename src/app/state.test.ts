@@ -98,6 +98,17 @@ describe('reducer', () => {
     expect(reducer(next, { type: 'set-tab', tab: 'speed' })).toBe(next)
   })
 
+  it('정렬 전환은 기본 사용률, 세대를 바꾸지 않고 같은 값·잘못된 값은 그대로', () => {
+    const s = start()
+    expect(s.sortMode).toBe('usage')
+    const next = reducer(s, { type: 'set-sort', mode: 'result' })
+    expect(next.sortMode).toBe('result')
+    expect(next.generation).toBe(s.generation)
+    expect(reducer(next, { type: 'set-sort', mode: 'result' })).toBe(next)
+    expect(reducer(next, { type: 'set-sort', mode: 'bogus' as 'usage' })).toBe(next)
+    expect(reducer(next, { type: 'set-sort', mode: 'usage' }).sortMode).toBe('usage')
+  })
+
   it('순풍·세트 초안 변경', () => {
     const s = start()
     const wind = reducer(s, { type: 'set-tailwind', side: 'opponent', on: true })

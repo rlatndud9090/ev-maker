@@ -2,6 +2,10 @@ import { useState } from 'react'
 
 interface Props {
   label: string
+  /** 화면 라벨보다 자세한 접근 이름(없으면 라벨) */
+  ariaLabel?: string
+  /** 입력 설명 id(aria-describedby) */
+  describedBy?: string
   value: number
   /** 화면 문자열 ↔ 값(기본: 그대로 숫자) */
   toText?: (v: number) => string
@@ -17,7 +21,7 @@ const parse = (text: string): number => (text.trim() === '' ? NaN : Number(text)
 const show = (v: number): string => (Number.isFinite(v) ? String(v) : '')
 
 /** 입력 중 문자열은 지역 상태로 두고, 포커스를 잃으면 확정 값 표시로 돌아간다. */
-export function NumberField({ label, value, toText = show, fromText = parse, onValue, min, max, step }: Props) {
+export function NumberField({ label, ariaLabel, describedBy, value, toText = show, fromText = parse, onValue, min, max, step }: Props) {
   const [editing, setEditing] = useState<string | null>(null)
   return (
     <label className="num-field">
@@ -25,6 +29,8 @@ export function NumberField({ label, value, toText = show, fromText = parse, onV
       <input
         type="number"
         inputMode="decimal"
+        aria-label={ariaLabel}
+        aria-describedby={describedBy}
         min={min}
         max={max}
         step={step}

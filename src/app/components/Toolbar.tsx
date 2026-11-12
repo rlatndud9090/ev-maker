@@ -1,5 +1,5 @@
-import { useId, useRef, useState, type Dispatch, type KeyboardEvent, type Ref } from 'react'
-import { ROLL_STEPS, TABS, type MetaSourceView, type Tab } from '../../cards'
+import { useId, useRef, useState, type Dispatch, type KeyboardEvent, type ReactNode } from 'react'
+import { ROLL_STEPS, TABS, type MetaSourceView, type SortMode, type Tab } from '../../cards'
 import type { Snapshot } from '../../data/schema'
 import type { MatchType, MetaIndexItem } from '../../data/meta-schema'
 import type { MetaView } from '../../meta'
@@ -31,9 +31,6 @@ interface Props {
   selection: { match: MatchType; month: string }
   tabIdOf: (tab: Tab) => string
   panelId: string
-  customOpen: boolean
-  onToggleCustom: () => void
-  customButtonRef: Ref<HTMLButtonElement>
 }
 
 const ROLL_FIELD_LABEL: Record<'attack' | 'defense', string> = { attack: '고난수 1타 기준', defense: '고난수 견딤 기준' }
@@ -85,11 +82,56 @@ function RollThresholdField({ tab, rollSteps, dispatch }: { tab: 'attack' | 'def
   )
 }
 
-export function Toolbar({ customButtonRef, ...p }: Props) {
+const SORT_OPTIONS: readonly { mode: SortMode; label: string }[] = [
+  { mode: 'usage', label: '사용률' },
+  { mode: 'result', label: '계산결과순' },
+]
+
+/** 작은 굵은 라벨 + 컨트롤 줄. 줄 이름 = 라벨(스크린 리더가 묶음으로 읽는다) */
+function ToolRow({ id, label, testId, children }: { id: string; label: string; testId: string; children: ReactNode }) {
+  return (
+    <div className="tool-row" role="group" aria-labelledby={id} data-testid={testId}>
+      <span id={id} className="tool-row-label">
+        {label}
+      </span>
+      <div className="tool-group">{children}</div>
+    </div>
+  )
+}
+
+/**
+ * 최소 사용률 입력(%). 화면 라벨("… 최소(%)")이 그대로 접근 이름이고(보이는 라벨 = 이름, WCAG 2.5.3),
+ * "사용률" 뜻은 설명(aria-describedby)으로 붙인다.
+ */
+function ShareField({ label, value, onValue }: { label: string; value: number; onValue: (v: number) => void }) {
+  const hintId = useId()
+  return (
+    <>
+      <NumberField
+        label={`${label} 최소(%)`}
+        describedBy={hintId}
+        value={value}
+        toText={toPercentInput}
+        fromText={fromPercentInput}
+        min={0}
+        max={100}
+        step={0.5}
+        onValue={onValue}
+      />
+      <span id={hintId} className="sr-only">
+        {label} 최소 사용률(%), 이보다 적게 쓰이면 표에 넣지 않습니다
+      </span>
+    </>
+  )
+}
+
+/**
+ * 결과 목록 위 설정: 탭 줄 → 통계 설정(형식·기준 월·최소 사용률 3종) → 표시 설정(상위 N·정렬·판정 기준·순풍) → 포켓몬 찾기(단독 줄).
+ */
+export function Toolbar(p: Props) {
   const { game, view, state, dispatch } = p
   const uid = useId()
   const names = namesOf(game)
-  const [criteriaOpen, setCriteriaOpen] = useState(false)
   const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({})
 
   const pickIndex = searchIndexOf(game.data.species, rankingIdsOf(view))
@@ -145,11 +187,75 @@ export function Toolbar({ customButtonRef, ...p }: Props) {
       </div>
 
       <div className="toolbar-controls">
-        <div className="tool-group">
+        <ToolRow id={`${uid}-stats`} label="통계 설정" testId="tool-row-stats">
+          <label className="inline-select">
+            형식
+            <select value={p.selection.match} onChange={(e) => setMeta(e.target.value as MatchType, p.selection.month)}>
+              {matches.map((m) => (
+                <option key={m} value={m}>
+                  {MATCH_LABEL[m]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="inline-select">
+            기준 월
+            <select value={p.selection.month} onChange={(e) => setMeta(p.selection.match, e.target.value)}>
+              {months.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </label>
+          <ShareField label="SP 배분" value={state.criteria.bundleShareMin} onValue={(v) => dispatch({ type: 'set-criteria', criteria: { bundleShareMin: v } })} />
+          <ShareField label="랭크업 기술" value={state.criteria.rankShareMin} onValue={(v) => dispatch({ type: 'set-criteria', criteria: { rankShareMin: v } })} />
+          <ShareField label="구애스카프" value={state.criteria.scarfShareMin} onValue={(v) => dispatch({ type: 'set-criteria', criteria: { scarfShareMin: v } })} />
+        </ToolRow>
+
+        <ToolRow id={`${uid}-display`} label="표시 설정" testId="tool-row-display">
           <NumberField label="상위 N" value={state.filters.topN} min={1} step={1} onValue={(v) => dispatch({ type: 'set-top-n', topN: v })} />
+          <div className="sort-field">
+            <span id={`${uid}-sort`} className="sort-label">
+              정렬
+            </span>
+            <div className="segmented" role="group" aria-labelledby={`${uid}-sort`} data-testid="sort-toggle">
+              {SORT_OPTIONS.map((o) => (
+                <button
+                  key={o.mode}
+                  type="button"
+                  aria-pressed={state.sortMode === o.mode}
+                  data-mode={o.mode}
+                  onClick={() => dispatch({ type: 'set-sort', mode: o.mode })}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {state.tab !== 'speed' && <RollThresholdField key={state.tab} tab={state.tab} rollSteps={state.rollSteps} dispatch={dispatch} />}
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={state.conditions.myTailwind}
+              onChange={(e) => dispatch({ type: 'set-tailwind', side: 'me', on: e.target.checked })}
+            />
+            내 순풍
+          </label>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={state.conditions.opponentTailwind}
+              onChange={(e) => dispatch({ type: 'set-tailwind', side: 'opponent', on: e.target.checked })}
+            />
+            상대 순풍
+          </label>
+        </ToolRow>
+
+        <div className="tool-row tool-row-search" data-testid="tool-row-search">
           <div className="pick">
             <Combobox
-              label="포켓몬 선택"
+              label="포켓몬 찾기"
               index={pickIndex}
               value=""
               clearOnCommit
@@ -182,85 +288,6 @@ export function Toolbar({ customButtonRef, ...p }: Props) {
               </ul>
             )}
           </div>
-          <button type="button" ref={customButtonRef} aria-expanded={p.customOpen} onClick={p.onToggleCustom}>
-            포켓몬 추가
-          </button>
-        </div>
-
-        <div className="tool-group">
-          {state.tab !== 'speed' && <RollThresholdField key={state.tab} tab={state.tab} rollSteps={state.rollSteps} dispatch={dispatch} />}
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={state.conditions.myTailwind}
-              onChange={(e) => dispatch({ type: 'set-tailwind', side: 'me', on: e.target.checked })}
-            />
-            내 순풍
-          </label>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={state.conditions.opponentTailwind}
-              onChange={(e) => dispatch({ type: 'set-tailwind', side: 'opponent', on: e.target.checked })}
-            />
-            상대 순풍
-          </label>
-          <label className="inline-select">
-            통계 기준
-            <select value={p.selection.match} onChange={(e) => setMeta(e.target.value as MatchType, p.selection.month)}>
-              {matches.map((m) => (
-                <option key={m} value={m}>
-                  {MATCH_LABEL[m]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="inline-select">
-            월
-            <select value={p.selection.month} onChange={(e) => setMeta(p.selection.match, e.target.value)}>
-              {months.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="button" aria-expanded={criteriaOpen} aria-controls={`${uid}-criteria`} onClick={() => setCriteriaOpen((o) => !o)}>
-            표시 기준
-          </button>
-        </div>
-
-        <div id={`${uid}-criteria`} className="criteria" hidden={!criteriaOpen}>
-          <NumberField
-            label="배분 최소비중(%)"
-            value={state.criteria.bundleShareMin}
-            toText={toPercentInput}
-            fromText={fromPercentInput}
-            min={0}
-            max={100}
-            step={0.5}
-            onValue={(v) => dispatch({ type: 'set-criteria', criteria: { bundleShareMin: v } })}
-          />
-          <NumberField
-            label="랭업 최소사용률(%)"
-            value={state.criteria.rankShareMin}
-            toText={toPercentInput}
-            fromText={fromPercentInput}
-            min={0}
-            max={100}
-            step={0.5}
-            onValue={(v) => dispatch({ type: 'set-criteria', criteria: { rankShareMin: v } })}
-          />
-          <NumberField
-            label="스카프 최소사용률(%)"
-            value={state.criteria.scarfShareMin}
-            toText={toPercentInput}
-            fromText={fromPercentInput}
-            min={0}
-            max={100}
-            step={0.5}
-            onValue={(v) => dispatch({ type: 'set-criteria', criteria: { scarfShareMin: v } })}
-          />
         </div>
       </div>
     </div>
