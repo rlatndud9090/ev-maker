@@ -1,5 +1,5 @@
-import { memo, useEffect, useId, useLayoutEffect, useRef, useState, type Dispatch, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
-import { addedBundleCardId, defaultOption, type AddedBundle, type CardGroup, type CardView, type CustomTarget, type RowView, type Tab } from '../../cards'
+import { memo, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { addedBundleCardId, defaultOption, isPinned, pinOf, type AddedBundle, type CardGroup, type CardView, type CustomTarget, type RowView, type Tab } from '../../cards'
 import type { Snapshot, StatId } from '../../data/schema'
 import { namesOf } from '../../ui/names'
 import { STAT_SHORT, bundleText, categoryBadge, fixedText, koBadge, orderBadge, shareText, type KoBadge } from '../../ui/format'
@@ -55,50 +55,85 @@ function resultBadge(tab: Tab, card: CardView, rollSteps: number): { kind: 'ko' 
 }
 
 const isUser = (card: CardView): boolean => card.bundle.userAdded !== undefined
-const userClass = (card: CardView): string => (isUser(card) ? ' user-bundle' : '')
+/** 고정 배분(직접 추가 포함)은 배지·메뉴 항목·상세 목록 모두 다른 면 색 */
+const pinClass = (pinned: boolean): string => (pinned ? ' pinned-bundle' : '')
 
 /** 화면 배분 카드 → 상태의 사용자 추가 배분 */
 function addedOf(tab: Tab, card: CardView): AddedBundle {
   return { tab, opponentId: card.opponent.id, category: card.category, sp: Object.fromEntries(card.bundle.stats.map((s) => [s.stat, s.sp])) }
 }
 
-/** 배분 라벨 "A32↑ 56.3%": 묶음(본문색)과 비중(래더)·소수 배분·직접 추가·프리셋(커스텀)은 작은 회색 글씨. */
-function BundleLabel({ card }: { card: CardView }) {
+/** 배분 라벨 "A32↑ 56.3%": 묶음(본문색)과 비중(래더)·소수 배분·고정됨·프리셋(커스텀)은 작은 회색 글씨. 고정 배분은 비중 대신 "고정됨". */
+function BundleLabel({ card, pinned }: { card: CardView; pinned: boolean }) {
   const { bundle } = card
   const ladder = card.opponent.source === 'ladder'
   return (
     <>
       <span className="bundle-stats">{bundle.stats.length > 0 ? bundleText(bundle.stats) : '관련 SP 없음'}</span>
-      {ladder && isUser(card) && <> <span className="bundle-share">직접 추가</span></>}
-      {ladder && bundle.share !== undefined && !bundle.minority && <> <span className="bundle-share">{shareText(bundle.share)}</span></>}
-      {ladder && bundle.minority && <> <span className="bundle-share">소수 배분</span></>}
+      {ladder && pinned && <> <span className="bundle-share">고정됨</span></>}
+      {ladder && !pinned && bundle.share !== undefined && !bundle.minority && <> <span className="bundle-share">{shareText(bundle.share)}</span></>}
+      {ladder && !pinned && bundle.minority && <> <span className="bundle-share">소수 배분</span></>}
       {!ladder && bundle.presetIndex !== undefined && <> <span className="bundle-share">프리셋 {bundle.presetIndex + 1}</span></>}
     </>
   )
 }
 
-/** 배분 선택지 한 항목의 내용: 배분·비중 라벨 + 결과 배지 + 변동 가능 표시(드롭다운·상세 왼쪽 목록 공용). */
-function BundleOptionContent({ tab, option, rollSteps }: { tab: Tab; option: CardView; rollSteps: number }) {
+/**
+ * 배분 선택지 한 항목의 내용: 배분·비중 라벨 + 결과 배지 + 변동 가능 표시(드롭다운·상세 왼쪽 목록 공용).
+ * 같은 목록에 변동 가능 항목이 하나라도 있으면 변동 표시가 없는 항목에도 같은 폭 빈 칸을 둬 결과 배지 오른쪽 끝이 세로로 맞는다.
+ */
+function BundleOptionContent({ tab, option, rollSteps, pinned, reserveVariable }: { tab: Tab; option: CardView; rollSteps: number; pinned: boolean; reserveVariable: boolean }) {
   const r = resultBadge(tab, option, rollSteps)
   return (
     <>
       <span className="bundle-opt-label num">
-        <BundleLabel card={option} />
+        <BundleLabel card={option} pinned={pinned} />
       </span>
       <span className="bundle-opt-result">
         {option.state === 'error' && <span className="badge-error">계산 불가</span>}
         {r !== undefined && <span className={`ko-badge ko-${r.badge.tone} ko-small`}>{r.badge.label}</span>}
-        {option.variable && <VariableTag compact testId="variable-mark" />}
+        {option.variable ? (
+          <VariableTag compact testId="variable-mark" />
+        ) : (
+          reserveVariable && (
+            <span className="variable-tag compact variable-slot" aria-hidden="true">
+              변동
+            </span>
+          )
+        )}
       </span>
     </>
   )
 }
 
+/** 핀 아이콘(고정이면 채움, 아니면 윤곽선) */
+function PinIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg className="pin-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">
+      <path
+        d="M10.2 1.6 14.4 5.8 13.1 6.4 10.9 8.6 11.3 11.6 10.2 12.7 7.4 9.9 3 14.3 1.7 14.3 1.7 13 6.1 8.6 3.3 5.8 4.4 4.7 7.4 5.1 9.6 2.9Z"
+        fill={filled ? 'currentColor' : 'none'}
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+/** 핀 버튼 이름은 늘 "배분 고정"(상태는 눌림/체크로), 마우스 툴팁만 동작을 말한다 */
+const PIN_LABEL = '배분 고정'
+const pinTitle = (pinned: boolean, user: boolean) => (pinned ? (user ? '고정 해제(직접 추가 배분 삭제)' : '고정 해제') : '배분 고정')
+
+/** 핀이 없는 항목(목록 밖 타겟 프리셋)의 같은 폭 빈 칸: 결과 배지 정렬을 지킨다 */
+const PinSlot = () => <span className="bundle-pin pin-slot" aria-hidden="true" />
+
 /** 배분 선택지 항목의 공용 data 속성(e2e 계약) */
-const optionData = (o: CardView) => ({
+const optionData = (group: CardGroup, o: CardView) => ({
   'data-card-id': o.id,
   'data-category': o.category ?? 'none',
   'data-user-added': isUser(o) ? 'true' : undefined,
+  'data-pinned': group.pinned.includes(o.id) ? 'true' : undefined,
   'data-headline': o.headline.kind,
   'data-variable': o.variable ? 'true' : 'false',
 })
@@ -234,8 +269,9 @@ function rememberFocusReturn(key: string) {
 type ActionProps = Pick<Props, 'tab' | 'group' | 'card' | 'onSelect' | 'dispatch'>
 
 /**
- * 배분 직접 추가·삭제(드롭다운·상세 목록 공용). 같은 키 배분이 이미 선택지면 그걸 고르고, 아니면 상태에 추가하고 그 카드를 미리 고른다
- * (계산이 끝나면 맨 위에 보인다). 추가·삭제 뒤 재계산 중 포커스를 잃으면 그 행의 배분 버튼으로 돌려준다.
+ * 배분 직접 추가·고정 토글(드롭다운·상세 목록 공용). 추가: 같은 키 배분이 이미 선택지면 그걸 고르고(관측 배분이면 고정한다), 아니면 상태에
+ * 추가(추가와 함께 고정)하고 그 카드를 미리 고른다(계산이 끝나면 맨 위에 보인다). 고정 토글: 관측 배분은 고정만 바꾸고(재계산 없음),
+ * 직접 추가 배분의 고정 해제는 삭제다. 추가·삭제 뒤 재계산 중 포커스를 잃으면 그 행의 배분 버튼으로 돌려준다.
  */
 function bundleActions({ tab, group, card, onSelect, dispatch }: ActionProps, spMax: number | undefined) {
   const returnKey = JSON.stringify([tab, group.key])
@@ -246,6 +282,7 @@ function bundleActions({ tab, group, card, onSelect, dispatch }: ActionProps, sp
       o.bundle.stats.length === stats.length && o.bundle.stats.every((s, i) => s.stat === stats[i].stat && s.sp === stats[i].sp && s.nature === 'neutral')
     const existing = group.options.find((o) => !isUser(o) && same(o)) ?? group.options.find((o) => isUser(o) && same(o))
     if (existing !== undefined) {
+      if (!isPinned(group, existing)) dispatch({ type: 'pin-bundle', pin: pinOf(tab, existing) })
       onSelect(group.key, existing.id)
     } else if (spMax !== undefined) {
       const added: AddedBundle = { tab, opponentId: card.opponent.id, category: card.category, sp }
@@ -255,21 +292,36 @@ function bundleActions({ tab, group, card, onSelect, dispatch }: ActionProps, sp
     done?.()
     if (existing === undefined) rememberFocusReturn(returnKey)
   }
-  const remove = (o: CardView, done?: () => void) => {
+  /** 고정 토글. 직접 추가 배분의 해제(삭제)면 true, removed 뒤 done을 부른다 */
+  const togglePin = (o: CardView, done?: () => void): boolean => {
+    if (!isPinned(group, o)) {
+      dispatch({ type: 'pin-bundle', pin: pinOf(tab, o) })
+      return false
+    }
+    if (!isUser(o)) {
+      dispatch({ type: 'unpin-bundle', pin: pinOf(tab, o) })
+      return false
+    }
     dispatch({ type: 'remove-bundle', bundle: addedOf(tab, o) })
     if (o.id === card.id) onSelect(group.key, defaultOption({ ...group, options: group.options.filter((x) => x.id !== o.id) }).id)
     done?.()
     rememberFocusReturn(returnKey)
+    return true
   }
-  return { add, remove, returnKey }
+  return { add, togglePin, returnKey }
 }
 
 interface PickerProps extends Pick<Props, 'tab' | 'group' | 'card' | 'rollSteps' | 'onSelect' | 'dispatch'> {
-  /** 래더 행: 직접 추가 폼·사용자 배분 삭제 */
+  /** 래더 행: 직접 추가 폼 */
   spMax?: number
 }
 
-/** 행의 배분 배지: 아래로 여는 배분 선택 메뉴(래더 행은 직접 추가 폼 포함). */
+/** 고정 토글 뒤 그 항목의 핀으로 포커스를 돌린다(항목이 맨 위·원래 자리로 옮겨지며 포커스를 잃을 수 있다). */
+function refocusPin(root: HTMLElement | null, cardId: string) {
+  requestAnimationFrame(() => root?.querySelector<HTMLElement>(`[data-pin-for="${CSS.escape(cardId)}"]`)?.focus())
+}
+
+/** 행의 배분 배지: 아래로 여는 배분 선택 메뉴(래더 행은 직접 추가 폼 + 항목마다 오른쪽 끝 핀). */
 function BundlePicker({ tab, group, card, rollSteps, onSelect, dispatch, spMax }: PickerProps) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLSpanElement>(null)
@@ -279,7 +331,9 @@ function BundlePicker({ tab, group, card, rollSteps, onSelect, dispatch, spMax }
     setOpen(false)
     btnRef.current?.focus()
   }
-  const { add, remove, returnKey } = bundleActions({ tab, group, card, onSelect, dispatch }, spMax)
+  const { add, togglePin, returnKey } = bundleActions({ tab, group, card, onSelect, dispatch }, spMax)
+  const ladder = card.opponent.source === 'ladder'
+  const reserveVariable = group.options.some((o) => o.variable)
 
   // 추가·삭제 뒤 재계산 중 이 행이 다시 붙었고 포커스가 갈 곳을 잃었으면 배분 버튼으로 돌려준다.
   useEffect(() => {
@@ -305,7 +359,7 @@ function BundlePicker({ tab, group, card, rollSteps, onSelect, dispatch, spMax }
   useEffect(() => {
     if (!open) return
     const menu = menuRef.current
-    menu?.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus()
+    menu?.querySelector<HTMLButtonElement>('[aria-checked="true"][role="menuitemradio"]')?.focus()
     menu?.scrollIntoView({ block: 'nearest' })
     const onDown = (e: PointerEvent) => {
       if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
@@ -316,18 +370,31 @@ function BundlePicker({ tab, group, card, rollSteps, onSelect, dispatch, spMax }
 
   const onMenuKey = (e: KeyboardEvent) => {
     // 직접 추가 폼의 키 입력(숫자 칸 ↑↓ 등)은 폼이 여기까지 올리지 않는다(Escape만 올린다).
-    const items = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"], [role="menuitem"]') ?? [])]
-    const at = items.indexOf(document.activeElement as HTMLButtonElement)
+    // ↑↓·Home/End는 배분 항목만 오간다(핀에 포커스가 있으면 그 항목 기준). → 항목에서 그 핀으로, ← 핀에서 그 항목으로.
+    const items = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? [])]
+    const active = document.activeElement as HTMLElement | null
+    const rowItem = active?.closest('.bundle-opt-row')?.querySelector<HTMLButtonElement>('[role="menuitemradio"]') ?? null
+    const at = rowItem === null ? -1 : items.indexOf(rowItem)
     if (e.key === 'Escape') {
       e.preventDefault()
       close()
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
       const step = e.key === 'ArrowDown' ? 1 : -1
-      items[(at + step + items.length) % items.length]?.focus()
+      const from = at < 0 && step < 0 ? 0 : at
+      items[(from + step + items.length) % items.length]?.focus()
     } else if (e.key === 'Home' || e.key === 'End') {
       e.preventDefault()
       items[e.key === 'Home' ? 0 : items.length - 1]?.focus()
+    } else if (e.key === 'ArrowRight' && active?.getAttribute('role') === 'menuitemradio') {
+      const pin = active.closest('.bundle-opt-row')?.querySelector<HTMLElement>('[data-pin-for]')
+      if (pin) {
+        e.preventDefault()
+        pin.focus()
+      }
+    } else if (e.key === 'ArrowLeft' && active?.hasAttribute('data-pin-for') && rowItem !== null) {
+      e.preventDefault()
+      rowItem.focus()
     }
   }
 
@@ -336,14 +403,14 @@ function BundlePicker({ tab, group, card, rollSteps, onSelect, dispatch, spMax }
       <button
         type="button"
         ref={btnRef}
-        className={`bundle-btn${userClass(card)}`}
+        className={`bundle-btn${pinClass(isPinned(group, card))}`}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`노력치 배분 ${bundleAria(card)} (${group.options.length}개 중 선택)`}
+        aria-label={`노력치 배분 ${bundleAria(card, isPinned(group, card))} (${group.options.length}개 중 선택)`}
         onClick={() => setOpen((o) => !o)}
       >
         <span className="card-bundle num" data-testid="card-bundle">
-          <BundleLabel card={card} />
+          <BundleLabel card={card} pinned={isPinned(group, card)} />
         </span>
         <span className="bundle-caret" aria-hidden="true">
           ▾
@@ -366,29 +433,43 @@ function BundlePicker({ tab, group, card, rollSteps, onSelect, dispatch, spMax }
         >
           {spMax !== undefined && card.bundle.stats.length > 0 && <BundleAddForm key={card.id} card={card} spMax={spMax} onAdd={(sp) => add(sp, close)} />}
           {group.options.map((o) => {
-            const item = (
-              <button
-                key={o.id}
-                type="button"
-                role="menuitemradio"
-                aria-checked={o.id === card.id}
-                className={`bundle-opt${userClass(o)}`}
-                {...optionData(o)}
-                onClick={() => {
-                  onSelect(group.key, o.id)
-                  close()
-                }}
-              >
-                <BundleOptionContent tab={tab} option={o} rollSteps={rollSteps} />
-              </button>
-            )
-            if (!isUser(o)) return item
+            const pinned = isPinned(group, o)
             return (
               <div key={o.id} className="bundle-opt-row" role="none">
-                {item}
-                <button type="button" role="menuitem" className="bundle-del" aria-label="직접 추가 배분 삭제" onClick={() => remove(o, close)}>
-                  ×
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={o.id === card.id}
+                  className={`bundle-opt${pinClass(pinned)}`}
+                  {...optionData(group, o)}
+                  onClick={() => {
+                    onSelect(group.key, o.id)
+                    close()
+                  }}
+                >
+                  <BundleOptionContent tab={tab} option={o} rollSteps={rollSteps} pinned={pinned} reserveVariable={reserveVariable} />
                 </button>
+                {ladder ? (
+                  <button
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={pinned}
+                    aria-label={PIN_LABEL}
+                    title={pinTitle(pinned, isUser(o))}
+                    className="bundle-pin"
+                    data-pin-for={o.id}
+                    data-testid="bundle-pin"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      // 직접 추가 배분의 해제는 삭제라 재계산이 돌아 메뉴를 닫고 배분 버튼으로 돌아간다. 관측 배분은 메뉴를 연 채 그 핀에 머문다.
+                      if (!togglePin(o, close)) refocusPin(menuRef.current, o.id)
+                    }}
+                  >
+                    <PinIcon filled={pinned} />
+                  </button>
+                ) : (
+                  <PinSlot />
+                )}
               </div>
             )
           })}
@@ -398,12 +479,12 @@ function BundlePicker({ tab, group, card, rollSteps, onSelect, dispatch, spMax }
   )
 }
 
-/** 스크린 리더용 배분 문구(비중 포함) */
-function bundleAria(card: CardView): string {
+/** 스크린 리더용 배분 문구(비중 포함, 고정이면 "고정됨") */
+function bundleAria(card: CardView, pinned: boolean): string {
   const { bundle } = card
   const stats = bundle.stats.length > 0 ? bundleText(bundle.stats) : '관련 SP 없음'
   if (card.opponent.source === 'custom') return bundle.presetIndex !== undefined ? `${stats} 프리셋 ${bundle.presetIndex + 1}` : stats
-  if (isUser(card)) return `${stats} 직접 추가`
+  if (pinned) return `${stats} 고정됨`
   if (bundle.minority) return `${stats} 소수 배분`
   return bundle.share !== undefined ? `${stats} ${shareText(bundle.share)}` : stats
 }
@@ -414,14 +495,16 @@ interface ListProps extends PickerProps {
 }
 
 /**
- * 상세 왼쪽 열: 드롭다운과 같은 배분 목록을 세로로 고정(래더는 맨 위 직접 추가 폼). 선택은 radiogroup(↑↓·←→ 이동 즉시 선택, Home/End),
- * radiogroup 안에는 radio만 둔다: 사용자 추가 배분 삭제는 그 radio에서 Delete·Backspace 키, 마우스는 항목 안 × 표시(보조 기술에는 숨김 —
- * 터치 스크린 리더는 드롭다운 메뉴의 삭제 항목을 쓴다). 사용자 추가 배분은 다른 면 색.
+ * 상세 왼쪽 열: 드롭다운과 같은 배분 목록을 세로로 고정(래더는 맨 위 직접 추가 폼, 항목마다 오른쪽 끝 핀).
+ * 선택은 radiogroup(↑↓·←→ 이동 즉시 선택, Home/End). 핀은 선택 항목 것만 Tab 순서(radio 다음)에 들어오고, 고정 항목 radio에서
+ * Delete·Backspace 키도 고정 해제다(직접 추가 배분은 삭제). 고정 항목은 다른 면 색.
  */
-function BundleList({ tab, group, card, rollSteps, onSelect, dispatch, spMax, optionId, deleteHintId }: ListProps & { deleteHintId: string }) {
+function BundleList({ tab, group, card, rollSteps, onSelect, dispatch, spMax, optionId, unpinHintId }: ListProps & { unpinHintId: string }) {
   const listRef = useRef<HTMLDivElement>(null)
-  const { add, remove } = bundleActions({ tab, group, card, onSelect, dispatch }, spMax)
+  const { add, togglePin } = bundleActions({ tab, group, card, onSelect, dispatch }, spMax)
   const anySelected = group.options.some((o) => o.id === card.id)
+  const ladder = card.opponent.source === 'ladder'
+  const reserveVariable = group.options.some((o) => o.variable)
 
   useEffect(() => {
     // 선택 항목이 목록 스크롤 밖이면 보이게 옮긴다(목록 박스 안에서만, 페이지는 건드리지 않는다).
@@ -443,9 +526,9 @@ function BundleList({ tab, group, card, rollSteps, onSelect, dispatch, spMax, op
     const at = group.options.findIndex((o) => o.id === focused.dataset.cardId)
     if (e.key === 'Delete' || e.key === 'Backspace') {
       const o = group.options[at]
-      if (o === undefined || !isUser(o)) return
+      if (o === undefined || !isPinned(group, o)) return
       e.preventDefault()
-      remove(o)
+      if (!togglePin(o)) focusOption(o.id)
       return
     }
     let to: number
@@ -463,47 +546,64 @@ function BundleList({ tab, group, card, rollSteps, onSelect, dispatch, spMax, op
   return (
     <div className="bundle-side" data-testid="bundle-list" ref={listRef}>
       {spMax !== undefined && card.bundle.stats.length > 0 && <BundleAddForm key={card.id} card={card} spMax={spMax} onAdd={(sp) => add(sp)} />}
-      <div className="bundle-radios" role="radiogroup" aria-label="노력치 배분" onKeyDown={onKey}>
-        {group.options.map((o, i) => {
-          const selected = o.id === card.id
-          const user = isUser(o)
-          return (
-            <button
-              key={o.id}
-              type="button"
-              role="radio"
-              id={optionId(i)}
-              aria-checked={selected}
-              // 선택 항목(없으면 첫 항목)만 Tab으로 들어온다(roving tabindex)
-              tabIndex={selected || (!anySelected && i === 0) ? 0 : -1}
-              aria-keyshortcuts={user ? 'Delete' : undefined}
-              aria-describedby={user ? deleteHintId : undefined}
-              className={`bundle-opt${userClass(o)}`}
-              {...optionData(o)}
-              onClick={() => onSelect(group.key, o.id)}
-            >
-              <BundleOptionContent tab={tab} option={o} rollSteps={rollSteps} />
-              {user && (
-                <span
-                  className="bundle-del"
-                  aria-hidden="true"
-                  title="직접 추가 배분 삭제"
-                  data-testid="bundle-del"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    remove(o)
-                  }}
-                >
-                  ×
-                </span>
-              )}
-            </button>
-          )
-        })}
+      {/* 선택(radiogroup)과 핀(group)을 형제 열로 둔다 — radiogroup 안에는 radio만(스크린 리더가 radio 수·위치를 바르게 읽는다).
+          두 열은 같은 줄(subgrid)을 공유해 항목과 그 핀이 같은 높이로 맞는다. */}
+      <div className="bundle-rows" style={{ '--bundle-rows': group.options.length } as CSSProperties}>
+        <div className="bundle-radios" role="radiogroup" aria-label="노력치 배분" onKeyDown={onKey}>
+          {group.options.map((o, i) => {
+            const selected = o.id === card.id
+            const pinned = isPinned(group, o)
+            // 선택 항목(없으면 첫 항목)만 Tab으로 들어온다(roving tabindex). 그 항목의 핀이 다음 Tab.
+            const tabbable = selected || (!anySelected && i === 0)
+            return (
+              <button
+                key={o.id}
+                type="button"
+                role="radio"
+                id={optionId(i)}
+                aria-checked={selected}
+                tabIndex={tabbable ? 0 : -1}
+                aria-keyshortcuts={pinned ? 'Delete' : undefined}
+                aria-describedby={pinned ? unpinHintId : undefined}
+                className={`bundle-opt${pinClass(pinned)}`}
+                {...optionData(group, o)}
+                onClick={() => onSelect(group.key, o.id)}
+              >
+                <BundleOptionContent tab={tab} option={o} rollSteps={rollSteps} pinned={pinned} reserveVariable={reserveVariable} />
+              </button>
+            )
+          })}
+        </div>
+        <div className="bundle-pins" role={ladder ? 'group' : undefined} aria-label={ladder ? PIN_LABEL : undefined} aria-hidden={ladder ? undefined : true}>
+          {group.options.map((o, i) => {
+            if (!ladder) return <PinSlot key={o.id} />
+            const pinned = isPinned(group, o)
+            const tabbable = o.id === card.id || (!anySelected && i === 0)
+            return (
+              <button
+                key={o.id}
+                type="button"
+                className="bundle-pin"
+                aria-label={PIN_LABEL}
+                aria-pressed={pinned}
+                title={pinTitle(pinned, isUser(o))}
+                tabIndex={tabbable ? 0 : -1}
+                data-pin-for={o.id}
+                data-testid="bundle-pin"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (!togglePin(o)) refocusPin(listRef.current, o.id)
+                }}
+              >
+                <PinIcon filled={pinned} />
+              </button>
+            )
+          })}
+        </div>
       </div>
-      {group.options.some(isUser) && (
-        <span id={deleteHintId} className="sr-only">
-          Delete 키로 직접 추가 배분 삭제
+      {group.pinned.length > 0 && (
+        <span id={unpinHintId} className="sr-only">
+          Delete 키로 고정 해제(직접 추가 배분은 삭제)
         </span>
       )}
     </div>
@@ -550,6 +650,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
       data-headline={card.headline.kind}
       data-variable={card.variable ? 'true' : 'false'}
       data-user-added={isUser(card) ? 'true' : undefined}
+      data-pinned={isPinned(group, card) ? 'true' : undefined}
     >
       {/* 행 어디를 눌러도 펼친다. 키보드·스크린 리더는 이름 칸 버튼(클릭이 이 줄로 버블돼 한 번만 토글). */}
       <div className="card-line" onClick={() => onToggle(group.key)}>
@@ -568,7 +669,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
         ) : (
           <span className="bundle-cell">
             <span className="card-bundle num" data-testid="card-bundle">
-              <BundleLabel card={card} />
+              <BundleLabel card={card} pinned={isPinned(group, card)} />
             </span>
           </span>
         )}
@@ -606,7 +707,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
               dispatch={dispatch}
               spMax={spMax}
               optionId={optionId}
-              deleteHintId={`${uid}-delete-hint`}
+              unpinHintId={`${uid}-unpin-hint`}
             />
             {/* 오른쪽 영역 이름 = 선택 배분 항목(목록에 없으면 일반 이름) */}
             <div
@@ -642,5 +743,6 @@ function sameProps(a: Props, b: Props): boolean {
   if (a.onToggle !== b.onToggle || a.onSelect !== b.onSelect || a.target !== b.target || a.dispatch !== b.dispatch) return false
   if (a.group === b.group) return true
   if (a.group.key !== b.group.key || a.group.opponent !== b.group.opponent || a.group.options.length !== b.group.options.length) return false
+  if (a.group.pinned.length !== b.group.pinned.length || !a.group.pinned.every((id, i) => id === b.group.pinned[i])) return false
   return a.group.options.every((o, i) => o === b.group.options[i])
 }

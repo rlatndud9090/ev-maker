@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { addedBundleCardId } from './ids'
-import { chosenOption, defaultOption, groupCards } from './groups'
-import type { CardView, PresetIndex } from './types'
+import { chosenOption, defaultOption, groupCards, isPinned, pinOf } from './groups'
+import type { CardView, PinnedBundle, PresetIndex } from './types'
 
 let seq = 0
 function view(opts: {
@@ -128,5 +128,85 @@ describe('groupCards: 사용자 추가 배분', () => {
     expect(chosenOption(grp, 'defense', userId).id).toBe('top')
     const [noMatch] = groupCards([top, plus])
     expect(chosenOption(noMatch, 'attack', userId).id).toBe('top')
+  })
+})
+
+describe('groupCards: 고정 배분', () => {
+  // view()의 묶음 키는 k{order}, 카드 분류는 physical
+  const pin = (c: CardView, tab: 'attack' | 'defense' = 'attack'): PinnedBundle => pinOf(tab, c)
+  const user = (o: Parameters<typeof view>[0] & { added: number }): CardView => {
+    const c = view(o)
+    return { ...c, bundle: { ...c.bundle, share: undefined, userAdded: o.added } }
+  }
+
+  it('고정 없으면 pinned 빈 목록, 순서는 그대로', () => {
+    const [g] = groupCards([view({ id: 'lo', opp: 'x', share: 0.1 }), view({ id: 'hi', opp: 'x', share: 0.5 })], 'attack', [])
+    expect(ids(g.options)).toEqual(['hi', 'lo'])
+    expect(g.pinned).toEqual([])
+  })
+
+  it('고정(고정한 순) → 관측 점유율 내림차순 → 소수 배분. 직접 추가도 고정 목록 순서를 따른다', () => {
+    const hi = view({ id: 'hi', opp: 'x', share: 0.5 })
+    const mid = view({ id: 'mid', opp: 'x', share: 0.3 })
+    const lo = view({ id: 'lo', opp: 'x', share: 0.1 })
+    const minor = view({ id: 'minor', opp: 'x', share: 0.01, minority: true })
+    const u0 = user({ id: 'u0', opp: 'x', added: 0 })
+    // 고정 순: lo → u0 → minor
+    const [g] = groupCards([hi, minor, u0, mid, lo], 'attack', [pin(lo), pin(u0), pin(minor)])
+    expect(ids(g.options)).toEqual(['lo', 'u0', 'minor', 'hi', 'mid'])
+    expect(g.pinned).toEqual(['lo', 'u0', 'minor'])
+    expect(isPinned(g, lo)).toBe(true)
+    expect(isPinned(g, hi)).toBe(false)
+    // 기본 선택은 고정과 무관하게 관측 최고 점유율
+    expect(defaultOption(g).id).toBe('hi')
+    expect(chosenOption(g, 'attack', undefined).id).toBe('hi')
+  })
+
+  it('고정을 풀면 원래(점유율) 자리로 돌아간다', () => {
+    const hi = view({ id: 'hi', opp: 'x', share: 0.5 })
+    const lo = view({ id: 'lo', opp: 'x', share: 0.1 })
+    const mid = view({ id: 'mid', opp: 'x', share: 0.3 })
+    const cards = [hi, lo, mid]
+    expect(ids(groupCards(cards, 'attack', [pin(lo)])[0].options)).toEqual(['lo', 'hi', 'mid'])
+    expect(ids(groupCards(cards, 'attack', [])[0].options)).toEqual(['hi', 'mid', 'lo'])
+  })
+
+  it('다른 탭·분류·상대의 고정은 맞지 않고, 커스텀 카드는 고정되지 않는다', () => {
+    const a = view({ id: 'a', opp: 'x', share: 0.5 })
+    const b = view({ id: 'b', opp: 'x', share: 0.1 })
+    const [g] = groupCards([a, b], 'attack', [pin(b, 'defense'), { ...pin(b), category: 'special' }, { ...pin(b), opponentId: 'y' }])
+    expect(ids(g.options)).toEqual(['a', 'b'])
+    expect(g.pinned).toEqual([])
+    const c0 = view({ id: 'c0', opp: 'z', source: 'custom', preset: 0 })
+    const c1 = view({ id: 'c1', opp: 'z', source: 'custom', preset: 1 })
+    const [cg] = groupCards([c0, c1], 'attack', [pin(c1)])
+    expect(ids(cg.options)).toEqual(['c0', 'c1'])
+    expect(cg.pinned).toEqual([])
+  })
+
+  it('맞는 카드가 없는 고정(기준 변경으로 빠진 관측 배분)은 무시되고, 카드가 돌아오면 다시 고정한 순 맨 위', () => {
+    const hi = view({ id: 'hi', opp: 'x', share: 0.5 })
+    const mid = view({ id: 'mid', opp: 'x', share: 0.3 })
+    const lo = view({ id: 'lo', opp: 'x', share: 0.1 })
+    const pins = [pin(lo), pin(mid)]
+    // lo가 최소 비중 아래로 빠진 기준
+    const [away] = groupCards([hi, mid], 'attack', pins)
+    expect(ids(away.options)).toEqual(['mid', 'hi'])
+    expect(away.pinned).toEqual(['mid'])
+    const [back] = groupCards([hi, mid, lo], 'attack', pins)
+    expect(ids(back.options)).toEqual(['lo', 'mid', 'hi'])
+    expect(back.pinned).toEqual(['lo', 'mid'])
+  })
+
+  it('고정 목록에 없는 직접 추가 배분도 고정으로 친다(고정 뒤, 추가 순)', () => {
+    const hi = view({ id: 'hi', opp: 'x', share: 0.5 })
+    const lo = view({ id: 'lo', opp: 'x', share: 0.1 })
+    const u1 = user({ id: 'u1', opp: 'x', added: 1 })
+    const u0 = user({ id: 'u0', opp: 'x', added: 0 })
+    const [g] = groupCards([hi, u1, lo, u0], 'attack', [pin(lo)])
+    expect(ids(g.options)).toEqual(['lo', 'u0', 'u1', 'hi'])
+    expect(g.pinned).toEqual(['lo', 'u0', 'u1'])
+    // 탭을 안 주면 고정 목록은 쓰지 않는다(직접 추가만 앞)
+    expect(ids(groupCards([hi, u1, lo, u0])[0].options)).toEqual(['u0', 'u1', 'hi', 'lo'])
   })
 })

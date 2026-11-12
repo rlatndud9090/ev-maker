@@ -142,13 +142,22 @@ for (const width of [400, 1280]) {
         expect(m.maxHeight).toBeLessThanOrEqual(13 * m.rem + 0.5)
         // 추가 폼 + 항목 5개(두 줄 항목 없음)는 스크롤 없이 다 들어간다(항목 수를 5로 맞춰 확인).
         const five = await list.evaluate((el) => {
-          const group = el.querySelector('[role="radiogroup"]')!
-          const radios = [...group.querySelectorAll('[role="radio"]')]
-          const added = radios.length < 5 ? Array.from({ length: 5 - radios.length }, () => group.appendChild(radios[0].cloneNode(true))) : []
-          const hidden = radios.slice(5).map((r) => ((r as HTMLElement).hidden = true, r as HTMLElement))
+          // 항목 열(radiogroup)과 핀 열은 같은 줄 수(--bundle-rows)를 공유하므로 둘 다 5개로 맞추고 줄 수도 5로 둔다.
+          const rows = el.querySelector<HTMLElement>('.bundle-rows')!
+          const group = rows.querySelector('[role="radiogroup"]')!
+          const pinCol = rows.querySelector('.bundle-pins')!
+          const fit = (col: Element, sel: string) => {
+            const items = [...col.querySelectorAll(sel)]
+            const added = items.length < 5 ? Array.from({ length: 5 - items.length }, () => col.appendChild(items[0].cloneNode(true)) as HTMLElement) : []
+            const hidden = items.slice(5).map((r) => ((r as HTMLElement).hidden = true, r as HTMLElement))
+            return () => (added.forEach((a) => a.remove()), hidden.forEach((h) => (h.hidden = false)))
+          }
+          const prevRows = rows.style.getPropertyValue('--bundle-rows')
+          rows.style.setProperty('--bundle-rows', '5')
+          const undo = [fit(group, '[role="radio"]'), fit(pinCol, '.bundle-pin')]
           const r = { count: group.querySelectorAll('[role="radio"]:not([hidden])').length, overflow: el.scrollHeight - el.clientHeight }
-          added.forEach((a) => (a as Element).remove())
-          hidden.forEach((h) => (h.hidden = false))
+          undo.forEach((u) => u())
+          rows.style.setProperty('--bundle-rows', prevRows)
           return r
         })
         expect(five.count).toBe(5)

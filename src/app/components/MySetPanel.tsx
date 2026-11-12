@@ -2,11 +2,12 @@ import { useEffect, useId, useMemo, useRef, useState, type Dispatch } from 'reac
 import { CoreError, CoreInputError, STAT_IDS, computeStats, type SpTable } from '../../core'
 import { myMeansNotes, type ErrorReason } from '../../cards'
 import type { Snapshot, StatId, StatTable } from '../../data/schema'
+import { topMoves, type MetaView } from '../../meta'
 import { STAT_LABEL, typeNameOf, typeSlug } from '../../ui/labels'
 import { TypeIcon } from '../../ui/TypeIcon'
 import { heldItemIds, namesOf, pickSpecies } from '../../ui/names'
 import { choiceOf, natureIdFor, refreshAuto, toggleMinus, togglePlus, type NatureChoice, type NatureStat } from '../../ui/natureToggle'
-import { MOVE_SLOTS, parseNumber, toPokemonSet, type SetDraft } from '../../ui/setDraft'
+import { MOVE_SLOTS, parseNumber, speciesMoveFill, toPokemonSet, type SetDraft } from '../../ui/setDraft'
 import { searchIndexOf } from '../../ui/search'
 import { STAT_SHORT } from '../../ui/format'
 import { draftFieldOf, koReason, type DraftField } from '../../ui/koErrors'
@@ -16,6 +17,8 @@ import { TAB_LABEL, meansLabel } from './text'
 
 interface Props {
   game: Snapshot
+  /** 지금 선택한 통계 기준·월의 메타(종을 바꾸면 그 종 기술 사용률 상위로 기술 칸을 채운다) */
+  view: MetaView
   draft: SetDraft
   dispatch: Dispatch<AppAction>
   /** 세 탭의 내 세트 오류 이유(중복 제거) */
@@ -47,7 +50,7 @@ function FieldAlerts({ game, reasons, field, set }: { game: Snapshot; reasons: r
   )
 }
 
-export function MySetPanel({ game, draft, dispatch, reasons, onDisplaySp }: Props) {
+export function MySetPanel({ game, view, draft, dispatch, reasons, onDisplaySp }: Props) {
   const uid = useId()
   const bodyId = `${uid}-body`
   const names = namesOf(game)
@@ -59,6 +62,12 @@ export function MySetPanel({ game, draft, dispatch, reasons, onDisplaySp }: Prop
 
   const { spTotal, spMaxPerStat } = game.manifest.rules
   const pick = pickSpecies(game, draft.species)
+  const speciesId = names.species.resolve(draft.species)
+  // 마지막으로 풀린 종 id(종 칸이 오타 등으로 풀리지 않는 동안 "같은 종으로 돌아옴"을 가린다)
+  const lastSpeciesId = useRef(speciesId)
+  useEffect(() => {
+    if (speciesId !== undefined) lastSpeciesId.current = speciesId
+  }, [speciesId])
   const base = pick?.base
   const { set, megaByName } = useMemo(() => toPokemonSet(game, draft), [game, draft])
   const committed = Object.fromEntries(STAT_IDS.map((s) => [s, parseNumber(draft.sp[s])])) as SpTable
@@ -101,6 +110,13 @@ export function MySetPanel({ game, draft, dispatch, reasons, onDisplaySp }: Prop
       if (next.megaStone !== undefined) patch.item = names.items.label(next.megaStone)
       else if (pick?.megaStone !== undefined) patch.item = ''
     }
+    // 사용자가 종을 바꾸면 그 종(메가 폼은 메가 항목, 없으면 원종 항목) 기술 사용률 상위로 기술 칸을 채운다. 메타 목록 밖 종이면
+    // 기술 그대로. 비교는 마지막으로 풀린 종이라 오타를 거쳐 같은 종으로 돌아와도 손으로 고친 기술을 덮지 않는다.
+    const moves = speciesMoveFill(game, speciesId ?? lastSpeciesId.current, text, (id) => {
+      const entry = view.entry(id)
+      return entry === undefined ? undefined : topMoves(entry, game, MOVE_SLOTS)
+    })
+    if (moves !== undefined) patch.moves = moves
     update(patch)
   }
 

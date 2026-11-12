@@ -1,5 +1,6 @@
 // 카드·행·프리셋 키. 서로 다른 조합이 같은 문자열이 되지 않게 라벨을 잇지 않고 튜플을 직렬화한다.
-import type { Category, PresetIndex, Tab } from './types'
+import { STAT_IDS } from '../core'
+import type { AddedBundle, Category, PinnedBundle, PresetIndex, Tab } from './types'
 
 type Part = string | number | null
 
@@ -25,6 +26,16 @@ export function addedBundleKey(stats: readonly { stat: string; sp: number }[]): 
 export function addedCardId(tab: Tab, opponentId: string, category: Category | null, bundleKey: string): string {
   return cardId([tab, 'ladder', opponentId, category, bundleKey, 'user'])
 }
+
+/** 직접 추가 배분의 고정 항목(키 = 그 배분 카드의 묶음 키: 키 능력치 STAT_IDS 순, 무보정) */
+export function addedBundlePin(added: AddedBundle): PinnedBundle {
+  const stats = STAT_IDS.filter((s) => added.sp[s] !== undefined).map((stat) => ({ stat, sp: added.sp[stat] as number }))
+  return { tab: added.tab, opponentId: added.opponentId, category: added.category, key: addedBundleKey(stats) }
+}
+
+/** 같은 (탭, 상대, 분류, 묶음 키) 고정인지 */
+export const samePin = (a: PinnedBundle, b: PinnedBundle): boolean =>
+  a.tab === b.tab && a.opponentId === b.opponentId && a.category === b.category && a.key === b.key
 
 /** 화면이 추가 직후(계산이 끝나기 전) 그 카드를 미리 고를 때 쓰는 id. 계획(plan)과 같은 규칙이다. */
 export function addedBundleCardId(added: { tab: Tab; opponentId: string; category: Category | null }, stats: readonly { stat: string; sp: number }[]): string {

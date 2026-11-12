@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_CRITERIA, DEFAULT_ROLL_STEPS, DEFAULT_TOP_N, type AddedBundle } from '../cards'
+import { DEFAULT_CRITERIA, DEFAULT_ROLL_STEPS, DEFAULT_TOP_N, type AddedBundle, type PinnedBundle } from '../cards'
 import type { StatId } from '../data/schema'
 import { realData } from '../cards/testing'
 import { toPokemonSet } from '../ui/setDraft'
@@ -21,6 +21,7 @@ describe('initialState', () => {
     expect(s.conditions).toEqual({ myTailwind: false, opponentTailwind: false })
     expect(s.customTargets).toEqual([])
     expect(s.addedBundles).toEqual([])
+    expect(s.pinnedBundles).toEqual([])
     expect(s.criteria.bundleShareMin).toBe(0.05)
     expect(s.rollSteps).toBe(14)
     expect(s.rollSteps).toBe(DEFAULT_ROLL_STEPS)
@@ -177,6 +178,78 @@ describe('reducer', () => {
       expect(removed.addedBundles).toEqual([hb(32, 0)])
       expect(removed.generation).toBe(two.generation + 1)
       expect(reducer(removed, { type: 'remove-bundle', bundle: hb(0, 32) })).toBe(removed)
+    })
+
+    // 직접 추가 배분의 고정 키 = 키 능력치 STAT_IDS 순·무보정 묶음 키(관측 묶음 키와 같은 형식)
+    const pinOfHb = (hp: number, def: number, extra: Partial<PinnedBundle> = {}): PinnedBundle => ({
+      tab: 'attack',
+      opponentId: 'garchomp',
+      category: 'physical',
+      key: JSON.stringify([
+        { stat: 'hp', sp: hp, nature: 'neutral' },
+        { stat: 'def', sp: def, nature: 'neutral' },
+      ]),
+      ...extra,
+    })
+    const observed = (key: string): PinnedBundle => ({ tab: 'attack', opponentId: 'garchomp', category: 'physical', key })
+
+    it('추가는 고정도 함께(추가 순, 관측 고정과 한 목록), 같은 키 고정이 이미 있으면 고정을 겹치지 않는다', () => {
+      const s = run(start(), { type: 'pin-bundle', pin: observed('obs-a') }, add(hb(0, 32)), add(hb(32, 0)))
+      expect(s.pinnedBundles).toEqual([observed('obs-a'), pinOfHb(0, 32), pinOfHb(32, 0)])
+      const pre = run(start(), { type: 'pin-bundle', pin: pinOfHb(4, 8) })
+      const added = reducer(pre, add(hb(4, 8)))
+      expect(added.addedBundles).toEqual([hb(4, 8)])
+      expect(added.pinnedBundles).toEqual([pinOfHb(4, 8)])
+    })
+
+    it('관측 배분 고정은 세대를 올리지 않고 맨 뒤에 붙는다. 중복·빈 id/키는 무시', () => {
+      const s = start()
+      const one = reducer(s, { type: 'pin-bundle', pin: observed('a') })
+      expect(one.pinnedBundles).toEqual([observed('a')])
+      expect(one.generation).toBe(s.generation)
+      const two = reducer(one, { type: 'pin-bundle', pin: { ...observed('b'), tab: 'defense' } })
+      expect(two.pinnedBundles).toEqual([observed('a'), { ...observed('b'), tab: 'defense' }])
+      expect(reducer(two, { type: 'pin-bundle', pin: observed('a') })).toBe(two)
+      expect(reducer(s, { type: 'pin-bundle', pin: observed('') })).toBe(s)
+      expect(reducer(s, { type: 'pin-bundle', pin: { ...observed('a'), opponentId: '' } })).toBe(s)
+    })
+
+    it('고정 해제: 관측 배분은 고정만 빠지고(세대 그대로), 직접 추가 배분은 삭제된다(세대 +1). 없으면 그대로', () => {
+      const s = run(start(), { type: 'pin-bundle', pin: observed('a') }, add(hb(0, 32)), { type: 'pin-bundle', pin: observed('b') })
+      const obsOff = reducer(s, { type: 'unpin-bundle', pin: observed('a') })
+      expect(obsOff.pinnedBundles).toEqual([pinOfHb(0, 32), observed('b')])
+      expect(obsOff.addedBundles).toEqual([hb(0, 32)])
+      expect(obsOff.generation).toBe(s.generation)
+      const userOff = reducer(obsOff, { type: 'unpin-bundle', pin: pinOfHb(0, 32) })
+      expect(userOff.pinnedBundles).toEqual([observed('b')])
+      expect(userOff.addedBundles).toEqual([])
+      expect(userOff.generation).toBe(obsOff.generation + 1)
+      expect(reducer(userOff, { type: 'unpin-bundle', pin: observed('a') })).toBe(userOff)
+      // 다른 탭·분류의 같은 키는 다른 고정
+      expect(reducer(userOff, { type: 'unpin-bundle', pin: { ...observed('b'), category: 'special' } })).toBe(userOff)
+    })
+
+    it('관측 배분과 키가 같은 직접 추가 배분: 그 키의 고정을 풀면 추가 배분도 함께 지운다(세대 +1)', () => {
+      const s = run(start(), { type: 'pin-bundle', pin: pinOfHb(4, 8) }, add(hb(4, 8)))
+      const off = reducer(s, { type: 'unpin-bundle', pin: pinOfHb(4, 8) })
+      expect(off.pinnedBundles).toEqual([])
+      expect(off.addedBundles).toEqual([])
+      expect(off.generation).toBe(s.generation + 1)
+    })
+
+    it('통계 기준·월·최소 비중을 바꿨다 되돌려도 고정은 그대로 남는다(기준 왕복)', () => {
+      const s = run(start(), { type: 'pin-bundle', pin: observed('a') }, add(hb(0, 32)))
+      const away = run(s, { type: 'set-criteria', criteria: { bundleShareMin: 0.2 } }, { type: 'set-meta', meta: { match: 'bo3', month: '2026-09' } })
+      expect(away.pinnedBundles).toEqual(s.pinnedBundles)
+      expect(away.addedBundles).toEqual(s.addedBundles)
+      const back = run(away, { type: 'set-criteria', criteria: { bundleShareMin: s.criteria.bundleShareMin } }, { type: 'set-meta', meta: { match: 'bo1', month: '2026-10' } })
+      expect(back.pinnedBundles).toEqual([observed('a'), pinOfHb(0, 32)])
+    })
+
+    it('remove-bundle도 그 배분의 고정을 지운다', () => {
+      const two = run(start(), add(hb(0, 32)), add(hb(32, 0)))
+      const removed = reducer(two, { type: 'remove-bundle', bundle: hb(0, 32) })
+      expect(removed.pinnedBundles).toEqual([pinOfHb(32, 0)])
     })
 
     it('toCardInput이 추가 배분을 그대로 넘긴다', () => {

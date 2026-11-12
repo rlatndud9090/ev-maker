@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, type Dispatch } from 'react'
 import type { PokemonSet } from '../../core'
-import { chosenOption, groupCards, type CustomTarget, type Tab } from '../../cards'
+import { chosenOption, groupCards, type CustomTarget, type PinnedBundle, type Tab } from '../../cards'
 import type { Snapshot } from '../../data/schema'
 import { namesOf } from '../../ui/names'
 import { progressText } from '../../ui/format'
@@ -20,10 +20,12 @@ interface Props {
   generation: number
   mySet: PokemonSet
   customTargets: readonly CustomTarget[]
+  /** 고정한 래더 배분(고정한 순): 행의 배분 선택지 맨 위 */
+  pinnedBundles: readonly PinnedBundle[]
   dispatch: Dispatch<AppAction>
 }
 
-export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySet, customTargets, dispatch }: Props) {
+export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySet, customTargets, pinnedBundles, dispatch }: Props) {
   const names = namesOf(game)
   // 펼침·배분 선택은 탭마다 따로(같은 포켓몬이라도 탭이 다르면 다른 행), 배분을 바꿔도 펼침이 유지되게 그룹 키로 둔다.
   const scoped = (groupKey: string) => JSON.stringify([tab, groupKey])
@@ -51,7 +53,7 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
   )
 
   const view = state.kind === 'view' ? state.view : undefined
-  const groups = useMemo(() => (view === undefined ? [] : groupCards(view.cards)), [view])
+  const groups = useMemo(() => (view === undefined ? [] : groupCards(view.cards, tab, pinnedBundles)), [view, tab, pinnedBundles])
   const superseded = state.kind === 'view' && (state.superseded || state.generation !== generation)
   const firstCard = view !== undefined && !superseded && (view.cards.length > 0 || view.stage12Done)
   const complete = view !== undefined && !superseded && view.complete

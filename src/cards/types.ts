@@ -75,6 +75,18 @@ export interface AddedBundle {
   sp: Readonly<Partial<Record<StatId, number>>>
 }
 
+/**
+ * 사용자가 고정한 래더 상대 배분(목록 맨 위, 고정한 순서). key = 그 카드 묶음의 정규화 키(BundleSpec.key).
+ * 직접 추가 배분도 추가와 함께 고정된다(키 = addedBundleKey). 고정은 계산 입력이 아니다(정렬·표시만 바꾼다).
+ */
+export interface PinnedBundle {
+  tab: Tab
+  /** 래더 메타 항목 id */
+  opponentId: string
+  category: Category | null
+  key: string
+}
+
 export interface CardInput {
   game: Snapshot
   view: MetaView

@@ -1,9 +1,9 @@
 // 카드 모델 공개 API. 순수 모듈이며 데이터는 입력으로 받는다.
 export * from './types'
-export { addedBundleCardId, cardId, rowId, presetKey } from './ids'
+export { addedBundleCardId, addedBundlePin, cardId, rowId, presetKey, samePin } from './ids'
 export { relevantStats, myDependsOn } from './relevance'
 export { bundlesOf } from './bundles'
-export { chosenOption, defaultOption, groupCards, groupKey, type CardGroup } from './groups'
+export { chosenOption, defaultOption, groupCards, groupKey, isPinned, pinOf, type CardGroup } from './groups'
 export { RANK_MEANS, REACTIONS, applyMeans, myMeansNotes } from './rankMeans'
 export { presetAssumption } from './presets'
 export { planTab } from './plan'

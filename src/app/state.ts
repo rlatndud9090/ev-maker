@@ -7,11 +7,14 @@ import {
   ROLL_STEPS,
   DEFAULT_TOP_N,
   MAX_CUSTOM_MOVES,
+  addedBundlePin,
+  samePin,
   type AddedBundle,
   type CardConditions,
   type CardFilters,
   type CustomTarget,
   type DisplayCriteria,
+  type PinnedBundle,
   type PresetEdit,
   type Tab,
 } from '../cards'
@@ -33,6 +36,14 @@ export interface AppState {
   customTargets: readonly CustomTarget[]
   /** 사용자가 직접 추가한 래더 상대 배분(추가 순, 메모리에만 둔다) */
   addedBundles: readonly AddedBundle[]
+  /**
+   * 고정한 래더 상대 배분(고정·추가한 순, 메모리에만 둔다). 직접 추가 배분은 추가와 함께 여기에도 들어가고, 고정을 풀면 지워진다
+   * (addedBundles의 모든 항목은 고정돼 있다). 계산 입력이 아니라 세대를 올리지 않는다(정렬·표시만).
+   * 통계 기준·월·최소 비중이 바뀌어 고정한 관측 배분이 목록에서 빠져도 지우지 않는다(의도): 화면에 맞는 카드가 없는 고정은
+   * 정렬에서 무시되고(cards groupCards) 아무것도 바꾸지 않으며, 기준을 되돌리면 사용자가 고른 고정이 다시 맨 위에 선다 —
+   * 기준이 바뀌어도 남는 addedBundles와 같은 수명이다.
+   */
+  pinnedBundles: readonly PinnedBundle[]
   /** 계산 입력이 바뀔 때만 +1(탭 전환·같은 값 확정은 그대로) */
   generation: number
 }
@@ -62,8 +73,17 @@ export type AppAction =
    * 관측 묶음을 고른다: cards chosenOption). 그런 항목은 상태에 남아 기준이 바뀌어 관측 묶음이 빠지면 다시 카드가 된다.
    */
   | { type: 'add-bundle'; bundle: AddedBundle; keyStats: readonly StatId[]; spMax: number }
-  /** 같은 (탭, 상대, 분류, SP)를 지운다. 없으면 무시 */
+  /** 같은 (탭, 상대, 분류, SP)를 지운다(고정도 함께). 없으면 무시 */
   | { type: 'remove-bundle'; bundle: AddedBundle }
+  /** 래더 배분 고정(맨 뒤에 붙는다). 이미 고정이거나 상대 id·키가 빈 문자열이면 무시 */
+  | { type: 'pin-bundle'; pin: PinnedBundle }
+  /**
+   * 고정 해제. 같은 키의 직접 추가 배분이 있으면 그것도 지운다(직접 추가는 고정을 풀면 사라진다). 없으면 무시.
+   * 직접 추가 배분이 기준 변경으로 같은 키의 관측 배분에 가려져 있을 때(plan.userSeeds가 카드를 만들지 않는다) 화면의 "고정됨"
+   * 관측 카드는 그 추가 배분의 고정을 보여 주는 것이므로, 그 핀을 풀면 추가 배분도 지운다(의도: "모든 추가 배분은 고정"이라는
+   * 단일 모델을 지키고, 풀었는데 기준을 되돌리면 다시 고정으로 나타나는 일을 막는다).
+   */
+  | { type: 'unpin-bundle'; pin: PinnedBundle }
 
 export function initialState(regulation: string): AppState {
   return {
@@ -77,6 +97,7 @@ export function initialState(regulation: string): AppState {
     filters: { topN: DEFAULT_TOP_N, selected: [] },
     customTargets: [],
     addedBundles: [],
+    pinnedBundles: [],
     generation: 0,
   }
 }
@@ -175,11 +196,27 @@ export function reducer(state: AppState, action: AppAction): AppState {
       const b = action.bundle
       if (!validBundle(b, action.keyStats, action.spMax) || state.addedBundles.some((x) => sameBundle(x, b))) return state
       const added: AddedBundle = { tab: b.tab, opponentId: b.opponentId, category: b.category, sp: { ...b.sp } }
-      return bump(state, { addedBundles: [...state.addedBundles, added] })
+      const pin = addedBundlePin(added)
+      const pinnedBundles = state.pinnedBundles.some((p) => samePin(p, pin)) ? state.pinnedBundles : [...state.pinnedBundles, pin]
+      return { ...bump(state, { addedBundles: [...state.addedBundles, added] }), pinnedBundles }
     }
     case 'remove-bundle': {
       const next = state.addedBundles.filter((x) => !sameBundle(x, action.bundle))
-      return next.length === state.addedBundles.length ? state : bump(state, { addedBundles: next })
+      if (next.length === state.addedBundles.length) return state
+      const pin = addedBundlePin(action.bundle)
+      return { ...bump(state, { addedBundles: next }), pinnedBundles: state.pinnedBundles.filter((p) => !samePin(p, pin)) }
+    }
+    case 'pin-bundle': {
+      const p = action.pin
+      if (typeof p.opponentId !== 'string' || p.opponentId === '' || typeof p.key !== 'string' || p.key === '') return state
+      if (state.pinnedBundles.some((x) => samePin(x, p))) return state
+      return { ...state, pinnedBundles: [...state.pinnedBundles, { tab: p.tab, opponentId: p.opponentId, category: p.category, key: p.key }] }
+    }
+    case 'unpin-bundle': {
+      const pinnedBundles = state.pinnedBundles.filter((x) => !samePin(x, action.pin))
+      const addedBundles = state.addedBundles.filter((x) => !samePin(addedBundlePin(x), action.pin))
+      if (addedBundles.length !== state.addedBundles.length) return { ...bump(state, { addedBundles }), pinnedBundles }
+      return pinnedBundles.length === state.pinnedBundles.length ? state : { ...state, pinnedBundles }
     }
   }
 }

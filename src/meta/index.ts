@@ -13,3 +13,4 @@ export {
   mergeOverlay,
   lookupOpponent,
 } from './assumptions'
+export { topMoves } from './moves'

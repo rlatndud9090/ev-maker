@@ -188,7 +188,7 @@ function Workspace({ boot }: { boot: Boot }) {
   return (
     <div className="product-layout">
       <aside className="sidebar">
-        <MySetPanel game={game} draft={draft} dispatch={dispatch} reasons={reasons} onDisplaySp={onDisplaySp} />
+        <MySetPanel game={game} view={meta.view} draft={draft} dispatch={dispatch} reasons={reasons} onDisplaySp={onDisplaySp} />
       </aside>
       <div className="results" ref={results}>
         <Toolbar
@@ -228,6 +228,7 @@ function Workspace({ boot }: { boot: Boot }) {
             generation={generation}
             mySet={mySet}
             customTargets={customTargets}
+            pinnedBundles={state.pinnedBundles}
             dispatch={dispatch}
           />
         </ResultBox>

@@ -1181,16 +1181,16 @@ test.describe('포켓몬마다 한 행 + 노력치 배분 선택(사용자 피�
   })
 })
 
-test.describe('배분 직접 추가(사용자 피드백 2026-11-12)', () => {
+test.describe('배분 직접 추가·고정(사용자 피드백 2026-11-12)', () => {
   const addForm = (row: Locator) => bundleMenu(row).getByTestId('bundle-add')
   const spInput = (row: Locator, stat: string) => addForm(row).getByRole('spinbutton', { name: `직접 추가 SP ${stat}`, exact: true })
   const addButton = (row: Locator) => addForm(row).getByRole('button', { name: '추가', exact: true })
   const bg = (loc: Locator) => loc.evaluate((el) => getComputedStyle(el).backgroundColor)
-  /** 사용자 배분 면 토큰(--user-bundle-bg)을 계산된 rgb로: 같은 배경을 칠한 탐침 요소로 푼다 */
-  const userBg = (page: Page) =>
+  /** 고정 배분 면 토큰(--pinned-bundle-bg)을 계산된 rgb로: 같은 배경을 칠한 탐침 요소로 푼다 */
+  const pinnedBg = (page: Page) =>
     page.evaluate(() => {
       const probe = document.createElement('div')
-      probe.style.background = 'var(--user-bundle-bg)'
+      probe.style.background = 'var(--pinned-bundle-bg)'
       document.body.appendChild(probe)
       const v = getComputedStyle(probe).backgroundColor
       probe.remove()
@@ -1249,14 +1249,53 @@ test.describe('배분 직접 추가(사용자 피드백 2026-11-12)', () => {
     await expect(cardLine(row)).toHaveAttribute('aria-expanded', 'false')
   })
 
-  test('추가 → 맨 위에 다른 배경 "직접 추가" 항목 + 자동 선택(배지도 다른 배경, 결과 갱신), × 삭제 → 기본 배분으로', async ({ page }) => {
+  /** 카드 id(JSON: 따옴표·역슬래시 포함)를 CSS 속성 선택자 문자열로 */
+  const pinFor = (cardId: string) => `[data-pin-for='${cardId.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}']`
+  const menuPin = (row: Locator, cardId: string) => bundleMenu(row).locator(pinFor(cardId))
+  const listPin = (row: Locator, cardId: string) => row.getByTestId('bundle-list').locator(pinFor(cardId))
+
+  /**
+   * 항목들의 결과 배지 오른쪽 끝·핀 칸 왼쪽 끝 x(배지가 없는 항목은 결과 칸 오른쪽 끝). 항목(radio·menuitemradio)과 핀 칸은
+   * 문서 순서로 짝짓는다(드롭다운은 항목 줄 안, 상세 목록은 radiogroup 밖 형제 핀 열). 핀 칸 수가 항목 수와 다르면 NaN.
+   */
+  const columns = (container: Locator) =>
+    container.evaluate((root) => {
+      const items = [...root.querySelectorAll('[role="menuitemradio"], [role="radio"]')]
+      const pins = [...root.querySelectorAll('.bundle-pin')]
+      return items.map((el, i) => {
+        const badge = el.querySelector('.bundle-opt-result .ko-badge') ?? el.querySelector('.bundle-opt-result')
+        const pin = pins.length === items.length ? pins[i] : undefined
+        const p = pin?.getBoundingClientRect()
+        const r = el.getBoundingClientRect()
+        return {
+          badgeRight: badge?.getBoundingClientRect().right ?? NaN,
+          pinLeft: p?.left ?? NaN,
+          // 핀 칸이 그 항목과 같은 줄(세로 가운데가 항목 안)
+          sameRow: p !== undefined && p.top + p.height / 2 > r.top && p.top + p.height / 2 < r.bottom,
+          hasBadge: el.querySelector('.ko-badge') !== null,
+        }
+      })
+    })
+  /** 모든 항목이 같은 줄에 핀 칸을 갖고, 결과 배지 오른쪽 끝·핀 칸 x가 세로로 맞는다(직접 추가·고정 항목이 섞여도) */
+  async function expectAligned(container: Locator, what: string) {
+    const cols = await columns(container)
+    expect(cols.length, what).toBeGreaterThan(1)
+    expect(cols.filter((c) => c.hasBadge).length, what).toBeGreaterThan(1)
+    for (const c of cols) {
+      expect(c.pinLeft, `${what} 핀 칸`).toBeCloseTo(cols[0].pinLeft, 0)
+      expect(c.sameRow, `${what} 핀 칸 줄`).toBe(true)
+      if (c.hasBadge) expect(c.badgeRight, `${what} 결과 배지`).toBeCloseTo(cols.find((x) => x.hasBadge)!.badgeRight, 0)
+    }
+  }
+
+  test('추가 → 맨 위에 다른 배경 "고정됨" 항목 + 자동 선택(배지도 다른 배경, 결과 갱신), 핀 해제 → 삭제되고 기본 배분으로', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     const row = await firstRow(page)
     const before = { id: await row.getAttribute('data-card-id'), text: (await row.getByTestId('card-bundle').textContent()) ?? '' }
-    const tint = await userBg(page)
+    const tint = await pinnedBg(page)
     expect(tint).toMatch(/^rgb/)
-    // 일반(관측) 배지는 포커스 없이 사용자 면 색이 아니다
+    // 일반(관측) 배지는 포커스 없이 고정 면 색이 아니다
     expect(await bg(bundleButton(row))).not.toBe(tint)
     await bundleButton(row).click()
     // 관측 배분과 겹치지 않을 값(H31 B3, 무보정)
@@ -1268,16 +1307,17 @@ test.describe('배분 직접 추가(사용자 피드백 2026-11-12)', () => {
     await expect(bundleButton(row)).toBeFocused()
     await waitComplete(page)
 
-    await expect(row.getByTestId('card-bundle')).toHaveText('H31 B3 직접 추가')
+    await expect(row.getByTestId('card-bundle')).toHaveText('H31 B3 고정됨')
     await expect(row).toHaveAttribute('data-user-added', 'true')
+    await expect(row).toHaveAttribute('data-pinned', 'true')
     await expect(row).not.toHaveAttribute('data-card-id', before.id!)
-    await expect(bundleButton(row)).toHaveClass(/user-bundle/)
+    await expect(bundleButton(row)).toHaveClass(/pinned-bundle/)
     await page.mouse.move(0, 0)
-    // 포커스 없이: 사용자 면 색
+    // 포커스 없이: 고정 면 색
     await bundleButton(row).evaluate((el) => (el as HTMLElement).blur())
     await expect(bundleButton(row)).not.toBeFocused()
     await expect.poll(() => bg(bundleButton(row))).toBe(tint)
-    // 키보드 포커스(:focus-visible)여도 사용자 면 색이 유지된다(포커스는 윤곽선만)
+    // 키보드 포커스(:focus-visible)여도 고정 면 색이 유지된다(포커스는 윤곽선만)
     await page.keyboard.press('Shift')
     await bundleButton(row).focus()
     expect(await bundleButton(row).evaluate((el) => el.matches(':focus-visible'))).toBe(true)
@@ -1291,27 +1331,42 @@ test.describe('배분 직접 추가(사용자 피드백 2026-11-12)', () => {
     const items = bundleMenu(row).getByRole('menuitemradio')
     await expect(items.first()).toHaveAttribute('data-user-added', 'true')
     await expect(items.first()).toHaveAttribute('aria-checked', 'true')
-    await expect(items.first().locator('.bundle-opt-label')).toHaveText('H31 B3 직접 추가')
+    await expect(items.first().locator('.bundle-opt-label')).toHaveText('H31 B3 고정됨')
     await expect(items.first().locator('.ko-badge')).toHaveCount(1)
     await expect(items.nth(1)).not.toHaveAttribute('data-user-added', 'true')
     await expect(items.nth(1).locator('.bundle-opt-label')).toHaveText(before.text)
-    // 호버를 항목 밖(추가 폼 라벨)으로 옮긴 뒤: 선택된 사용자 항목도 사용자 면 색, 관측 항목은 아니다
+    // 모든 항목에 핀(같은 이름, 상태는 체크), 고정 항목만 체크
+    const pins = bundleMenu(row).getByRole('menuitemcheckbox', { name: '배분 고정', exact: true })
+    await expect(pins).toHaveCount(await items.count())
+    await expect(pins.first()).toHaveAttribute('aria-checked', 'true')
+    await expect(pins.nth(1)).toHaveAttribute('aria-checked', 'false')
+    await expect(bundleMenu(row).getByRole('menuitem')).toHaveCount(0)
+    // 결과 배지가 직접 추가 항목에서도 세로로 맞는다(× 칸이 없다)
+    await expectAligned(bundleMenu(row), '드롭다운')
+    // 호버를 항목 밖(추가 폼 라벨)으로 옮긴 뒤: 선택된 고정 항목도 고정 면 색, 관측 항목은 아니다
     await addForm(row).locator('label').first().hover()
     await expect.poll(() => bg(items.first())).toBe(tint)
     expect(await bg(items.nth(1))).not.toBe(tint)
 
-    // 상세 왼쪽 목록도 같은 면 색, 맨 앞, × 표시(radiogroup 안에는 radio만: ×는 radio 안 장식이고 키보드는 Delete)
+    // 상세 왼쪽 목록도 같은 면 색·맨 앞·핀(눌림), 결과 배지 정렬
     await bundleMenu(row).press('Escape')
     await cardLine(row).click()
-    const radios = row.getByTestId('bundle-list').getByRole('radio')
+    const list = row.getByTestId('bundle-list')
+    const radios = list.getByRole('radio')
     await expect(radios.first()).toHaveAttribute('data-user-added', 'true')
     await expect(radios.first()).toHaveAttribute('aria-checked', 'true')
-    await expect(radios.first()).toHaveClass(/user-bundle/)
+    await expect(radios.first()).toHaveClass(/pinned-bundle/)
     await expect(radios.first()).toHaveAttribute('aria-keyshortcuts', 'Delete')
-    await expect(radios.first().getByTestId('bundle-del')).toHaveCount(1)
-    await expect(radios.nth(1).getByTestId('bundle-del')).toHaveCount(0)
+    await expect(radios.first().locator('.bundle-share')).toHaveText('고정됨')
     await expect(radios.nth(1)).not.toHaveAttribute('aria-keyshortcuts', 'Delete')
-    await expect(row.getByTestId('bundle-list').getByRole('radiogroup').getByRole('button')).toHaveCount(0)
+    const listPins = list.getByRole('button', { name: '배분 고정', exact: true })
+    await expect(listPins).toHaveCount(await radios.count())
+    // radiogroup 안에는 radio만(핀은 형제 열 group "배분 고정")
+    await expect(list.getByRole('radiogroup').getByRole('button')).toHaveCount(0)
+    await expect(list.getByRole('group', { name: '배분 고정', exact: true }).getByRole('button')).toHaveCount(await radios.count())
+    await expect(listPins.first()).toHaveAttribute('aria-pressed', 'true')
+    await expect(listPins.nth(1)).toHaveAttribute('aria-pressed', 'false')
+    await expectAligned(list, '상세 왼쪽 목록')
     await page.mouse.move(0, 0)
     await expect.poll(() => bg(radios.first())).toBe(tint)
     expect(await bg(radios.nth(1))).not.toBe(tint)
@@ -1323,32 +1378,124 @@ test.describe('배분 직접 추가(사용자 피드백 2026-11-12)', () => {
     await spInput(row, '방어').fill('5')
     await addButton(row).click()
     await waitComplete(page)
-    await expect(row.getByTestId('card-bundle')).toHaveText('H30 B5 직접 추가')
+    await expect(row.getByTestId('card-bundle')).toHaveText('H30 B5 고정됨')
     await bundleButton(row).click()
-    await expect(bundleMenu(row).locator('.bundle-opt-label').first()).toHaveText('H31 B3 직접 추가')
-    await expect(bundleMenu(row).locator('.bundle-opt-label').nth(1)).toHaveText('H30 B5 직접 추가')
+    await expect(bundleMenu(row).locator('.bundle-opt-label').first()).toHaveText('H31 B3 고정됨')
+    await expect(bundleMenu(row).locator('.bundle-opt-label').nth(1)).toHaveText('H30 B5 고정됨')
 
-    // 삭제: 선택돼 있던 H30 B5를 지우면 기본(최고 비중) 배분으로 돌아간다.
-    const del = bundleMenu(row).getByRole('menuitem', { name: '직접 추가 배분 삭제' })
-    await expect(del).toHaveCount(2)
-    await del.nth(1).click()
+    // 핀 해제 = 직접 추가 배분 삭제: 선택돼 있던 H30 B5를 풀면 기본(최고 비중) 배분으로 돌아간다.
+    const second = await items.nth(1).getAttribute('data-card-id')
+    await menuPin(row, second!).click()
     await expect(bundleMenu(row)).toHaveCount(0)
     await waitComplete(page)
     await expect(row).toHaveAttribute('data-card-id', before.id!)
     await expect(row.getByTestId('card-bundle')).toHaveText(before.text)
-    await expect(bundleButton(row)).not.toHaveClass(/user-bundle/)
+    await expect(bundleButton(row)).not.toHaveClass(/pinned-bundle/)
     await bundleButton(row).click()
     await expect(bundleMenu(row).locator('[data-user-added="true"]')).toHaveCount(1)
-    await expect(bundleMenu(row).locator('.bundle-opt-label').first()).toHaveText('H31 B3 직접 추가')
-    // 선택돼 있지 않던 것을 지우면 선택은 그대로
-    await bundleMenu(row).getByRole('menuitem', { name: '직접 추가 배분 삭제' }).click()
+    await expect(bundleMenu(row).locator('.bundle-opt-label').first()).toHaveText('H31 B3 고정됨')
+    // 선택돼 있지 않던 것을 풀면 선택은 그대로
+    const first = await items.first().getAttribute('data-card-id')
+    await menuPin(row, first!).click()
+    // 삭제는 재계산이라 메뉴를 닫고 배분 버튼으로 돌아간다
+    await expect(bundleMenu(row)).toHaveCount(0)
+    await expect(bundleButton(row)).toBeFocused()
     await waitComplete(page)
     await expect(row).toHaveAttribute('data-card-id', before.id!)
     await bundleButton(row).click()
     await expect(bundleMenu(row).locator('[data-user-added="true"]')).toHaveCount(0)
+    await expect(bundleMenu(row).locator('[data-pinned="true"]')).toHaveCount(0)
   })
 
-  test('상세 왼쪽 목록: 사용자 배분 radio에서 Delete 키, 또는 항목 안 × 클릭으로 삭제(관측 배분 radio는 Delete가 아무것도 하지 않는다)', async ({ page }) => {
+  test('관측 배분 핀: 메뉴를 연 채 맨 위로 "고정됨"·고정 면 색(재계산 없음), 해제하면 원래 자리·비중으로. 상세 목록 핀·Delete도 같다', async ({ page }) => {
+    await openProduct(page)
+    await waitComplete(page)
+    const row = await firstRow(page)
+    const tint = await pinnedBg(page)
+    const generation = await tabPanel(page).getAttribute('data-generation')
+    await bundleButton(row).click()
+    const items = bundleMenu(row).getByRole('menuitemradio')
+    const original = await items.evaluateAll((els) => els.map((e) => ({ id: (e as HTMLElement).dataset.cardId!, text: e.querySelector('.bundle-opt-label')?.textContent ?? '' })))
+    expect(original.length, '선택지 2개 이상').toBeGreaterThan(2)
+    const selected = await row.getAttribute('data-card-id')
+    // 3위 이하 첫 비중 표시 관측 배분을 고정
+    const targetAt = original.findIndex((o, i) => i >= 2 && /%$/.test(o.text))
+    expect(targetAt, original.map((o) => o.text).join(' | ')).toBeGreaterThanOrEqual(2)
+    const target = original[targetAt]
+    const badgeRights = async () => (await columns(bundleMenu(row))).filter((c) => c.hasBadge).map((c) => c.badgeRight)
+    const rightsBefore = await badgeRights()
+    expect(rightsBefore.length).toBeGreaterThan(1)
+    await menuPin(row, target.id).click()
+    await expect(bundleMenu(row)).toBeVisible()
+    await expect(menuPin(row, target.id)).toBeFocused()
+    await expect(menuPin(row, target.id)).toHaveAttribute('aria-checked', 'true')
+    await expect(items.first()).toHaveAttribute('data-card-id', target.id)
+    await expect(items.first()).toHaveAttribute('data-pinned', 'true')
+    await expect(items.first()).not.toHaveAttribute('data-user-added', 'true')
+    await expect(items.first().locator('.bundle-opt-label')).toHaveText(target.text.replace(/\s\S+$/, ' 고정됨'))
+    await page.mouse.move(0, 0)
+    await expect.poll(() => bg(items.first())).toBe(tint)
+    // 선택은 그대로(고정은 선택을 바꾸지 않는다), 재계산하지 않는다
+    await expect(row).toHaveAttribute('data-card-id', selected!)
+    await expect(tabPanel(page)).toHaveAttribute('data-generation', generation!)
+    await expect(tabPanel(page)).not.toHaveAttribute('data-superseded', 'true')
+    // 나머지는 원래 사용률 순
+    expect(await items.evaluateAll((els) => els.slice(1).map((e) => (e as HTMLElement).dataset.cardId))).toEqual(original.filter((o) => o.id !== target.id).map((o) => o.id))
+    await expectAligned(bundleMenu(row), '관측 고정 드롭다운')
+    // 비중이 "고정됨"으로 바뀌어도 메뉴 폭이 그대로라 결과 배지 열이 움직이지 않는다
+    for (const x of await badgeRights()) expect(x).toBeCloseTo(rightsBefore[0], 0)
+    // 메뉴 키보드: ←로 그 항목, →로 다시 핀, ↓는 다음 항목(핀이 아니다)
+    await page.keyboard.press('ArrowLeft')
+    await expect(items.first()).toBeFocused()
+    await page.keyboard.press('ArrowRight')
+    await expect(menuPin(row, target.id)).toBeFocused()
+    await page.keyboard.press('ArrowDown')
+    await expect(items.nth(1)).toBeFocused()
+
+    // 고정 항목을 고르면 배지도 "고정됨"·고정 면 색
+    await items.first().click()
+    await expect(row).toHaveAttribute('data-card-id', target.id)
+    await expect(row.getByTestId('card-bundle')).toHaveText(target.text.replace(/\s\S+$/, ' 고정됨'))
+    await expect(bundleButton(row)).toHaveClass(/pinned-bundle/)
+
+    // 상세 왼쪽 목록: 고정 항목이 맨 위, 핀 해제 → 원래 자리·비중, 선택은 유지
+    await cardLine(row).click()
+    const list = row.getByTestId('bundle-list')
+    const radios = list.getByRole('radio')
+    await expect(radios.first()).toHaveAttribute('data-card-id', target.id)
+    await expect(listPin(row, target.id)).toHaveAttribute('aria-pressed', 'true')
+    // 선택 항목의 핀만 Tab 순서(radio 다음)
+    await radios.first().focus()
+    await page.keyboard.press('Tab')
+    await expect(listPin(row, target.id)).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(listPin(row, target.id)).toHaveAttribute('aria-pressed', 'false')
+    await expect(listPin(row, target.id)).toBeFocused()
+    expect(await radios.evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.cardId))).toEqual(original.map((o) => o.id))
+    await expect(radios.nth(targetAt).locator('.bundle-opt-label')).toHaveText(target.text)
+    await expect(row).toHaveAttribute('data-card-id', target.id)
+    await expect(bundleButton(row)).not.toHaveClass(/pinned-bundle/)
+    await expect(tabPanel(page)).toHaveAttribute('data-generation', generation!)
+
+    // 상세 목록 핀 클릭으로 다시 고정, 그 radio에서 Delete로 해제(관측 radio의 Delete는 고정 안 된 항목엔 아무것도 하지 않는다)
+    await listPin(row, original[1].id).click()
+    await expect(radios.first()).toHaveAttribute('data-card-id', original[1].id)
+    // 옮겨진 항목의 핀에 포커스가 남는다
+    await expect(listPin(row, original[1].id)).toBeFocused()
+    await expect(radios.first()).toHaveAttribute('aria-keyshortcuts', 'Delete')
+    await expectAligned(list, '관측 고정 상세 목록')
+    const unpinned = radios.and(page.locator(':not([data-pinned])')).first()
+    await unpinned.focus()
+    await page.keyboard.press('Delete')
+    await expect(list.locator('[role="radio"][data-pinned="true"]')).toHaveCount(1)
+    await radios.first().focus()
+    await page.keyboard.press('Delete')
+    await expect(list.locator('[role="radio"][data-pinned="true"]')).toHaveCount(0)
+    expect(await radios.evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.cardId))).toEqual(original.map((o) => o.id))
+    await expect(tabPanel(page)).toHaveAttribute('data-generation', generation!)
+  })
+
+  test('상세 왼쪽 목록: 직접 추가 배분 radio에서 Delete 키, 또는 핀 클릭으로 고정 해제 = 삭제', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     const row = await firstRow(page)
@@ -1366,28 +1513,30 @@ test.describe('배분 직접 추가(사용자 피드백 2026-11-12)', () => {
     const list = row.getByTestId('bundle-list')
     const user = list.getByRole('radio').and(page.locator('[data-user-added="true"]'))
     await expect(user).toHaveCount(1)
-    // 관측 배분 radio에서 Delete: 변화 없음
-    const observed = list.getByRole('radio').and(page.locator(':not([data-user-added])')).first()
+    // 고정 안 된 관측 배분 radio에서 Delete: 변화 없음
+    const observed = list.getByRole('radio').and(page.locator(':not([data-pinned])')).first()
     await observed.focus()
     await page.keyboard.press('Delete')
     await expect(user).toHaveCount(1)
-    // 사용자 배분 radio에서 Delete: 삭제되고 기본 배분으로 돌아간다
+    // 직접 추가 radio에서 Delete: 삭제되고 기본 배분으로 돌아간다
     await user.focus()
     await page.keyboard.press('Delete')
     await waitComplete(page)
     await expect(row).toHaveAttribute('data-card-id', before!)
     await expect(row.getByTestId('bundle-list').locator('[data-user-added="true"]')).toHaveCount(0)
-    // × 클릭(마우스)
+    // 핀 클릭(마우스)
     if ((await row.getAttribute('class'))?.includes('open')) await cardLine(row).click()
     await addVia('30', '5')
     if (!(await row.getAttribute('class'))?.includes('open')) await cardLine(row).click()
-    await row.getByTestId('bundle-list').getByTestId('bundle-del').click()
+    const added = await row.getAttribute('data-card-id')
+    await expect(listPin(row, added!)).toHaveAttribute('aria-pressed', 'true')
+    await listPin(row, added!).click()
     await waitComplete(page)
     await expect(row).toHaveAttribute('data-card-id', before!)
     await expect(row.getByTestId('bundle-list').locator('[data-user-added="true"]')).toHaveCount(0)
   })
 
-  test('관측 배분과 같은 값을 추가하면 새 항목 없이 그 배분을 고른다', async ({ page }) => {
+  test('관측 배분과 같은 값을 추가하면 새 항목 없이 그 배분을 고르고 고정한다', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     const row = await firstRow(page)
@@ -1403,11 +1552,33 @@ test.describe('배분 직접 추가(사용자 피드백 2026-11-12)', () => {
     await spInput(row, '방어').fill(b)
     await addButton(row).click()
     await expect(row).toHaveAttribute('data-card-id', target!)
-    await expect(row.getByTestId('card-bundle')).toHaveText(texts[at])
+    await expect(row.getByTestId('card-bundle')).toHaveText(`H${h} B${b} 고정됨`)
+    await expect(row).toHaveAttribute('data-pinned', 'true')
+    await expect(row).not.toHaveAttribute('data-user-added', 'true')
     await expect(tabPanel(page)).not.toHaveAttribute('data-superseded', 'true')
     await bundleButton(row).click()
     await expect(bundleMenu(row).locator('[data-user-added="true"]')).toHaveCount(0)
     await expect(bundleMenu(row).getByRole('menuitemradio')).toHaveCount(texts.length)
+    await expect(items.first()).toHaveAttribute('data-card-id', target!)
+    // 핀 해제 → 관측 배분이라 삭제되지 않고 원래 자리·비중으로
+    await menuPin(row, target!).click()
+    await expect(items.nth(at)).toHaveAttribute('data-card-id', target!)
+    await expect(items.nth(at).locator('.bundle-opt-label')).toHaveText(texts[at])
+    await expect(bundleMenu(row).getByRole('menuitemradio')).toHaveCount(texts.length)
+  })
+
+  test('목록 밖 타겟 행: 프리셋 항목에는 핀이 없고 같은 폭 빈 칸으로 결과 배지가 맞는다', async ({ page }) => {
+    await openProduct(page)
+    await waitComplete(page)
+    await addCustomTarget(page, '워시로토무', ['하이드로펌프'])
+    await waitComplete(page)
+    const row = customCards(page).first()
+    await expect(row).toBeVisible()
+    await bundleButton(row).click()
+    await expect(bundleMenu(row).getByRole('menuitemcheckbox')).toHaveCount(0)
+    const slots = bundleMenu(row).locator('.bundle-opt-row .pin-slot')
+    await expect(slots).toHaveCount(await bundleMenu(row).getByRole('menuitemradio').count())
+    await expectAligned(bundleMenu(row), '프리셋 드롭다운')
   })
 
   test('변동 가능이 아닌 배분도 선택지: 고르면 행 배지가 고정 판정·기술 라벨 유지·변동 태그 없음(펼치면 변화 없음 행)', async ({ page }) => {
@@ -1439,5 +1610,106 @@ test.describe('배분 직접 추가(사용자 피드백 2026-11-12)', () => {
     await cardLine(row).click()
     await expect(row.locator('.card-detail .rows li').first()).toBeVisible()
     await expect(row.locator('.card-detail .rows li .row-fixed').first()).toBeVisible()
+  })
+})
+
+
+test.describe('내 포켓몬 종 변경 → 기술 사용률 상위 4개 미리 채우기(사용자 피드백 2026-11-12)', () => {
+  interface Named { name: { ko: string; koLabel?: string } }
+  const data = JSON.parse(readFileSync(new URL('../src/data/regulations/m-c/data.json', import.meta.url), 'utf8')) as {
+    species: Record<string, Named & { isMega?: boolean }>
+    moves: Record<string, Named>
+    megas: { forme: string; base: string }[]
+  }
+  const label = (n: Named) => (n.name.koLabel ? `${n.name.ko}(${n.name.koLabel})` : n.name.ko)
+  /** 기본 통계(최근 월에서 판수가 더 많은 매치 방식, 동률 Bo1)의 항목 */
+  function defaultEntries(): { id: string; moves: { shares: Record<string, number> } }[] {
+    const items = metaIndexItems()
+    const month = items.map((i) => i.month).sort().at(-1)!
+    const inMonth = items.filter((i) => i.month === month)
+    const pick = inMonth.reduce((a, b) => (b.battles > a.battles || (b.battles === a.battles && b.match === 'bo1') ? b : a))
+    return (JSON.parse(readFileSync(new URL(`../src/data/meta/m-c/${month}-${pick.match}.json`, import.meta.url), 'utf8')) as { entries: { id: string; moves: { shares: Record<string, number> } }[] }).entries
+  }
+  /** 그 항목 기술 사용률 상위 4개(동률 id 순, 게임 데이터에 없는 id 건너뜀)의 한국어 이름, 모자라면 빈칸 */
+  function expectedMoves(id: string): string[] {
+    const entry = defaultEntries().find((e) => e.id === id)!
+    const top = Object.entries(entry.moves.shares)
+      .filter(([m, s]) => s > 0 && m in data.moves)
+      .sort(([a, x], [b, y]) => y - x || (a < b ? -1 : 1))
+      .slice(0, 4)
+      .map(([m]) => label(data.moves[m]))
+    return [0, 1, 2, 3].map((i) => top[i] ?? '')
+  }
+  const moveBoxes = (page: Page) => [1, 2, 3, 4].map((i) => combo(mySet(page), `기술 ${i}`))
+  const movesNow = (page: Page) => Promise.all(moveBoxes(page).map((m) => m.inputValue()))
+  async function chooseSpecies(page: Page, text: string) {
+    const species = combo(mySet(page), '종')
+    await species.fill(text)
+    await species.press('Enter')
+    await expect(species).toHaveValue(text)
+  }
+
+  test('목록 안 종(메가 폼 포함)으로 바꾸면 그 종 기술 사용률 상위 4개, 목록 밖 종·같은 종 재확정이면 기술 그대로', async ({ page }) => {
+    await openProduct(page)
+    await waitComplete(page)
+    const entries = defaultEntries()
+    const ids = new Set(entries.map((e) => e.id))
+    const before = await movesNow(page)
+    expect(before.every((m) => m !== '')).toBe(true)
+
+    // 1위 종(예시 세트와 다른 종)
+    const top = entries.find((e) => e.id !== 'garchomp')!
+    await chooseSpecies(page, label(data.species[top.id]))
+    const want = expectedMoves(top.id)
+    expect(want).not.toEqual(before)
+    for (const [i, box] of moveBoxes(page).entries()) await expect(box).toHaveValue(want[i])
+    await waitComplete(page)
+    await expect(tabPanel(page).getByTestId('tab-error')).toHaveCount(0)
+
+    // 메가 폼: 메가 폼 항목의 기술
+    const mega = entries.find((e) => data.species[e.id]?.isMega)!
+    expect(mega, '메가 항목').toBeDefined()
+    await chooseSpecies(page, label(data.species[mega.id]))
+    const megaWant = expectedMoves(mega.id)
+    for (const [i, box] of moveBoxes(page).entries()) await expect(box).toHaveValue(megaWant[i])
+
+    // 같은 종을 다른 표기(id)로 다시 확정: 손으로 바꾼 기술 유지
+    await moveBoxes(page)[3].fill('')
+    await moveBoxes(page)[3].press('Enter')
+    await expect(moveBoxes(page)[3]).toHaveValue('')
+    await chooseSpecies(page, mega.id)
+    await expect(moveBoxes(page)[3]).toHaveValue('')
+    expect((await movesNow(page)).slice(0, 3)).toEqual(megaWant.slice(0, 3))
+
+    // 목록 밖 종: 기술 그대로
+    // 목록에 메가 항목만 있는 원종(리자몽 등)이 있으면 그것: 원종 항목 대신 메가 항목을 쓰지 않는다
+    const outside = !ids.has('charizard') && data.species.charizard ? 'charizard' : Object.keys(data.species).find((id) => !ids.has(id) && !data.species[id].isMega)!
+    expect(ids.has(outside)).toBe(false)
+    const kept = await movesNow(page)
+    await chooseSpecies(page, label(data.species[outside]))
+    // 종 확정이 반영된 뒤에도(도구 잠금 풀림) 기술은 그대로
+    await expect(mySet(page).getByText('메가 폼 고정')).toHaveCount(0)
+    expect(await movesNow(page)).toEqual(kept)
+  })
+
+  test('메가 항목이 없는 메가 폼은 원종 항목 상위 4개, 오타를 거쳐 같은 종으로 돌아오면 손으로 고친 기술 유지', async ({ page }) => {
+    await openProduct(page)
+    await waitComplete(page)
+    const ids = new Set(defaultEntries().map((e) => e.id))
+    // 기본 통계에 메가 항목은 없고 원종 항목만 있는 메가(예: venusaurmega·excadrillmega)
+    const lone = data.megas.find((m) => !ids.has(m.forme) && ids.has(m.base) && data.species[m.forme])
+    expect(lone, '원종 항목만 있는 메가').toBeDefined()
+    await chooseSpecies(page, label(data.species[lone!.forme]))
+    const want = expectedMoves(lone!.base)
+    for (const [i, box] of moveBoxes(page).entries()) await expect(box).toHaveValue(want[i])
+
+    // 손으로 기술 4를 비운 뒤 종 칸에 풀리지 않는 이름을 확정했다가 같은 종으로 돌아온다
+    await moveBoxes(page)[3].fill('')
+    await moveBoxes(page)[3].press('Enter')
+    await expect(moveBoxes(page)[3]).toHaveValue('')
+    await chooseSpecies(page, '없는포켓몬')
+    await chooseSpecies(page, label(data.species[lone!.forme]))
+    await expect(moveBoxes(page)[3]).toHaveValue('')
+    expect((await movesNow(page)).slice(0, 3)).toEqual(want.slice(0, 3))
   })
 })

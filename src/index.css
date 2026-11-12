@@ -88,8 +88,8 @@
   --badge-green: #a9dcb0;
   --mid: #7a5a00;
   --bad: #b1352a;
-  /* 사용자가 직접 추가한 배분(배지·메뉴 항목·상세 탭) 면 — 본문·회색 글자 대비 ≥ 4.5:1 */
-  --user-bundle-bg: #e3f0f5;
+  /* 고정한 배분(직접 추가 포함 — 배지·메뉴 항목·상세 탭) 면 — 본문·회색 글자 대비 ≥ 4.5:1 */
+  --pinned-bundle-bg: #e3f0f5;
   /* dev 표 강조(경계 행·예산 밖 행) */
   --boundary: var(--mb-tier-neutral);
   --over: var(--surface);
@@ -136,7 +136,7 @@
     --tier-bad: #e6c2be;
     --tier-ink: #2a201a;
     --tier-ink-muted: #4f4236;
-    --user-bundle-bg: #1f353f;
+    --pinned-bundle-bg: #1f353f;
     --badge-red: #e9a9a1;
     --badge-orange: #eabf8e;
     --badge-yellow: #e6d585;
@@ -1343,43 +1343,43 @@ td.src {
   padding: 0 0.4rem;
 }
 
-/* 사용자가 직접 추가한 배분: 배지·메뉴 항목·상세 탭 모두 같은 면 색(호버·포커스·선택 강조는 그 위에 그대로) */
-.product .bundle-btn.user-bundle,
-.product .bundle-opt.user-bundle {
-  background: var(--user-bundle-bg);
+/* 고정한 배분(직접 추가 포함): 배지·메뉴 항목·상세 탭 모두 같은 면 색(호버·포커스·선택 강조는 그 위에 그대로) */
+.product .bundle-btn.pinned-bundle,
+.product .bundle-opt.pinned-bundle {
+  background: var(--pinned-bundle-bg);
 }
 
 /* 호버만 강조색 면. 포커스·펼침·선택에서는 사용자 면 색을 유지하고 테두리·윤곽선으로 강조한다
    (추가 직후 포커스가 배지로 돌아와도 다른 면 색이 그대로 보이게) */
-.product .bundle-btn.user-bundle:hover,
-.product .bundle-opt.user-bundle:hover {
+.product .bundle-btn.pinned-bundle:hover,
+.product .bundle-opt.pinned-bundle:hover {
   background: var(--accent-soft);
 }
 
-.product .bundle-btn.user-bundle:focus-visible,
-.product .bundle-btn.user-bundle[aria-expanded='true'] {
-  background: var(--user-bundle-bg);
+.product .bundle-btn.pinned-bundle:focus-visible,
+.product .bundle-btn.pinned-bundle[aria-expanded='true'] {
+  background: var(--pinned-bundle-bg);
 }
 
-.product .bundle-opt.user-bundle:focus-visible {
-  background: var(--user-bundle-bg);
+.product .bundle-opt.pinned-bundle:focus-visible {
+  background: var(--pinned-bundle-bg);
   box-shadow: inset 0 0 0 2px var(--accent);
 }
 
 /* 선택된 사용자 항목: 면 색은 그대로, 왼쪽 막대 + 둘레 선으로 선택 표시 */
-.product .bundle-opt.user-bundle[aria-checked='true'],
-.product .bundle-opt.user-bundle[aria-checked='true']:focus-visible {
-  background: var(--user-bundle-bg);
+.product .bundle-opt.pinned-bundle[aria-checked='true'],
+.product .bundle-opt.pinned-bundle[aria-checked='true']:focus-visible {
+  background: var(--pinned-bundle-bg);
   box-shadow:
     inset 3px 0 0 var(--accent),
     inset 0 0 0 1px var(--accent);
 }
 
-.product .bundle-opt.user-bundle[aria-checked='true']:hover {
+.product .bundle-opt.pinned-bundle[aria-checked='true']:hover {
   background: var(--accent-soft);
 }
 
-/* 사용자 배분 항목 줄: 선택 항목 + 오른쪽 삭제 버튼 */
+/* 배분 항목 줄: 선택 항목 + 오른쪽 끝 같은 폭 핀 칸(모든 항목이 같은 칸을 가져 결과 배지가 세로로 맞는다) */
 .bundle-opt-row {
   display: flex;
   align-items: stretch;
@@ -1391,25 +1391,51 @@ td.src {
   min-width: 0;
 }
 
-.product .bundle-del {
-  flex: 0 0 auto;
+.product .bundle-pin {
+  flex: 0 0 1.75rem;
+  width: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   margin: 0;
-  padding: 0 0.45rem;
+  padding: 0;
   border: 0;
   border-radius: 6px;
   background: none;
   color: var(--muted);
   font: inherit;
-  font-size: 0.9rem;
-  line-height: 1;
   cursor: pointer;
 }
 
-.product .bundle-del:hover,
-.product .bundle-del:focus-visible {
-  background: var(--danger-soft);
-  color: var(--danger);
+.product .bundle-pin[aria-pressed='true'],
+.product .bundle-pin[aria-checked='true'] {
+  color: var(--accent-strong);
+}
+
+.product .bundle-pin:hover,
+.product .bundle-pin:focus-visible {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
   outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.product .bundle-pin:hover {
+  box-shadow: none;
+}
+
+/* 핀이 없는 항목(목록 밖 타겟 프리셋)의 빈 칸 */
+.product .bundle-pin.pin-slot {
+  cursor: default;
+}
+
+.pin-icon {
+  display: block;
+}
+
+/* 변동 표시가 없는 항목의 같은 폭 빈 칸 */
+.variable-tag.variable-slot {
+  visibility: hidden;
 }
 
 /* 직접 추가 폼(메뉴 최상단·상세 왼쪽 목록 위): "H [ ] B [ ] [추가]"는 한 줄, 안내만 아래 줄 */
@@ -1505,13 +1531,24 @@ td.src {
   scroll-padding-top: 2.6rem;
 }
 
-.bundle-radios {
+/* 상세 목록: 선택 열(radiogroup) + 핀 열(group). 두 열이 같은 줄을 공유해(subgrid) 항목과 핀이 같은 높이, 결과 배지는 핀 열 바로 왼쪽에 맞는다 */
+.bundle-rows {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: repeat(var(--bundle-rows, 1), auto);
   gap: 1px;
   min-width: 0;
 }
 
-/* 목록 항목은 좁은 열에서 배지를 다음 줄로 보낼 수 있다(배지는 오른쪽 끝, 사용자 항목은 그 뒤 × 표시) */
+.bundle-radios,
+.bundle-pins {
+  display: grid;
+  grid-row: 1 / span var(--bundle-rows, 1);
+  grid-template-rows: subgrid;
+  min-width: 0;
+}
+
+/* 목록 항목은 좁은 열에서 배지를 다음 줄로 보낼 수 있다(배지는 항목 오른쪽 끝, 그 뒤 핀 칸) */
 .bundle-side .bundle-opt {
   flex-wrap: wrap;
   justify-content: flex-start;
@@ -1525,20 +1562,11 @@ td.src {
   margin-left: auto;
 }
 
-/* 상세 목록의 × 는 radio 안 장식(마우스 삭제). 키보드는 그 radio에서 Delete */
-.product .bundle-side .bundle-del {
-  display: inline-flex;
-  align-items: center;
-  align-self: stretch;
-  margin: -0.3rem -0.45rem -0.3rem 0;
-  padding: 0 0.45rem;
-}
-
 .bundle-side .bundle-opt-label {
   white-space: nowrap;
 }
 
-.product .bundle-side .bundle-opt:not(.user-bundle)[aria-checked='true'] {
+.product .bundle-side .bundle-opt:not(.pinned-bundle)[aria-checked='true'] {
   background: var(--accent-soft);
 }
 
@@ -1676,6 +1704,12 @@ td.src {
 .bundle-share {
   font-size: 0.75rem;
   color: var(--muted);
+}
+
+/* 드롭다운은 내용 폭이라 비중("56.3%")이 "고정됨"으로 바뀌어도 메뉴 폭·결과 배지 열이 움직이지 않게 같은 폭을 잡는다 */
+.bundle-menu .bundle-share {
+  display: inline-block;
+  min-width: 3.2em;
 }
 
 .custom-tag {
