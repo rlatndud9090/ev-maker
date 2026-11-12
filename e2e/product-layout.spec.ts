@@ -75,6 +75,63 @@ for (const width of [400, 1280]) {
       expect(leak).toBeNull()
     })
 
+    test(`${width}px: 배분 메뉴·배분 탭이 화면 안에 들어오고 탭 줄만 자체 가로 스크롤`, async ({ page }) => {
+      await openProduct(page)
+      await selectTab(page, '방어')
+      await waitComplete(page)
+      const row = cards(page).filter({ has: page.locator('button.bundle-btn') }).first()
+      await row.locator('button[aria-expanded]').first().click()
+      const tabs = row.getByTestId('bundle-tabs')
+      await expect(tabs).toBeVisible()
+      const m = await tabs.evaluate((el) => ({
+        overflowX: getComputedStyle(el).overflowX,
+        right: el.getBoundingClientRect().right,
+        viewport: window.innerWidth,
+      }))
+      expect(m.overflowX).toBe('auto')
+      expect(m.right).toBeLessThanOrEqual(m.viewport)
+      // 넘치는 경우를 강제(탭 줄 폭을 줄임)해 그 줄 안에서만 가로로 스크롤되는지 본다.
+      const forced = await tabs.evaluate((el) => {
+        el.style.maxWidth = '5rem'
+        const r = { scrolls: el.scrollWidth > el.clientWidth, left: ((el.scrollLeft = 40), el.scrollLeft) }
+        el.scrollLeft = 0
+        el.style.maxWidth = ''
+        return r
+      })
+      expect(forced.scrolls).toBe(true)
+      expect(forced.left).toBeGreaterThan(0)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
+
+      // 배분 메뉴는 화면 가로 안에 열리고 페이지 가로 스크롤을 만들지 않는다.
+      await row.locator('button.bundle-btn').click()
+      const menu = row.getByRole('menu', { name: '노력치 배분', exact: true })
+      await expect(menu).toBeVisible()
+      const r = await menu.evaluate((el) => {
+        const b = el.getBoundingClientRect()
+        return { left: b.left, right: b.right, viewport: window.innerWidth }
+      })
+      expect(r.left).toBeGreaterThanOrEqual(0)
+      expect(r.right).toBeLessThanOrEqual(r.viewport)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
+      await expect(menu.getByRole('menuitemradio').first()).toBeInViewport()
+      await page.screenshot({ path: test.info().outputPath(`product-${width}-bundle-menu.png`) })
+      await page.keyboard.press('Escape')
+
+      // 목록 맨 아래 행의 메뉴도 목록 스크롤 박스 안에 다 보인다(아래가 모자라면 위로 열린다).
+      const last = cards(page).filter({ has: page.locator('button.bundle-btn') }).last()
+      await last.locator('button.bundle-btn').scrollIntoViewIfNeeded()
+      await last.locator('button.bundle-btn').click()
+      const lastMenu = last.getByRole('menu', { name: '노력치 배분', exact: true })
+      await expect(lastMenu).toBeVisible()
+      const fit = await lastMenu.evaluate((el) => {
+        const b = el.getBoundingClientRect()
+        const box = el.closest('.result-scroll')!.getBoundingClientRect()
+        return { top: b.top, bottom: b.bottom, boxTop: box.top, boxBottom: Math.min(box.bottom, window.innerHeight) }
+      })
+      expect(fit.bottom).toBeLessThanOrEqual(fit.boxBottom + 1)
+      expect(fit.top).toBeGreaterThanOrEqual(fit.boxTop - 1)
+    })
+
     test(`${width}px: 상대 목록은 뷰포트 높이에 맞춘 자체 스크롤 박스`, async ({ page }) => {
       await openProduct(page)
       await selectTab(page, '방어')

@@ -1,6 +1,6 @@
-import { useCallback, useState, type Dispatch } from 'react'
+import { useCallback, useMemo, useState, type Dispatch } from 'react'
 import type { PokemonSet } from '../../core'
-import type { CustomTarget, Tab } from '../../cards'
+import { groupCards, type CustomTarget, type Tab } from '../../cards'
 import type { Snapshot } from '../../data/schema'
 import { namesOf } from '../../ui/names'
 import { progressText } from '../../ui/format'
@@ -25,17 +25,33 @@ interface Props {
 
 export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySet, customTargets, dispatch }: Props) {
   const names = namesOf(game)
+  // 펼침·배분 선택은 탭마다 따로(같은 포켓몬이라도 탭이 다르면 다른 행), 배분을 바꿔도 펼침이 유지되게 그룹 키로 둔다.
+  const scoped = (groupKey: string) => JSON.stringify([tab, groupKey])
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
-  const onToggle = useCallback((id: string) => {
-    setExpanded((cur) => {
-      const next = new Set(cur)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }, [])
+  const onToggle = useCallback(
+    (groupKey: string) => {
+      const id = JSON.stringify([tab, groupKey])
+      setExpanded((cur) => {
+        const next = new Set(cur)
+        if (next.has(id)) next.delete(id)
+        else next.add(id)
+        return next
+      })
+    },
+    [tab],
+  )
+  // 포켓몬마다 한 행: (탭, 그룹 키) → 고른 배분 카드 id. 없거나 사라졌으면 가장 사용률 높은 배분.
+  const [chosen, setChosen] = useState<ReadonlyMap<string, string>>(() => new Map())
+  const onSelect = useCallback(
+    (groupKey: string, cardId: string) => {
+      const id = JSON.stringify([tab, groupKey])
+      setChosen((cur) => (cur.get(id) === cardId ? cur : new Map(cur).set(id, cardId)))
+    },
+    [tab],
+  )
 
   const view = state.kind === 'view' ? state.view : undefined
+  const groups = useMemo(() => (view === undefined ? [] : groupCards(view.cards)), [view])
   const superseded = state.kind === 'view' && (state.superseded || state.generation !== generation)
   const firstCard = view !== undefined && !superseded && (view.cards.length > 0 || view.stage12Done)
   const complete = view !== undefined && !superseded && view.complete
@@ -108,19 +124,25 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
               )}
               {view.cards.length === 0 && !view.stage12Done && <p className="hint">카드를 계산하는 중…</p>}
               <ol className="cards">
-                {view.cards.map((c) => (
-                  <CardItem
-                    key={c.id}
-                    game={game}
-                    tab={tab}
-                    card={c}
-                    rollSteps={view.rollSteps}
-                    expanded={expanded.has(c.id)}
-                    onToggle={onToggle}
-                    target={c.opponent.source === 'custom' ? targetOf(c.opponent.id) : undefined}
-                    dispatch={dispatch}
-                  />
-                ))}
+                {groups.map((g) => {
+                  const id = chosen.get(scoped(g.key))
+                  const c = g.options.find((o) => o.id === id) ?? g.options[0]
+                  return (
+                    <CardItem
+                      key={scoped(g.key)}
+                      game={game}
+                      tab={tab}
+                      group={g}
+                      card={c}
+                      rollSteps={view.rollSteps}
+                      expanded={expanded.has(scoped(g.key))}
+                      onToggle={onToggle}
+                      onSelect={onSelect}
+                      target={c.opponent.source === 'custom' ? targetOf(c.opponent.id) : undefined}
+                      dispatch={dispatch}
+                    />
+                  )
+                })}
               </ol>
             </>
           )}

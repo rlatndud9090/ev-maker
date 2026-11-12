@@ -232,7 +232,7 @@ export function Toolbar({ customButtonRef, ...p }: Props) {
 
         <div id={`${uid}-criteria`} className="criteria" hidden={!criteriaOpen}>
           <NumberField
-            label="묶음 점유율 기준(%)"
+            label="배분 최소비중(%)"
             value={state.criteria.bundleShareMin}
             toText={toPercentInput}
             fromText={fromPercentInput}
@@ -242,7 +242,7 @@ export function Toolbar({ customButtonRef, ...p }: Props) {
             onValue={(v) => dispatch({ type: 'set-criteria', criteria: { bundleShareMin: v } })}
           />
           <NumberField
-            label="분류당 카드 상한"
+            label="배분 선택지 수"
             value={state.criteria.cardsPerCategory}
             min={1}
             step={1}
