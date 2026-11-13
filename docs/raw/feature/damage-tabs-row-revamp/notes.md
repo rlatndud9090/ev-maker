@@ -63,9 +63,9 @@ Status: draft
 | `acceptance.test.ts` 오라클 `corePicks`/`expectMatchesCore` 재작성(R4 독립 재구현), AC4·AC5·AC11·AC12×2 재작성 | 위 전부(분류 가로지름으로 카드가 빠짐, 랭크 행·오류 행이 카드 행에 있음) |
 | `groups.test.ts`·`resultSort.test.ts` 픽스처 `moreRows` → `items`/`selected` | 외 k행 |
 
-## 미결(사용자 확인 필요)
+## 결정(빌드 중)
 
-- PRD 용어 "분류 기본 배분 = 고정 순 첫째"는 기존 결정("기본 선택은 고정과 무관하게 관측 최고 점유율", `groups.test`)과 어긋난다. 구현은 기존 결정(고정 무관)을 유지했다 — PRD 용어 정의 개정 여부를 사용자에게 확인한다.
+- 2026-11-13 사용자 결정: 분류 기본 배분 = 고정 배분 우선(PRD 용어 정의 그대로, 직접 추가 포함 고정 순 첫째). 이전 결정("기본 선택은 고정과 무관하게 관측 최고 점유율")을 대체한다 — `groups.categoryDefault`, `groups.test` 2건·`plan.test` 1건을 새 결정으로 갱신.
 
 ## 검증
 

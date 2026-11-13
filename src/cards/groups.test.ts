@@ -101,10 +101,10 @@ describe('groupCards: 사용자 추가 배분', () => {
     expect(ids(grp.options)).toEqual(['u0', 'u1', 'hi', 'lo', 'm'])
   })
 
-  it('기본 선택은 사용자 추가 배분이 아닌 첫 선택지(최고 점유율)', () => {
+  it('기본 선택: 직접 추가 배분은 늘 고정이라 고정 순 첫째로 기본이 된다(사용자 결정 2026-11-13 고정 배분 우선), 고정이 없으면 최고 점유율', () => {
     const [grp] = groupCards([user({ id: 'u0', opp: 'x', added: 0 }), view({ id: 'lo', opp: 'x', share: 0.1 }), view({ id: 'hi', opp: 'x', share: 0.5 })])
     expect(grp.options[0].id).toBe('u0')
-    expect(defaultOption(grp).id).toBe('hi')
+    expect(defaultOption(grp).id).toBe('u0')
     const [plain] = groupCards([view({ id: 'a', opp: 'y', share: 0.2 }), view({ id: 'b', opp: 'y', share: 0.3 })])
     expect(defaultOption(plain).id).toBe('b')
     const [onlyUser] = groupCards([user({ id: 'u', opp: 'z', added: 0 })])
@@ -158,9 +158,9 @@ describe('groupCards: 고정 배분', () => {
     expect(g.pinned).toEqual(['lo', 'u0', 'minor'])
     expect(isPinned(g, lo)).toBe(true)
     expect(isPinned(g, hi)).toBe(false)
-    // 기본 선택은 고정과 무관하게 관측 최고 점유율
-    expect(defaultOption(g).id).toBe('hi')
-    expect(chosenOption(g, 'attack', undefined).id).toBe('hi')
+    // 기본 선택은 고정 순 첫째(사용자 결정 2026-11-13 고정 배분 우선, 이전: 고정과 무관하게 관측 최고 점유율)
+    expect(defaultOption(g).id).toBe('lo')
+    expect(chosenOption(g, 'attack', undefined).id).toBe('lo')
   })
 
   it('고정을 풀면 원래(점유율) 자리로 돌아간다', () => {

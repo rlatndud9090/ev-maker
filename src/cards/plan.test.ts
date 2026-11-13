@@ -755,7 +755,7 @@ describe('planTab: 사용자 추가 배분', () => {
     expect(plan.cards.some((c) => c.bundle.userAdded !== undefined)).toBe(false)
   })
 
-  it('끝까지 계산하면 사용자 카드는 그 상대가 보이는 한 선택지로 남고(변화 없음이어도), 그룹 맨 앞·기본 선택은 관측 최대 묶음', () => {
+  it('끝까지 계산하면 사용자 카드는 그 상대가 보이는 한 선택지로 남고(변화 없음이어도), 그룹 맨 앞·기본 선택은 첫 직접 추가 배분(고정 배분 우선)', () => {
     // H32 B32(무보정)과 H0 B0: 둘 중 적어도 하나는 지진 판정이 바뀌지 않을 수 있어도 선택지로 남아야 한다.
     const bs = [added({ hp: 32, def: 32 }), added({ hp: 0, def: 0 })]
     const view = buildTabView(input({ mySet: GARCHOMP, filters: { topN: 30, selected: [opp] }, addedBundles: bs }), 'attack')
@@ -765,8 +765,6 @@ describe('planTab: 사용자 추가 배분', () => {
     expect(g.options.slice(0, 2).map((o) => o.bundle.userAdded)).toEqual([0, 1])
     expect(g.options.slice(0, 2).map((o) => o.id)).toEqual(bs.map((b) => addedBundleCardId(b, Object.entries(b.sp).map(([stat, sp]) => ({ stat, sp: sp as number })))))
     for (const o of g.options.slice(0, 2)) expect(o.rows.length).toBeGreaterThan(0)
-    const d = defaultOption(g)
-    expect(d.bundle.userAdded).toBeUndefined()
-    expect(d.bundle.share).toBe(Math.max(...g.options.filter((o) => o.bundle.userAdded === undefined && !o.bundle.minority).map((o) => o.bundle.share as number)))
+    expect(defaultOption(g).bundle.userAdded).toBe(0)
   })
 })

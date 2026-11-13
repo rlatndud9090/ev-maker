@@ -102,9 +102,17 @@ function baseDefault(options: readonly CardView[]): CardView | undefined {
   return best ?? options[0]
 }
 
-/** 분류 기본 배분: 그 분류 선택지 중 고정과 무관한 기본 배분(관측 최고 점유율, 커스텀은 프리셋 1). 그 분류 선택지가 없으면 undefined */
+/**
+ * 분류 기본 배분: 그 분류의 고정 배분 중 고정 순 첫째(직접 추가 포함), 없으면 고정 없을 때의 기본 배분(관측 최고 점유율, 커스텀은 프리셋 1).
+ * 그 분류 선택지가 없으면 undefined. (사용자 결정 2026-11-13: 고정 배분 우선 — 이전: 기본 선택은 고정과 무관하게 관측 최고 점유율)
+ */
 export function categoryDefault(group: CardGroup, category: CardView['category']): CardView | undefined {
-  return baseDefault(group.options.filter((o) => o.category === category))
+  const options = group.options.filter((o) => o.category === category)
+  for (const id of group.pinned) {
+    const hit = options.find((o) => o.id === id)
+    if (hit !== undefined) return hit
+  }
+  return baseDefault(options)
 }
 
 /** 분류 순서(선택지에 처음 나온 순서 = 계획의 물리 → 특수) */
