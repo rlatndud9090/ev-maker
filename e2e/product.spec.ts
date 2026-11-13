@@ -96,7 +96,7 @@ test.describe('제품 화면', () => {
     await expect(page.locator('main[data-app="product"]')).toHaveCount(0)
   })
 
-  test('카드 상세 행은 조건(기본·랭크 수단)마다 가장 센 기술 하나 + 선공기만, 포푸니크 최대 배분은 변화 없음(고정 판정)(사용자 피드백 2026-11-11·11-12)', async ({ page }) => {
+  test('카드 상세 행은 보이는 항목 하나의 행만(공격 1행, 방어 H행·B/D행 쌍 또는 고정 1행): 모든 행이 같은 기술·같은 조건, 랭크·선공기 행은 따로 없다(PRD R7·AC15)', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     for (const tab of ['공격', '방어'] as const) {
@@ -113,52 +113,18 @@ test.describe('제품 화면', () => {
       const byCard = await cards(page).evaluateAll((els) =>
         els.map((el) => ({
           id: (el as HTMLElement).dataset.cardId ?? '',
-          rows: [...el.querySelectorAll<HTMLElement>('[data-testid="row"]')].map((r) => ({
-            move: r.dataset.move ?? '',
-            condition: r.dataset.condition ?? '',
-            status: r.dataset.status ?? '',
-            priority: r.dataset.priorityKept === 'true',
-            tag: r.querySelector('[data-testid="priority-tag"]') !== null,
-          })),
+          rows: [...el.querySelectorAll<HTMLElement>('[data-testid="row"]')].map((r) => ({ move: r.dataset.move ?? '', condition: r.dataset.condition ?? '' })),
         })),
       )
       for (const c of byCard) {
-        const strongest = new Map<string, Set<string>>()
-        for (const r of c.rows) {
-          expect(r.tag, c.id).toBe(r.priority)
-          if (r.priority || r.status === 'error') continue
-          strongest.set(r.condition, new Set([...(strongest.get(r.condition) ?? []), r.move]))
-        }
-        for (const [condition, moves] of strongest) expect([...moves], `${tab} ${c.id} ${condition}`).toHaveLength(1)
+        expect(c.rows.length, c.id).toBeGreaterThan(0)
+        expect(c.rows.length, c.id).toBeLessThanOrEqual(tab === '공격' ? 1 : 2)
+        expect(new Set(c.rows.map((r) => JSON.stringify([r.move, r.condition]))).size, c.id).toBe(1)
       }
-      // 방어 탭은 행이 H행·B/D행 쌍이라 한 조건에 행이 2개다(기술은 하나).
-      if (tab === '방어') expect(byCard.some((c) => c.rows.filter((r) => r.condition === 'base' && !r.priority).length === 2)).toBe(true)
+      if (tab === '방어') expect(byCard.some((c) => c.rows.length === 2)).toBe(true)
+      await expect(page.getByTestId('card-more')).toHaveCount(0)
     }
-    // 예시 세트 공격 탭: 포푸니크 최대 배분(H2 B0)은 분함의발구르기가 무투자 확정1타라(드래곤클로 행 없음) 변화 없음이다.
-    // 판정이 바뀌지 않아도 목록에 남고(사용자 피드백 2026-11-12), 가장 센 기술 라벨과 고정 판정 배지가 보이며 "변동 가능"은 없다.
-    await selectTab(page, '공격')
-    await waitComplete(page)
-    const sneasler = ladderCards(page).and(page.locator('[data-opponent="sneasler"]'))
-    await expect(sneasler).toHaveCount(1)
-    await expect(sneasler.getByTestId('card-bundle')).toHaveText(/^H2 B0 \d+\.\d%$/)
-    await expect(sneasler).toHaveAttribute('data-headline', 'row')
-    await expect(sneasler).toHaveAttribute('data-variable', 'false')
-    await expect(sneasler.getByTestId('ko-badge')).toHaveText('확정1타')
-    await expect(sneasler.getByTestId('move-label')).toHaveText(/분함의발구르기/)
-    await expect(sneasler.getByTestId('variable-tag')).toHaveCount(0)
-    // 기준을 0.5%로 낮추면 판정이 바뀌는 다른 배분이 메뉴에 생긴다(그 항목에만 변동 표시).
-    const min = toolbarSpin(page, 'SP 배분 최소(%)')
-    await min.fill('0.5')
-    await min.blur()
-    await waitComplete(page)
-    await bundleButton(sneasler).click()
-    const variable = bundleMenu(sneasler).locator('[role="menuitemradio"][data-variable="true"]')
-    await expect(variable.first()).toBeVisible()
-    await expect(variable.first().getByTestId('variable-mark')).toHaveText('변동 가능')
-    await expect(bundleMenu(sneasler).locator('[role="menuitemradio"][data-variable="false"] [data-testid="variable-mark"]')).toHaveCount(0)
-    await bundleMenu(sneasler).press('Escape')
   })
-
   test('상위 N 래더 상대는 판정 변화와 무관하게 탭마다 전부 한 행, 변동 가능 태그는 변화 있는 행에만, 기술 라벨은 모든 행(사용자 피드백 2026-11-12)', async ({ page }) => {
     await openProduct(page)
     const topN = Number(await toolbarSpin(page, '상위 N').inputValue())
@@ -198,42 +164,57 @@ test.describe('제품 화면', () => {
     }
   })
 
-  test('선공기 행은 상대 약점이거나 자속·반감 아님일 때만(실데이터: 대도각참 기습은 남고 어흥염·포푸니크 속이기는 없다)', async ({ page }) => {
+  test('기술 배지 메뉴: 대도각참 기본 +2 도각참, 기습 선공 표시, 직접 고름·되돌리기, 배지를 눌러도 카드는 펼쳐지지 않는다(PRD R1·R5·AC10·AC11)', async ({ page }) => {
     await openProduct(page)
     await selectTab(page, '방어')
     await waitComplete(page)
-    const rowsOf = async (opponent: string) => {
-      const card = ladderCards(page).and(page.locator(`[data-opponent="${opponent}"]`))
-      await expect(card).toHaveCount(1)
-      await cardLine(card).click()
-      await expect(card.locator('[data-testid="row"]').first()).toBeVisible()
-      const rows = await card.locator('[data-testid="row"]').evaluateAll((els) =>
-        els.map((r) => ({ move: (r as HTMLElement).dataset.move ?? '', kept: (r as HTMLElement).dataset.priorityKept === 'true', tag: r.querySelector('[data-testid="priority-tag"]') !== null })),
-      )
-      await cardLine(card).click()
-      return rows
-    }
-    // 대도각참(악·강철) 기습(악, 자속) → 내 한카리아스(드래곤·땅) 1배: 가장 센 기술(도각참)이 아니어도 선공기 행으로 남는다.
-    const gambit = await rowsOf('kingambit')
-    expect(gambit.some((r) => r.move === 'suckerpunch' && r.kept && r.tag)).toBe(true)
-    // 속이기(노말)는 어흥염·포푸니크의 비자속 1배라 행이 없다(상위 5 기술에 있다: 예전 규칙이면 선공기 행이었다).
-    for (const opponent of ['incineroar', 'sneasler']) expect((await rowsOf(opponent)).some((r) => r.move === 'fakeout'), opponent).toBe(false)
+    const card = ladderCards(page).and(page.locator('[data-opponent="kingambit"]'))
+    await expect(card).toHaveCount(1)
+    const pick = card.getByTestId('move-pick')
+    await expect(pick).toHaveAccessibleName(/기술 선택/)
+    await pick.click()
+    await expect(cardLine(card)).toHaveAttribute('aria-expanded', 'false')
+    const menu = card.getByTestId('move-menu')
+    await expect(menu).toBeVisible()
+    const sd = JSON.stringify(['rank', 'opponent', 'move', 'swordsdance'])
+    await expect(menu.locator(`[role="menuitemradio"][aria-checked="true"]`)).toHaveAttribute('data-item-key', JSON.stringify(['kowtowcleave', sd]))
+    await expect(menu.locator('[data-move="suckerpunch"]').first().getByTestId('priority-tag')).toBeVisible()
+    // 키보드: ↓ 이동, Esc 닫힘
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('Escape')
+    await expect(menu).toHaveCount(0)
+    await expect(pick).toBeFocused()
+    // 칼춤 전 도각참을 직접 고른다
+    await pick.click()
+    await menu.getByRole('menuitemradio', { name: /^악 타입 도각참/ }).click()
+    const chosen = card.getByTestId('move-pick')
+    await expect(chosen).toHaveAttribute('data-selected', 'true')
+    await expect(chosen.getByTestId('chosen-tag')).toBeVisible()
+    await expect(cardLine(card)).toHaveAttribute('aria-expanded', 'false')
+    // SP를 바꿔도 유지된다
+    const gen = async () => Number(await tabPanel(page).getAttribute('data-generation'))
+    const before = await gen()
+    await page.getByLabel('SP HP', { exact: true }).fill('0')
+    await page.getByLabel('SP HP', { exact: true }).blur()
+    await expect.poll(gen).toBeGreaterThan(before)
+    await waitComplete(page)
+    await expect(card.getByTestId('move-pick')).toHaveAttribute('data-selected', 'true')
+    // 되돌리기
+    await card.getByTestId('move-pick').click()
+    await card.getByTestId('move-reset').click()
+    await expect(card.getByTestId('move-pick')).not.toHaveAttribute('data-selected', 'true')
   })
-
-  test('펼친 상세: 행·0~32 띠·현재값·예산 밖 칸 구분, 접힌 줄 대표 문구·외 k행(AC9·AC19)', async ({ page }) => {
+  test('펼친 상세: 행·0~32 띠·현재값·예산 밖 칸 구분, 접힌 줄 대표 문구, 상세 기술 선택(AC9·AC19)', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
-    // 외 k행은 남은 행(조건당 가장 센 기술 + 선공기) 기준. 예시 세트 공격 탭은 카드마다 한 행이라 방어 탭(H행·B/D행 쌍)에서 본다.
     await selectTab(page, '방어')
     await waitComplete(page)
-    const withMore = cards(page).filter({ has: page.getByTestId('card-more') }).first()
-    await expect(withMore.getByTestId('card-more')).toHaveText(/^외 \d+행$/)
-    await cardLine(withMore).click()
-    await expect(withMore.locator('.card-detail')).toBeVisible()
-    const shownRows = await withMore.locator('[data-testid="row"]').count()
-    await expect(withMore.getByTestId('card-more')).toHaveText(`외 ${shownRows - 1}행`)
-    await cardLine(withMore).click()
-    await expect(cardLine(withMore)).toHaveAttribute('aria-expanded', 'false')
+    const first = cards(page).first()
+    await cardLine(first).click()
+    await expect(first.locator('.card-detail')).toBeVisible()
+    await expect(first.getByTestId('detail-move-pick')).toBeVisible()
+    await cardLine(first).click()
+    await expect(cardLine(first)).toHaveAttribute('aria-expanded', 'false')
     await selectTab(page, '공격')
     await waitComplete(page)
     // 목표 문구는 간단행에 없고(사용자 피드백 2026-11-11) 펼친 상세 행에만 있다.
@@ -363,14 +344,14 @@ test.describe('제품 화면', () => {
     await expect(customCards(page).first()).toContainText('출처: 사용자 지정')
     for (const text of await customCards(page).locator('.card-line').allTextContents()) expect(text).not.toMatch(/%/)
 
-    // 방어 탭: 계획은 분류(특수 하이드로펌프·물리 폴터가이스트)마다 3장이지만, 가장 센 기술은 분류를 가로질러 고르므로
-    // 하이드로펌프가 폴터가이스트보다 센 물리 프리셋 카드 3장은 빠지고 특수 3장만 보인다(사용자 피드백 2026-11-11).
+    // 방어 탭: 분류(특수 하이드로펌프·물리 폴터가이스트)마다 프리셋 3장이 모두 선택지이고, 하이드로펌프가 더 세서 처음 보이는 배분은 특수(PRD R7).
     await selectTab(page, '방어')
     await waitComplete(page)
     await expect(customCards(page)).toHaveCount(1)
     const defense = (await bundleOptions(customCards(page))).map((o) => o.category)
     expect(defense.filter((c) => c === 'special')).toHaveLength(3)
-    expect(defense.filter((c) => c === 'physical')).toHaveLength(0)
+    expect(defense.filter((c) => c === 'physical')).toHaveLength(3)
+    await expect(customCards(page)).toHaveAttribute('data-category', 'special')
 
     await selectTab(page, '스피드')
     await waitComplete(page)

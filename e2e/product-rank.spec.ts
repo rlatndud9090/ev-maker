@@ -39,20 +39,24 @@ test.describe('랭크 행: 능동 랭크업만', () => {
     await selectTab(page, '방어')
     await waitComplete(page)
 
-    const golisopod = groupRow(page, 'golisopodmega')
-    await expand(golisopod)
-    const sd = golisopod.locator(`[data-testid="row"][data-row-kind="rank"][data-condition='${JSON.stringify(['opponent', 'move', 'swordsdance'])}']`)
-    expect(await sd.count()).toBeGreaterThan(0)
-    for (const move of await sd.evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.move))) expect(['leechlife', 'ironhead']).toContain(move)
-    await expect(golisopod.locator('[data-testid="row"][data-row-kind="rank"][data-move="firstimpression"]')).toHaveCount(0)
-    await expect(golisopod.getByTestId('move-label').filter({ hasText: '+2 만나자마자' })).toHaveCount(0)
+    // 기술 선택 목록 항목(키 = [기술, 조건])으로 본다(랭크 행은 목록 항목으로 통합, PRD R7).
+    const itemKeys = async (row: ReturnType<typeof groupRow>) => {
+      await row.getByTestId('move-pick').click()
+      const keys = await row.getByTestId('move-menu').locator('[role="menuitemradio"]').evaluateAll((els) => els.map((e) => JSON.parse((e as HTMLElement).dataset.itemKey ?? '[]') as [string, string]))
+      await page.keyboard.press('Escape')
+      return keys
+    }
+    const sd = JSON.stringify(['rank', 'opponent', 'move', 'swordsdance'])
+    const golisopod = await itemKeys(groupRow(page, 'golisopodmega'))
+    const sdMoves = golisopod.filter(([, c]) => c === sd).map(([m]) => m)
+    expect(sdMoves.length).toBeGreaterThan(0)
+    for (const move of sdMoves) expect(['leechlife', 'ironhead']).toContain(move)
+    expect(sdMoves).not.toContain('firstimpression')
 
-    const floette = groupRow(page, 'floettemega')
-    await expand(floette)
-    await expect(floette.locator('[data-testid="row"][data-condition="base"][data-move="lightofruin"]').first()).toBeAttached()
-    const cm = floette.locator(`[data-testid="row"][data-row-kind="rank"][data-condition='${JSON.stringify(['opponent', 'move', 'calmmind'])}']`)
-    expect(await cm.count()).toBeGreaterThan(0)
-    await expect(cm.and(page.locator('[data-move="lightofruin"]'))).toHaveCount(0)
-    await expect(floette.getByTestId('move-label').filter({ hasText: '+1 파멸의빛' })).toHaveCount(0)
+    const cm = JSON.stringify(['rank', 'opponent', 'move', 'calmmind'])
+    const floette = await itemKeys(groupRow(page, 'floettemega'))
+    expect(floette.some(([m, c]) => m === 'lightofruin' && c === JSON.stringify(['base']))).toBe(true)
+    expect(floette.some(([, c]) => c === cm)).toBe(true)
+    expect(floette.some(([m, c]) => m === 'lightofruin' && c === cm)).toBe(false)
   })
 })

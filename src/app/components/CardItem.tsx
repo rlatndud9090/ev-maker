@@ -707,6 +707,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
       data-state={card.state}
       data-headline={card.headline.kind}
       data-variable={card.variable ? 'true' : 'false'}
+      data-items={items.length}
       data-user-added={isUser(card) ? 'true' : undefined}
       data-pinned={isPinned(group, card) ? 'true' : undefined}
     >

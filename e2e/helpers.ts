@@ -39,10 +39,19 @@ export async function findOverlaps(page: Page, selector: string): Promise<string
   return page.evaluate((sel) => {
     const out: string[] = []
     // 보이는 부분만 비교한다: 스크롤 박스(overflow가 visible이 아닌 조상) 밖으로 잘린 부분은 겹침이 아니다.
+    // 붙은 sticky 줄: 페이지 맨 위(창 스크롤) 또는 가장 가까운 스크롤 박스 위 변에 붙은 것(그 박스가 스크롤된 상태).
+    const stuckIn = (el: Element, r: DOMRect): boolean => {
+      if (window.scrollY > 0 && r.top <= 1 && r.top >= -1) return true
+      for (let p = el.parentElement; p; p = p.parentElement) {
+        if (!/(auto|scroll)/.test(getComputedStyle(p).overflowY)) continue
+        return p.scrollTop > 0 && Math.abs(r.top - p.getBoundingClientRect().top) <= 1
+      }
+      return false
+    }
     const stuck = [...document.querySelectorAll('*')]
       .filter((el) => getComputedStyle(el).position === 'sticky')
       .map((el) => ({ el, r: el.getBoundingClientRect() }))
-      .filter(({ r }) => window.scrollY > 0 && r.top <= 1 && r.top >= -1)
+      .filter(({ el, r }) => stuckIn(el, r))
     const visibleRect = (el: Element) => {
       const r = el.getBoundingClientRect()
       let { left, top, right, bottom } = r

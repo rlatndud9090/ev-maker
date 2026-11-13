@@ -54,19 +54,19 @@ for (const width of [400, 1280]) {
       const leaks = await page.evaluate(() => [...document.querySelectorAll('.band')].filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1).length)
       expect(leaks).toBe(0)
       expect(await findOverlaps(page, CONTROLS)).toEqual([])
-      // 접힌 줄: 결과(배지 + 변동 가능)가 "외 n행"과 겹치지 않고, 이름(폼 꼬리 포함)은 1280px에서 한 줄.
+      // 접힌 줄: 기술 선택 버튼과 결과(배지 + 변동 가능)가 겹치지 않고, 이름(폼 꼬리 포함)은 1280px에서 한 줄.
       const lineIssues = await page.evaluate((wide) => {
         const out: string[] = []
         const lines = [...document.querySelectorAll('[data-testid="card"] .card-line')]
         for (const line of lines) {
           const name = line.querySelector('.card-name')!
           const res = line.querySelector('.card-result')?.getBoundingClientRect()
-          const more = line.querySelector('.card-more')?.getBoundingClientRect()
-          if (res && more && res.top < more.bottom && more.top < res.bottom && res.right > more.left + 0.5) out.push(`${name.textContent} 결과↔외 n행 ${res.right - more.left}`)
+          const pick = line.querySelector('[data-testid="move-pick"]')?.getBoundingClientRect()
+          if (res && pick && res.top < pick.bottom && pick.top < res.bottom && pick.right > res.left + 0.5 && res.right > pick.left + 0.5) out.push(`${name.textContent} 기술↔결과`)
           const lh = parseFloat(getComputedStyle(name).lineHeight) || 24
           if (wide && name.getBoundingClientRect().height > lh * 1.5) out.push(`${name.textContent} 이름 두 줄`)
         }
-        return { out, checked: lines.filter((l) => l.querySelector('.card-more')).length }
+        return { out, checked: lines.filter((l) => l.querySelector('[data-testid="move-pick"]')).length }
       }, width >= 1280)
       expect(lineIssues.checked).toBeGreaterThan(0)
       expect(lineIssues.out).toEqual([])
