@@ -8,6 +8,7 @@ const data = JSON.parse(readFileSync(new URL('../src/data/regulations/m-c/data.j
   species: Record<string, Named & { isMega?: boolean; abilities: string[] }>
   moves: Record<string, Named>
   items: Record<string, Named>
+  abilities: Record<string, Named>
   natures: Record<string, { plus?: string; minus?: string }>
 }
 const label = (n: Named) => (n.name.koLabel ? `${n.name.ko}(${n.name.koLabel})` : n.name.ko)
@@ -101,6 +102,20 @@ test.describe('내 포켓몬 교체(R11)', () => {
     await expect(itemBox(page)).toHaveValue('생명의구슬')
     await expect(moveBox(page, 0)).toHaveValue('지진')
     await expect(spBox(page, 'atk')).toHaveValue('32')
+  })
+
+  test('메가 폼을 고르면 특성 칸이 메가 폼 특성으로 고정된다(메가가디안 → 페어리스킨)', async ({ page }) => {
+    await openProduct(page)
+    await waitComplete(page)
+    const mega = data.species.gardevoirmega
+    await chooseSpecies(page, label(mega))
+    const ability = mySet(page).getByTestId('mega-ability')
+    await expect(ability).toBeDisabled()
+    await expect(ability).toHaveValue(label(data.abilities[mega.abilities[0]]))
+    await expect(abilitySelect(page)).toHaveCount(0)
+    // 원종으로 돌아오면 다시 고를 수 있다
+    await chooseSpecies(page, label(data.species.gardevoir))
+    await expect(abilitySelect(page)).toBeEnabled()
   })
 
   test('종을 바꾸면 재계산 뒤 펼친 카드가 접히고, SP만 바꾸면 펼침 유지(AC32)', async ({ page }) => {
