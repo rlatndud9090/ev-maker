@@ -1,5 +1,5 @@
 // 반감열매(공격 탭 상대 도구 변형). 판정은 코어 타입표·특성 타입 변화 규칙만 조회한다.
-import { attackEffectiveness, attackMoveType } from '../core'
+import { WEATHER_NEGATING_ABILITIES, abilityTerrain, abilityWeather, attackEffectiveness, attackMoveType } from '../core'
 import type { Snapshot } from '../data/schema'
 
 /** 기술을 쓰는 쪽: 계산에 쓰는 폼(메가면 메가 폼) 타입과 특성 */
@@ -49,7 +49,7 @@ export const resistBerryType = (item: string): string | undefined =>
 
 /**
  * 공격측(user)이 moveId로 target을 칠 때 target이 지닌 berry가 발동하는지. 기술 타입은 코어가 대미지 계산에서 바꾸는 타입
- * (스킨 특성 등, attackMoveType), 상성은 배짱·심안·기술별 특례(프리즈드라이·플라잉프레스)까지(attackEffectiveness). 반감열매가 아니거나,
+ * (스킨 특성, 공격측 특성 날씨·필드의 웨더볼·대지의파동 등, attackMoveType), 상성은 배짱·심안·기술별 특례(프리즈드라이·플라잉프레스)까지(attackEffectiveness). 반감열매가 아니거나,
  * 공격측이 긴장감·인마일체거나, 맞는 쪽이 서투름(도구 무효)이거나, 스냅샷에 없는 기술·엔진 타입표에 없는 타입이면 false.
  */
 export function berryActivates(game: Snapshot, moveId: string, berry: string, user: MoveUser, target: BerryHolder): boolean {
@@ -59,7 +59,10 @@ export function berryActivates(game: Snapshot, moveId: string, berry: string, us
   const move = game.data.moves[moveId]
   if (move.category === 'Status') return false
   try {
-    const type = attackMoveType(moveId, move.type, user.ability)
+    const type = attackMoveType(moveId, move.type, user.ability, {
+      weather: WEATHER_NEGATING_ABILITIES.some((a) => a === user.ability || a === target.ability) ? 'none' : abilityWeather(user.ability),
+      terrain: abilityTerrain(user.ability),
+    })
     if (type !== berryType) return false
     return berryType === 'Normal' || attackEffectiveness(type, target.types, user.ability, moveId) > 1
   } catch {

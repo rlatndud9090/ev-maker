@@ -615,6 +615,16 @@ const ORACLE_IMMUNE: Record<string, (type: string, flags: readonly string[]) => 
 }
 const ORACLE_HALVED: Record<string, string[]> = { thickfat: ['Fire', 'Ice'], heatproof: ['Fire'], waterbubble: ['Fire'], purifyingsalt: ['Ghost'] }
 
+/** 오라클용 공격측 특성 → 웨더볼·대지의파동 타입(PRD R12). 구름보기·에어록이면 날씨 없음. 필드 쪽 공격측 접지는 보지 않는다. */
+const ORACLE_WEATHER_BALL: Record<string, string> = { drought: 'Fire', desolateland: 'Fire', orichalcumpulse: 'Fire', drizzle: 'Water', primordialsea: 'Water', sandstream: 'Rock', snowwarning: 'Ice' }
+const ORACLE_TERRAIN_PULSE: Record<string, string> = { electricsurge: 'Electric', hadronengine: 'Electric', psychicsurge: 'Psychic', grassysurge: 'Grass', mistysurge: 'Fairy' }
+function oracleMoveType(m: string, baseType: string, attackerAbility: string, defenderAbility: string): string {
+  const noWeather = ['cloudnine', 'airlock'].includes(attackerAbility) || ['cloudnine', 'airlock'].includes(defenderAbility)
+  if (m === 'weatherball') return (noWeather ? undefined : ORACLE_WEATHER_BALL[attackerAbility]) ?? baseType
+  if (m === 'terrainpulse') return ORACLE_TERRAIN_PULSE[attackerAbility] ?? baseType
+  return attackMoveType(m, baseType, attackerAbility)
+}
+
 /** 방어 탭 래더 상대 기본 후보(PRD R2): 변화기 제외 · 사용률 ≥ 5% · 나에게 1배 이상, 없으면 사용률 1위 하나(동률 id 순). */
 function defenseCandidates(view: MetaView, e: MetaEntry, mySet: PokemonSet): string[] {
   const me = validateSet(game, mySet)
@@ -625,7 +635,7 @@ function defenseCandidates(view: MetaView, e: MetaEntry, mySet: PokemonSet): str
     .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
   const factor = (m: string): number => {
     const move = game.data.moves[m]
-    const type = attackMoveType(m, move.type, opp)
+    const type = oracleMoveType(m, move.type, opp, me.ability)
     const eff = attackEffectiveness(type, me.species.types, opp, m)
     if (['moldbreaker', 'turboblaze', 'teravolt'].includes(opp)) return eff
     if (ORACLE_IMMUNE[me.ability]?.(type, move.flags)) return 0
@@ -734,6 +744,28 @@ describe('AC5 방어 탭 극단 필터(F3)', () => {
   it('표시 카드·변화 없음 행·표시 행 칸 = 코어 재판정(극단 필터 1건 = 1행)', () => {
     const { plan, view } = run('example', top(EXAMPLE_SET), 'defense')
     expect(expectMatchesCore(plan, view).items).toBeGreaterThan(0)
+  })
+})
+
+// ---------- AC33 공격측 특성 날씨·필드(PRD R12) ----------
+
+/** 오라클: 공격측 계산 특성 → 날씨·필드(엔진 미처리 델타스트림은 없음) */
+const ORACLE_WEATHER: Record<string, string> = { drought: 'Sun', desolateland: 'Sun', orichalcumpulse: 'Sun', drizzle: 'Rain', primordialsea: 'Rain', sandstream: 'Sand', snowwarning: 'Snow' }
+const ORACLE_TERRAIN: Record<string, string> = { electricsurge: 'Electric', hadronengine: 'Electric', psychicsurge: 'Psychic', grassysurge: 'Grassy', mistysurge: 'Misty' }
+
+describe('AC33 공격측 특성 날씨·필드', () => {
+  it.each(['attack', 'defense'] as const)('%s 탭: 모든 대미지 판정 조건의 날씨·필드 = 공격측 계산 특성의 것(맞는 쪽 특성은 보지 않는다)', (tab) => {
+    const { plan } = run('example', top(EXAMPLE_SET), tab)
+    const specs = [...Object.values(plan.rows), ...Object.values(plan.filters), ...Object.values(plan.fixed)]
+    expect(specs.length).toBeGreaterThan(0)
+    let withField = 0
+    for (const spec of specs) {
+      const ability = validateSet(game, spec.attacker).ability
+      expect([spec.conditions.weather, spec.conditions.terrain]).toEqual([ORACLE_WEATHER[ability], ORACLE_TERRAIN[ability]])
+      if (ORACLE_WEATHER[ability] ?? ORACLE_TERRAIN[ability]) withField++
+    }
+    // 실데이터 상위 N에 가뭄(메가리자몽Y)·그래스메이커(고릴타) 상대가 있어 방어 탭엔 날씨·필드 판정이 있다
+    if (tab === 'defense') expect(withField).toBeGreaterThan(0)
   })
 })
 

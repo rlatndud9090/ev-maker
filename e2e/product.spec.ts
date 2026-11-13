@@ -833,7 +833,8 @@ test.describe('제품 화면', () => {
     const lockedItem = me.getByRole('textbox', { name: /^도구/ })
     await expect(lockedItem).toBeDisabled()
     await expect(lockedItem).toHaveValue(/나이트/)
-    await expect(me.getByText('메가 폼 고정')).toBeVisible()
+    // 도구 칸 안내(특성 칸에도 같은 안내가 있다)
+    await expect(me.locator('[id$="-mega-item"]', { hasText: '메가 폼 고정' })).toBeVisible()
     await waitComplete(page)
     await expect(tabPanel(page).getByTestId('tab-error')).toHaveCount(0)
 

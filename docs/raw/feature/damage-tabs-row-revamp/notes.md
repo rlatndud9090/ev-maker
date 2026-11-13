@@ -82,6 +82,9 @@ Status: draft
 | e2e `product.spec.ts` 지웠던 상세 왼쪽 목록 검사(직접 추가 radio Delete·핀 클릭 삭제, 관측 radio Delete 무시, 선택 항목 핀만 Tab 순서·Enter 고정·Delete 해제, 맨 위 직접 추가 폼) → 스피드 탭 상세 목록 테스트 2건으로 되살림 | PRD R9(스피드 탭 상세 목록은 그대로) |
 | e2e `product-layout.spec.ts` "배분 메뉴가 화면 안"의 방어 탭 400px 검사 → 스피드 탭 이동과 별개로 방어 탭 400px 드롭다운 1건 되살림 | PRD R9(간단행 배지 드롭다운은 그대로) |
 | `setDraft.test.ts` `speciesMoveFill` 테스트 삭제, e2e `product.spec.ts` 메가 폼을 떠날 때 도구 기대값 `''` → 기억 복원 값 | PRD R11(종 교체 = 대표 세트·종별 기억, `speciesDraft.test.ts`가 스톤 비우기를 대체) |
+| `plan.test.ts` 실데이터 리자몽메가Y 기본 후보 `['weatherball', 'solarbeam', 'dragonpulse', 'hurricane']` → `['solarbeam', 'dragonpulse', 'hurricane']`(자기 가뭄으로 웨더볼이 불꽃 → 드래곤/땅 반감), `acceptance.test.ts` 오라클 `defenseCandidates`에 공격측 특성 웨더볼·대지의파동 타입 독립 구현(`oracleMoveType`) | PRD R12(이전: 대미지 판정·후보 배율에 날씨·필드 없음) |
+| `plan.test.ts` "조건: 방어 탭도 순풍 없음" 행 조건 전체 일치 → 순풍(attacker/defender)만 비교(공격측 특성 날씨·필드가 합쳐질 수 있음) | PRD R12 |
+| e2e `product.spec.ts` "메가는 종 검색에서 메가 폼으로…" `getByText('메가 폼 고정')` → 도구 칸 안내(`[id$="-mega-item"]`)만(메가 특성 고정 커밋 eb09c7b로 특성 칸에도 같은 안내가 생겨 strict 위반) | PRD R11 후속(메가 폼 특성 고정 표시) |
 
 ## 결정(빌드 중)
 
@@ -94,6 +97,7 @@ Status: draft
 - 2026-11-14 2단계 구현(PRD R9·R10·R11, ADR 결정 6): `sumBand.ts`(쌍 최소 조합 → 합계 띠 칸·구간·최소 분배), 상세 `PairDetail`·`SumBand`, 상세 배분 목록·기술 버튼 제거(스피드 탭은 유지), `speciesDraft.ts`(대표 세트 → 초안), `switch-species`·`draftCache`·`speciesGeneration`, `ResultBox` 높이 붙잡기(재계산으로 카드가 숨는 동안만: 이전 세대 뷰 또는 새 세대 기본 항목 미확정)와 스크롤 앵커링 끄기.
 - 리뷰 예외(기록): 현재 성격이 B/D 하락이거나 스냅샷에 없는 성격이면 내구 합계 띠를 무보정 변형 쌍 결과로 칠하고 안내만 붙인다(현재 성격 쌍은 추가 계산하지 않음). 두 행이 모두 변화 없음으로 정해졌는데 변형 오류가 있으면 상세는 "계산 불가", 간단행 배지는 그대로(후속). 종 교체 시 상태이상·랭크는 초안이 늘 none·0이라 넘어올 값이 없다.
 - 2026-11-14 `speciesMoveFill`(종 교체 시 기술만 채우기) 삭제 — `representativeDraft`가 대체. 메가 폼에서 기억 없는 종으로 떠날 때 스톤 비우기는 `speciesDraft.test.ts` 단위 테스트로 덮는다(e2e `product.spec.ts` 메가 도구 기대값은 기억 복원으로 바뀜).
+- 2026-11-14 R12 구현(ADR 결정 7): `src/core/fieldAbilities.ts`(`abilityWeather`·`abilityTerrain`·`withAttackerField`), 모든 대미지 판정 조건은 `PlanBuilder.damageConditions(공격측 해결 특성)` 경유(스피드 탭 제외), 웨더볼·대지의파동 타입(메가솔라 포함)을 `attackMoveType`·후보 배율·반감열매 판정에 반영. 캐시 키는 조건 전체라 자동. 예외: 델타스트림·강한 날씨는 엔진(champions) 미지원으로 각각 무시·쾌청/비 근사(현재 스냅샷에 해당 특성 없음). 대지의파동 타입은 공격측 접지를 보지 않는다(필드 설정 포켓몬이 모두 접지).
 
 ## 검증
 

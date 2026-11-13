@@ -9,6 +9,9 @@ import {
   moveStatRefs,
   normalizeRollSteps,
   validateSet,
+  withAttackerField,
+  abilityTerrain,
+  abilityWeather,
   type BattleConditions,
   type BoostTable,
   type EffectivenessDefender,
@@ -136,6 +139,11 @@ class PlanBuilder {
 
   get game(): Snapshot {
     return this.input.game
+  }
+
+  /** 대미지 판정 조건: 탭 조건 + 공격측 계산 특성(메가면 메가 폼 특성)이 까는 날씨·필드(R12). 맞는 쪽 특성은 보지 않는다. */
+  damageConditions(attackerAbility: string): BattleConditions {
+    return withAttackerField(this.conditions, attackerAbility)
   }
 
   /** 공격 탭: 내 기술 슬롯. 분류 가변 기술·내 HP 의존 기술은 tabNotices로, 변화기는 건너뛴다. */
@@ -353,7 +361,7 @@ class PlanBuilder {
       moveId,
       attacker: this.mySet,
       defender: opponentSet,
-      conditions: this.conditions,
+      conditions: this.damageConditions(this.me.ability),
     }
     this.fixed[f.id] = f
     const ids = card.fixedIds as string[]
@@ -405,7 +413,7 @@ class PlanBuilder {
         moveId: slot.moveId,
         attacker,
         defender,
-        conditions: this.conditions,
+        conditions: this.damageConditions(this.me.ability),
         refs,
         dependsOn: extra.error ? [] : myDependsOn({ judge: 'damage', refs, sweep }, 'attacker', [], this.me.ability),
         ...extra,
@@ -461,6 +469,7 @@ class PlanBuilder {
     if (!resolved) return
     const oppSet = seed.assumption.set
     card.speedEdge = this.speedEdge(oppSet)
+    const conditions = this.damageConditions(resolved.ability)
     const def = defenseStatOf(seed.category as Category)
     const inCategory = (slot: MoveSlot) => slot.refs?.defense === def
     const slots = all.filter(inCategory)
@@ -482,7 +491,7 @@ class PlanBuilder {
           moveId: slot.moveId,
           attacker,
           defender,
-          conditions: this.conditions,
+          conditions,
           refs,
           dependsOn: [],
           error,
@@ -495,7 +504,7 @@ class PlanBuilder {
         moveId: slot.moveId,
         attacker,
         defender,
-        conditions: this.conditions,
+        conditions,
         stats: ['hp', def],
         natures,
         dependsOn: myDependsOn({ judge: 'damage', refs, sweep: undefined }, 'defender', ['hp', def], ability),
@@ -510,7 +519,7 @@ class PlanBuilder {
           sweep,
           attacker,
           defender,
-          conditions: this.conditions,
+          conditions,
           refs,
           dependsOn: myDependsOn({ judge: 'damage', refs, sweep }, 'defender', [], ability),
           gate: f.id,
@@ -542,7 +551,7 @@ class PlanBuilder {
             moveId: slot.moveId,
             attacker: oppSet,
             defender: this.mySet,
-            conditions: this.conditions,
+            conditions,
             dependsOn: [],
             error: slot.error,
           })
@@ -708,7 +717,7 @@ const isStatus = (game: Snapshot, moveId: string): boolean => hasMove(game, move
 
 /**
  * 방어 탭 래더 상대 기본 후보(사용률 순, 동률 id 순): 변화기를 뺀 기술 중 사용률 ≥ DEFENSE_MOVE_SHARE_MIN이고 나에게 배율 ≥ 1
- * (effectivenessAgainst: 상대 특성 타입 변화·기술 특례 × 내 특성 보정). 하나도 없으면 변화기를 뺀 사용률 1위 하나.
+ * (effectivenessAgainst: 상대 특성 타입 변화·상대 특성 날씨·필드의 웨더볼·대지의파동 타입·기술 특례 × 내 특성 보정). 하나도 없으면 변화기를 뺀 사용률 1위 하나.
  * me = 내 계산 폼 타입·특성, opponentAbility = 상대 대표 세트의 계산 특성. 스냅샷에 없거나 배율을 낼 수 없는 기술은 배율 조건 없이 남긴다(계산 불가 항목).
  */
 export function defenseMoveIds(game: Snapshot, entry: MetaEntry, me: EffectivenessDefender, opponentAbility: string): string[] {
@@ -718,7 +727,7 @@ export function defenseMoveIds(game: Snapshot, entry: MetaEntry, me: Effectivene
   const hits = (id: string): boolean => {
     if (!hasMove(game, id)) return true
     try {
-      return effectivenessAgainst(game, id, { ability: opponentAbility }, me) >= 1
+      return effectivenessAgainst(game, id, { ability: opponentAbility, weather: abilityWeather(opponentAbility), terrain: abilityTerrain(opponentAbility) }, me) >= 1
     } catch (e) {
       errorReasons(e)
       return true

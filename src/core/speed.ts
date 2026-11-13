@@ -19,7 +19,7 @@ const ITEM_MOD: Record<string, number> = { choicescarf: 6144, ironball: 2048 }
 /** 지닌 도구 효과를 무효화하는 특성 */
 const ITEM_NEGATING_ABILITIES = ['klutz']
 /** 필드의 날씨 효과를 무효화하는 특성 */
-const WEATHER_NEGATING_ABILITIES = ['cloudnine', 'airlock']
+export const WEATHER_NEGATING_ABILITIES: readonly string[] = ['cloudnine', 'airlock']
 /** 게임에서 스피드를 바꾸지만 이 모듈이 구현하지 않은 보정. 조용히 무시하지 않고 거부한다. */
 const UNSUPPORTED_SPEED_ABILITIES = ['slowstart', 'protosynthesis', 'quarkdrive']
 const UNSUPPORTED_SPEED_ITEMS = ['machobrace', 'poweranklet', 'powerband', 'powerbelt', 'powerbracer', 'powerlens', 'powerweight', 'quickpowder']

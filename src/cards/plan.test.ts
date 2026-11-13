@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import type { PokemonSet } from '../core'
+import { calcDamage, type BattleConditions, type PokemonSet } from '../core'
 import type { MetaEntry } from '../data/meta-schema'
 import { addedBundleCardId, cardId, presetKey } from './ids'
 import { representativeAssumption, resolveAssumption } from '../meta'
 import { DEFENSE_MOVE_SHARE_MIN, defenseMoveIds, planTab } from './plan'
 import { coAdoptionFloor } from './rank'
 import { buildTabView } from './batch'
+import { judgementKey } from './key'
+import { computeRowTask } from './rowTask'
 import { defaultOption, groupCards } from './groups'
 import { cardInput, realData, syntheticEntry, syntheticView } from './testing'
 import { DEFAULT_CRITERIA, type AddedBundle, type CardInput, type CardSpec, type RowSpec, type TabPlan } from './types'
@@ -232,7 +234,10 @@ describe('planTab: 공격 탭', () => {
   it('조건: 순풍 토글은 스피드 탭 전용이라 공격 탭은 순풍 없음으로 계산한다', () => {
     const p = planTab(input({ mySet: PLAIN, conditions: { myTailwind: true, opponentTailwind: true } }), 'attack')
     expect(Object.values(p.rows).length).toBeGreaterThan(0)
-    for (const r of Object.values(p.rows)) expect(r.conditions).toEqual({ attacker: { tailwind: false }, defender: { tailwind: false } })
+    for (const r of Object.values(p.rows)) {
+      expect(r.conditions.attacker).toEqual({ tailwind: false })
+      expect(r.conditions.defender).toEqual({ tailwind: false })
+    }
   })
 
   it('조건: 스피드 탭은 attacker(나) 순풍 = 내 순풍, defender 순풍 = 상대 순풍', () => {
@@ -327,11 +332,12 @@ describe('planTab: 방어 탭', () => {
       for (const id of ids) expect(game.data.moves[id].category).not.toBe('Status')
       if (ids.length > 1) for (const id of ids) expect(e.moves.shares[id]).toBeGreaterThanOrEqual(DEFENSE_MOVE_SHARE_MIN)
     }
-    // 실데이터 리자몽메가Y(가뭄): 열풍(불꽃)·원시의힘(바위)은 드래곤/땅에 반감이라 빠지고, 웨더볼(노말)·솔라빔(풀 2배) 등은 남는다
+    // 실데이터 리자몽메가Y(가뭄): 열풍(불꽃)·원시의힘(바위)은 드래곤/땅에 반감이라 빠지고, 솔라빔(풀 2배) 등은 남는다.
+    // 웨더볼은 자기 가뭄(쾌청)으로 불꽃이 되어 반감이라 빠진다(R12. 이전: 노말 등배로 남았다)
     const zard = plainDefense(entryOf('charizardmegay'))
     expect(zard).not.toContain('heatwave')
     expect(zard).not.toContain('ancientpower')
-    expect(zard).toEqual(['weatherball', 'solarbeam', 'dragonpulse', 'hurricane'])
+    expect(zard).toEqual(['solarbeam', 'dragonpulse', 'hurricane'])
   })
 
   it('실데이터 포푸니크: 1배 이상인 내 세트면 지옥찌르기(14.8%)·암석봉인(6.6%)이 후보, 5% 미만(더스트슈트 3.8%)은 아니다', () => {
@@ -476,7 +482,10 @@ describe('planTab: 방어 탭', () => {
   it('조건: 방어 탭도 순풍 없음으로 계산한다(순풍 토글은 스피드 탭 전용)', () => {
     const p = planTab(input({ mySet: PLAIN, conditions: { myTailwind: true, opponentTailwind: true } }), 'defense')
     expect(Object.values(p.rows).length).toBeGreaterThan(0)
-    for (const r of Object.values(p.rows)) expect(r.conditions).toEqual({ attacker: { tailwind: false }, defender: { tailwind: false } })
+    for (const r of Object.values(p.rows)) {
+      expect(r.conditions.attacker).toEqual({ tailwind: false })
+      expect(r.conditions.defender).toEqual({ tailwind: false })
+    }
   })
 
   it('상대 속임수 행은 내 A에 의존하고 묶음 키에 보태지 않는다', () => {
@@ -871,5 +880,69 @@ describe('planTab: 사용자 추가 배분', () => {
     expect(g.options.slice(0, 2).map((o) => o.id)).toEqual(bs.map((b) => addedBundleCardId(b, Object.entries(b.sp).map(([stat, sp]) => ({ stat, sp: sp as number })))))
     for (const o of g.options.slice(0, 2)) expect(o.rows.length).toBeGreaterThan(0)
     expect(defaultOption(g).bundle.userAdded).toBe(0)
+  })
+})
+
+describe('planTab: 공격측 특성 날씨·필드(R12·AC33)', () => {
+  // 메가리자몽Y = 원종 + mega + 메가스톤(해결 특성 가뭄)
+  const ZARD_Y = mk('charizard', 'blaze', ['heatwave', 'weatherball'], { item: 'charizarditey', mega: true, nature: 'modest', sp: { ...ZERO, hp: 2, spa: 32, spe: 32 } })
+  const INCIN = mk('incineroar', 'intimidate', ['flareblitz'], { nature: 'adamant' })
+  const only = (...ids: string[]) => ({ filters: { topN: 10, selected: ids } })
+  const NO_WIND: BattleConditions = { attacker: { tailwind: false }, defender: { tailwind: false } }
+  const specsOf = (p: TabPlan) => [...Object.values(p.rows), ...Object.values(p.filters), ...Object.values(p.fixed)]
+  const probe = (p: TabPlan, target: 'row' | 'filter', id: string) => {
+    const r = computeRowTask(p, { kind: 'probe', target, id })
+    if (r.kind !== 'probe') throw new Error(r.kind)
+    return r.cell
+  }
+
+  it('공격 탭: 내가 어흥염이고 상대가 메가리자몽Y여도 내 플레어드라이브 판정은 날씨 없음', () => {
+    const p = planTab(input({ mySet: INCIN, ...only('charizardmegay') }), 'attack')
+    const rows = Object.values(p.rows).filter((r) => r.moveId === 'flareblitz' && r.kind === 'base')
+    expect(rows.length).toBeGreaterThan(0)
+    for (const spec of specsOf(p)) expect(spec.conditions).toEqual(NO_WIND)
+    const r = rows[0]
+    const core = calcDamage(game, r.attacker, r.defender, 'flareblitz', NO_WIND)
+    expect(core.kind).toBe('damage')
+    if (core.kind === 'damage') expect(probe(p, 'row', r.id).maxPercent).toBe(core.maxPercent)
+  })
+
+  it('방어 탭: 메가리자몽Y가 나(어흥염)를 칠 때는 쾌청 기준, 웨더볼은 불꽃이 되어 후보에서 빠진다(불꽃/악에 반감)', () => {
+    const p = planTab(input({ mySet: INCIN, ...only('charizardmegay') }), 'defense')
+    const specs = specsOf(p)
+    expect(specs.length).toBeGreaterThan(0)
+    for (const spec of specs) expect(spec.conditions).toEqual({ ...NO_WIND, weather: 'Sun' })
+    const moves = new Set(p.cards.flatMap((c) => c.conditions.flatMap((g) => g.candidates.map((x) => x.moveId))))
+    expect(moves.has('weatherball')).toBe(false)
+    // 강철인 내 세트(대도각참)에는 열풍이 후보이고, 판정은 쾌청 기준이다(날씨 없음보다 크다)
+    const steel = planTab(input({ mySet: mk('kingambit', 'defiant', ['kowtowcleave']), ...only('charizardmegay') }), 'defense')
+    const [fid, f] = Object.entries(steel.filters).find(([, x]) => x.moveId === 'heatwave' && x.basis === undefined) ?? []
+    if (fid === undefined || f === undefined) throw new Error('열풍 필터 없음')
+    const sun = calcDamage(game, f.attacker, f.defender, 'heatwave', { ...NO_WIND, weather: 'Sun' })
+    const none = calcDamage(game, f.attacker, f.defender, 'heatwave', NO_WIND)
+    if (sun.kind !== 'damage' || none.kind !== 'damage') throw new Error('대미지 아님')
+    expect(sun.maxPercent).toBeGreaterThan(none.maxPercent)
+    expect(probe(steel, 'filter', fid).maxPercent).toBe(sun.maxPercent)
+    expect(judgementKey(steel, { kind: 'probe', target: 'filter', id: fid })).toContain('["weather","Sun"]')
+  })
+
+  it('공격 탭: 내가 메가리자몽Y면 내 판정이 쾌청 기준, 스피드 탭은 날씨를 넣지 않는다', () => {
+    const atk = planTab(input({ mySet: ZARD_Y, ...only('incineroar', 'garchomp') }), 'attack')
+    const specs = specsOf(atk)
+    expect(specs.length).toBeGreaterThan(0)
+    for (const spec of specs) expect(spec.conditions).toEqual({ ...NO_WIND, weather: 'Sun' })
+    const speed = planTab(input({ mySet: ZARD_Y, ...only('incineroar') }), 'speed')
+    for (const r of Object.values(speed.rows)) expect(r.conditions.weather).toBeUndefined()
+  })
+
+  it('방어 탭: 공격측 상대 계산 특성이 그래스메이커일 때만 그래스필드, 아니면 조건이 그대로다', () => {
+    const p = planTab(input({ mySet: PLAIN, ...only('rillaboom', 'garchomp') }), 'defense')
+    const rilla = repAbility(entryOf('rillaboom'))
+    for (const c of p.cards) {
+      const ids = [...c.rowIds, ...c.filterIds]
+      const expected = c.opponent.id === 'rillaboom' && rilla === 'grassysurge' ? { ...NO_WIND, terrain: 'Grassy' } : NO_WIND
+      for (const id of ids) expect((p.rows[id] ?? p.filters[id]).conditions, c.id).toEqual(expected)
+    }
+    expect(rilla).toBe('grassysurge')
   })
 })

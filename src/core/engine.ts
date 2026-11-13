@@ -3,6 +3,7 @@ import { Field, Generations, Move, Pokemon, calculate, toID } from '@smogon/calc
 import type { MoveEntry, Snapshot, SpeciesEntry, StatTable } from '../data/schema'
 import aliasesJson from '../../scripts/data/aliases.json'
 import type { ResolvedSet } from './set'
+import type { Terrain, Weather } from './types'
 import type { NormalizedConditions, NormalizedSide } from './conditions'
 import { coreError } from './errors'
 import { STAT_IDS, statTable } from './stats'
@@ -62,11 +63,24 @@ const GHOST_REVEALING_ABILITIES: readonly string[] = ['scrappy', 'mindseye']
 
 const abilityKey = (ability: string): string => toID(ENGINE_ALIASES.abilities?.[ability] ?? ability)
 
+const WEATHER_BALL_TYPE: Readonly<Record<string, string>> = { Sun: 'Fire', Rain: 'Water', Sand: 'Rock', Snow: 'Ice' }
+const TERRAIN_PULSE_TYPE: Readonly<Record<string, string>> = { Electric: 'Electric', Grassy: 'Grass', Psychic: 'Psychic', Misty: 'Fairy' }
+
+/** 기술 타입을 정하는 날씨·필드(유효 날씨: 구름보기 등은 호출 측이 반영) */
+export interface MoveTypeField {
+  weather?: Weather
+  terrain?: Terrain
+}
+
 /**
  * 공격측 특성에 따른 기술 타입(엔진 대미지 경로와 같은 규칙): 스킨 특성(노말 → 비행·전기·페어리·얼음·드래곤), 촉촉보이스(소리 기술 → 물),
- * 노말스킨(모든 기술 → 노말). 도구·날씨·테라 등에 따른 변화(웨더볼 등)는 넣지 않는다. 엔진에 없는 기술은 기본 타입 그대로.
+ * 노말스킨(모든 기술 → 노말). field를 주면 웨더볼·대지의파동 타입도 바꾼다(대지의파동의 공격측 접지 여부는 보지 않는다).
+ * 도구·테라 등에 따른 변화는 넣지 않는다. 엔진에 없는 기술은 기본 타입 그대로.
  */
-export function attackMoveType(moveId: string, baseType: string, ability: string): string {
+export function attackMoveType(moveId: string, baseType: string, ability: string, field?: MoveTypeField): string {
+  // 메가솔라는 날씨와 무관하게 쾌청 취급(엔진 규칙)
+  if (moveId === 'weatherball') return abilityKey(ability) === 'megasol' ? 'Fire' : (WEATHER_BALL_TYPE[field?.weather ?? 'none'] ?? baseType)
+  if (moveId === 'terrainpulse') return TERRAIN_PULSE_TYPE[field?.terrain ?? 'none'] ?? baseType
   if (NO_TYPE_CHANGE_MOVES.includes(moveId)) return baseType
   const key = abilityKey(ability)
   const ate = ATE_ABILITIES[key]

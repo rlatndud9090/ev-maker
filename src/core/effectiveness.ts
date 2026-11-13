@@ -1,6 +1,7 @@
 // 방어측 특성 보정을 넣은 기술 배율(대미지 계산 없이 타입·특성만). 계획 단계 후보 거름용.
 import type { Snapshot } from '../data/schema'
-import { attackEffectiveness, attackMoveType } from './engine'
+import { attackEffectiveness, attackMoveType, type MoveTypeField } from './engine'
+import { WEATHER_NEGATING_ABILITIES } from './speed'
 import { CoreInputError } from './errors'
 
 /** 방어측 특성을 무시하는 공격측 특성(틀깨기 계열) */
@@ -55,12 +56,19 @@ const FIXED_DAMAGE_MOVES: readonly string[] = ['seismictoss', 'nightshade', 'sup
 
 /**
  * attacker가 moveId로 defender를 칠 때의 배율 = attackEffectiveness(공격측 특성 타입 변화·기술 특례) × defenderAbilityFactor.
- * 도구·날씨·필드·테라는 넣지 않는다. 스냅샷에 없는 기술은 CoreInputError, 엔진 타입표에 없는 타입은 CoreError.
+ * attacker의 weather·terrain은 웨더볼·대지의파동 타입에만 쓴다(어느 쪽이든 구름보기·에어록이면 날씨 없음).
+ * 도구·테라는 넣지 않는다. 스냅샷에 없는 기술은 CoreInputError, 엔진 타입표에 없는 타입은 CoreError.
  */
-export function effectivenessAgainst(game: Snapshot, moveId: string, attacker: { ability: string }, defender: EffectivenessDefender): number {
+export function effectivenessAgainst(
+  game: Snapshot,
+  moveId: string,
+  attacker: { ability: string } & MoveTypeField,
+  defender: EffectivenessDefender,
+): number {
   if (!Object.prototype.hasOwnProperty.call(game.data.moves, moveId)) throw new CoreInputError('move', `${moveId}은 스냅샷에 없는 기술이다`)
   const move = game.data.moves[moveId]
-  const type = attackMoveType(moveId, move.type, attacker.ability)
+  const negated = [attacker.ability, defender.ability].some((a) => WEATHER_NEGATING_ABILITIES.includes(a))
+  const type = attackMoveType(moveId, move.type, attacker.ability, { weather: negated ? 'none' : attacker.weather, terrain: attacker.terrain })
   const eff = attackEffectiveness(type, defender.types, attacker.ability, moveId)
   const factor = defenderAbilityFactor(type, move.flags, eff, defender.ability, attacker.ability)
   if (FIXED_DAMAGE_MOVES.includes(moveId)) return eff === 0 || factor === 0 ? 0 : 1
