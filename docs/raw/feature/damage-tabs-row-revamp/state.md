@@ -44,6 +44,7 @@ adr_status: pre-accepted
 - 2026-11-13 prd-review: 1단계(판정 행 기술 선택) PRD 작성 — 사용자 결정 반영, 적대 리뷰(blocker 2·major 8) 반영. ADR 필요(행 모델·계산 범위·선택 상태·화면 배치)
 - 2026-11-13 adr-review: ADR proposed 초안(결정 1~3 구조, 결정 4 화면 배치는 design-options.html 사용자 선택 대기). 서브에이전트 인증 오류로 오케스트레이터가 직접 작성
 - 2026-11-13 pre-approved: 사용자 명시 사전 승인 (harness:approve)
+- 2026-11-13 implementing: 1단계 구현·테스트 완료 — 단위 1006·기능 e2e 89·성능 e2e 5 통과, harness:gate ok. 미측정: 선택 반응 시간·깜박임/드래그 e2e·스크린샷(notes 검증). 미결: PRD "분류 기본 배분" 정의(고정 순 첫째)와 기존 결정(고정 무관) 불일치 — 구현은 기존 결정 유지, 사용자 확인 대기
 ## 승인 이벤트
 
 <!-- 이 블록은 `npm run harness:approve`만 기록한다. 사용자의 명시 승인 발화가
