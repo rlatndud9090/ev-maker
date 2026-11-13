@@ -60,7 +60,8 @@ function card(opp: string, kind: Kind, opts: { usage?: number; custom?: boolean 
     rows: [row],
     headline: state === 'error' ? { kind: 'error', reason: { code: 'INPUT', message: 'x' } } : headline,
     variable,
-    moreRows: 0,
+    items: [],
+    selected: false,
   }
 }
 

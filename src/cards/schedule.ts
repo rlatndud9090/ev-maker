@@ -1,7 +1,11 @@
 // 행 작업 대기열. 계획과 지금까지의 결과에서 남은 작업을 단계별로 낸다(판정 없음).
+import { cardItems, itemStates, resolveDefault, type CardItemRef, type DefaultResult } from './items'
 import { variantNature } from './natures'
 import { NATURE_VARIANTS } from './types'
-import type { CardSpec, CompactCell, MoveCandidate, NatureVariant, PendingTasks, ResultMap, RowSpec, RowTask, RowTaskResult, TabPlan } from './types'
+import type { CardSpec, CompactCell, MoveCandidate, NatureVariant, OpponentHeader, PendingTasks, ResultMap, RowSpec, RowTask, RowTaskResult, TabPlan } from './types'
+
+/** 기술 선택의 상대 단위 키(반감열매 변형 카드도 같은 키 — 같은 포켓몬의 선택을 공유한다) */
+export const opponentKey = (o: Pick<OpponentHeader, 'source' | 'id'>): string => JSON.stringify([o.source, o.id])
 
 /** 결과 맵 키. sweep은 stage와 무관하게 같은 키다. */
 export function taskKey(task: RowTask): string {
@@ -125,115 +129,102 @@ export function filterState(results: ResultMap, filterId: string): FilterState {
   return { kind: r.low.category !== r.high.category ? 'passed' : 'blocked', result: r }
 }
 
-/**
- * 후보 상태. probing = 같은 조건의 단건 판정이 다 나오지 않음, chosen = 가장 센 기술(모든 후보가 무효면 첫 후보),
- * priority = 가장 센 기술은 아니지만 선공기 행 조건(MoveCandidate.priority)을 채워 남김,
- * dropped = 고르지 않음(더 약함·무효), error = 단건 판정이 계산 불가(오류 행으로 보인다).
- */
-export type CandidateState = 'probing' | 'chosen' | 'priority' | 'dropped' | 'error'
-
 /** 후보의 단건 판정 결과 키: 고정 판정은 그 결과 자체가 단건 판정이다. */
 export function probeKey(c: MoveCandidate): string {
   return c.target === 'fixed' ? taskKey({ kind: 'fixed', fixedId: c.id }) : taskKey({ kind: 'probe', target: c.target, id: c.id })
 }
 
-function probeCell(r: RowTaskResult): CompactCell | undefined {
-  if (r.kind === 'probe') return r.cell
-  if (r.kind === 'fixed') return r.cell
-  return undefined
+/** 카드의 기본 항목 결정(items.resolveDefault). 방어 탭은 내가 확실히 빠를 때(speedEdge) 선공기 우선 규칙을 쓴다 */
+export function cardDefault(plan: TabPlan, card: CardSpec, results: ResultMap, refs: readonly CardItemRef[] = cardItems(plan, card)): DefaultResult {
+  return resolveDefault(itemStates(plan, card, refs, results), { priorityRule: plan.tab === 'defense' && card.speedEdge === true })
 }
 
-/** 1타 확률 → 최대 대미지 비율 순으로 큰 쪽. 같으면 false(앞 후보가 이긴다). */
-function stronger(a: CompactCell, b: CompactCell): boolean {
-  const pa = a.ohkoChance ?? 0
-  const pb = b.ohkoChance ?? 0
-  if (pa !== pb) return pa > pb
-  return (a.maxPercent ?? 0) > (b.maxPercent ?? 0)
+/** 보이는 항목: 사용자가 고른 항목이 이 카드에 있으면 그것, 아니면 정해진 기본 항목 */
+export function shownItemKey(refs: readonly CardItemRef[], def: DefaultResult, selected: string | undefined): string | undefined {
+  if (selected !== undefined && refs.some((r) => r.key === selected)) return selected
+  return def.kind === 'ready' ? def.key : undefined
 }
 
-/** 카드 후보 id(행·필터·고정) → 상태. 후보가 아닌 행(스피드 탭·계획 단계 계산 불가 행)은 맵에 없다. */
-export function candidateStates(card: CardSpec, results: ResultMap): Map<string, CandidateState> {
-  const out = new Map<string, CandidateState>()
-  for (const group of card.conditions) {
-    const cells = group.candidates.map((c) => results.get(probeKey(c)))
-    if (cells.some((r) => r === undefined)) {
-      for (const c of group.candidates) out.set(c.id, 'probing')
-      continue
-    }
-    let best = -1
-    let firstImmune = -1
-    let errored = false
-    group.candidates.forEach((c, i) => {
-      const cell = probeCell(cells[i] as RowTaskResult)
-      if (cell === undefined) {
-        out.set(c.id, 'error')
-        errored = true
-        return
-      }
-      out.set(c.id, 'dropped')
-      if (cell.immune === true) {
-        if (firstImmune < 0) firstImmune = i
-        return
-      }
-      if (best < 0 || stronger(cell, probeCell(cells[best] as RowTaskResult) as CompactCell)) best = i
-    })
-    // 모든 후보가 무효면 첫 무효 후보를 고른다: 그 상대 행이 "무효" 판정으로 남는다(계산 불가 후보가 있으면 그 오류 행이 남는다).
-    if (best < 0 && !errored) best = firstImmune
-    group.candidates.forEach((c, i) => {
-      if (i === best) out.set(c.id, 'chosen')
-      else if (c.priority && out.get(c.id) === 'dropped' && probeCell(cells[i] as RowTaskResult)?.immune !== true) out.set(c.id, 'priority')
-    })
-  }
-  return out
-}
-
-/** 행이 계산 대상인지: 후보가 아니면 늘, 후보면 chosen·priority일 때만(방어 탭 행은 그 필터 상태). */
-export const isKept = (state: CandidateState | undefined): boolean => state === undefined || state === 'chosen' || state === 'priority'
-
-/** 한 카드의 남은 작업. error 카드는 작업이 없다. */
-export function cardPending(plan: TabPlan, card: CardSpec, results: ResultMap): PendingTasks {
+/**
+ * 한 카드의 남은 작업. error 카드는 작업이 없다. 후보가 없는 카드(스피드 탭)는 모든 행이 대상이다.
+ * 후보 카드: 모든 후보 단건 판정(1단계) → 기본 항목 결정에 필요한 항목의 변동 판정(극단 필터·양 끝 1단계, 현재·변형 스윕 2단계) →
+ * 보이는 항목(selected = 사용자가 고른 항목 키)의 행 작업 전부(기존 단계).
+ */
+export function cardPending(plan: TabPlan, card: CardSpec, results: ResultMap, selected?: string): PendingTasks {
   const stage1: RowTask[] = []
   const stage2: RowTask[] = []
   const stage3: RowTask[] = []
   const stage4: RowTask[] = []
   const stage5: RowTask[] = []
   if (card.state === 'error') return { stage1, stage2, stage3, stage4, stage5 }
-  const states = candidateStates(card, results)
-  for (const group of card.conditions) {
-    for (const c of group.candidates) {
-      if (c.target === 'fixed' || results.has(probeKey(c))) continue
-      stage1.push({ kind: 'probe', target: c.target, id: c.id })
-    }
+  const push = (stage: RowTask[], task: RowTask) => {
+    if (!results.has(taskKey(task))) stage.push(task)
   }
-  for (const filterId of card.filterIds) {
-    if (!isKept(states.get(filterId))) continue
-    if (!results.has(taskKey({ kind: 'extreme', filterId }))) stage1.push({ kind: 'extreme', filterId })
-  }
-  for (const rowId of card.rowIds) {
+
+  /** 보이는 행: 양 끝 → 판정 변화 스윕(2단계)·확인 스윕(3단계) → 성격 변형(4단계, 결정용이면 2단계) */
+  const fullRow = (rowId: string, decide: boolean) => {
     const spec = plan.rows[rowId]
-    if (spec.error !== undefined || spec.sweep === undefined) continue
-    if (!isKept(states.get(spec.gate ?? rowId))) continue
-    if (spec.gate !== undefined && filterState(results, spec.gate).kind !== 'passed') continue
+    if (spec.error !== undefined || spec.sweep === undefined) return
+    if (spec.gate !== undefined && filterState(results, spec.gate).kind !== 'passed') return
     const ends = results.get(taskKey({ kind: 'ends', rowId }))
-    if (ends === undefined) {
-      stage1.push({ kind: 'ends', rowId })
-      continue
-    }
-    if (ends.kind !== 'ends') continue
-    for (const nature of neededVariants(plan, spec)) {
-      if (!results.has(taskKey({ kind: 'variant', rowId, nature }))) stage4.push({ kind: 'variant', rowId, nature })
-    }
-    if (results.has(taskKey({ kind: 'sweep', rowId, stage: 2 }))) continue
+    if (ends === undefined) return push(stage1, { kind: 'ends', rowId })
+    if (ends.kind !== 'ends') return
+    for (const nature of neededVariants(plan, spec)) push(decide ? stage2 : stage4, { kind: 'variant', rowId, nature })
+    if (results.has(taskKey({ kind: 'sweep', rowId, stage: 2 }))) return
     if (rowChanges(ends, { variantsDone: false })) stage2.push({ kind: 'sweep', rowId, stage: 2 })
     else stage3.push({ kind: 'sweep', rowId, stage: 3 })
   }
-  for (const fixedId of card.fixedIds) {
-    if (!results.has(taskKey({ kind: 'fixed', fixedId }))) stage1.push({ kind: 'fixed', fixedId })
+  /** 결정용 행: 변동이 정해질 만큼만(양 끝이 다르면 끝, 같으면 성격 변형과 현재와 같은 변형 대신 쓰는 현재 스윕) */
+  const decideRow = (rowId: string) => {
+    const spec = plan.rows[rowId]
+    if (spec.error !== undefined || spec.sweep === undefined) return
+    if (spec.gate !== undefined && filterState(results, spec.gate).kind !== 'passed') return
+    const ends = results.get(taskKey({ kind: 'ends', rowId }))
+    if (ends === undefined) return push(stage1, { kind: 'ends', rowId })
+    if (ends.kind !== 'ends' || ends.range.low.category !== ends.range.high.category) return
+    const needed = neededVariants(plan, spec)
+    for (const nature of needed) push(stage2, { kind: 'variant', rowId, nature })
+    if (spec.natures !== undefined && needed.length < 2) push(stage2, { kind: 'sweep', rowId, stage: 2 })
   }
-  for (const filterId of card.filterIds) {
-    if (!isKept(states.get(filterId))) continue
+  const gatedRows = (filterId: string) => card.rowIds.filter((id) => plan.rows[id].gate === filterId)
+  const pairs = (filterId: string) => {
     const missing = NATURE_VARIANTS.filter((nature) => !results.has(taskKey({ kind: 'pair', filterId, nature })))
     if (missing.length > 0 && pairReady(plan, card, filterId, results)) for (const nature of missing) stage5.push({ kind: 'pair', filterId, nature })
+  }
+
+  if (card.conditions.length === 0) {
+    for (const filterId of card.filterIds) push(stage1, { kind: 'extreme', filterId })
+    for (const rowId of card.rowIds) fullRow(rowId, false)
+    for (const fixedId of card.fixedIds) push(stage1, { kind: 'fixed', fixedId })
+    for (const filterId of card.filterIds) pairs(filterId)
+    return { stage1, stage2, stage3, stage4, stage5 }
+  }
+
+  const refs = cardItems(plan, card)
+  for (const r of refs) {
+    const c = r.candidate
+    if (c.target === 'fixed') push(stage1, { kind: 'fixed', fixedId: c.id })
+    else if (c.target === 'filter' || plan.rows[c.id].error === undefined) push(stage1, { kind: 'probe', target: c.target, id: c.id })
+  }
+  const def = cardDefault(plan, card, results, refs)
+  const decide = new Set(def.kind === 'pending' ? def.need : [])
+  const shown = shownItemKey(refs, def, selected)
+  for (const r of refs) {
+    const c = r.candidate
+    const isShown = r.key === shown
+    if (!isShown && !decide.has(r.key)) continue
+    if (c.target === 'row') {
+      if (isShown) fullRow(c.id, decide.has(r.key))
+      else decideRow(c.id)
+      continue
+    }
+    if (c.target !== 'filter') continue
+    push(stage1, { kind: 'extreme', filterId: c.id })
+    for (const rowId of gatedRows(c.id)) {
+      if (isShown) fullRow(rowId, decide.has(r.key))
+      else decideRow(rowId)
+    }
+    if (isShown) pairs(c.id)
   }
   return { stage1, stage2, stage3, stage4, stage5 }
 }
@@ -242,9 +233,7 @@ export function cardPending(plan: TabPlan, card: CardSpec, results: ResultMap): 
 export function taskCardId(plan: TabPlan, task: RowTask): string {
   switch (task.kind) {
     case 'probe':
-      if (task.target === 'row') return plan.rows[task.id].cardId
-      if (task.target === 'filter') return plan.filters[task.id].cardId
-      return plan.probes[task.id].cardId
+      return task.target === 'row' ? plan.rows[task.id].cardId : plan.filters[task.id].cardId
     case 'ends':
     case 'sweep':
     case 'variant':
@@ -277,15 +266,15 @@ export function primaryCardIds(plan: TabPlan): Set<string> {
   return out
 }
 
-/** 카드 순 → 행 순. 결과(오류 포함)가 있는 작업은 다시 내지 않는다. */
-export function pendingTasks(plan: TabPlan, results: ResultMap): PendingTasks {
+/** 카드 순 → 행 순. 결과(오류 포함)가 있는 작업은 다시 내지 않는다. selections = 상대 그룹 키(groupKey) → 사용자가 고른 항목 키 */
+export function pendingTasks(plan: TabPlan, results: ResultMap, selections: ReadonlyMap<string, string> = new Map()): PendingTasks {
   const stage1: RowTask[] = []
   const stage2: RowTask[] = []
   const stage3: RowTask[] = []
   const stage4: RowTask[] = []
   const stage5: RowTask[] = []
   for (const card of plan.cards) {
-    const p = cardPending(plan, card, results)
+    const p = cardPending(plan, card, results, selections.get(opponentKey(card.opponent)))
     stage1.push(...p.stage1)
     stage2.push(...p.stage2)
     stage3.push(...p.stage3)

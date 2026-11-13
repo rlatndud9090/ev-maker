@@ -4,6 +4,7 @@ import {
   CoreInputError,
   STAT_IDS,
   checkSpeedSupport,
+  compareSpeed,
   moveStatRefs,
   normalizeRollSteps,
   validateSet,
@@ -25,7 +26,6 @@ import { presetAssumption } from './presets'
 import { TAB_MEANS_OWNERS, ladderMeans, rankMoveAllowed, rankVariants, setMeansCandidates, type CardRefStats, type MeansCandidate } from './rank'
 import type { BoostStat } from './rankMeans'
 import { natureVariants } from './natures'
-import { keepsPriorityRow, type PriorityUser } from './priority'
 import { myDependsOn, relevantStats } from './relevance'
 import {
   CATEGORY_ORDER,
@@ -39,7 +39,6 @@ import {
   type ErrorReason,
   type ExtremeSpec,
   type FixedSpec,
-  type ProbeSpec,
   type MoveCandidate,
   type MoveNotice,
   type NatureVariants,
@@ -116,9 +115,6 @@ class PlanBuilder {
   readonly rows: Record<string, RowSpec> = {}
   readonly filters: Record<string, ExtremeSpec> = {}
   readonly fixed: Record<string, FixedSpec> = {}
-  readonly probes: Record<string, ProbeSpec> = {}
-  /** 카드 id → 기술 사용자(폼 타입·특성)·대상 타입(선공기 행 조건용) */
-  private readonly cardTypes = new Map<string, { user: PriorityUser; target: readonly string[] }>()
 
   readonly input: CardInput
   readonly tab: Tab
@@ -310,11 +306,6 @@ class PlanBuilder {
     }
     if (seed.error) card.error = seed.error
     if (berry !== undefined) card.berry = { item: berry.item, share: berry.share, triggers: [...berry.triggers] }
-    if (seed.resolved) {
-      const mine = { types: this.me.species.types, ability: this.me.ability }
-      const theirs = { types: seed.resolved.species.types, ability: seed.resolved.ability }
-      this.cardTypes.set(card.id, this.tab === 'defense' ? { user: theirs, target: mine.types } : { user: mine, target: theirs.types })
-    }
     this.cards.push(card)
     return card
   }
@@ -335,31 +326,20 @@ class PlanBuilder {
     return f
   }
 
-  /** priority = 선공기 행 조건(keepsPriorityRow): 사용자·대상 = 공격·스피드 탭 나 → 상대, 방어 탭 상대 → 나(카드 대표 세트 폼 타입·특성). */
-  candidate(card: CardSpec, target: MoveCandidate['target'], id: string, moveId: string): MoveCandidate {
-    const t = this.cardTypes.get(card.id)
-    return { target, id, moveId, priority: t !== undefined && keepsPriorityRow(this.game, moveId, t.user, t.target) }
+  /** priority = 우선도 > 0(스냅샷에 없는 기술은 false) */
+  candidate(target: MoveCandidate['target'], id: string, moveId: string): MoveCandidate {
+    return { target, id, moveId, priority: hasMove(this.game, moveId) && this.game.data.moves[moveId].priority > 0 }
   }
 
-  /** 이 카드에 행이 있는 후보가 없으면(비교 전용 후보뿐) 조건을 두지 않는다. */
+  /** 후보가 없으면 조건을 두지 않는다. */
   addCondition(card: CardSpec, id: string, candidates: readonly MoveCandidate[]): void {
-    if (!candidates.some((c) => c.target !== 'probe')) return
+    if (candidates.length === 0) return
     const groups = card.conditions as ConditionGroup[]
     groups.push({ id, candidates })
   }
 
-  /** 다른 분류 기술의 비교 전용 후보(행 없음). 이 카드 대표 세트·같은 조건으로 단건 판정만 한다. */
-  crossProbe(
-    card: CardSpec,
-    parts: readonly (string | null)[],
-    moveId: string,
-    side: ProbeSpec['side'],
-    attacker: PokemonSet,
-    defender: PokemonSet,
-  ): MoveCandidate {
-    const p: ProbeSpec = { id: rowId(card.id, ['cross', ...parts]), cardId: card.id, moveId, side, attacker, defender, conditions: this.conditions }
-    this.probes[p.id] = p
-    return this.candidate(card, 'probe', p.id, moveId)
+  speedEdge(opponentSet: PokemonSet): boolean {
+    return outspeedsAtMax(this.game, this.mySet, opponentSet)
   }
 
   addFixed(card: CardSpec, moveId: string, opponentSet: PokemonSet): string {
@@ -397,10 +377,7 @@ class PlanBuilder {
 
   // ---------- 탭별 행 ----------
 
-  /**
-   * all = 내 공격기 전부(슬롯 순). 이 카드 분류의 기술만 행을 만들고, 다른 분류 기술은 비교 전용 후보로만 넣어
-   * 조건마다 4개 기술 전부에서 가장 센 기술을 고른다(사용자 피드백 2026-11-11).
-   */
+  /** all = 내 공격기 전부(슬롯 순). 이 카드 분류의 기술만 후보(항목)다 — 다른 분류 기술은 그 분류 카드의 항목이다. */
   attackCard(opp: Opponent, seed: CardSeed, all: readonly MoveSlot[], berry?: BerryVariant & { triggers: readonly string[] }): void {
     const card = this.openCard(opp, seed, [], berry)
     const resolved = seed.resolved
@@ -439,10 +416,9 @@ class PlanBuilder {
     this.addCondition(
       card,
       BASE_CONDITION,
-      all.map((slot) => {
-        if (!inCategory(slot)) return this.crossProbe(card, ['base', slot.moveId], slot.moveId, 'attacker', this.mySet, oppSet)
+      slots.map((slot) => {
         const fixedId = fixedOf.get(slot.moveId)
-        return fixedId === undefined ? this.candidate(card, 'row', baseRows.get(slot.moveId) as string, slot.moveId) : this.candidate(card, 'fixed', fixedId, slot.moveId)
+        return fixedId === undefined ? this.candidate('row', baseRows.get(slot.moveId) as string, slot.moveId) : this.candidate('fixed', fixedId, slot.moveId)
       }),
     )
     if (base.length === 0) return
@@ -454,35 +430,30 @@ class PlanBuilder {
       const attacker = withBoosts(this.mySet, v.basis.myBoosts)
       const defender = withBoosts(oppSet, v.basis.opponentBoosts)
       const candidates: MoveCandidate[] = []
-      for (const slot of all) {
-        // 상대 능력치를 쓰는 기술(SP 무관 판정)은 기본 조건에서만 고른다.
-        if (slot.refs?.offense?.owner === 'target') continue
+      for (const slot of base) {
         if (!this.rankMoveAllowed(opp, v.basis, 'me', slot.moveId)) continue
-        const herbError = v.whiteHerbConsumed && isMultihit(this.game, slot.moveId)
-        const parts = ['rank', slot.moveId, ...meansParts(v.basis)]
-        if (!inCategory(slot)) {
-          if (!herbError) candidates.push(this.crossProbe(card, parts, slot.moveId, 'attacker', attacker, defender))
-          continue
-        }
+        // 랭크 변화가 그 기술의 판정 능력치(내 공격 능력치)에 들 때만 랭크 후 항목이다(명상은 물리기에 항목을 만들지 않는다).
+        if (!v.basis.myBoosts[slot.refs?.offense?.stat as BoostStat]) continue
         const extra: Partial<RowSpec> = { kind: 'rank', basis: v.basis }
-        if (herbError) extra.error = WHITE_HERB_MULTIHIT
-        const r = row(slot, attacker, defender, extra, parts)
-        if (r.error === undefined) candidates.push(this.candidate(card, 'row', r.id, slot.moveId))
+        if (v.whiteHerbConsumed && isMultihit(this.game, slot.moveId)) extra.error = WHITE_HERB_MULTIHIT
+        const r = row(slot, attacker, defender, extra, ['rank', slot.moveId, ...meansParts(v.basis)])
+        candidates.push(this.candidate('row', r.id, slot.moveId))
       }
       this.addCondition(card, rankCondition(v.basis), candidates)
     }
   }
 
-  /** all = 상대 후보 공격기 전부(사용률 순). 공격 탭과 같이 다른 분류 기술은 비교 전용 후보로만 넣는다. */
+  /** all = 상대 후보 공격기 전부(사용률 순). 이 카드 분류 기술과 스냅샷에 없는 기술(계산 불가 항목)이 후보다. */
   defenseCard(opp: Opponent, seed: CardSeed, all: readonly MoveSlot[], errors: readonly MoveSlot[], notices: readonly MoveNotice[]): void {
     const card = this.openCard(opp, seed, notices)
     const resolved = seed.resolved
     if (!resolved) return
     const oppSet = seed.assumption.set
+    card.speedEdge = this.speedEdge(oppSet)
     const def = defenseStatOf(seed.category as Category)
     const inCategory = (slot: MoveSlot) => slot.refs?.defense === def
     const slots = all.filter(inCategory)
-    /** 극단 필터 id(계획 단계 계산 불가면 undefined) */
+    /** 후보: 극단 필터, 계획 단계 계산 불가면 그 오류 행 */
     const pair = (
       slot: MoveSlot,
       attacker: PokemonSet,
@@ -490,7 +461,7 @@ class PlanBuilder {
       basis: RankBasis | undefined,
       error: ErrorReason | undefined,
       parts: (string | null)[],
-    ): string | undefined => {
+    ): MoveCandidate => {
       const refs = slot.refs as MoveStatRefs
       const ability = resolved.ability
       if (error) {
@@ -506,8 +477,7 @@ class PlanBuilder {
           error,
         }
         if (basis) spec.basis = basis
-        this.addRow(card, parts, spec)
-        return undefined
+        return this.candidate('row', this.addRow(card, parts, spec).id, slot.moveId)
       }
       const natures = this.natures(def, 'damage', refs, ability)
       const f = this.addFilter(card, ['extreme', ...parts], {
@@ -538,42 +508,43 @@ class PlanBuilder {
         if (basis) spec.basis = basis
         this.addRow(card, [...parts, stat], spec)
       }
-      return f.id
+      return this.candidate('filter', f.id, slot.moveId)
     }
-    /** 행을 만들거나(이 분류) 비교 전용 후보를 넣는다(다른 분류). 계산 불가는 후보가 아니다. */
     const group = (id: string, attacker: PokemonSet, defender: PokemonSet, basis: RankBasis | undefined, herbConsumed: boolean) => {
       const candidates: MoveCandidate[] = []
-      for (const slot of all) {
-        if (basis && !this.rankMoveAllowed(opp, basis, 'opponent', slot.moveId)) continue
+      for (const slot of slots) {
+        if (basis) {
+          if (!this.rankMoveAllowed(opp, basis, 'opponent', slot.moveId)) continue
+          // 랭크 변화가 그 기술의 판정 능력치(상대 공격 능력치)에 들 때만 랭크 후 항목이다(상대 속임수는 내 능력치라 없다).
+          const offense = slot.refs?.offense
+          if (offense?.owner !== 'self' || !basis.opponentBoosts[offense.stat as BoostStat]) continue
+        }
         const error = herbConsumed && isMultihit(this.game, slot.moveId) ? WHITE_HERB_MULTIHIT : undefined
         const parts = basis ? ['rank', slot.moveId, ...meansParts(basis)] : ['base', slot.moveId]
-        if (!inCategory(slot)) {
-          if (!error) candidates.push(this.crossProbe(card, parts, slot.moveId, 'defender', attacker, defender))
-          continue
+        candidates.push(pair(slot, attacker, defender, basis, error, parts))
+      }
+      if (basis === undefined) {
+        for (const slot of errors) {
+          const r = this.addRow(card, ['base', slot.moveId], {
+            kind: 'base',
+            judge: 'damage',
+            moveId: slot.moveId,
+            attacker: oppSet,
+            defender: this.mySet,
+            conditions: this.conditions,
+            dependsOn: [],
+            error: slot.error,
+          })
+          candidates.push(this.candidate('row', r.id, slot.moveId))
         }
-        const filterId = pair(slot, attacker, defender, basis, error, parts)
-        if (filterId !== undefined) candidates.push(this.candidate(card, 'filter', filterId, slot.moveId))
       }
       this.addCondition(card, id, candidates)
     }
     group(BASE_CONDITION, oppSet, this.mySet, undefined, false)
-    for (const slot of errors) {
-      this.addRow(card, ['base', slot.moveId], {
-        kind: 'base',
-        judge: 'damage',
-        moveId: slot.moveId,
-        attacker: oppSet,
-        defender: this.mySet,
-        conditions: this.conditions,
-        dependsOn: [],
-        error: slot.error,
-      })
-    }
     if (slots.length === 0) return
     const refs: CardRefStats = {
       opponent: unique(slots.filter((s) => s.refs?.offense?.owner === 'self').map((s) => s.refs?.offense?.stat as BoostStat)),
-      // 내 수단은 방어 랭크업(B·D)만 본다: 내 A 랭크업(칼춤 등)은 상대 속임수가 있어도 방어 탭 행을 만들지 않는다(myMeansNotes와 같은 기준).
-      my: [def],
+      my: [],
     }
     for (const v of this.variants(opp, resolved, refs)) {
       const attacker = withBoosts(oppSet, v.basis.opponentBoosts)
@@ -624,6 +595,26 @@ class PlanBuilder {
   }
 }
 
+/**
+ * 방어 탭 선공기 우선 조건: 상대 세트를 스피드 SP 최대·스피드 상승 성격으로 바꾸고 구애스카프를 빼도(다른 도구·특성·폼 유지,
+ * 랭크·순풍 없음, SP 합계 상한 무시) 내 현재 스피드(도구·특성 포함)보다 엄격히 느리다. 스피드 비교를 지원하지 않는 세트면 false.
+ */
+export function outspeedsAtMax(game: Snapshot, mySet: PokemonSet, opponentSet: PokemonSet): boolean {
+  const fastest: PokemonSet = {
+    ...opponentSet,
+    sp: { ...opponentSet.sp, spe: game.manifest.rules.spMaxPerStat },
+    nature: natureVariants(game, opponentSet.nature, 'spe', []).plus,
+  }
+  if (fastest.item === SCARF) delete fastest.item
+  try {
+    const r = compareSpeed(game, mySet, fastest, undefined, { ignoreSpTotal: true })
+    return r.defenderSpeed < r.attackerSpeed
+  } catch (e) {
+    errorReasons(e)
+    return false
+  }
+}
+
 const unique = <T>(xs: readonly T[]): T[] => [...new Set(xs)]
 const isSp = (v: unknown, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= max
 
@@ -648,7 +639,7 @@ function trimSp(sp: SpTable, keys: ReadonlySet<StatId>, total: number): void {
 const meansParts = (b: RankBasis): string[] => [b.owner, b.means.kind, b.means.id]
 
 function emptyPlan(input: CardInput, tab: Tab, mySp: SpTable, status: TabPlan['status'], conflicts: string[]): TabPlan {
-  return { ...planHead(input, tab, mySp), status, cards: [], rows: {}, filters: {}, fixed: {}, probes: {}, customTargetConflicts: conflicts, notices: [] }
+  return { ...planHead(input, tab, mySp), status, cards: [], rows: {}, filters: {}, fixed: {}, customTargetConflicts: conflicts, notices: [] }
 }
 
 function planHead(input: CardInput, tab: Tab, mySp: SpTable) {
@@ -781,7 +772,6 @@ export function planTab(input: CardInput, tab: Tab): TabPlan {
     rows: b.rows,
     filters: b.filters,
     fixed: b.fixed,
-    probes: b.probes,
     customTargetConflicts: conflicts,
     notices: tabNotices,
   }

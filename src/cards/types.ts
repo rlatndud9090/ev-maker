@@ -228,21 +228,6 @@ export interface FixedSpec {
   conditions: BattleConditions
 }
 
-/**
- * 다른 분류 카드에 행이 있는 내 기술(공격 탭)·상대 기술(방어 탭)을 이 카드의 대표 세트·같은 조건으로 단건 판정하는 비교 전용 후보.
- * 가장 센 기술은 상대 한 마리의 기술 전부(분류를 가로질러)에서 고른다(사용자 피드백 2026-11-11). 이 후보가 고르면 이 카드의 행은 빠진다(선공기 제외).
- */
-export interface ProbeSpec {
-  id: string
-  cardId: string
-  moveId: string
-  /** judgeDamage 관점: 공격 탭 attacker(나 → 상대), 방어 탭 defender(상대 → 나) */
-  side: 'attacker' | 'defender'
-  attacker: PokemonSet
-  defender: PokemonSet
-  conditions: BattleConditions
-}
-
 export interface BundleStat {
   stat: StatId
   sp: number
@@ -277,17 +262,16 @@ export interface OpponentHeader {
 }
 
 /**
- * 카드 안 조건 하나(기본 상태·랭크 수단 행 조건)의 기술 후보. 현재 세트 단건 판정(probe, 고정 판정은 그 결과)으로
- * 1타 확률 → 최대 대미지 비율 → 후보 순서로 가장 센 기술 하나만 고르고, 선공기 행 조건을 채운 선공기는 함께 남긴다.
- * 무효·계산 불가 후보는 고르지 않는다(모든 후보가 무효면 첫 후보를 고른다 — 상대 행이 "무효"로 남게). 고른 후보에만 양 끝·스윕·변형·극단·쌍 작업이 생긴다.
+ * 카드 안 조건 하나(기본 상태·랭크 수단 조건)의 기술 후보 = 기술 선택 목록의 항목 하나(items.ts).
+ * 카드는 보이는 항목(사용자가 고른 것, 없으면 기본 항목) 하나의 행만 낸다. 기본 항목 결정에 필요한 항목과 보이는 항목에만 행 작업이 생긴다.
  */
 export interface MoveCandidate {
-  /** row = 공격 탭 스윕 행, filter = 방어 탭 극단 필터(H행·B/D행 쌍), fixed = 공격 탭 내 SP 무관 판정, probe = 다른 분류 기술의 비교 전용 판정(행 없음) */
-  target: 'row' | 'filter' | 'fixed' | 'probe'
-  /** rowId·filterId·fixedId·probeId */
+  /** row = 공격 탭 스윕 행(계획 단계 계산 불가 행 포함), filter = 방어 탭 극단 필터(H행·B/D행 쌍), fixed = 공격 탭 내 SP 무관 판정 */
+  target: 'row' | 'filter' | 'fixed'
+  /** rowId·filterId·fixedId */
   id: string
   moveId: string
-  /** 선공기 행 조건(keepsPriorityRow): 우선도 > 0이고 대상 약점이거나 사용자 자속·반감 아님. 가장 센 기술이 아니어도 행으로 남는다 */
+  /** 우선도 > 0 기술(선공 표시, 방어 탭 선공기 우선 규칙) */
   priority: boolean
 }
 export interface ConditionGroup {
@@ -321,13 +305,18 @@ export interface CardSpec {
   rowIds: readonly string[]
   filterIds: readonly string[]
   fixedIds: readonly string[]
-  /** 조건별 기술 후보(스피드 탭·error 카드는 빈 배열). 후보가 아닌 행(계획 단계 계산 불가)은 그대로 표시한다 */
+  /** 조건별 기술 후보 = 기술 선택 항목(스피드 탭·error 카드는 빈 배열) */
   conditions: readonly ConditionGroup[]
   /**
    * 반감열매 변형 카드만. triggers = 이 카드 대표 세트에 그 열매가 발동하는 내 기술 id(berryActivates).
-   * 조립은 기본 조건의 가장 센 기술이 triggers에 없으면 이 카드를 보이지 않는다(열매가 판정에 관여하지 않는 행은 별도 행일 필요가 없다)
+   * 조립은 보이는 항목의 기술이 triggers에 없으면 이 카드를 보이지 않는다(열매가 판정에 관여하지 않으면 별도 행일 필요가 없다)
    */
   berry?: BerryVariant & { triggers: readonly string[] }
+  /**
+   * 방어 탭만: 상대 대표 세트를 스피드 SP 최대·스피드 상승 성격으로 바꾸고 구애스카프를 빼도(랭크·순풍 없이) 내 현재 스피드보다 엄격히 느림.
+   * 참이면 기본 항목에 선공기 우선 규칙을 쓴다(items.resolveDefault)
+   */
+  speedEdge?: boolean
 }
 
 export interface TabPlan {
@@ -348,8 +337,6 @@ export interface TabPlan {
   rows: Readonly<Record<string, RowSpec>>
   filters: Readonly<Record<string, ExtremeSpec>>
   fixed: Readonly<Record<string, FixedSpec>>
-  /** 비교 전용 후보(다른 분류 기술) */
-  probes: Readonly<Record<string, ProbeSpec>>
   /** 메타 목록 안에 있어 목록 밖 타겟으로 받지 않은 rosterId */
   customTargetConflicts: readonly string[]
   /** 내 기술의 계산하지 않음 안내(분류 가변·내 HP 의존, 탭 안내) */
@@ -359,8 +346,8 @@ export interface TabPlan {
 // ---------- 행 작업과 결과 ----------
 
 export type RowTask =
-  /** 후보 기술의 현재 세트(계획 시점 SP·성격) 단건 판정. 가장 센 기술 고르기 전용 */
-  | { kind: 'probe'; target: 'row' | 'filter' | 'probe'; id: string }
+  /** 후보 기술의 현재 세트(계획 시점 SP·성격) 단건 판정. 목록 배지·정렬·기본 항목 결정용 */
+  | { kind: 'probe'; target: 'row' | 'filter'; id: string }
   /** 현재 성격 0·최대 + 변형 범위 끝(neutral 0·plus 최대) */
   | { kind: 'ends'; rowId: string }
   | { kind: 'sweep'; rowId: string; stage: 2 | 3 }
@@ -483,8 +470,6 @@ export interface RowView {
    * 그 밖은 변형 범위 끝·현재·변형 스윕 칸 중 최선이며 성격 변형 스윕이 다 나온 뒤에만 붙는다. 판정을 다시 하지 않고 이미 나온 칸에서 고른다.
    */
   best?: string
-  /** 가장 센 기술이 아니지만 선공기 행 조건을 채워 남은 행 */
-  keptAsPriority?: true
   /** 칸이 없는 내 SP 무관 판정 행(공격 탭 속임수)의 판정 칸(결과 배지용) */
   fixedCell?: CompactCell
 }
@@ -529,17 +514,48 @@ export interface CardView {
   bundle: BundleSpec
   /** 반감열매 변형 카드(별도 행)면 그 열매 */
   berry?: BerryVariant
-  /** 표시 행(조건별 가장 센 기술·선공기 행 조건을 채운 선공기·계산 불가, 변화 없음 행 포함), 카드 안 순서 */
+  /**
+   * 보이는 항목의 판정 행(공격 탭 1행, 방어 탭 H행·B/D행 쌍 또는 극단 필터 고정 1줄, 계산 불가·판정 전 포함). 스피드 탭은 카드의 모든 행
+   */
   rows: readonly RowView[]
   /**
-   * 대표 행: 변화 있는 행이 있으면 경계까지 SP 차이가 가장 작은 행, 없으면 기본 조건의 가장 센 기술 행(선공기 행 아님).
+   * 대표 행: 변화 있는 행이 있으면 경계까지 SP 차이가 가장 작은 행, 없으면 첫 ok 행.
    * 판정 전·갱신 대기·잠정 변화 없음(provisional) 행이 있고 변화 있는 ok 행이 없으면 updating.
    */
   headline: Headline
-  /** 이 카드에 칸이 있는 ok·stale 변화 있는 행이 있음("변동 가능"). 대표 행과 따로 세어 드래그 중(updating)에도 유지된다 */
+  /** 보이는 항목 행 중 칸이 있는 ok·stale 변화 있는 행이 있음("변동 가능"). 대표 행과 따로 세어 드래그 중(updating)에도 유지된다 */
   variable: boolean
-  /** 외 k행 = 표시 행 수 − 1(0이면 생략) */
-  moreRows: number
+  /** 이 카드의 기술 선택 항목(가장 세게 치는 순). 스피드 탭·error 카드는 빈 배열 */
+  items: readonly ItemView[]
+  /** 보이는 항목 키(기본 항목이 정해지기 전이고 사용자가 고르지 않았으면 없음) */
+  shownItem?: string
+  /** 기본 항목(정해진 뒤) */
+  defaultItem?: DefaultItemView
+  /** 보이는 항목이 사용자가 직접 고른 것 */
+  selected: boolean
+}
+
+/** 기술 선택 목록의 항목 하나(그 카드 대표 세트 기준 현재 SP·성격 단건 판정) */
+export interface ItemView {
+  /** items.itemKey(기술, 조건) — 같은 상대의 모든 카드에서 같다 */
+  key: string
+  moveId: string
+  /** 랭크 후 항목이면 그 랭크 근거 */
+  basis?: RankBasis
+  /** 우선도 > 0 */
+  priority: boolean
+  status: 'pending' | 'ok' | 'immune' | 'error'
+  cell?: CompactCell
+  error?: ErrorReason
+}
+
+/** 카드의 기본 항목과 분류 사이 비교 근거(같은 상대의 물리·특수 기본 카드 중 어느 분류를 먼저 보일지) */
+export interface DefaultItemView {
+  key: string
+  /** 방어 탭 선공기 우선으로 정해짐 */
+  viaPriority: boolean
+  /** 기준 기술 랭크 전 항목의 단건 판정 칸 */
+  basisCell?: CompactCell
 }
 export interface TabView {
   tab: Tab

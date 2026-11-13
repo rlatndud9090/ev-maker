@@ -389,7 +389,7 @@ describe('planTab: 방어 탭', () => {
     ])
   })
 
-  it('상대 속임수가 있어도 내 A 랭크업(칼춤)은 방어 탭 랭크 행이 아니다(내 방어 랭크업만)', () => {
+  it('방어 탭은 내 랭크업 수단을 보지 않는다: 상대 속임수가 있어도 내 칼춤·철벽은 랭크 조건이 아니다(내 방어 랭크업은 후속 별도 UI)', () => {
     const base = entryOf('kingambit')
     const e = syntheticEntry(base, { id: 'kingambit', moves: { shares: { foulplay: 0.9, kowtowcleave: 0.8 }, keptShare: 1.7, excludedShare: 0 } })
     const view = syntheticView(game, bo1.meta, [e])
@@ -397,10 +397,8 @@ describe('planTab: 방어 탭', () => {
     const p = planTab(input({ mySet: mine, view }), 'defense')
     const rows = Object.values(p.rows)
     expect(rows.some((r) => r.moveId === 'foulplay' && r.kind === 'base')).toBe(true)
-    const mineRank = rows.filter((r) => r.basis?.kind === 'rank' && r.basis.owner === 'me')
-    // 철벽(내 B 랭크업)은 행을 만들고 칼춤(내 A)은 만들지 않는다(빈 검사 방지로 철벽 행이 있음을 같이 본다)
-    expect(mineRank.length).toBeGreaterThan(0)
-    expect(mineRank.every((r) => r.basis?.kind === 'rank' && r.basis.means.id === 'irondefense')).toBe(true)
+    expect(rows.some((r) => r.basis?.kind === 'rank' && r.basis.owner === 'me')).toBe(false)
+    expect(Object.values(p.filters).some((f) => f.basis?.owner === 'me')).toBe(false)
   })
 
   it('상대 목숨걸기(대미지 = 상대 HP)는 묶음 키에 상대 H를 보탠다', () => {
@@ -437,16 +435,15 @@ describe('planTab: 방어 탭', () => {
     expect(Object.values(p.rows).some((r) => r.moveId === 'rockslide')).toBe(false)
   })
 
-  it('내 위협(상대에게 거는 하락)은 방어 탭 랭크 행이 아니다, 내 철벽(내 방어 랭크업)은 랭크 행', () => {
+  it('내 위협(상대에게 거는 하락)·내 철벽(내 방어 랭크업) 모두 방어 탭 랭크 조건이 아니다, 상대 랭크업은 그대로', () => {
     const intim = planTab(input({ mySet: mk('incineroar', 'intimidate', ['flareblitz'], { nature: 'careful', sp: { ...ZERO, hp: 32, spd: 32 } }) }), 'defense')
     expect(Object.values(intim.rows).some((r) => r.basis?.kind === 'rank' && r.basis.owner === 'me')).toBe(false)
     const mine = mk('metagross', 'clearbody', ['irondefense', 'meteormash'], { nature: 'impish', sp: { ...ZERO, hp: 32, def: 32 } })
     const p = planTab(input({ mySet: mine }), 'defense')
     const c = cardsOf(p, 'kingambit').find((x) => x.state === 'ok') as CardSpec
-    const mineRank = rowsOf(p, c).filter((x) => x.basis?.kind === 'rank' && x.basis.owner === 'me')
-    // 내 수단은 하한 필터를 보지 않아 상대 기술 4개 × H·B 전부
-    expect(mineRank.length).toBe(8)
-    for (const x of mineRank) expect(x.basis).toMatchObject({ means: { id: 'irondefense' }, myBoosts: { def: 2 }, opponentBoosts: {} })
+    expect(rowsOf(p, c).some((x) => x.basis?.kind === 'rank' && x.basis.owner === 'me')).toBe(false)
+    // 대도각참의 칼춤(상대 A 랭크업)은 랭크 조건으로 남는다(빈 검사 방지)
+    expect(rowsOf(p, c).some((x) => x.basis?.kind === 'rank' && x.basis.owner === 'opponent' && x.basis.means.id === 'swordsdance')).toBe(true)
   })
 })
 

@@ -42,7 +42,7 @@ export function MoveLabel({ game, tab, row }: Props) {
   )
 }
 
-/** 가장 센 기술이 아니지만 선공기라 남은 행의 표시(RowView.keptAsPriority). 기술 라벨 밖에 둔다 */
+/** 우선도 > 0 기술(선공기) 표시. 기술 라벨 밖에 둔다 */
 export function PriorityTag() {
   return (
     <span className="priority-tag" data-testid="priority-tag">

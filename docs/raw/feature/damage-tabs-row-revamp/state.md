@@ -1,7 +1,7 @@
 ---
 title: "공격·방어 탭 판정 행 기능 확장과 상세 화면 가시성 개편(상대 기술 표시·설정, 화력 도구 행)"
 date: "2026-11-13"
-stage: pre-approved
+stage: implementing
 prd_status: pre-approved
 adr_status: pre-accepted
 ---

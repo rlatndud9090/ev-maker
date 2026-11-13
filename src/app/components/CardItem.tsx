@@ -1,5 +1,5 @@
 import { memo, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
-import { addedBundleCardId, defaultOption, isPinned, pinOf, type AddedBundle, type CardGroup, type CardView, type CustomTarget, type RowView, type Tab } from '../../cards'
+import { addedBundleCardId, defaultOption, isPinned, pinOf, type AddedBundle, type CardGroup, type CardView, type CustomTarget, type GroupItem, type RowView, type Tab } from '../../cards'
 import type { Snapshot, StatId } from '../../data/schema'
 import { namesOf } from '../../ui/names'
 import { itemIconUrl } from '../../ui/images'
@@ -11,7 +11,8 @@ import { CustomEditor } from './CustomEditor'
 import { RowDetail } from './RowDetail'
 import { PokemonIcon } from './PokemonIcon'
 import { MoveLabel, PriorityTag, VariableTag } from './MoveLabel'
-import { itemKeyLabel, moveNoticeText } from './text'
+import { MoveMenu } from './MoveMenu'
+import { basisText, itemKeyLabel, moveNoticeText, rowTitle } from './text'
 
 interface Props {
   game: Snapshot
@@ -30,6 +31,12 @@ interface Props {
   dispatch: Dispatch<AppAction>
   /** 계산결과순일 때 이 행이 든 그룹 제목 id(행 토글 버튼 설명에 붙여 소속을 전한다) */
   groupLabelId?: string
+  /** 포켓몬 한 줄의 기술 선택 항목(공격·방어 탭, groupItems). 스피드 탭은 빈 배열 */
+  items: readonly GroupItem[]
+  /** 항목을 직접 고름(다른 분류 항목이면 그 분류 기본 배분으로 전환까지) */
+  onChooseItem: (group: CardGroup, card: CardView, item: GroupItem) => void
+  /** 직접 고름 해제(기본 항목으로) */
+  onResetItem: (group: CardGroup) => void
 }
 
 /** 카드 줄 배지의 기준 행: 대표 행. 대표로 세울 행이 없는 카드(no-change)는 범주가 있는 첫 행. */
@@ -165,12 +172,6 @@ function Headline({ game, tab, card, badge }: { game: Snapshot; tab: Tab; card: 
           </>
         )}
         <MoveLabel game={game} tab={tab} row={row} />
-        {row.keptAsPriority && (
-          <>
-            {' '}
-            <PriorityTag />
-          </>
-        )}
       </span>
     </span>
   )
@@ -636,7 +637,37 @@ function BundleList({ tab, group, card, rollSteps, onSelect, dispatch, spMax, op
   )
 }
 
-export const CardItem = memo(function CardItem({ game, tab, group, card, rollSteps, expanded, onToggle, onSelect, target, dispatch, groupLabelId }: Props) {
+/** 보이는 항목의 기술 선택 버튼(간단행·상세 공용). 보이는 항목이 목록에 없으면 null */
+function ShownMove({ game, tab, group, card, rollSteps, items, onChooseItem, onResetItem, testId }: Pick<Props, 'game' | 'tab' | 'group' | 'card' | 'rollSteps' | 'items' | 'onChooseItem' | 'onResetItem'> & { testId: string }) {
+  const shown = items.find((g) => g.item.key === card.shownItem)
+  if (shown === undefined) return null
+  const row = { moveId: shown.item.moveId, basis: shown.item.basis, ...(card.rows[0]?.refs === undefined ? {} : { refs: card.rows[0].refs }) }
+  return (
+    <MoveMenu
+      game={game}
+      tab={tab}
+      rollSteps={rollSteps}
+      items={items}
+      shown={card.shownItem}
+      defaultKey={card.defaultItem?.key}
+      selected={card.selected}
+      onChoose={(item) => onChooseItem(group, card, item)}
+      onReset={() => onResetItem(group)}
+      label={`${rowTitle(game, { moveId: shown.item.moveId }, false)} 기술 선택${card.selected ? ' (직접 고름)' : ''}`}
+      testId={testId}
+    >
+      <MoveLabel game={game} tab={tab} row={row} />
+      {shown.item.priority && (
+        <>
+          {' '}
+          <PriorityTag />
+        </>
+      )}
+    </MoveMenu>
+  )
+}
+
+export const CardItem = memo(function CardItem({ game, tab, group, card, rollSteps, expanded, onToggle, onSelect, target, dispatch, groupLabelId, items, onChooseItem, onResetItem }: Props) {
   const names = namesOf(game)
   const ladder = card.opponent.source === 'ladder'
   const detailId = `card-detail-${encodeURIComponent(group.key)}`
@@ -708,19 +739,18 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
           </span>
         )}
         <span className="card-headline" data-testid="card-headline" id={headlineId}>
-          <Headline game={game} tab={tab} card={card} badge={result !== undefined} />
+          {card.shownItem !== undefined && items.some((g) => g.item.key === card.shownItem) ? (
+            <ShownMove game={game} tab={tab} group={group} card={card} rollSteps={rollSteps} items={items} onChooseItem={onChooseItem} onResetItem={onResetItem} testId="move-pick" />
+          ) : (
+            <Headline game={game} tab={tab} card={card} badge={result !== undefined} />
+          )}
         </span>
-        {/* 왼쪽부터 포켓몬 → SP 배분 → 기술 → 결과(+변동 가능), 오른쪽 끝에는 "외 n행"만 */}
+        {/* 왼쪽부터 포켓몬 → SP 배분 → 기술 → 결과(+변동 가능) */}
         {(card.state === 'error' || resultBody !== null || card.variable) && (
           <span className="card-result">
             {card.state === 'error' && <span className="badge-error">계산 불가</span>}
             {resultBody}
             {card.variable && <VariableTag id={variableId} />}
-          </span>
-        )}
-        {card.moreRows > 0 && (
-          <span className="card-more" data-testid="card-more">
-            외 {card.moreRows}행
           </span>
         )}
       </div>
@@ -752,6 +782,12 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
               data-testid="bundle-panel"
             >
               {card.state === 'error' && card.error && <p className="row-error">계산 불가: {koReason(game, card.error)}</p>}
+              {card.shownItem !== undefined && items.length > 0 && (
+                <div className="detail-move" data-testid="detail-move">
+                  <ShownMove game={game} tab={tab} group={group} card={card} rollSteps={rollSteps} items={items} onChooseItem={onChooseItem} onResetItem={onResetItem} testId="detail-move-pick" />
+                  {card.rows[0]?.basis?.kind === 'rank' && <span className="row-basis">{basisText(game, card.rows[0].basis)}</span>}
+                </div>
+              )}
               {card.rows.length > 0 && (
                 <ol className="rows">
                   {card.rows.map((r) => (
@@ -775,6 +811,8 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
 function sameProps(a: Props, b: Props): boolean {
   if (a.game !== b.game || a.tab !== b.tab || a.card !== b.card || a.rollSteps !== b.rollSteps || a.expanded !== b.expanded) return false
   if (a.onToggle !== b.onToggle || a.onSelect !== b.onSelect || a.target !== b.target || a.dispatch !== b.dispatch || a.groupLabelId !== b.groupLabelId) return false
+  if (a.onChooseItem !== b.onChooseItem || a.onResetItem !== b.onResetItem) return false
+  if (a.items.length !== b.items.length || !a.items.every((g, i) => g.item === b.items[i].item && g.card === b.items[i].card)) return false
   if (a.group === b.group) return true
   if (a.group.key !== b.group.key || a.group.opponent !== b.group.opponent || a.group.berry?.item !== b.group.berry?.item || a.group.options.length !== b.group.options.length)
     return false

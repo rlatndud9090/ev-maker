@@ -4,7 +4,8 @@ import type { MetaEntry } from '../data/meta-schema'
 import { loadSnapshotSync } from '../data/testing'
 import { RESIST_BERRIES, berryActivates, resistBerriesOf, resistBerryType } from './berries'
 import { buildTabView } from './batch'
-import { berryEngaged, berryIdle } from './assemble'
+import { BASE_CONDITION_ID, itemKey } from './items'
+import { opponentKey } from './schedule'
 import { chosenOption, groupCards, pinOf } from './groups'
 import { addedBundleCardId, samePin } from './ids'
 import { planTab } from './plan'
@@ -226,40 +227,23 @@ describe('조립: 열매 행은 가장 센 기술에 열매가 발동할 때만'
     expect(r?.cells.some((c, i) => (c.maxPercent ?? 0) < (b?.cells[i].maxPercent ?? 0))).toBe(true)
   })
 
-  it('열매가 발동하는 기술이 가장 세지 않으면 그 열매 카드는 보이지 않는다(berryEngaged)', () => {
-    const card = (triggers: string[]): CardSpec =>
-      ({
-        berry: { item: 'colburberry', share: 0.1, triggers },
-        conditions: [{ id: JSON.stringify(['base']), candidates: [{ target: 'row', id: 'a', moveId: 'kowtowcleave', priority: false }, { target: 'row', id: 'b', moveId: 'ironhead', priority: false }] }],
-      }) as unknown as CardSpec
-    const states = new Map([
-      ['a', 'dropped' as const],
-      ['b', 'chosen' as const],
-    ])
-    expect(berryEngaged(card(['kowtowcleave']), states)).toBe(false)
-    expect(berryEngaged(card(['ironhead']), states)).toBe(true)
-    expect(berryEngaged(card(['ironhead']), new Map([['b', 'probing' as const]]))).toBe(false)
-    expect(berryEngaged({ conditions: [] } as unknown as CardSpec, new Map())).toBe(true)
-  })
-
-  it('열매 카드 안에서 조건별로 고른 기술(선공기 포함)이 열매가 발동하지 않는 기술이면 그 행은 뺀다(berryIdle)', () => {
-    const card = { berry: { item: 'colburberry', share: 0.1, triggers: ['kowtowcleave'] } } as unknown as CardSpec
-    expect(berryIdle(card, 'kowtowcleave', 'chosen')).toBe(false)
-    expect(berryIdle(card, 'ironhead', 'chosen')).toBe(true)
-    expect(berryIdle(card, 'aquajet', 'priority')).toBe(true)
-    // 아직 고르지 못했거나 이미 빠진 후보·기본 카드는 이 규칙과 무관
-    expect(berryIdle(card, 'ironhead', 'probing')).toBe(false)
-    expect(berryIdle(card, 'ironhead', 'dropped')).toBe(false)
-    expect(berryIdle({} as CardSpec, 'ironhead', 'chosen')).toBe(false)
-    // 실데이터: 대쓰여너 (마코) 카드의 판정 끝난 행은 모두 열매가 발동하는 기술(랭크 조건 행 포함)
-    const view = buildTabView(only(['basculegion']), 'attack')
-    const colbur = view.cards.filter((c) => c.berry?.item === 'colburberry')
-    expect(colbur.length).toBeGreaterThan(0)
-    for (const c of colbur) {
-      const done = c.rows.filter((r) => r.status === 'ok')
-      expect(done.length, c.id).toBeGreaterThan(0)
-      for (const r of done) expect(['kowtowcleave', 'suckerpunch'], `${c.id} ${r.id}`).toContain(r.moveId)
+  it('열매 카드는 보이는 항목의 기술이 그 열매를 발동시킬 때만 보인다: 직접 고른 항목도 같은 규칙(PRD R7, 같은 상대 선택 공유)', () => {
+    const garchomp: PokemonSet = { regulation: 'm-c', species: 'garchomp', ability: 'roughskin', item: 'lifeorb', nature: 'adamant', sp: { ...ZERO, hp: 2, atk: 32, spe: 32 }, moves: ['earthquake', 'bite'] }
+    const input = cardInput({ mySet: garchomp, filters: { topN: 30, selected: ['basculegion'] } })
+    // 기본: 열매 카드의 기본 항목은 지진(열매가 깨물기를 반감) → 열매가 관여하지 않아 숨는다
+    expect(buildTabView(input, 'attack').cards.some((c) => c.berry !== undefined)).toBe(false)
+    // 깨물기를 직접 고르면 열매 카드(같은 상대 선택 공유)도 깨물기를 보이며 나타난다
+    const sel = new Map([[opponentKey({ source: 'ladder', id: 'basculegion' }), itemKey('bite', BASE_CONDITION_ID)]])
+    const chosen = buildTabView(input, 'attack', undefined, sel)
+    const berry = chosen.cards.filter((c) => c.berry !== undefined)
+    expect(berry.length).toBeGreaterThan(0)
+    for (const c of berry) {
+      expect(c.selected).toBe(true)
+      expect(c.rows.map((r) => r.moveId)).toEqual(['bite'])
     }
+    // 지진을 직접 고르면 다시 숨는다
+    const eq = new Map([[opponentKey({ source: 'ladder', id: 'basculegion' }), itemKey('earthquake', BASE_CONDITION_ID)]])
+    expect(buildTabView(input, 'attack', undefined, eq).cards.some((c) => c.berry !== undefined)).toBe(false)
   })
 
   it('실데이터: 한카리아스 지진·깨물기 → 대쓰여너 마코열매 변형은 계획되지만 열매 조건에서 지진이 가장 세서 보이지 않는다', () => {
@@ -272,13 +256,13 @@ describe('조립: 열매 행은 가장 센 기술에 열매가 발동할 때만'
     expect(view.cards.length).toBeGreaterThan(0)
     expect(view.cards.some((c) => c.berry !== undefined)).toBe(false)
     // 기본 카드(도구 없음)는 깨물기가 가장 세지만(지진은 더블 범위 보정 0.75), 열매 변형에서는 깨물기가 반감돼 지진이 가장 세다.
-    expect(new Set(view.cards.flatMap((c) => c.rows.filter((r) => r.kind === 'base').map((r) => r.moveId)))).toEqual(new Set(['bite']))
+    expect(new Set(view.cards.map((c) => c.items.find((i) => i.key === c.shownItem)?.moveId))).toEqual(new Set(['bite']))
   })
 
   it('실데이터: 대도각참 로플열매 변형은 로킥이 가장 셀 때 보인다', () => {
     const view = buildTabView(cardInput({ mySet: KINGAMBIT, filters: { topN: 30, selected: ['kingambit'] } }), 'attack')
     const chople = view.cards.filter((c) => c.berry?.item === 'chopleberry')
     expect(chople.length).toBeGreaterThan(0)
-    for (const c of chople) expect(c.rows.filter((r) => r.kind === 'base').map((r) => r.moveId)).toContain('lowkick')
+    for (const c of chople) expect(c.rows.map((r) => r.moveId)).toContain('lowkick')
   })
 })

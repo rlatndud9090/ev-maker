@@ -1,5 +1,5 @@
 // 세 탭의 행 작업을 시간 조각으로 나눠 계산하고 탭 뷰를 외부 저장소로 내는 실행기(React 없음).
-import { TABS, computeRowTask, createLruCache, createTabAssembler, mayUnlockPair, planTab, primaryCardIds, taskCardId, taskKey } from '../cards'
+import { TABS, computeRowTask, createLruCache, createTabAssembler, opponentKey, planTab, primaryCardIds, taskCardId, taskKey } from '../cards'
 import type { CardInput, JudgementCache, PendingTasks, RowTask, RowTaskResult, Tab, TabAssembler, TabPlan, TabView } from '../cards'
 import type { SpTable } from '../core'
 import type { Scheduler } from './scheduler'
@@ -27,6 +27,11 @@ export interface Executor {
   setActiveTab(tab: Tab): void
   /** 드래그 표시용 SP. 활성 탭만 다시 조립(행 작업 없음). null이면 계획 시점 SP */
   setDisplaySp(sp: SpTable | null): void
+  /**
+   * 사용자 기술 선택(상대 키 → 항목 키). 계산 입력이 아니다: 세대를 바꾸지 않고, 선택이 바뀐 상대의 카드만 다시 조립하며
+   * 그 항목의 행 작업을 맨 앞 층(수요)에 넣는다. 세대가 바뀌어도 유지된다
+   */
+  setSelections(tab: Tab, selections: ReadonlyMap<string, string>): void
   dispose(): void
 }
 
@@ -42,21 +47,30 @@ export const DEFAULT_SLICE_MS = 12
 export const COMPUTE_START_MARK = 'cards:compute-start'
 
 type Stage = 0 | 1 | 2 | 3 | 4
-/** 0 = 먼저 계산할 카드(primaryCardIds: 상대·분류마다 최대 묶음·사용자 추가·커스텀), 1 = 나머지 묶음 */
-type Tier = 0 | 1
+/** 0 = 사용자가 기술을 고른 상대의 카드(수요), 1 = 먼저 계산할 카드(primaryCardIds: 상대·분류마다 최대 묶음·사용자 추가·커스텀), 2 = 나머지 묶음 */
+type Tier = 0 | 1 | 2
 const STAGE_KEYS = ['stage1', 'stage2', 'stage3', 'stage4', 'stage5'] as const
-const TIERS: readonly Tier[] = [0, 1]
+const TIERS: readonly Tier[] = [0, 1, 2]
+const STAGES: readonly Stage[] = [0, 1, 2, 3, 4]
+type Pos = [number, number, number, number, number]
+const zeroPos = (): [Pos, Pos, Pos] => [
+  [0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0],
+]
 
 interface TabRun {
   plan: TabPlan | null
   /** 카드별 남은 작업·조립 캐시(결과가 바뀐 카드만 다시 계산) */
   assembler: TabAssembler | null
   primary: ReadonlySet<string>
+  /** 사용자가 기술을 고른 상대 키(수요 층) */
+  demand: ReadonlySet<string>
   results: Map<string, RowTaskResult>
   /** 층별 마지막 남은 작업 목록과 단계별 소비 위치 */
-  queue: [PendingTasks, PendingTasks]
-  pos: [[number, number, number, number, number], [number, number, number, number, number]]
-  /** probe·fixed(가장 센 기술 고르기)·extreme·ends 결과나 쌍의 마지막 행 sweep·variant 결과가 대기열을 바꿨을 수 있음 */
+  queue: [PendingTasks, PendingTasks, PendingTasks]
+  pos: [Pos, Pos, Pos]
+  /** 새 결과(기본 항목 결정·필터 통과·쌍 준비 등)나 선택 변경이 대기열을 바꿨을 수 있음 */
   dirty: boolean
   fatal: boolean
   /** 결과가 늘 때마다 +1 */
@@ -82,12 +96,10 @@ function newTabRun(): TabRun {
     plan: null,
     assembler: null,
     primary: new Set(),
+    demand: new Set(),
     results: new Map(),
-    queue: [EMPTY_QUEUE, EMPTY_QUEUE],
-    pos: [
-      [0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0],
-    ],
+    queue: [EMPTY_QUEUE, EMPTY_QUEUE, EMPTY_QUEUE],
+    pos: zeroPos(),
     dirty: false,
     fatal: false,
     version: 0,
@@ -96,24 +108,26 @@ function newTabRun(): TabRun {
 }
 
 /**
- * 활성 탭 1·2단계(먼저 계산할 카드 → 나머지 묶음) → 나머지 탭(TABS 순) 1·2단계 → 활성 탭 3·4·5단계(확인 스윕·성격 변형·쌍) → 나머지 탭 3·4·5단계.
- * 3·4·5단계도 단계마다 먼저 계산할 카드가 앞선다.
+ * 활성 탭 수요(사용자가 고른 기술의 카드, 모든 단계) → 활성 탭 1·2단계(먼저 계산할 카드 → 나머지 묶음) → 나머지 탭(TABS 순) 수요·1·2단계 →
+ * 활성 탭 3·4·5단계(확인 스윕·성격 변형·쌍) → 나머지 탭 3·4·5단계. 3·4·5단계도 단계마다 먼저 계산할 카드가 앞선다.
  */
 function priority(active: Tab): readonly Slot[] {
   const others = TABS.filter((t) => t !== active)
-  const early = (t: Tab): Slot[] => [[t, 0, 0], [t, 1, 0], [t, 0, 1], [t, 1, 1]]
-  const late = (t: Tab): Slot[] => ([2, 3, 4] as const).flatMap((s) => TIERS.map((tier): Slot => [t, s, tier]))
+  const early = (t: Tab): Slot[] => [...STAGES.map((s): Slot => [t, s, 0]), [t, 0, 1], [t, 1, 1], [t, 0, 2], [t, 1, 2]]
+  const late = (t: Tab): Slot[] => ([2, 3, 4] as const).flatMap((s) => ([1, 2] as const).map((tier): Slot => [t, s, tier]))
   return [...early(active), ...others.flatMap(early), ...late(active), ...others.flatMap(late)]
 }
 
 function refresh(t: TabRun): void {
   if (t.plan === null || t.assembler === null) return
-  const primary = t.primary
-  t.queue = [t.assembler.pending(t.results, (id) => primary.has(id)), t.assembler.pending(t.results, (id) => !primary.has(id))]
-  t.pos = [
-    [0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0],
+  const { primary, demand, plan } = t
+  const demanded = new Set(plan.cards.filter((c) => demand.has(opponentKey(c.opponent))).map((c) => c.id))
+  t.queue = [
+    t.assembler.pending(t.results, (id) => demanded.has(id)),
+    t.assembler.pending(t.results, (id) => !demanded.has(id) && primary.has(id)),
+    t.assembler.pending(t.results, (id) => !demanded.has(id) && !primary.has(id)),
   ]
+  t.pos = zeroPos()
   t.dirty = false
 }
 
@@ -161,6 +175,7 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
   let current: Run | null = null
   let regulation: string | null = null
   let displaySp: SpTable | null = null
+  const selections: Record<Tab, ReadonlyMap<string, string>> = { attack: new Map(), defense: new Map(), speed: new Map() }
   let running = false
   let disposed = false
 
@@ -249,8 +264,9 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
       if (unit.kind === 'plan') {
         const plan = planTab(run.input, unit.tab)
         t.plan = plan
-        t.assembler = createTabAssembler(plan)
+        t.assembler = createTabAssembler(plan, selections[unit.tab])
         t.primary = primaryCardIds(plan)
+        t.demand = new Set(selections[unit.tab].keys())
         refresh(t)
         return
       }
@@ -258,8 +274,8 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
       t.results.set(taskKey(unit.task), computeRowTask(t.plan, unit.task, cache))
       t.assembler.invalidate(taskCardId(t.plan, unit.task))
       t.version++
-      const k = unit.task.kind
-      if (k === 'probe' || k === 'fixed' || k === 'ends' || k === 'extreme' || mayUnlockPair(t.plan, t.results, unit.task)) t.dirty = true
+      // 어떤 결과든 기본 항목 결정(변동 판정)·필터 통과·쌍 준비로 그 카드의 남은 작업을 바꿀 수 있다(카드 단위 조립 캐시라 다시 내기는 싸다).
+      t.dirty = true
     } catch (e) {
       fail(run, unit.tab, e)
     }
@@ -360,6 +376,20 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
       displaySp = sp
       refreshActive()
       emit()
+    },
+    setSelections(tab, next) {
+      if (disposed) return
+      selections[tab] = next
+      const t = current?.tabs[tab]
+      if (current === null || t === undefined || t.assembler === null || t.fatal) return
+      t.demand = new Set(next.keys())
+      if (!t.assembler.setSelections(next)) return
+      t.version++
+      t.dirty = true
+      if (tab === snapshot.activeTab) refreshActive()
+      else assemble(current, tab, null)
+      emit()
+      ensureLoop()
     },
     dispose() {
       disposed = true

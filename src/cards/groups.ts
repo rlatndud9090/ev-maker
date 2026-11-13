@@ -1,5 +1,5 @@
 import { addedCardId, addedBundleKey, samePin } from './ids'
-import type { BerryVariant, CardView, OpponentHeader, PinnedBundle, Tab } from './types'
+import type { BerryVariant, CardView, ItemView, OpponentHeader, PinnedBundle, Tab } from './types'
 
 /** 화면 한 행: 같은 상대 포켓몬(출처+id)·같은 반감열매 변형의 카드들을 배분 선택지로 묶은 것. */
 export interface CardGroup {
@@ -92,14 +92,88 @@ export function groupCards(cards: readonly CardView[], tab?: Tab, pins: readonly
 /** 그 선택지가 고정됐는지 */
 export const isPinned = (group: CardGroup, card: CardView): boolean => group.pinned.includes(card.id)
 
-/** 기본 선택: 사용자 추가 배분이 아닌 선택지 중 고정이 없을 때의 첫째(관측 배분 중 최고 점유율). 모두 사용자 추가면 첫 선택지. */
-export function defaultOption(group: CardGroup): CardView {
+/** 고정 없을 때의 기본 배분: 사용자 추가 배분이 아닌 선택지 중 첫째(관측 배분 중 최고 점유율, 커스텀은 프리셋 1). 모두 사용자 추가면 첫 선택지. */
+function baseDefault(options: readonly CardView[]): CardView | undefined {
   let best: CardView | undefined
-  for (const o of group.options) {
+  for (const o of options) {
     if (o.bundle.userAdded !== undefined) continue
     if (best === undefined || compareBase(o, best) < 0) best = o
   }
+  return best ?? options[0]
+}
+
+/** 분류 기본 배분: 그 분류 선택지 중 고정과 무관한 기본 배분(관측 최고 점유율, 커스텀은 프리셋 1). 그 분류 선택지가 없으면 undefined */
+export function categoryDefault(group: CardGroup, category: CardView['category']): CardView | undefined {
+  return baseDefault(group.options.filter((o) => o.category === category))
+}
+
+/** 분류 순서(선택지에 처음 나온 순서 = 계획의 물리 → 특수) */
+function categoriesOf(group: CardGroup): CardView['category'][] {
+  return [...new Set(group.options.map((o) => o.category))]
+}
+
+/** 분류 사이 비교: 방어 탭 선공기 우선으로 정해진 쪽 → 기준 기술 단건 판정이 센 쪽(1타 확률 → 최대 대미지 비율). 같으면 0 */
+function compareDefaults(a: CardView, b: CardView): number {
+  const da = a.defaultItem
+  const db = b.defaultItem
+  if (da === undefined || db === undefined) return da === undefined ? (db === undefined ? 0 : 1) : -1
+  if (da.viaPriority !== db.viaPriority) return da.viaPriority ? -1 : 1
+  const ca = da.basisCell
+  const cb = db.basisCell
+  if (ca === undefined || cb === undefined) return ca === undefined ? (cb === undefined ? 0 : 1) : -1
+  const p = (cb.ohkoChance ?? 0) - (ca.ohkoChance ?? 0)
+  if (p !== 0) return p
+  return (cb.maxPercent ?? 0) - (ca.maxPercent ?? 0)
+}
+
+/**
+ * 기본 선택: 분류마다 분류 기본 배분을 두고, 그 기본 항목을 견줘(compareDefaults, 같으면 분류 순) 이긴 분류의 기본 배분.
+ * 분류가 하나면 그 분류 기본 배분이다.
+ */
+export function defaultOption(group: CardGroup): CardView {
+  let best: CardView | undefined
+  for (const category of categoriesOf(group)) {
+    const card = categoryDefault(group, category)
+    if (card !== undefined && (best === undefined || compareDefaults(card, best) < 0)) best = card
+  }
   return best ?? group.options[0]
+}
+
+/** 기술 선택 목록의 항목 하나와 그 항목을 판정한 카드(그 분류 기본 배분) */
+export interface GroupItem {
+  item: ItemView
+  card: CardView
+}
+
+const ITEM_STATUS_RANK: Readonly<Record<ItemView['status'], number>> = { ok: 0, pending: 1, error: 2, immune: 3 }
+
+/**
+ * 포켓몬 한 줄의 기술 선택 목록: 분류마다 분류 기본 배분의 항목을 모아 가장 세게 치는 순(정상 → 판정 전 → 계산 불가 → 무효,
+ * 정상끼리 1타 확률 → 최대 대미지 비율, 같으면 분류 순·카드 안 순서)으로 낸다.
+ */
+export function groupItems(group: CardGroup): GroupItem[] {
+  const out: GroupItem[] = []
+  for (const category of categoriesOf(group)) {
+    const card = categoryDefault(group, category)
+    if (card !== undefined) for (const item of card.items) out.push({ item, card })
+  }
+  return out
+    .map((g, i) => ({ g, i }))
+    .sort((a, b) => {
+      const sa = ITEM_STATUS_RANK[a.g.item.status]
+      const sb = ITEM_STATUS_RANK[b.g.item.status]
+      if (sa !== sb) return sa - sb
+      const ca = a.g.item.cell
+      const cb = b.g.item.cell
+      if (a.g.item.status === 'ok' && ca !== undefined && cb !== undefined) {
+        const p = (cb.ohkoChance ?? 0) - (ca.ohkoChance ?? 0)
+        if (p !== 0) return p
+        const m = (cb.maxPercent ?? 0) - (ca.maxPercent ?? 0)
+        if (m !== 0) return m
+      }
+      return a.i - b.i
+    })
+    .map(({ g }) => g)
 }
 
 /**

@@ -12,7 +12,7 @@ import { Errors } from '../ui/Errors'
 import { Licenses } from '../ui/Licenses'
 import { toPokemonSet } from '../ui/setDraft'
 import { toCardInput } from './input'
-import { initialState, reducer } from './state'
+import { initialState, moveSelections, reducer } from './state'
 import { useExecutor } from './useExecutor'
 import { CustomTargetPanel } from './components/CustomTargetPanel'
 import { MySetPanel } from './components/MySetPanel'
@@ -154,6 +154,10 @@ function Workspace({ boot }: { boot: Boot }) {
   useEffect(() => {
     if (input !== undefined) executor.setInput(input, generation)
   }, [executor, input, generation])
+  // 직접 고른 기술은 계산 입력이 아니라 실행기에 수요로만 알린다(세대를 바꾸지 않는다).
+  useEffect(() => {
+    for (const t of TABS) executor.setSelections(t, moveSelections(state.moveChoices, t))
+  }, [executor, state.moveChoices])
 
   const onDisplaySp = useCallback((sp: SpTable | null) => executor.setDisplaySp(sp), [executor])
 
@@ -216,6 +220,7 @@ function Workspace({ boot }: { boot: Boot }) {
             customTargets={customTargets}
             pinnedBundles={state.pinnedBundles}
             sortMode={state.sortMode}
+            moveChoices={state.moveChoices}
             dispatch={dispatch}
             customOpen={customOpen}
             onToggleCustom={() => (customOpen ? closeCustom() : setCustomOpen(true))}

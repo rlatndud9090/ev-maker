@@ -44,9 +44,32 @@ Status: draft
 
 -
 
+## 구현(1단계, 2026-11-13)
+
+- 도메인: `src/cards/items.ts`(항목 키·단건 판정·변동 판정·정렬·기본 항목 결정 `resolveDefault`), `schedule.cardPending`(후보 단건 판정 → 기본 항목 결정에 필요한 변동 판정을 1·2단계로 → 보이는 항목만 전체 작업), `assemble.buildCard`(보이는 항목 행만, `items`/`shownItem`/`defaultItem`/`selected`), 같은 상대의 먼저 계산할 카드가 준비될 때까지 그 상대를 숨김(분류·기본 항목 깜박임 방지).
+- 계획: 비교 전용 후보(`ProbeSpec`·`crossProbe`) 제거, 후보 `priority` = 우선도 > 0, 랭크 후 항목은 판정 능력치에 랭크가 들 때만, 계산 불가 행(하양허브 연속기·스냅샷에 없는 상대 기술)도 후보, 방어 카드 `speedEdge`(`outspeedsAtMax`), 방어 탭 랭크 수단 주인 = 상대만. `priority.ts`(선공기 행 조건) 삭제.
+- 앱: `AppState.moveChoices`(계산 입력 아님) + `choose-move`/`reset-move`, 실행기 `setSelections`(선택 카드 = 수요 층 0, 세대 불변), `groups.defaultOption`(분류 기본 배분의 기본 항목을 견줘 처음 분류 결정)·`groupItems`, `MoveMenu`(간단행·상세 공용 드롭다운), "외 k행"·선공기 행 표지 제거.
+- 이 단위에서 잡은 결함: 후보 없는 카드(손 계획) 경로에서 극단 필터·쌍 작업 누락, `buildCard` dangling else(필터 후보에 고정 판정 경로 호출) — 둘 다 수정.
+
+## 테스트 대체 매핑(AC24)
+
+| 바꾼/지운 테스트 | 대체한 PRD R7 "이전:" 항목 |
+| --- | --- |
+| `strongest.test.ts` 삭제 → `items.test.ts` 신설 | 카드·조건당 가장 센 기술 + 선공기 행(keptAsPriority), 분류를 가로지른 비교 전용 후보 |
+| `priority.test.ts` 삭제(`priority.ts` 삭제) | 선공기 행 조건(약점·자속) → 방어 탭 선공기 우선(스피드·변동) |
+| `assemble.test.ts` `moreRows` 검사 제거, 대표 행 테스트 재작성, 상대 단위 표시 게이트 | 외 k행, 랭크 행·선공기 행 별도 행, 대표 행이 카드 전 조건 행 기준 |
+| `berries.test.ts` berryEngaged·berryIdle 테스트 → 보이는 항목 기준 열매 노출(직접 선택 포함) | 열매 노출 = 기본 조건 가장 센 기술 기준 |
+| `plan.test.ts` 방어 탭 내 랭크업 2건, `rank.test.ts` 수단 주인 | 방어 탭 내 B·D 랭크업 행 |
+| `acceptance.test.ts` 오라클 `corePicks`/`expectMatchesCore` 재작성(R4 독립 재구현), AC4·AC5·AC11·AC12×2 재작성 | 위 전부(분류 가로지름으로 카드가 빠짐, 랭크 행·오류 행이 카드 행에 있음) |
+| `groups.test.ts`·`resultSort.test.ts` 픽스처 `moreRows` → `items`/`selected` | 외 k행 |
+
+## 미결(사용자 확인 필요)
+
+- PRD 용어 "분류 기본 배분 = 고정 순 첫째"는 기존 결정("기본 선택은 고정과 무관하게 관측 최고 점유율", `groups.test`)과 어긋난다. 구현은 기존 결정(고정 무관)을 유지했다 — PRD 용어 정의 개정 여부를 사용자에게 확인한다.
+
 ## 검증
 
-- 명령 또는 근거
+- `npx tsc -b` 통과, `npm run lint` 통과, `npx vitest run` 1006/1006 통과(2026-11-13).
 
 ## 후속 작업
 

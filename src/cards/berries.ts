@@ -1,7 +1,12 @@
 // 반감열매(공격 탭 상대 도구 변형). 판정은 코어 타입표·특성 타입 변화 규칙만 조회한다.
 import { attackEffectiveness, attackMoveType } from '../core'
 import type { Snapshot } from '../data/schema'
-import type { PriorityUser } from './priority'
+
+/** 기술을 쓰는 쪽: 계산에 쓰는 폼(메가면 메가 폼) 타입과 특성 */
+export interface MoveUser {
+  types: readonly string[]
+  ability: string
+}
 
 /**
  * 반감열매 → 반감하는 기술 타입(엔진 @smogon/calc getBerryResistType과 같은 표). 스냅샷 도구 데이터에는 열매 효과가 없어 순수 상수로 둔다.
@@ -47,7 +52,7 @@ export const resistBerryType = (item: string): string | undefined =>
  * (스킨 특성 등, attackMoveType), 상성은 배짱·심안·기술별 특례(프리즈드라이·플라잉프레스)까지(attackEffectiveness). 반감열매가 아니거나,
  * 공격측이 긴장감·인마일체거나, 맞는 쪽이 서투름(도구 무효)이거나, 스냅샷에 없는 기술·엔진 타입표에 없는 타입이면 false.
  */
-export function berryActivates(game: Snapshot, moveId: string, berry: string, user: PriorityUser, target: BerryHolder): boolean {
+export function berryActivates(game: Snapshot, moveId: string, berry: string, user: MoveUser, target: BerryHolder): boolean {
   const berryType = resistBerryType(berry)
   if (berryType === undefined || BERRY_BLOCKING_ABILITIES.includes(user.ability) || ITEM_DISABLING_ABILITIES.includes(target.ability)) return false
   if (!Object.prototype.hasOwnProperty.call(game.data.moves, moveId)) return false

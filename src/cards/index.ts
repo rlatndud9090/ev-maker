@@ -3,7 +3,7 @@ export * from './types'
 export { addedBundleCardId, addedBundlePin, cardId, rowId, presetKey, samePin } from './ids'
 export { relevantStats, myDependsOn } from './relevance'
 export { bundlesOf } from './bundles'
-export { chosenOption, defaultOption, groupCards, groupKey, isPinned, pinOf, type CardGroup } from './groups'
+export { categoryDefault, chosenOption, defaultOption, groupCards, groupItems, groupKey, isPinned, pinOf, type CardGroup, type GroupItem } from './groups'
 export { RANK_MEANS, REACTIONS, applyMeans, myMeansNotes } from './rankMeans'
 export { presetAssumption } from './presets'
 export { planTab } from './plan'
@@ -15,13 +15,27 @@ export {
   neededVariants,
   rowJudgements,
   rowChanges,
-  candidateStates,
+  cardDefault,
+  shownItemKey,
+  opponentKey,
   probeKey,
   primaryCardIds,
   taskCardId,
-  type CandidateState,
   type RowJudgements,
 } from './schedule'
+export {
+  BASE_CONDITION_ID,
+  itemKey,
+  cardItems,
+  compareItems,
+  resolveDefault,
+  itemStates,
+  type CardItemRef,
+  type DefaultResult,
+  type ItemProbe,
+  type ItemState,
+  type ItemVariability,
+} from './items'
 export { natureVariants } from './natures'
 export { judgementKey } from './key'
 export { createLruCache } from './cache'

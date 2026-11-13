@@ -32,7 +32,8 @@ function view(opts: {
     rows: [],
     headline: { kind: 'updating' },
     variable: false,
-    moreRows: 0,
+    items: [],
+    selected: false,
   }
 }
 const ids = (cards: readonly CardView[]) => cards.map((c) => c.id)

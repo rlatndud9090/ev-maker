@@ -3,10 +3,10 @@ import { cellLabel, type CellView, type RowView, type Tab } from '../../cards'
 import type { Snapshot } from '../../data/schema'
 import { categoryLabel, categorySymbol, categoryTone, currentText, fixedText, spanNeedText, spanText, spansOf, targetSegments, type TargetLike, type TargetSegment } from '../../ui/format'
 import { koReason } from '../../ui/koErrors'
-import { PriorityTag, VariableTag } from './MoveLabel'
+import { VariableTag } from './MoveLabel'
 import { ROW_KIND_LABEL, basisText, rowRefsNote, rowTitle } from './text'
 
-/** 행 조건(기본·랭크 수단·도구) 식별 문자열. e2e가 "조건당 기술 하나(+선공기)"를 대조한다 */
+/** 행 조건(기본·랭크 수단·도구) 식별 문자열 */
 const conditionOf = (row: RowView): string =>
   row.basis === undefined ? 'base' : row.basis.kind === 'rank' ? JSON.stringify([row.basis.owner, row.basis.means.kind, row.basis.means.id]) : JSON.stringify([row.basis.kind, row.basis.item])
 
@@ -98,14 +98,12 @@ export const RowDetail = memo(function RowDetail({ game, tab, row }: Props) {
       data-status={row.status}
       data-move={row.moveId}
       data-condition={conditionOf(row)}
-      data-priority-kept={row.keptAsPriority ? 'true' : undefined}
       data-variable={(row.status === 'ok' || row.status === 'stale') && !row.provisional ? (row.noChange ? 'false' : 'true') : undefined}
       data-provisional={row.provisional ? 'true' : undefined}
     >
       <div className="row-head">
         <span className="row-kind">{ROW_KIND_LABEL[row.kind]}</span>
         <strong className="row-title">{rowTitle(game, row)}</strong>
-        {row.keptAsPriority && <PriorityTag />}
         {note && <span className="hint">({note})</span>}
         {row.basis && <span className="row-basis">{basisText(game, row.basis)}</span>}
       </div>

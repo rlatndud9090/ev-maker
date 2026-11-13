@@ -54,11 +54,9 @@ interface KeyParts {
 function partsOf(plan: TabPlan, task: RowTask): KeyParts {
   if (task.kind === 'probe') {
     // 현재 세트 그대로라 관여 SP를 모두 넣는다(side는 judgeDamage 관점, 덮어쓰는 능력치 없음).
-    // 비교 전용 후보는 같은 세트·조건이면 다른 분류 카드 행의 단건 판정과 같은 키가 된다.
     const filter = task.target === 'filter' ? plan.filters[task.id] : undefined
     const row = task.target === 'row' ? plan.rows[task.id] : undefined
-    const probe = task.target === 'probe' ? plan.probes[task.id] : undefined
-    const spec = filter ?? row ?? probe
+    const spec = filter ?? row
     if (spec === undefined) throw new Error(`단건 판정 대상 ${task.id}가 계획에 없다`)
     const moveId = spec.moveId
     if (moveId === undefined) throw new Error(`단건 판정 대상 ${task.id}에 기술이 없다`)
@@ -66,7 +64,7 @@ function partsOf(plan: TabPlan, task: RowTask): KeyParts {
       kind: 'probe',
       judge: 'damage',
       options: {},
-      side: filter !== undefined ? 'defender' : probe !== undefined ? probe.side : (row?.sweep?.side ?? 'attacker'),
+      side: filter !== undefined ? 'defender' : (row?.sweep?.side ?? 'attacker'),
       stats: [],
       attacker: spec.attacker,
       defender: spec.defender,

@@ -8,6 +8,7 @@ import {
   DEFAULT_TOP_N,
   MAX_CUSTOM_MOVES,
   addedBundlePin,
+  opponentKey,
   samePin,
   type AddedBundle,
   type CardConditions,
@@ -47,9 +48,31 @@ export interface AppState {
   pinnedBundles: readonly PinnedBundle[]
   /** 목록 정렬: usage = 사용률 순(계획 순서), result = 계산결과순(cards sortByResult). 계산 입력이 아니라 세대를 올리지 않는다 */
   sortMode: SortMode
+  /**
+   * 사용자가 판정 행 기술 목록에서 직접 고른 항목((탭, 상대)마다 하나, 메모리에만 둔다). 계산 입력이 아니라 세대를 올리지 않는다
+   * (실행기가 그 항목의 행 작업을 수요로 받아 계산한다). 같은 상대의 모든 배분·반감열매 변형에 공유된다.
+   */
+  moveChoices: readonly MoveChoice[]
   /** 계산 입력이 바뀔 때만 +1(탭 전환·같은 값 확정은 그대로) */
   generation: number
 }
+
+/** 직접 고른 기술 항목. key = cards itemKey(기술, 랭크 조건) */
+export interface MoveChoice {
+  tab: Tab
+  source: 'ladder' | 'custom'
+  opponentId: string
+  key: string
+}
+
+/** 그 탭의 선택: 상대 키(cards opponentKey) → 항목 키 */
+export function moveSelections(choices: readonly MoveChoice[], tab: Tab): Map<string, string> {
+  const out = new Map<string, string>()
+  for (const c of choices) if (c.tab === tab) out.set(opponentKey({ source: c.source, id: c.opponentId }), c.key)
+  return out
+}
+
+const sameTarget = (a: Omit<MoveChoice, 'key'>, b: Omit<MoveChoice, 'key'>): boolean => a.tab === b.tab && a.source === b.source && a.opponentId === b.opponentId
 
 export type AppAction =
   | { type: 'set-draft'; draft: SetDraft }
@@ -88,6 +111,10 @@ export type AppAction =
    * 단일 모델을 지키고, 풀었는데 기준을 되돌리면 다시 고정으로 나타나는 일을 막는다).
    */
   | { type: 'unpin-bundle'; pin: PinnedBundle }
+  /** 기술 항목 직접 선택(같은 (탭, 상대)의 이전 선택을 바꾼다). 상대 id·키가 빈 문자열이면 무시 */
+  | { type: 'choose-move'; choice: MoveChoice }
+  /** 직접 선택 해제(기본 항목으로). 없으면 무시 */
+  | { type: 'reset-move'; tab: Tab; source: 'ladder' | 'custom'; opponentId: string }
 
 export function initialState(regulation: string): AppState {
   return {
@@ -103,6 +130,7 @@ export function initialState(regulation: string): AppState {
     addedBundles: [],
     pinnedBundles: [],
     sortMode: 'usage',
+    moveChoices: [],
     generation: 0,
   }
 }
@@ -229,6 +257,17 @@ export function reducer(state: AppState, action: AppAction): AppState {
       const addedBundles = state.addedBundles.filter((x) => !samePin(addedBundlePin(x), action.pin))
       if (addedBundles.length !== state.addedBundles.length) return { ...bump(state, { addedBundles }), pinnedBundles }
       return pinnedBundles.length === state.pinnedBundles.length ? state : { ...state, pinnedBundles }
+    }
+    case 'choose-move': {
+      const c = action.choice
+      if (typeof c.opponentId !== 'string' || c.opponentId === '' || typeof c.key !== 'string' || c.key === '') return state
+      if (state.moveChoices.some((x) => sameTarget(x, c) && x.key === c.key)) return state
+      const choice: MoveChoice = { tab: c.tab, source: c.source, opponentId: c.opponentId, key: c.key }
+      return { ...state, moveChoices: [...state.moveChoices.filter((x) => !sameTarget(x, c)), choice] }
+    }
+    case 'reset-move': {
+      const moveChoices = state.moveChoices.filter((x) => !sameTarget(x, action))
+      return moveChoices.length === state.moveChoices.length ? state : { ...state, moveChoices }
     }
   }
 }

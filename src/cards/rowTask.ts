@@ -127,18 +127,13 @@ function computePair(plan: TabPlan, filterId: string, which: NatureVariant): Pai
   }, plan.spMaxPerStat)
 }
 
-/** 후보 기술의 현재 세트 단건 판정(가장 센 기술 고르기 전용, 칸 sp는 0). 방어 탭 필터는 상대 → 나, 비교 전용 후보는 그 명세의 관점. */
+/** 후보 기술의 현재 세트 단건 판정(목록 배지·정렬·기본 항목 결정용, 칸 sp는 0). 방어 탭 필터는 상대 → 나. */
 function computeProbe(plan: TabPlan, task: Extract<RowTask, { kind: 'probe' }>): CompactCell[] {
   const options = { rollSteps: plan.rollSteps }
   if (task.target === 'filter') {
     const spec = plan.filters[task.id]
     if (spec === undefined) throw new Error(`극단 필터 ${task.id}가 계획에 없다`)
     return [compactDamage(0, judgeDamage(plan.game, 'defender', spec.attacker, spec.defender, spec.moveId, spec.conditions, undefined, options))]
-  }
-  if (task.target === 'probe') {
-    const spec = plan.probes[task.id]
-    if (spec === undefined) throw new Error(`비교 판정 ${task.id}가 계획에 없다`)
-    return [compactDamage(0, judgeDamage(plan.game, spec.side, spec.attacker, spec.defender, spec.moveId, spec.conditions, undefined, options))]
   }
   const spec = rowSpec(plan, task.id)
   return [compactDamage(0, judgeDamage(plan.game, spec.sweep.side, spec.attacker, spec.defender, moveOf(spec), spec.conditions, undefined, options))]

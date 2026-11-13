@@ -1,16 +1,19 @@
 // 계획 + 행 작업 결과 → 탭 뷰. 판정을 다시 하지 않고 표시용 SP로 산술·조회만 한다. 비용 O(행 × 33).
 import type { SpTable } from '../core'
 import type { StatId } from '../data/schema'
+import { cardItems, compareItems, itemStates, type CardItemRef, type ItemState } from './items'
 import {
-  candidateStates,
+  cardDefault,
   cardPending,
   filterState,
   neededVariants,
+  opponentKey,
+  primaryCardIds,
   probeKey,
   rowChanges,
   rowJudgements,
+  shownItemKey,
   taskKey,
-  type CandidateState,
   type RowJudgements,
 } from './schedule'
 import { tierRank, type JudgementSide } from '../core'
@@ -22,8 +25,10 @@ import type {
   CardView,
   CellView,
   CompactCell,
+  DefaultItemView,
   ErrorReason,
   Headline,
+  ItemView,
   PairPoint,
   PendingTasks,
   ResultMap,
@@ -38,8 +43,6 @@ import type {
   TargetView,
 } from './types'
 
-/** 계획의 기본 조건 그룹 id(plan BASE_CONDITION과 같은 값) */
-const BASE_CONDITION_ID = JSON.stringify(['base'])
 const KIND_RANK: Readonly<Record<RowKind, number>> = { base: 0, rank: 1, scarf: 2, 'non-scarf': 2 }
 const STAT_KEYS: readonly StatId[] = ['hp', 'atk', 'def', 'spa', 'spd', 'spe']
 const STAGE_KEYS = ['stage1', 'stage2', 'stage3', 'stage4', 'stage5'] as const
@@ -53,7 +56,10 @@ interface Ctx {
 
 interface CardBuild {
   view: CardView
-  displayed: boolean
+  /** 표시 자격(판정 준비와 무관한 노출 조건: 행·안내가 있고 반감열매가 관여함) */
+  visible: boolean
+  /** 기본 항목이 정해졌고(래더는 그 항목의 1·2단계까지) 화면에 낼 수 있음. 사용자가 고른 항목이면 판정 전이어도 참 */
+  ready: boolean
   mySetReasons: ErrorReason[]
 }
 
@@ -189,7 +195,7 @@ function lexLess(a: readonly number[], b: readonly number[]): boolean {
 
 /**
  * 대표 행: 변화 있는 행 중 경계까지 SP 차이가 가장 작은 행 → (판정 전·갱신 대기·잠정 변화 없음 행이 있으면 updating) →
- * 기본 조건의 가장 센 기술 행(선공기 행 아님, 동률 순서 tieKey) → 계산 불가 → 행 없음(no-change).
+ * 첫 ok 행(동률 순서 tieKey) → 계산 불가 → 행 없음(no-change). 공격·방어 탭의 행은 보이는 항목 하나의 행이다.
  */
 function headlineOf(card: CardSpec, rows: readonly RowView[], slotOf: ReadonlyMap<string, number> = new Map()): Headline {
   if (card.state === 'error') return { kind: 'error', reason: cardError(card) }
@@ -207,8 +213,7 @@ function headlineOf(card: CardSpec, rows: readonly RowView[], slotOf: ReadonlyMa
   let fallback: { row: RowView; tie: readonly number[] } | undefined
   for (const row of rows) {
     if (row.status !== 'ok') continue
-    // 선공기 행은 다른 ok 행이 없을 때만(그때도 동률 순서로).
-    const tie = [row.keptAsPriority ? 1 : 0, ...tieKey(row, slotOf)]
+    const tie = tieKey(row, slotOf)
     if (fallback === undefined || lexLess(tie, fallback.tie)) fallback = { row, tie }
   }
   if (fallback !== undefined) return { kind: 'row', rowId: fallback.row.id }
@@ -234,11 +239,25 @@ function cardError(card: CardSpec): ErrorReason {
   return card.error
 }
 
+/** 항목 상태 → 목록 항목(가장 세게 치는 순) */
+function itemViews(refs: readonly CardItemRef[], states: readonly ItemState[]): ItemView[] {
+  const byKey = new Map(refs.map((r) => [r.key, r]))
+  return [...states].sort(compareItems).map((st) => {
+    const ref = byKey.get(st.key) as CardItemRef
+    const v: ItemView = { key: st.key, moveId: st.moveId, priority: st.priority, status: st.probe.kind }
+    if (ref.basis !== undefined) v.basis = ref.basis
+    if (st.probe.kind === 'ok' || st.probe.kind === 'immune') v.cell = st.probe.cell
+    if (st.probe.kind === 'error') v.error = st.probe.reason
+    return v
+  })
+}
+
 /**
- * 카드 하나를 조립한다. 래더·커스텀 모두 변화 없음 행·판정 전 행을 rows에 남긴다(판정 변화와 무관하게 상대를 보인다).
- * 래더 카드는 1·2단계(가장 센 기술 고르기·양 끝·변화 스윕)가 끝난 뒤에만 표시한다(분류 사이 가장 센 기술이 정해지기 전 깜박임 방지).
+ * 카드 하나를 조립한다. 공격·방어 탭은 보이는 항목(사용자가 고른 항목, 없으면 기본 항목) 하나의 행만 낸다.
+ * 래더 카드는 기본 항목이 정해지고 그 1·2단계(양 끝·변화 스윕)가 끝난 뒤에만 낼 수 있다(기본 항목·분류 깜박임 방지).
+ * 사용자가 고른 항목은 판정 전이어도 바로 낸다(행은 갱신 중).
  */
-function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks): CardBuild {
+function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: string | undefined): CardBuild {
   const { plan, results } = ctx
   const ladder = card.opponent.source === 'ladder'
   const base: Pick<CardView, 'id' | 'order' | 'state' | 'notices' | 'opponent' | 'category' | 'bundle' | 'berry'> = {
@@ -253,9 +272,9 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks): CardBuild {
   if (card.berry !== undefined) base.berry = { item: card.berry.item, share: card.berry.share }
   if (card.state === 'error') {
     const headline = headlineOf(card, [])
-    const view: CardView = { ...base, error: cardError(card), rows: [], headline, variable: false, moreRows: 0 }
+    const view: CardView = { ...base, error: cardError(card), rows: [], headline, variable: false, items: [], selected: false }
     // 반감열매 변형의 해석 실패는 기본 카드가 같은 이유로 보이므로 따로 보이지 않는다.
-    return { view, displayed: card.berry === undefined, mySetReasons: [] }
+    return { view, visible: card.berry === undefined, ready: true, mySetReasons: [] }
   }
 
   const rows: RowView[] = []
@@ -264,16 +283,6 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks): CardBuild {
     if (reason.field?.startsWith(`${plan.mySide}.`)) reasons.push(reason)
     return reason
   }
-
-  const states = candidateStates(card, results)
-  const probeErrors = new Map<string, ErrorReason>()
-  for (const group of card.conditions) {
-    for (const c of group.candidates) {
-      const r = results.get(probeKey(c))
-      if (c.target !== 'fixed' && r?.kind === 'error') probeErrors.set(c.id, r.reason)
-    }
-  }
-  const filterDone = new Set<string>()
   const filterHead = (gate: string, spec: RowSpec): RowHead => {
     const filter = plan.filters[gate]
     const head: RowHead = { id: JSON.stringify(['filter', gate]), kind: filter.basis ? 'rank' : 'base', order: spec.order, moveId: filter.moveId }
@@ -281,47 +290,27 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks): CardBuild {
     if (spec.refs !== undefined) head.refs = spec.refs
     return head
   }
-  for (const rowId of card.rowIds) {
+  const filterDone = new Set<string>()
+  /** 스윕 행 하나(방어 탭 필터 행이면 필터 상태까지) */
+  const pushRow = (rowId: string) => {
     const spec = plan.rows[rowId]
     if (spec.error !== undefined) {
       rows.push(bareRow(ctx, headOf(spec), 'error', { error: spec.error }))
-      continue
-    }
-    const candidate = spec.gate ?? rowId
-    const state: CandidateState | undefined = states.get(candidate)
-    if (state === 'dropped') continue
-    if (berryIdle(card, spec.moveId, state)) continue
-    if (state === 'probing') {
-      rows.push(bareRow(ctx, headOf(spec), 'pending'))
-      continue
-    }
-    if (state === 'error') {
-      const reason = probeErrors.get(candidate) as ErrorReason
-      if (spec.gate === undefined) rows.push(bareRow(ctx, headOf(spec), 'error', { error: fail(reason) }))
-      else if (!filterDone.has(spec.gate)) {
-        filterDone.add(spec.gate)
-        rows.push(bareRow(ctx, filterHead(spec.gate, spec), 'error', { error: fail(reason) }))
-      }
-      continue
+      return
     }
     if (spec.gate !== undefined) {
       const f = filterState(results, spec.gate)
       if (f.kind === 'pending') {
         rows.push(bareRow(ctx, headOf(spec), 'pending'))
-        continue
+        return
       }
       if (f.kind !== 'passed') {
-        if (filterDone.has(spec.gate)) continue
+        if (filterDone.has(spec.gate)) return
         filterDone.add(spec.gate)
         const head = filterHead(spec.gate, spec)
         if (f.kind === 'error') rows.push(bareRow(ctx, head, 'error', { error: fail(f.result.reason) }))
-        else {
-          const blocked = bareRow(ctx, head, 'ok', { category: f.result.low.category, noChange: true })
-          // 가장 센 기술이 아니지만 선공기라 남은 극단 필터 행도 선공기 표지를 단다(스윕 행과 같은 규칙).
-          if (state === 'priority') blocked.keptAsPriority = true
-          rows.push(blocked)
-        }
-        continue
+        else rows.push(bareRow(ctx, head, 'ok', { category: f.result.low.category, noChange: true }))
+        return
       }
     }
     const stat = spec.sweep?.stat
@@ -329,21 +318,21 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks): CardBuild {
     const ends = results.get(taskKey({ kind: 'ends', rowId }))
     if (ends === undefined) {
       rows.push(bareRow(ctx, headOf(spec), 'pending'))
-      continue
+      return
     }
     if (ends.kind === 'error') {
       rows.push(bareRow(ctx, headOf(spec), 'error', { error: fail(ends.reason) }))
-      continue
+      return
     }
     if (ends.kind !== 'ends') throw new Error(`행 ${rowId}의 양 끝 결과 종류가 ${ends.kind}다`)
     const swept = results.get(taskKey({ kind: 'sweep', rowId, stage: 2 }))
     if (swept === undefined) {
       rows.push(bareRow(ctx, headOf(spec), 'pending'))
-      continue
+      return
     }
     if (swept.kind === 'error') {
       rows.push(bareRow(ctx, headOf(spec), 'error', { error: fail(swept.reason) }))
-      continue
+      return
     }
     if (swept.kind !== 'sweep') throw new Error(`행 ${rowId}의 스윕 결과 종류가 ${swept.kind}다`)
     if (swept.cells.length === 0) throw new Error(`행 ${rowId}의 스윕 칸이 비어 있다`)
@@ -356,59 +345,66 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks): CardBuild {
       const best = bestReachable(ctx, spec, ends, j)
       if (best !== undefined) row.best = best
     }
-    if (state === 'priority') row.keptAsPriority = true
     rows.push(row)
   }
-
-  const fixedOrder = card.rowIds.reduce((m, id) => Math.max(m, plan.rows[id].order + 1), 0)
-  card.fixedIds.forEach((fixedId, i) => {
+  const pushFixed = (fixedId: string, order: number) => {
     const spec = plan.fixed[fixedId]
-    const head: RowHead = { id: JSON.stringify(['fixed', fixedId]), kind: 'base', order: fixedOrder + i, moveId: spec.moveId }
+    const head: RowHead = { id: JSON.stringify(['fixed', fixedId]), kind: 'base', order, moveId: spec.moveId }
     const r = results.get(taskKey({ kind: 'fixed', fixedId }))
-    const state = states.get(fixedId)
-    if (state === 'dropped') return
-    if (berryIdle(card, spec.moveId, state)) return
-    if (r === undefined || state === 'probing') {
-      rows.push(bareRow(ctx, head, 'pending'))
-    } else if (r.kind === 'error') {
-      rows.push(bareRow(ctx, head, 'error', { error: fail(r.reason) }))
-    } else if (r.kind !== 'fixed') {
-      throw new Error(`고정 판정 ${fixedId}의 결과 종류가 ${r.kind}다`)
-    } else {
-      const row = bareRow(ctx, head, 'ok', { category: r.cell.category, noChange: true, fixedCell: r.cell })
-      if (state === 'priority') row.keptAsPriority = true
-      rows.push(row)
-    }
-  })
-
-  rows.sort((a, b) => a.order - b.order)
+    if (r === undefined) rows.push(bareRow(ctx, head, 'pending'))
+    else if (r.kind === 'error') rows.push(bareRow(ctx, head, 'error', { error: fail(r.reason) }))
+    else if (r.kind !== 'fixed') throw new Error(`고정 판정 ${fixedId}의 결과 종류가 ${r.kind}다`)
+    else rows.push(bareRow(ctx, head, 'ok', { category: r.cell.category, noChange: true, fixedCell: r.cell }))
+  }
+  const fixedOrder = card.rowIds.reduce((m, id) => Math.max(m, plan.rows[id].order + 1), 0)
   const settled = pending.stage1.length === 0 && pending.stage2.length === 0
-  const headline = headlineOf(card, rows, slotOrder(plan, card))
-  const view: CardView = { ...base, rows, headline, variable: isVariable(rows), moreRows: Math.max(0, rows.length - 1) }
-  // 안내(notices)가 있는 카드는 행이 없어도 표시한다: 카드 머리가 안내의 유일한 화면 경로다(AC 11a).
-  // 다른 분류 기술이 가장 세 행이 하나도 남지 않은 카드는 뺀다(그 상대의 다른 분류 카드가 보인다).
-  const visible = (rows.length > 0 || card.notices.length > 0) && (card.berry === undefined || berryEngaged(card, states))
-  return { view, displayed: ladder ? settled && visible : visible, mySetReasons: reasons }
-}
 
-/**
- * 반감열매 변형 카드가 보일 자격: 기본 조건에서 고른 가장 센 기술(다른 분류 비교 후보 포함)이 그 열매가 발동하는 기술(triggers)이다.
- * 아직 고르지 못했거나(판정 중·계산 불가) 열매가 발동하지 않는 기술이 가장 세면 열매는 판정에 관여하지 않아 보이지 않는다.
- */
-export function berryEngaged(card: CardSpec, states: ReadonlyMap<string, CandidateState>): boolean {
-  if (card.berry === undefined) return true
-  const base = card.conditions.find((g) => g.id === BASE_CONDITION_ID)
-  const chosen = base?.candidates.find((c) => states.get(c.id) === 'chosen')
-  return chosen !== undefined && card.berry.triggers.includes(chosen.moveId)
-}
+  // 후보가 없는 카드(스피드 탭): 모든 행.
+  if (card.conditions.length === 0) {
+    for (const rowId of card.rowIds) pushRow(rowId)
+    card.fixedIds.forEach((id, i) => pushFixed(id, fixedOrder + i))
+    rows.sort((a, b) => a.order - b.order)
+    const headline = headlineOf(card, rows, slotOrder(plan, card))
+    const view: CardView = { ...base, rows, headline, variable: isVariable(rows), items: [], selected: false }
+    return { view, visible: rows.length > 0 || card.notices.length > 0, ready: ladder ? settled : true, mySetReasons: reasons }
+  }
 
-/**
- * 반감열매 변형 카드 안에서 열매가 관여하지 않는 행: 조건별로 고른 가장 센 기술(또는 함께 남긴 선공기)이 그 열매가 발동하지 않는 기술이면
- * 그 행은 기본 카드의 같은 조건 행과 판정이 같으므로 열매 카드에서 뺀다(랭크 조건 행 포함). 아직 고르지 못한 후보(판정 중)는 남긴다.
- */
-export function berryIdle(card: CardSpec, moveId: string | undefined, state: CandidateState | undefined): boolean {
-  if (card.berry === undefined || moveId === undefined) return false
-  return (state === 'chosen' || state === 'priority') && !card.berry.triggers.includes(moveId)
+  const refs = cardItems(plan, card)
+  const states = itemStates(plan, card, refs, results)
+  const def = cardDefault(plan, card, results, refs)
+  const shown = shownItemKey(refs, def, selected)
+  const isSelected = shown !== undefined && shown === selected
+  const ref = refs.find((r) => r.key === shown)
+  if (ref !== undefined) {
+    const c = ref.candidate
+    const probeError = c.target !== 'fixed' ? results.get(probeKey(c)) : undefined
+    if (probeError?.kind === 'error') {
+      const spec = c.target === 'row' ? plan.rows[c.id] : plan.rows[card.rowIds.find((id) => plan.rows[id].gate === c.id) as string]
+      const head = c.target === 'row' ? headOf(spec) : filterHead(c.id, spec)
+      rows.push(bareRow(ctx, head, 'error', { error: fail(probeError.reason) }))
+    } else if (c.target === 'row') {
+      pushRow(c.id)
+    } else if (c.target === 'filter') {
+      for (const rowId of card.rowIds) if (plan.rows[rowId].gate === c.id) pushRow(rowId)
+    } else {
+      pushFixed(c.id, fixedOrder)
+    }
+  }
+  rows.sort((a, b) => a.order - b.order)
+  const headline: Headline = shown === undefined ? { kind: 'updating' } : headlineOf(card, rows, slotOrder(plan, card))
+  const view: CardView = { ...base, rows, headline, variable: isVariable(rows), items: itemViews(refs, states), selected: isSelected }
+  if (shown !== undefined) view.shownItem = shown
+  if (def.kind === 'ready') {
+    const d: DefaultItemView = { key: def.key, viaPriority: def.viaPriority }
+    const basis = states.find((st) => st.key === def.basis)
+    if (basis?.probe.kind === 'ok') d.basisCell = basis.probe.cell
+    view.defaultItem = d
+  }
+  // 반감열매 변형 카드는 보이는 항목의 기술이 그 열매를 발동시킬 때만 보인다.
+  const engaged = card.berry === undefined || (ref !== undefined && card.berry.triggers.includes(ref.candidate.moveId))
+  const visible = (rows.length > 0 || card.notices.length > 0) && engaged
+  const ready = isSelected || (def.kind === 'ready' && (!ladder || settled))
+  return { view, visible, ready, mySetReasons: reasons }
 }
 
 /** 계획은 기본 행을 슬롯 순(공격 탭 내 기술 슬롯, 방어 탭 상대 기술 사용률 순)으로 먼저 쌓는다. */
@@ -427,7 +423,7 @@ function cardDone(plan: TabPlan, card: CardSpec, results: ResultMap): number {
   let done = 0
   const has = (key: string) => (results.has(key) ? 1 : 0)
   for (const group of card.conditions) {
-    for (const c of group.candidates) if (c.target !== 'fixed') done += has(probeKey(c))
+    for (const c of group.candidates) if (c.target !== 'fixed' && !(c.target === 'row' && plan.rows[c.id].error !== undefined)) done += has(probeKey(c))
   }
   for (const filterId of card.filterIds) {
     done += has(taskKey({ kind: 'extreme', filterId }))
@@ -455,6 +451,8 @@ interface CardMemo {
  */
 export interface TabAssembler {
   invalidate(cardId: string): void
+  /** 사용자 기술 선택(상대 키 opponentKey → 항목 키). 선택이 바뀐 상대의 카드만 다시 계산한다. 바뀐 카드가 있으면 true */
+  setSelections(selections: ReadonlyMap<string, string>): boolean
   /** pendingTasks(plan, results)와 같은 값(카드 순 → 행 순). only가 있으면 그 카드들만 */
   pending(results: ResultMap, only?: (cardId: string) => boolean): PendingTasks
   assemble(results: ResultMap, displaySp?: SpTable): TabView
@@ -462,13 +460,16 @@ export interface TabAssembler {
 
 const sameSp = (a: SpTable, b: SpTable): boolean => STAT_KEYS.every((k) => a[k] === b[k])
 
-export function createTabAssembler(plan: TabPlan): TabAssembler {
+export function createTabAssembler(plan: TabPlan, initialSelections: ReadonlyMap<string, string> = new Map()): TabAssembler {
   const memo = new Map<string, CardMemo>()
   let builtSp: SpTable | null = null
+  let selections = initialSelections
+  const primary = primaryCardIds(plan)
+  const selectedOf = (card: CardSpec) => selections.get(opponentKey(card.opponent))
   const entry = (card: CardSpec, results: ResultMap): CardMemo => {
     let m = memo.get(card.id)
     if (m === undefined) {
-      m = { pending: cardPending(plan, card, results), done: cardDone(plan, card, results) }
+      m = { pending: cardPending(plan, card, results, selectedOf(card)), done: cardDone(plan, card, results) }
       memo.set(card.id, m)
     }
     return m
@@ -476,6 +477,17 @@ export function createTabAssembler(plan: TabPlan): TabAssembler {
   return {
     invalidate(cardId) {
       memo.delete(cardId)
+    },
+    setSelections(next) {
+      let changed = false
+      for (const card of plan.cards) {
+        const k = opponentKey(card.opponent)
+        if (selections.get(k) === next.get(k)) continue
+        memo.delete(card.id)
+        changed = true
+      }
+      selections = next
+      return changed
     },
     pending(results, only) {
       const out = { stage1: [] as RowTask[], stage2: [] as RowTask[], stage3: [] as RowTask[], stage4: [] as RowTask[], stage5: [] as RowTask[] }
@@ -515,8 +527,14 @@ export function createTabAssembler(plan: TabPlan): TabAssembler {
       const ctx: Ctx = { plan, results, displaySp, spSum: STAT_KEYS.reduce((sum, k) => sum + displaySp[k], 0) }
       const builds = plan.cards.map((card, i) => {
         const m = entries[i]
-        m.build ??= buildCard(ctx, card, m.pending)
+        m.build ??= buildCard(ctx, card, m.pending, selectedOf(card))
         return m.build
+      })
+      // 같은 상대의 먼저 계산할 카드(분류마다 기본 배분·사용자 추가·커스텀, 반감열매 변형 제외)가 모두 준비되기 전에는 그 상대를 보이지 않는다:
+      // 처음 보이는 분류(물리·특수)가 두 분류의 기본 항목을 견줘 정해지므로, 한쪽만 준비됐을 때 보이면 분류가 바뀌며 깜박인다.
+      const waiting = new Set<string>()
+      plan.cards.forEach((card, i) => {
+        if (card.berry === undefined && primary.has(card.id) && builds[i].visible && !builds[i].ready) waiting.add(opponentKey(card.opponent))
       })
       const reasons: ErrorReason[] = []
       const seen = new Set<string>()
@@ -531,12 +549,13 @@ export function createTabAssembler(plan: TabPlan): TabAssembler {
         const status: TabStatus = { kind: 'my-set-error', reasons }
         return { ...shell, status, cards: [] }
       }
-      return { ...shell, status: plan.status, cards: builds.filter((b) => b.displayed).map((b) => b.view) }
+      const shown = builds.filter((b, i) => b.visible && b.ready && (plan.cards[i].berry !== undefined || !waiting.has(opponentKey(plan.cards[i].opponent))))
+      return { ...shell, status: plan.status, cards: shown.map((b) => b.view) }
     },
   }
 }
 
 /** displaySp 기본값은 계획 시점 SP. 카드 순서는 계획 순서 그대로다(한 번 조립: 캐시 없음). */
-export function assembleTab(plan: TabPlan, results: ResultMap, displaySp: SpTable = plan.mySp): TabView {
-  return createTabAssembler(plan).assemble(results, displaySp)
+export function assembleTab(plan: TabPlan, results: ResultMap, displaySp: SpTable = plan.mySp, selections: ReadonlyMap<string, string> = new Map()): TabView {
+  return createTabAssembler(plan, selections).assemble(results, displaySp)
 }
