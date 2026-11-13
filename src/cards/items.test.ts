@@ -199,6 +199,16 @@ describe('outspeedsAtMax: 선공기 우선의 스피드 조건(R4-2, PRD AC8)', 
     expect(compareSpeed(game, EXAMPLE_SET, fastest, undefined, { ignoreSpTotal: true }).order).toBe('second')
     expect(outspeedsAtMax(game, EXAMPLE_SET, scarfed)).toBe(true)
   })
+  it('(f) 판정 조건(공격측 상대 특성 날씨)의 날씨로 양쪽 스피드를 비교하고, 어느 쪽이든 구름보기면 날씨 없음(R12, PRD AC34)', () => {
+    const venu = mon({ species: 'venusaur', ability: 'chlorophyll', nature: 'timid', sp: { spa: 32, spe: 32 }, moves: ['gigadrain'] })
+    const nine = mon({ species: 'ninetales', ability: 'drought', nature: 'modest', sp: { spa: 32 }, moves: ['heatwave'] })
+    const sun = { attacker: { tailwind: false }, defender: { tailwind: false }, weather: 'Sun' as const }
+    expect(outspeedsAtMax(game, venu, nine)).toBe(false)
+    expect(outspeedsAtMax(game, venu, nine, sun)).toBe(true)
+    const altaria = mon({ species: 'altaria', ability: 'cloudnine', nature: 'modest', sp: { spa: 32 }, moves: ['dracometeor'] })
+    expect(outspeedsAtMax(game, venu, altaria, sun)).toBe(false)
+    expect(outspeedsAtMax(game, venu, { ...altaria, ability: 'naturalcure' }, sun)).toBe(true)
+  })
 })
 
 describe('실데이터: 목록·기본 항목·직접 선택', () => {

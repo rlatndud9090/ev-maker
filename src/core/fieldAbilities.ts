@@ -43,3 +43,29 @@ export function withAttackerField(c: BattleConditions, attackerAbility: string):
   if (terrain !== 'none') out.terrain = terrain
   return out
 }
+
+/** 접지 판정에 쓰는 쪽: 계산 폼 타입·특성·도구 */
+export interface GroundSide {
+  types: readonly string[]
+  ability: string
+  item?: string
+}
+
+/** 엔진 isGrounded와 같은 규칙(중력은 다루지 않는다): 쇠구슬이면 접지, 아니면 비행 타입·부유·풍선이 아닐 때 접지 */
+export function isGrounded(s: GroundSide): boolean {
+  if (s.item === 'ironball') return true
+  return !s.types.includes('Flying') && s.ability !== 'levitate' && s.item !== 'airballoon'
+}
+
+/**
+ * 공격측 필드를 넣은 우선도: 그래스필드에서 땅에 붙은 공격측의 그래스슬라이더는 +1.
+ * 엔진은 이 증가를 넣지 않으므로(대미지에 영향 없음) 선공기 판단에서만 쓴다.
+ */
+export function fieldPriority(moveId: string, basePriority: number, terrain: Terrain | undefined, attacker: GroundSide): number {
+  return moveId === 'grassyglide' && terrain === 'Grassy' && isGrounded(attacker) ? basePriority + 1 : basePriority
+}
+
+/** 사이코필드에서 땅에 붙은 맞는 쪽에게 우선도 > 0 기술은 무효(엔진 대미지 0과 같은 규칙) */
+export function psychicTerrainBlocks(priority: number, terrain: Terrain | undefined, defender: GroundSide): boolean {
+  return priority > 0 && terrain === 'Psychic' && isGrounded(defender)
+}

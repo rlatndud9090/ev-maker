@@ -8,7 +8,7 @@ import { moveRankParts, rowTitle } from './text'
 interface Props {
   game: Snapshot
   tab: Tab
-  row: Pick<RowView, 'moveId' | 'sweepStat' | 'basis' | 'refs'>
+  row: Pick<RowView, 'moveId' | 'moveType' | 'sweepStat' | 'basis' | 'refs'>
   /** 칩 테두리 안 끝에 붙일 것(기술 선택 버튼의 펼침 화살표) */
   trailing?: ReactNode
 }
@@ -16,7 +16,8 @@ interface Props {
 /** 간단행 기술 라벨: [타입 아이콘][사용자 공격 랭크][기술명][그 밖의 랭크(작게)]. 내 기술 칸처럼 타입색 테두리·배경. */
 export function MoveLabel({ game, tab, row, trailing }: Props) {
   const move = row.moveId !== undefined && Object.prototype.hasOwnProperty.call(game.data.moves, row.moveId) ? game.data.moves[row.moveId] : undefined
-  const type = typeNameOf(move?.type)
+  // 판정에서 바뀐 타입(스킨·웨더볼 등)이 있으면 그것, 없으면 기술 기본 타입
+  const type = typeNameOf(row.moveType ?? move?.type)
   const { own, rest } = moveRankParts(tab, row)
   return (
     <span className="move-chip" data-testid="move-label" data-type={type ? typeSlug(type) : undefined}>

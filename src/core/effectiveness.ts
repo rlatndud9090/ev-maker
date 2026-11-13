@@ -3,6 +3,7 @@ import type { Snapshot } from '../data/schema'
 import { attackEffectiveness, attackMoveType, type MoveTypeField } from './engine'
 import { WEATHER_NEGATING_ABILITIES } from './speed'
 import { CoreInputError } from './errors'
+import { fieldPriority, psychicTerrainBlocks } from './fieldAbilities'
 
 /** 방어측 특성을 무시하는 공격측 특성(틀깨기 계열) */
 export const DEFENDER_ABILITY_IGNORING: readonly string[] = ['moldbreaker', 'turboblaze', 'teravolt']
@@ -49,6 +50,8 @@ export function defenderAbilityFactor(moveType: string, flags: readonly string[]
 export interface EffectivenessDefender {
   types: readonly string[]
   ability: string
+  /** 사이코필드 접지 판정(풍선·쇠구슬)에만 쓴다 */
+  item?: string
 }
 
 /** 대미지가 상성과 무관하게 정해지는 기술(무효만 따른다) */
@@ -56,8 +59,9 @@ const FIXED_DAMAGE_MOVES: readonly string[] = ['seismictoss', 'nightshade', 'sup
 
 /**
  * attacker가 moveId로 defender를 칠 때의 배율 = attackEffectiveness(공격측 특성 타입 변화·기술 특례) × defenderAbilityFactor.
- * attacker의 weather·terrain은 웨더볼·대지의파동 타입에만 쓴다(어느 쪽이든 구름보기·에어록이면 날씨 없음).
- * 도구·테라는 넣지 않는다. 스냅샷에 없는 기술은 CoreInputError, 엔진 타입표에 없는 타입은 CoreError.
+ * attacker의 weather·terrain은 웨더볼·대지의파동 타입과, 사이코필드에서 땅에 붙은 defender에게 우선도 > 0 기술 무효(0)에 쓴다
+ * (어느 쪽이든 구름보기·에어록이면 날씨 없음). 도구는 defender 접지 판정에만, 테라는 넣지 않는다.
+ * 스냅샷에 없는 기술은 CoreInputError, 엔진 타입표에 없는 타입은 CoreError.
  */
 export function effectivenessAgainst(
   game: Snapshot,
@@ -67,6 +71,9 @@ export function effectivenessAgainst(
 ): number {
   if (!Object.prototype.hasOwnProperty.call(game.data.moves, moveId)) throw new CoreInputError('move', `${moveId}은 스냅샷에 없는 기술이다`)
   const move = game.data.moves[moveId]
+  // 공격측 접지는 그래스필드에서만 우선도를 바꾸고 사이코필드와 함께 오지 않으므로 접지로 둔다
+  const priority = fieldPriority(moveId, move.priority, attacker.terrain, { types: [], ability: '' })
+  if (psychicTerrainBlocks(priority, attacker.terrain, defender)) return 0
   const negated = [attacker.ability, defender.ability].some((a) => WEATHER_NEGATING_ABILITIES.includes(a))
   const type = attackMoveType(moveId, move.type, attacker.ability, { weather: negated ? 'none' : attacker.weather, terrain: attacker.terrain })
   const eff = attackEffectiveness(type, defender.types, attacker.ability, moveId)

@@ -946,3 +946,62 @@ describe('planTab: 공격측 특성 날씨·필드(R12·AC33)', () => {
     expect(rilla).toBe('grassysurge')
   })
 })
+
+describe('planTab: 공격측 필드의 우선도·스피드(R12·AC34)', () => {
+  const candidatesOf = (p: TabPlan, opponent: string) =>
+    p.cards.filter((c) => c.opponent.id === opponent).flatMap((c) => c.conditions.flatMap((g) => g.candidates))
+  /** 대표 세트·특성 분포를 ability 하나로 바꾼 래더 항목 */
+  const withAbility = (e: MetaEntry, ability: string): MetaEntry =>
+    syntheticEntry(e, { abilities: { [ability]: 1 }, representative: { ...e.representative, set: { ...e.representative.set, ability } } })
+
+  it('그래스메이커 상대의 그래스슬라이더 후보는 선공기, 같은 상대 우드해머·특성이 다른 상대의 그래스슬라이더는 아니다', () => {
+    const p = planTab(input({ mySet: PLAIN, filters: { topN: 10, selected: ['rillaboom'] } }), 'defense')
+    const cs = candidatesOf(p, 'rillaboom')
+    const glide = cs.filter((c) => c.moveId === 'grassyglide')
+    expect(glide.length).toBeGreaterThan(0)
+    for (const c of glide) expect(c.priority).toBe(true)
+    for (const c of cs.filter((x) => x.moveId === 'woodhammer')) expect(c.priority).toBe(false)
+    const overgrow = withAbility(entryOf('rillaboom'), 'overgrow')
+    const q = planTab(input({ mySet: PLAIN, view: syntheticView(game, bo1.meta, [overgrow]) }), 'defense')
+    const glide2 = candidatesOf(q, 'rillaboom').filter((c) => c.moveId === 'grassyglide')
+    expect(glide2.length).toBeGreaterThan(0)
+    for (const c of glide2) expect(c.priority).toBe(false)
+  })
+
+  it('공격 탭: 내가 그래스메이커면 내 그래스슬라이더 후보가 선공기', () => {
+    const me = mk('rillaboom', 'grassysurge', ['grassyglide', 'woodhammer'], { nature: 'adamant' })
+    const p = planTab(input({ mySet: me, filters: { topN: 3, selected: [] } }), 'attack')
+    const cs = p.cards.flatMap((c) => c.conditions.flatMap((g) => g.candidates))
+    expect(cs.some((c) => c.moveId === 'grassyglide')).toBe(true)
+    for (const c of cs) expect(c.priority, c.moveId).toBe(c.moveId === 'grassyglide')
+  })
+
+  it('사이코메이커 상대의 선공기는 땅에 붙은 나에게 0배라 기본 후보에서 빠지고, 비행 타입·풍선인 나에게는 남는다', () => {
+    const base = withAbility(entryOf('indeedeef'), 'psychicsurge')
+    const e = syntheticEntry(base, { moves: { shares: { fakeout: 0.9, psychic: 0.8, dazzlinggleam: 0.7 }, keptShare: 2.4, excludedShare: 0 } })
+    expect(defenseMoveIds(game, e, PLAIN_ME, 'psychicsurge')).toEqual(['psychic', 'dazzlinggleam'])
+    expect(defenseMoveIds(game, e, PLAIN_ME, 'owntempo')).toEqual(['fakeout', 'psychic', 'dazzlinggleam'])
+    expect(defenseMoveIds(game, e, { ...PLAIN_ME, item: 'airballoon' }, 'psychicsurge')).toEqual(['fakeout', 'psychic', 'dazzlinggleam'])
+    expect(defenseMoveIds(game, e, { types: ['Fire', 'Flying'], ability: 'blaze' }, 'psychicsurge')).toContain('fakeout')
+    // 계획: 풍선을 든 나에게는 속이다 후보가 있다(내 도구가 접지 판정에 들어간다)
+    const view = syntheticView(game, bo1.meta, [e])
+    const moves = (set: PokemonSet) => new Set(candidatesOf(planTab(input({ mySet: set, view }), 'defense'), 'indeedeef').map((c) => c.moveId))
+    expect(moves(PLAIN).has('fakeout')).toBe(false)
+    expect(moves({ ...PLAIN, item: 'airballoon' }).has('fakeout')).toBe(true)
+  })
+
+  it('방어 탭 speedEdge는 공격측(상대) 특성 날씨로 비교한다: 가뭄 상대면 엽록소인 내가 빠르다', () => {
+    const venu = mk('venusaur', 'chlorophyll', ['gigadrain'], { nature: 'timid', sp: { ...ZERO, hp: 2, spa: 32, spe: 32 } })
+    const p = planTab(input({ mySet: venu, filters: { topN: 10, selected: ['ninetales'] } }), 'defense')
+    const cards = p.cards.filter((c) => c.opponent.id === 'ninetales' && c.state === 'ok')
+    expect(cards.length).toBeGreaterThan(0)
+    expect(repAbility(entryOf('ninetales'))).toBe('drought')
+    for (const c of cards) expect(c.speedEdge, c.id).toBe(true)
+    // 같은 상대가 가뭄이 아니면 날씨 없음 기준이라 내가 확실히 빠르지 않다
+    const ff = withAbility(entryOf('ninetales'), 'flashfire')
+    const q = planTab(input({ mySet: venu, view: syntheticView(game, bo1.meta, [ff]) }), 'defense')
+    const qc = q.cards.filter((c) => c.state === 'ok')
+    expect(qc.length).toBeGreaterThan(0)
+    for (const c of qc) expect(c.speedEdge, c.id).toBe(false)
+  })
+})

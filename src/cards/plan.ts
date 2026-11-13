@@ -10,6 +10,7 @@ import {
   normalizeRollSteps,
   validateSet,
   withAttackerField,
+  fieldPriority,
   abilityTerrain,
   abilityWeather,
   type BattleConditions,
@@ -336,9 +337,19 @@ class PlanBuilder {
     return f
   }
 
-  /** priority = 우선도 > 0(스냅샷에 없는 기술은 false). added = 사용자가 추가한 상대 기술 */
-  candidate(target: MoveCandidate['target'], id: string, moveId: string, added?: ReadonlySet<string>): MoveCandidate {
-    const c: MoveCandidate = { target, id, moveId, priority: hasMove(this.game, moveId) && this.game.data.moves[moveId].priority > 0 }
+  /**
+   * priority = 공격측 필드를 넣은 우선도 > 0(fieldPriority: 그래스필드 그래스슬라이더, 스냅샷에 없는 기술은 false).
+   * attacker = 그 판정의 공격측 해결 세트. added = 사용자가 추가한 상대 기술
+   */
+  candidate(target: MoveCandidate['target'], id: string, moveId: string, attacker: ResolvedSet, added?: ReadonlySet<string>): MoveCandidate {
+    const priority =
+      hasMove(this.game, moveId) &&
+      fieldPriority(moveId, this.game.data.moves[moveId].priority, this.damageConditions(attacker.ability).terrain, {
+        types: attacker.species.types,
+        ability: attacker.ability,
+        item: attacker.item,
+      }) > 0
+    const c: MoveCandidate = { target, id, moveId, priority }
     if (added?.has(moveId) === true) c.added = true
     return c
   }
@@ -350,8 +361,9 @@ class PlanBuilder {
     groups.push({ id, candidates })
   }
 
-  speedEdge(opponentSet: PokemonSet): boolean {
-    return outspeedsAtMax(this.game, this.mySet, opponentSet)
+  /** 방어 탭 판정의 공격측(상대) 계산 특성 날씨·필드 기준 스피드 비교(R12) */
+  speedEdge(opponentSet: PokemonSet, opponentAbility: string): boolean {
+    return outspeedsAtMax(this.game, this.mySet, opponentSet, this.damageConditions(opponentAbility))
   }
 
   addFixed(card: CardSpec, moveId: string, opponentSet: PokemonSet): string {
@@ -430,7 +442,7 @@ class PlanBuilder {
       BASE_CONDITION,
       slots.map((slot) => {
         const fixedId = fixedOf.get(slot.moveId)
-        return fixedId === undefined ? this.candidate('row', baseRows.get(slot.moveId) as string, slot.moveId) : this.candidate('fixed', fixedId, slot.moveId)
+        return fixedId === undefined ? this.candidate('row', baseRows.get(slot.moveId) as string, slot.moveId, this.me) : this.candidate('fixed', fixedId, slot.moveId, this.me)
       }),
     )
     if (base.length === 0) return
@@ -449,7 +461,7 @@ class PlanBuilder {
         const extra: Partial<RowSpec> = { kind: 'rank', basis: v.basis }
         if (v.whiteHerbConsumed && isMultihit(this.game, slot.moveId)) extra.error = WHITE_HERB_MULTIHIT
         const r = row(slot, attacker, defender, extra, ['rank', slot.moveId, ...meansParts(v.basis)])
-        candidates.push(this.candidate('row', r.id, slot.moveId))
+        candidates.push(this.candidate('row', r.id, slot.moveId, this.me))
       }
       this.addCondition(card, rankCondition(v.basis), candidates)
     }
@@ -468,7 +480,7 @@ class PlanBuilder {
     const resolved = seed.resolved
     if (!resolved) return
     const oppSet = seed.assumption.set
-    card.speedEdge = this.speedEdge(oppSet)
+    card.speedEdge = this.speedEdge(oppSet, resolved.ability)
     const conditions = this.damageConditions(resolved.ability)
     const def = defenseStatOf(seed.category as Category)
     const inCategory = (slot: MoveSlot) => slot.refs?.defense === def
@@ -497,7 +509,7 @@ class PlanBuilder {
           error,
         }
         if (basis) spec.basis = basis
-        return this.candidate('row', this.addRow(card, parts, spec).id, slot.moveId, added)
+        return this.candidate('row', this.addRow(card, parts, spec).id, slot.moveId, resolved, added)
       }
       const natures = this.natures(def, 'damage', refs, ability)
       const f = this.addFilter(card, ['extreme', ...parts], {
@@ -528,7 +540,7 @@ class PlanBuilder {
         if (basis) spec.basis = basis
         this.addRow(card, [...parts, stat], spec)
       }
-      return this.candidate('filter', f.id, slot.moveId, added)
+      return this.candidate('filter', f.id, slot.moveId, resolved, added)
     }
     const group = (id: string, attacker: PokemonSet, defender: PokemonSet, basis: RankBasis | undefined, herbConsumed: boolean) => {
       const candidates: MoveCandidate[] = []
@@ -555,7 +567,7 @@ class PlanBuilder {
             dependsOn: [],
             error: slot.error,
           })
-          candidates.push(this.candidate('row', r.id, slot.moveId, added))
+          candidates.push(this.candidate('row', r.id, slot.moveId, resolved, added))
         }
       }
       this.addCondition(card, id, candidates)
@@ -618,8 +630,9 @@ class PlanBuilder {
 /**
  * 방어 탭 선공기 우선 조건: 상대 세트를 스피드 SP 최대·스피드 상승 성격으로 바꾸고 구애스카프를 빼도(다른 도구·특성·폼 유지,
  * 랭크·순풍 없음, SP 합계 상한 무시) 내 현재 스피드(도구·특성 포함)보다 엄격히 느리다. 스피드 비교를 지원하지 않는 세트면 false.
+ * conditions = 그 판정의 조건(공격측 특성 날씨·필드: 쓸쓸이·엽록소 등). 구름보기·에어록은 compareSpeed가 반영한다.
  */
-export function outspeedsAtMax(game: Snapshot, mySet: PokemonSet, opponentSet: PokemonSet): boolean {
+export function outspeedsAtMax(game: Snapshot, mySet: PokemonSet, opponentSet: PokemonSet, conditions?: BattleConditions): boolean {
   const fastest: PokemonSet = {
     ...opponentSet,
     sp: { ...opponentSet.sp, spe: game.manifest.rules.spMaxPerStat },
@@ -627,7 +640,7 @@ export function outspeedsAtMax(game: Snapshot, mySet: PokemonSet, opponentSet: P
   }
   if (fastest.item === SCARF) delete fastest.item
   try {
-    const r = compareSpeed(game, mySet, fastest, undefined, { ignoreSpTotal: true })
+    const r = compareSpeed(game, mySet, fastest, conditions, { ignoreSpTotal: true })
     return r.defenderSpeed < r.attackerSpeed
   } catch (e) {
     errorReasons(e)
@@ -717,8 +730,8 @@ const isStatus = (game: Snapshot, moveId: string): boolean => hasMove(game, move
 
 /**
  * 방어 탭 래더 상대 기본 후보(사용률 순, 동률 id 순): 변화기를 뺀 기술 중 사용률 ≥ DEFENSE_MOVE_SHARE_MIN이고 나에게 배율 ≥ 1
- * (effectivenessAgainst: 상대 특성 타입 변화·상대 특성 날씨·필드의 웨더볼·대지의파동 타입·기술 특례 × 내 특성 보정). 하나도 없으면 변화기를 뺀 사용률 1위 하나.
- * me = 내 계산 폼 타입·특성, opponentAbility = 상대 대표 세트의 계산 특성. 스냅샷에 없거나 배율을 낼 수 없는 기술은 배율 조건 없이 남긴다(계산 불가 항목).
+ * (effectivenessAgainst: 상대 특성 타입 변화·상대 특성 날씨·필드의 웨더볼·대지의파동 타입·사이코필드 접지 선공기 무효·기술 특례 × 내 특성 보정).
+ * 하나도 없으면 변화기를 뺀 사용률 1위 하나. me = 내 계산 폼 타입·특성·도구(접지), opponentAbility = 상대 대표 세트의 계산 특성. 스냅샷에 없거나 배율을 낼 수 없는 기술은 배율 조건 없이 남긴다(계산 불가 항목).
  */
 export function defenseMoveIds(game: Snapshot, entry: MetaEntry, me: EffectivenessDefender, opponentAbility: string): string[] {
   const ranked = Object.entries(entry.moves.shares)
@@ -796,7 +809,7 @@ export function planTab(input: CardInput, tab: Tab): TabPlan {
       }
     }
   } else if (tab === 'defense') {
-    const myDefender = { types: me.species.types, ability: me.ability }
+    const myDefender: EffectivenessDefender = { types: me.species.types, ability: me.ability, item: me.item }
     for (const opp of opponents) {
       const notices: MoveNotice[] = []
       let moveIds: readonly string[]

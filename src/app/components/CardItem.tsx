@@ -640,7 +640,7 @@ function BundleList({ tab, group, card, rollSteps, onSelect, dispatch, spMax, op
 function ShownMove({ game, tab, group, card, rollSteps, items, onChooseItem, onResetItem, dispatch, testId }: Pick<Props, 'game' | 'tab' | 'group' | 'card' | 'rollSteps' | 'items' | 'onChooseItem' | 'onResetItem' | 'dispatch'> & { testId: string }) {
   const shown = items.find((g) => g.item.key === card.shownItem)
   if (shown === undefined) return null
-  const row = { moveId: shown.item.moveId, basis: shown.item.basis, ...(card.rows[0]?.refs === undefined ? {} : { refs: card.rows[0].refs }) }
+  const row = { moveId: shown.item.moveId, moveType: shown.item.moveType, basis: shown.item.basis, ...(card.rows[0]?.refs === undefined ? {} : { refs: card.rows[0].refs }) }
   const opponentId = card.opponent.id
   const adding: MoveAdding | undefined =
     tab === 'defense' && card.opponent.source === 'ladder'

@@ -279,6 +279,20 @@ function oracleDefault(items: readonly OracleItem[], priorityRule: boolean, varO
   return pq(pre[0].moveId)
 }
 
+/** 오라클용 접지(PRD R12): 쇠구슬이면 접지, 아니면 비행 타입·부유·풍선이 아닐 때 */
+const oracleGrounded = (types: readonly string[], ability: string, item: string | undefined): boolean =>
+  item === 'ironball' || (!types.includes('Flying') && ability !== 'levitate' && item !== 'airballoon')
+
+/** 오라클용 선공기(PRD R12): 우선도 > 0, 또는 그래스메이커 공격측이 땅에 붙어 쓰는 그래스슬라이더 */
+function oraclePriority(plan: TabPlan, c: MoveCandidate): boolean {
+  if (!Object.prototype.hasOwnProperty.call(game.data.moves, c.moveId)) return false
+  if (game.data.moves[c.moveId].priority > 0) return true
+  if (c.moveId !== 'grassyglide') return false
+  const attacker = c.target === 'filter' ? plan.filters[c.id].attacker : c.target === 'fixed' ? plan.fixed[c.id].attacker : plan.rows[c.id].attacker
+  const r = validateSet(game, attacker, IGNORE_TOTAL)
+  return r.ability === 'grassysurge' && oracleGrounded(r.species.types, r.ability, r.item)
+}
+
 function oracleItems(plan: TabPlan, card: CardSpec): OracleItem[] {
   const moveOrder = new Map<string, number>()
   for (const g of card.conditions) for (const c of g.candidates) if (!moveOrder.has(c.moveId)) moveOrder.set(c.moveId, moveOrder.size)
@@ -289,7 +303,7 @@ function oracleItems(plan: TabPlan, card: CardSpec): OracleItem[] {
         key: JSON.stringify([c.moveId, g.id]),
         moveId: c.moveId,
         rankBefore: g.id === JSON.stringify(['base']),
-        priority: Object.prototype.hasOwnProperty.call(game.data.moves, c.moveId) && game.data.moves[c.moveId].priority > 0,
+        priority: oraclePriority(plan, c),
         cand: c,
         probe: coreProbe(plan, c),
         moveOrder: moveOrder.get(c.moveId) as number,
@@ -620,6 +634,8 @@ const ORACLE_WEATHER_BALL: Record<string, string> = { drought: 'Fire', desolatel
 const ORACLE_TERRAIN_PULSE: Record<string, string> = { electricsurge: 'Electric', hadronengine: 'Electric', psychicsurge: 'Psychic', grassysurge: 'Grass', mistysurge: 'Fairy' }
 function oracleMoveType(m: string, baseType: string, attackerAbility: string, defenderAbility: string): string {
   const noWeather = ['cloudnine', 'airlock'].includes(attackerAbility) || ['cloudnine', 'airlock'].includes(defenderAbility)
+  // 메가솔라: 날씨와 무관하게 쾌청 취급(웨더볼 불꽃)
+  if (m === 'weatherball' && attackerAbility === 'megasol') return 'Fire'
   if (m === 'weatherball') return (noWeather ? undefined : ORACLE_WEATHER_BALL[attackerAbility]) ?? baseType
   if (m === 'terrainpulse') return ORACLE_TERRAIN_PULSE[attackerAbility] ?? baseType
   return attackMoveType(m, baseType, attackerAbility)
@@ -635,6 +651,8 @@ function defenseCandidates(view: MetaView, e: MetaEntry, mySet: PokemonSet): str
     .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
   const factor = (m: string): number => {
     const move = game.data.moves[m]
+    // 사이코메이커 공격측의 선공기는 땅에 붙은 나에게 무효
+    if (opp === 'psychicsurge' && move.priority > 0 && oracleGrounded(me.species.types, me.ability, me.item)) return 0
     const type = oracleMoveType(m, move.type, opp, me.ability)
     const eff = attackEffectiveness(type, me.species.types, opp, m)
     if (['moldbreaker', 'turboblaze', 'teravolt'].includes(opp)) return eff

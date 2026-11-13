@@ -98,6 +98,8 @@ Status: draft
 - 리뷰 예외(기록): 현재 성격이 B/D 하락이거나 스냅샷에 없는 성격이면 내구 합계 띠를 무보정 변형 쌍 결과로 칠하고 안내만 붙인다(현재 성격 쌍은 추가 계산하지 않음). 두 행이 모두 변화 없음으로 정해졌는데 변형 오류가 있으면 상세는 "계산 불가", 간단행 배지는 그대로(후속). 종 교체 시 상태이상·랭크는 초안이 늘 none·0이라 넘어올 값이 없다.
 - 2026-11-14 `speciesMoveFill`(종 교체 시 기술만 채우기) 삭제 — `representativeDraft`가 대체. 메가 폼에서 기억 없는 종으로 떠날 때 스톤 비우기는 `speciesDraft.test.ts` 단위 테스트로 덮는다(e2e `product.spec.ts` 메가 도구 기대값은 기억 복원으로 바뀜).
 - 2026-11-14 R12 구현(ADR 결정 7): `src/core/fieldAbilities.ts`(`abilityWeather`·`abilityTerrain`·`withAttackerField`), 모든 대미지 판정 조건은 `PlanBuilder.damageConditions(공격측 해결 특성)` 경유(스피드 탭 제외), 웨더볼·대지의파동 타입(메가솔라 포함)을 `attackMoveType`·후보 배율·반감열매 판정에 반영. 캐시 키는 조건 전체라 자동. 예외: 델타스트림·강한 날씨는 엔진(champions) 미지원으로 각각 무시·쾌청/비 근사(현재 스냅샷에 해당 특성 없음). 대지의파동 타입은 공격측 접지를 보지 않는다(필드 설정 포켓몬이 모두 접지).
+- 2026-11-14 R12 보강·R13: `fieldPriority`(그래스필드 그래스슬라이더 +1, 공격측 접지)·`psychicTerrainBlocks`(사이코필드 선공기 → 접지 대상 무효, 후보 배율 0)·`isGrounded`(엔진 규칙, 중력 제외), 방어 탭 `outspeedsAtMax`에 공격측 날씨·필드 조건. 표시 타입 `judgedMoveType`(판정 spec의 공격측 계산 특성·조건) → `RowView.moveType`·`ItemView.moveType`, 내 기술 칸은 `ui/moveType.ts`. 성능(2026-11-14): 공격 첫 카드 76ms·완료 624ms, 방어 18·587ms, 스피드 19·305ms, Long Task 0ms.
+- 후속(리뷰 MEDIUM): acceptance 오라클이 `card.speedEdge`를 제품 값 그대로 써서 날씨 반영 스피드 비교를 독립 검증하지 않는다. 사이코필드 선공기 무효는 실데이터 해당 상대(벽기리F 속이다 0.75%)가 기준 미만이라 합성 단위 테스트로만 검증된다.
 
 ## 검증
 

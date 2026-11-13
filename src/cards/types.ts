@@ -453,6 +453,8 @@ export interface RowView {
   kind: RowKind
   order: number
   moveId?: string
+  /** 판정에서 실제 쓰는 기술 타입(공격측 특성·날씨·필드 반영, attackMoveType). 스냅샷에 없는 기술이면 없음 */
+  moveType?: string
   sweepStat?: StatId
   /** 기술 분류와 참조가 다를 때 표기용(예: 사이코쇼크 → 상대 def) */
   refs?: MoveStatRefs
@@ -584,6 +586,8 @@ export interface ItemView {
   /** items.itemKey(기술, 조건) — 같은 상대의 모든 카드에서 같다 */
   key: string
   moveId: string
+  /** 그 항목 판정의 기술 타입(RowView.moveType과 같은 규칙) */
+  moveType?: string
   /** 랭크 후 항목이면 그 랭크 근거 */
   basis?: RankBasis
   /** 우선도 > 0 */

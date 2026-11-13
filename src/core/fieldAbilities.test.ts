@@ -6,6 +6,9 @@ import {
   attackMoveType,
   calcDamage,
   effectivenessAgainst,
+  fieldPriority,
+  isGrounded,
+  psychicTerrainBlocks,
   validateSet,
   withAttackerField,
   type BattleConditions,
@@ -103,5 +106,54 @@ describe('AC33 공격측 특성 날씨·필드 판정', () => {
     expect(effectivenessAgainst(MC, 'weatherball', { ability: 'drought', weather: 'Sun' }, { types: ['Dark', 'Steel'], ability: 'cloudnine' })).toBe(0.5)
     expect(effectivenessAgainst(MC, 'weatherball', { ability: 'drought', weather: 'Sun' }, { types: ['Grass'], ability: 'flashfire' })).toBe(0)
     expect(effectivenessAgainst(MC, 'terrainpulse', { ability: 'psychicsurge', terrain: 'Psychic' }, { types: ['Fighting'], ability: 'guts' })).toBe(2)
+  })
+})
+
+describe('AC34 공격측 필드의 우선도(R12)', () => {
+  const grounded = { types: ['Dragon', 'Ground'], ability: 'roughskin' }
+  const flying = { types: ['Fire', 'Flying'], ability: 'blaze' }
+
+  it('접지: 비행 타입·부유·풍선이면 아니고, 쇠구슬이면 비행이어도 접지', () => {
+    expect(isGrounded(grounded)).toBe(true)
+    expect(isGrounded(flying)).toBe(false)
+    expect(isGrounded({ ...grounded, ability: 'levitate' })).toBe(false)
+    expect(isGrounded({ ...grounded, item: 'airballoon' })).toBe(false)
+    expect(isGrounded({ ...flying, item: 'ironball' })).toBe(true)
+  })
+
+  it('그래스슬라이더는 그래스필드에서 땅에 붙은 공격측만 +1, 다른 기술·필드는 그대로', () => {
+    expect(fieldPriority('grassyglide', 0, 'Grassy', grounded)).toBe(1)
+    expect(fieldPriority('grassyglide', 0, 'none', grounded)).toBe(0)
+    expect(fieldPriority('grassyglide', 0, undefined, grounded)).toBe(0)
+    expect(fieldPriority('grassyglide', 0, 'Psychic', grounded)).toBe(0)
+    expect(fieldPriority('grassyglide', 0, 'Grassy', flying)).toBe(0)
+    expect(fieldPriority('woodhammer', 0, 'Grassy', grounded)).toBe(0)
+    expect(fieldPriority('fakeout', 3, 'Grassy', flying)).toBe(3)
+  })
+
+  it('사이코필드 무효: 우선도 > 0 기술 × 땅에 붙은 맞는 쪽일 때만', () => {
+    expect(psychicTerrainBlocks(1, 'Psychic', grounded)).toBe(true)
+    expect(psychicTerrainBlocks(0, 'Psychic', grounded)).toBe(false)
+    expect(psychicTerrainBlocks(1, 'Psychic', flying)).toBe(false)
+    expect(psychicTerrainBlocks(1, 'Psychic', { ...grounded, item: 'airballoon' })).toBe(false)
+    expect(psychicTerrainBlocks(1, 'Grassy', grounded)).toBe(false)
+  })
+
+  it('엔진: 사이코메이커 공격측의 선공기(속이다)는 땅에 붙은 대상에 무효(immune), 비행 타입·풍선 대상에는 대미지가 있다', () => {
+    const indeedee = mkSet({ species: 'indeedeef', ability: 'psychicsurge', nature: 'modest', sp: { atk: 32 }, moves: ['fakeout'] })
+    expect(calcDamage(MC, indeedee, garchomp, 'fakeout', withAttackerField(BASE, 'psychicsurge')).kind).toBe('immune')
+    expect(judged({ ...indeedee, ability: 'owntempo' }, garchomp, 'fakeout').max).toBeGreaterThan(0)
+    const zard = mkSet({ species: 'charizard', ability: 'blaze', sp: { hp: 2 } })
+    expect(judged(indeedee, zard, 'fakeout').max).toBeGreaterThan(0)
+    expect(judged(indeedee, { ...garchomp, item: 'airballoon' }, 'fakeout').max).toBeGreaterThan(0)
+  })
+
+  it('후보 배율: 사이코필드 공격측 선공기는 땅에 붙은 나에게 0, 비행·풍선이면 타입 배율 그대로, 필드가 없으면 그대로', () => {
+    const psychic = { ability: 'psychicsurge', terrain: 'Psychic' as const }
+    expect(effectivenessAgainst(MC, 'suckerpunch', psychic, grounded)).toBe(0)
+    expect(effectivenessAgainst(MC, 'suckerpunch', { ability: 'psychicsurge' }, grounded)).toBe(1)
+    expect(effectivenessAgainst(MC, 'suckerpunch', psychic, flying)).toBe(1)
+    expect(effectivenessAgainst(MC, 'suckerpunch', psychic, { ...grounded, item: 'airballoon' })).toBe(1)
+    expect(effectivenessAgainst(MC, 'psychic', psychic, grounded)).toBe(1)
   })
 })

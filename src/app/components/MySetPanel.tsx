@@ -5,6 +5,7 @@ import type { Snapshot, StatId, StatTable } from '../../data/schema'
 import type { MetaView } from '../../meta'
 import { STAT_LABEL, typeNameOf, typeSlug } from '../../ui/labels'
 import { TypeIcon } from '../../ui/TypeIcon'
+import { calcAbilityOf, myMoveType } from '../../ui/moveType'
 import { heldItemIds, namesOf, pickSpecies } from '../../ui/names'
 import { choiceOf, natureIdFor, refreshAuto, toggleMinus, togglePlus, type NatureChoice, type NatureStat } from '../../ui/natureToggle'
 import { MOVE_SLOTS, parseNumber, toPokemonSet, type SetDraft } from '../../ui/setDraft'
@@ -86,9 +87,10 @@ export function MySetPanel({ game, view, draft, dispatch, reasons, onDisplaySp }
   const moveIndex = searchIndexOf(game.data.moves, base?.learnset)
   const notes = useMemo(() => myMeansNotes(game, set), [game, set])
 
+  const calcAbility = useMemo(() => calcAbilityOf(game, set), [game, set])
   const moveTypeAt = (i: number) => {
     const id = names.moves.resolve(draft.moves[i] ?? '')
-    return typeNameOf(id === undefined ? undefined : game.data.moves[id]?.type)
+    return typeNameOf(id === undefined ? undefined : myMoveType(game, id, calcAbility))
   }
   const moveIdsOf = (moves: readonly string[]) => moves.filter((m) => m.trim() !== '').map((m) => names.moves.resolve(m) ?? m)
   const choice = choiceOf(game, draft.nature, draft.natureMinusAuto === true)

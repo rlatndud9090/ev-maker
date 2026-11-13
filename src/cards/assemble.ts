@@ -1,6 +1,6 @@
 // 계획 + 행 작업 결과 → 탭 뷰. 판정을 다시 하지 않고 표시용 SP로 산술·조회만 한다. 비용 O(행 × 33).
-import type { SpTable } from '../core'
-import type { StatId } from '../data/schema'
+import { WEATHER_NEGATING_ABILITIES, attackMoveType, validateSet, type BattleConditions, type PokemonSet, type SpTable } from '../core'
+import type { Snapshot, StatId } from '../data/schema'
 import { cardItems, compareItems, itemStates, type CardItemRef, type ItemState } from './items'
 import {
   cardDefault,
@@ -96,11 +96,42 @@ function nearestOf(boundaries: readonly BoundaryView[]): RowView['nearest'] {
   return nearest
 }
 
-type RowHead = Pick<RowView, 'id' | 'kind' | 'order' | 'moveId' | 'sweepStat' | 'refs' | 'basis'>
+// 계획의 세트 객체는 바뀌지 않으므로 세트별로 한 번만 해석한다.
+const calcAbilities = new WeakMap<PokemonSet, string>()
 
-function headOf(spec: RowSpec): RowHead {
+/** 계산 특성(메가면 메가 폼 특성). 해석할 수 없으면 세트 특성 그대로 */
+function calcAbilityOf(game: Snapshot, set: PokemonSet): string {
+  const hit = calcAbilities.get(set)
+  if (hit !== undefined) return hit
+  let ability = set.ability
+  try {
+    ability = validateSet(game, set, { ignoreSpTotal: true }).ability
+  } catch {
+    // 계산 불가 세트: 세트 특성 그대로
+  }
+  calcAbilities.set(set, ability)
+  return ability
+}
+
+/**
+ * 판정에서 실제 쓰는 기술 타입(PRD R13): 공격측 계산 특성(스킨 등)과 판정 조건의 날씨·필드(공격측 특성 유도, ADR 결정 7).
+ * 양쪽 중 날씨 무효 특성이 있으면 날씨 없음(엔진 규칙). 스냅샷에 없는 기술이면 undefined.
+ */
+export function judgedMoveType(game: Snapshot, moveId: string, spec: { attacker: PokemonSet; defender: PokemonSet; conditions: BattleConditions }): string | undefined {
+  if (!Object.prototype.hasOwnProperty.call(game.data.moves, moveId)) return undefined
+  const attacker = calcAbilityOf(game, spec.attacker)
+  const defender = calcAbilityOf(game, spec.defender)
+  const negated = WEATHER_NEGATING_ABILITIES.some((a) => a === attacker || a === defender)
+  return attackMoveType(moveId, game.data.moves[moveId].type, attacker, { weather: negated ? 'none' : spec.conditions.weather, terrain: spec.conditions.terrain })
+}
+
+type RowHead = Pick<RowView, 'id' | 'kind' | 'order' | 'moveId' | 'moveType' | 'sweepStat' | 'refs' | 'basis'>
+
+function headOf(game: Snapshot, spec: RowSpec): RowHead {
   const head: RowHead = { id: spec.id, kind: spec.kind, order: spec.order }
   if (spec.moveId !== undefined) head.moveId = spec.moveId
+  const moveType = spec.moveId === undefined ? undefined : judgedMoveType(game, spec.moveId, spec)
+  if (moveType !== undefined) head.moveType = moveType
   if (spec.sweep !== undefined) head.sweepStat = spec.sweep.stat
   if (spec.refs !== undefined) head.refs = spec.refs
   if (spec.basis !== undefined) head.basis = spec.basis
@@ -248,7 +279,7 @@ function sweptRow(ctx: Ctx, spec: RowSpec, stat: StatId, j: RowJudgements, noCha
   const current: RowView['current'] = { sp }
   const at = views.find((c) => c.sp === sp)
   if (at !== undefined) current.category = at.category
-  const row: RowView = { ...headOf(spec), status: stale ? 'stale' : 'ok', noChange, cells: views, current, boundaries, nearest: nearestOf(boundaries) }
+  const row: RowView = { ...headOf(ctx.plan.game, spec), status: stale ? 'stale' : 'ok', noChange, cells: views, current, boundaries, nearest: nearestOf(boundaries) }
   const target = noChange ? undefined : targetOf(ctx, spec, stat, j, at)
   if (target !== undefined) row.target = target
   return row
@@ -315,11 +346,15 @@ function cardError(card: CardSpec): ErrorReason {
 }
 
 /** 항목 상태 → 목록 항목(가장 세게 치는 순) */
-function itemViews(refs: readonly CardItemRef[], states: readonly ItemState[]): ItemView[] {
+function itemViews(plan: TabPlan, refs: readonly CardItemRef[], states: readonly ItemState[]): ItemView[] {
   const byKey = new Map(refs.map((r) => [r.key, r]))
   return [...states].sort(compareItems).map((st) => {
     const ref = byKey.get(st.key) as CardItemRef
     const v: ItemView = { key: st.key, moveId: st.moveId, priority: st.priority, status: st.probe.kind }
+    const c = ref.candidate
+    const spec = c.target === 'row' ? plan.rows[c.id] : c.target === 'filter' ? plan.filters[c.id] : plan.fixed[c.id]
+    const moveType = spec === undefined ? undefined : judgedMoveType(plan.game, st.moveId, spec)
+    if (moveType !== undefined) v.moveType = moveType
     if (ref.basis !== undefined) v.basis = ref.basis
     if (ref.candidate.added === true) v.added = true
     if (st.probe.kind === 'ok' || st.probe.kind === 'immune') v.cell = st.probe.cell
@@ -364,6 +399,8 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
     const head: RowHead = { id: JSON.stringify(['filter', gate]), kind: filter.basis ? 'rank' : 'base', order: spec.order, moveId: filter.moveId }
     if (filter.basis !== undefined) head.basis = filter.basis
     if (spec.refs !== undefined) head.refs = spec.refs
+    const moveType = judgedMoveType(plan.game, filter.moveId, filter)
+    if (moveType !== undefined) head.moveType = moveType
     return head
   }
   const filterDone = new Set<string>()
@@ -371,13 +408,13 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
   const pushRow = (rowId: string) => {
     const spec = plan.rows[rowId]
     if (spec.error !== undefined) {
-      rows.push(bareRow(ctx, headOf(spec), 'error', { error: spec.error }))
+      rows.push(bareRow(ctx, headOf(ctx.plan.game, spec), 'error', { error: spec.error }))
       return
     }
     if (spec.gate !== undefined) {
       const f = filterState(results, spec.gate)
       if (f.kind === 'pending') {
-        rows.push(bareRow(ctx, headOf(spec), 'pending'))
+        rows.push(bareRow(ctx, headOf(ctx.plan.game, spec), 'pending'))
         return
       }
       if (f.kind !== 'passed') {
@@ -393,21 +430,21 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
     if (stat === undefined) throw new Error(`행 ${rowId}에 스윕 대상이 없다`)
     const ends = results.get(taskKey({ kind: 'ends', rowId }))
     if (ends === undefined) {
-      rows.push(bareRow(ctx, headOf(spec), 'pending'))
+      rows.push(bareRow(ctx, headOf(ctx.plan.game, spec), 'pending'))
       return
     }
     if (ends.kind === 'error') {
-      rows.push(bareRow(ctx, headOf(spec), 'error', { error: fail(ends.reason) }))
+      rows.push(bareRow(ctx, headOf(ctx.plan.game, spec), 'error', { error: fail(ends.reason) }))
       return
     }
     if (ends.kind !== 'ends') throw new Error(`행 ${rowId}의 양 끝 결과 종류가 ${ends.kind}다`)
     const swept = results.get(taskKey({ kind: 'sweep', rowId, stage: 2 }))
     if (swept === undefined) {
-      rows.push(bareRow(ctx, headOf(spec), 'pending'))
+      rows.push(bareRow(ctx, headOf(ctx.plan.game, spec), 'pending'))
       return
     }
     if (swept.kind === 'error') {
-      rows.push(bareRow(ctx, headOf(spec), 'error', { error: fail(swept.reason) }))
+      rows.push(bareRow(ctx, headOf(ctx.plan.game, spec), 'error', { error: fail(swept.reason) }))
       return
     }
     if (swept.kind !== 'sweep') throw new Error(`행 ${rowId}의 스윕 결과 종류가 ${swept.kind}다`)
@@ -426,6 +463,8 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
   const pushFixed = (fixedId: string, order: number) => {
     const spec = plan.fixed[fixedId]
     const head: RowHead = { id: JSON.stringify(['fixed', fixedId]), kind: 'base', order, moveId: spec.moveId }
+    const moveType = judgedMoveType(plan.game, spec.moveId, spec)
+    if (moveType !== undefined) head.moveType = moveType
     const r = results.get(taskKey({ kind: 'fixed', fixedId }))
     if (r === undefined) rows.push(bareRow(ctx, head, 'pending'))
     else if (r.kind === 'error') rows.push(bareRow(ctx, head, 'error', { error: fail(r.reason) }))
@@ -457,7 +496,7 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
     const probeError = c.target !== 'fixed' ? results.get(probeKey(c)) : undefined
     if (probeError?.kind === 'error') {
       const spec = c.target === 'row' ? plan.rows[c.id] : plan.rows[card.rowIds.find((id) => plan.rows[id].gate === c.id) as string]
-      const head = c.target === 'row' ? headOf(spec) : filterHead(c.id, spec)
+      const head = c.target === 'row' ? headOf(ctx.plan.game, spec) : filterHead(c.id, spec)
       rows.push(bareRow(ctx, head, 'error', { error: fail(probeError.reason) }))
     } else if (c.target === 'row') {
       pushRow(c.id)
@@ -470,7 +509,7 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
   }
   rows.sort((a, b) => a.order - b.order)
   const headline: Headline = shown === undefined ? { kind: 'updating' } : headlineOf(card, rows, slotOrder(plan, card))
-  const view: CardView = { ...base, rows, headline, variable: isVariable(rows), items: itemViews(refs, states), selected: isSelected }
+  const view: CardView = { ...base, rows, headline, variable: isVariable(rows), items: itemViews(plan, refs, states), selected: isSelected }
   if (shown !== undefined) view.shownItem = shown
   if (pair !== undefined) view.pair = pair
   if (def.kind === 'ready') {

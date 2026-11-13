@@ -38,4 +38,4 @@ export {
   typeEffectiveness,
   type MoveTypeField,
 } from './engine'
-export { abilityTerrain, abilityWeather, withAttackerField } from './fieldAbilities'
+export { abilityTerrain, abilityWeather, fieldPriority, isGrounded, psychicTerrainBlocks, withAttackerField, type GroundSide } from './fieldAbilities'
