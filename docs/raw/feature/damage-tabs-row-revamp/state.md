@@ -1,8 +1,8 @@
 ---
 title: "공격·방어 탭 판정 행 기능 확장과 상세 화면 가시성 개편(상대 기술 표시·설정, 화력 도구 행)"
 date: "2026-11-13"
-stage: kickoff
-prd_status: draft
+stage: prd-review
+prd_status: review
 adr_status: proposed
 ---
 
@@ -41,6 +41,7 @@ adr_status: proposed
 ## 단계 로그 (append-only)
 
 - 2026-11-13 kickoff: raw 골격 생성
+- 2026-11-13 prd-review: 1단계(판정 행 기술 선택) PRD 작성 — 사용자 결정 반영, 적대 리뷰(blocker 2·major 8) 반영. ADR 필요(행 모델·계산 범위·선택 상태·화면 배치)
 
 ## 승인 이벤트
 
