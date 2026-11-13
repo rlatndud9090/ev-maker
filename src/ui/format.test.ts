@@ -19,6 +19,9 @@ import {
   spanNeedText,
   spanText,
   spansOf,
+  splitText,
+  sumCurrentText,
+  sumSpanText,
   targetSegments,
   targetText,
   toPercentInput,
@@ -212,5 +215,33 @@ describe('categoryBadge(칸 없는 고정 판정)', () => {
     expect(categoryBadge('guaranteed-survive')).toEqual({ label: '확정견딤', tone: 'green' })
     expect(categoryBadge('first')).toBeUndefined()
     expect(categoryBadge(undefined)).toBeUndefined()
+  })
+})
+
+describe('내구 합계 띠 문구(R10)', () => {
+  const span = (from: number, to: number, label: string, min: [number, number], alt: [number, number] | null) => ({
+    from,
+    to,
+    label,
+    min: { hp: min[0], defense: min[1] },
+    alt: alt === null ? null : { hp: alt[0], defense: alt[1] },
+  })
+  it('분배 "H2 B8", 상승이면 B/D 뒤 +', () => {
+    expect(splitText({ hp: 2, defense: 8 }, 'def', false)).toBe('H2 B8')
+    expect(splitText({ hp: 0, defense: 4 }, 'spd', true)).toBe('H0 D4+')
+  })
+  it('범례: 무보정 띠는 "/ H0 B0+", 상승 띠는 "/ 무보정 …", 닿지 않으면 불가, 0부터 H0·B0 구간은 분배 없음', () => {
+    expect(sumSpanText(span(10, 12, 'low-roll-ohko', [2, 8], [0, 0]), 'def', false)).toBe('10~12 저난수1타 → 최소 H2 B8 / H0 B0+')
+    expect(sumSpanText(span(13, 64, 'guaranteed-survive', [6, 7], null), 'def', false)).toBe('13~64 확정견딤 → 최소 H6 B7 / 상승 불가')
+    expect(sumSpanText(span(4, 9, 'mid-roll-ohko', [0, 4], [2, 6]), 'spd', true)).toBe('4~9 중난수1타 → 최소 H0 D4+ / 무보정 H2 D6')
+    expect(sumSpanText(span(0, 1, 'high-roll-ohko', [0, 0], [0, 0]), 'def', false)).toBe('0~1 고난수1타')
+    expect(sumSpanText(span(0, 3, 'mid-roll-ohko', [0, 0], null), 'def', true)).toBe('0~3 중난수1타 → 최소 H0 B0+ / 무보정 불가')
+  })
+  it('현재: "현재 H2 B0 (합 2) · 중난수1타", 같은 합 최적이 더 좋으면 덧붙임', () => {
+    expect(sumCurrentText({ hp: 2, defense: 0, sum: 2, label: 'mid-roll-ohko' }, 'def', false)).toBe('현재 H2 B0 (합 2) · 중난수1타')
+    expect(sumCurrentText({ hp: 2, defense: 0, sum: 2, label: 'mid-roll-ohko', best: { label: 'low-roll-ohko', split: { hp: 0, defense: 2 } } }, 'def', false)).toBe(
+      '현재 H2 B0 (합 2) · 중난수1타 · 같은 합 최적 H0 B2 저난수1타',
+    )
+    expect(sumCurrentText({ hp: 2, defense: 0, sum: 2 }, 'spd', true)).toBe('현재 H2 D0+ (합 2)')
   })
 })

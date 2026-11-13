@@ -20,7 +20,7 @@ for (const width of [400, 1280]) {
       const card = cards(page).and(page.locator('[data-variable="true"]')).first()
       await card.locator('button[aria-expanded]').first().click()
       await expect(card.getByTestId('band-cell').first()).toBeVisible()
-      // 상세 오른쪽 열의 띠: 33칸이 오른쪽 열(판정 영역) 안에 다 들어오고(스크롤 상자 없음), 칸 안 글자 없음, 칸 사이 틈 1px 이상.
+      // 방어 탭 상세의 내구 합계 띠(R10): 65칸이 판정 영역 안에 다 들어오고(스크롤 상자 없음), 칸 안 글자 없음, 칸 사이 틈 1px 이상.
       await expect(card.locator('.band-scroll')).toHaveCount(0)
       const bands = await card.locator('.band').evaluateAll((els) =>
         els.map((el) => {
@@ -43,7 +43,7 @@ for (const width of [400, 1280]) {
       )
       expect(bands.length).toBeGreaterThan(0)
       for (const b of bands) {
-        expect({ ...b, width: undefined }).toEqual({ count: 33, inside: true, bandFits: true, scrollers: [], text: '', minGap: true, sameRow: true, width: undefined })
+        expect({ ...b, width: undefined }).toEqual({ count: 65, inside: true, bandFits: true, scrollers: [], text: '', minGap: true, sameRow: true, width: undefined })
         expect(b.width).toBeGreaterThan(2)
       }
       await page.getByRole('button', { name: '포켓몬 추가', exact: true }).click()
@@ -112,9 +112,9 @@ for (const width of [400, 1280]) {
       expect(leak).toBeNull()
     })
 
-    test(`${width}px: 배분 메뉴·상세 배분 목록이 화면 안에 들어오고, 좁으면 목록이 판정 행 위로 쌓여 자체 세로 스크롤`, async ({ page }) => {
+    test(`${width}px: 스피드 탭 배분 메뉴·상세 배분 목록이 화면 안에 들어오고, 좁으면 목록이 판정 행 위로 쌓여 자체 세로 스크롤`, async ({ page }) => {
       await openProduct(page)
-      await selectTab(page, '방어')
+      await selectTab(page, '스피드')
       await waitComplete(page)
       const row = cards(page).filter({ has: page.locator('button.bundle-btn') }).first()
       await row.locator('button[aria-expanded]').first().click()

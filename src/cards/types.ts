@@ -508,6 +508,32 @@ export interface TargetView {
   /** 상승 성격 최소. 닿지 않으면 null. 둘 중 하나 이상은 null이 아니다 */
   plus: TargetOption | null
 }
+/** 내구 합계 띠의 H·B/D 분배(defense = def 또는 spd SP) */
+export interface SumSplit {
+  hp: number
+  defense: number
+}
+/** 합계 띠 범례 한 줄: from~to 합계에서 label, 그 단계에 처음 닿는 최소 분배와 다른 성격 변형의 같은 단계 최소 분배(닿지 않으면 null) */
+export interface SumBandSpan {
+  from: number
+  to: number
+  label: RollTier
+  min: SumSplit
+  alt: SumSplit | null
+}
+/** 방어 탭 내구 합계 띠(sumBandOf). 칸 sum = 0~max, label = 그 합계를 최적 분배했을 때의 최선 판정(nature 변형 기준) */
+export interface SumBandView {
+  defenseStat: 'def' | 'spd'
+  nature: NatureVariant
+  /** 현재 성격이 무보정·상승 어느 변형도 아니어서(B/D 하락) 무보정 기준으로 칠함 */
+  fallback: boolean
+  /** 합계 최대(2 × 능력치당 최대) */
+  max: number
+  cells: readonly { sum: number; label: RollTier }[]
+  spans: readonly SumBandSpan[]
+  /** 표시용 현재 분배·합계, 현재 분배 실제 판정, 같은 합계 최적이 더 좋으면 그 분배 */
+  current: SumSplit & { sum: number; label?: RollTier; best?: { label: RollTier; split: SumSplit } }
+}
 export type Headline =
   | { kind: 'row'; rowId: string }
   | { kind: 'error'; reason: ErrorReason }
@@ -544,6 +570,10 @@ export interface CardView {
   defaultItem?: DefaultItemView
   /** 보이는 항목이 사용자가 직접 고른 것 */
   selected: boolean
+  /**
+   * 방어 탭: 보이는 항목이 극단 필터를 통과한 쌍(rows = H 행·B/D 행)이면 있다. band = 내구 합계 띠(두 변형 쌍 결과가 나온 뒤에만)
+   */
+  pair?: { band?: SumBandView }
 }
 
 /** 기술 선택 목록의 항목 하나(그 카드 대표 세트 기준 현재 SP·성격 단건 판정) */

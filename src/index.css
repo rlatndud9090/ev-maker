@@ -1707,6 +1707,11 @@ img.mon-icon {
   min-width: 0;
 }
 
+/* 공격·방어 탭: 배분 목록 없이 판정 한 열(R9) */
+.detail-grid.single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .bundle-side {
   display: grid;
   gap: 1px;
@@ -2143,7 +2148,17 @@ img.mon-icon {
   border-radius: 2px;
 }
 
-/* 예산 밖 빗금: 띠 칸과 범례 견본이 같은 무늬 */
+/* 내구 합계 띠(65칸): 좁은 화면에서도 칸 폭이 남게 틈을 1px로 */
+.sum-band .band,
+.sum-band .band-ticks {
+  gap: 1px;
+}
+
+.band-legend .span-min {
+  color: var(--muted);
+}
+
+/* 예산 밖 빗금(스피드 탭): 띠 칸과 범례 견본이 같은 무늬 */
 .band .cell.over,
 .over-swatch {
   background-image: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.22) 0 2px, transparent 2px 5px);
@@ -2464,12 +2479,3 @@ img.mon-icon {
   box-shadow: none;
 }
 
-
-/* 펼친 상세: 판정 행 위 기술 선택 + 랭크 근거 */
-.detail-move {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
-  margin-bottom: 0.4rem;
-}

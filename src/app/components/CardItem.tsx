@@ -8,12 +8,12 @@ import { STAT_LABEL } from '../../ui/labels'
 import { koReason } from '../../ui/koErrors'
 import type { AppAction } from '../state'
 import { CustomEditor } from './CustomEditor'
-import { RowDetail } from './RowDetail'
+import { PairDetail, RowDetail } from './RowDetail'
 import { PokemonIcon } from './PokemonIcon'
 import { MoveLabel, VariableTag } from './MoveLabel'
 import { MoveMenu, type MoveAdding } from './MoveMenu'
 import { Caret } from './Caret'
-import { basisText, itemKeyLabel, moveNoticeText, rowTitle } from './text'
+import { itemKeyLabel, moveNoticeText, rowTitle } from './text'
 
 interface Props {
   game: Snapshot
@@ -297,7 +297,7 @@ function rememberFocusReturn(key: string) {
 type ActionProps = Pick<Props, 'tab' | 'group' | 'card' | 'onSelect' | 'dispatch'>
 
 /**
- * 배분 직접 추가·고정 토글(드롭다운·상세 목록 공용). 추가: 같은 키 배분이 이미 선택지면 그걸 고르고(관측 배분이면 고정한다), 아니면 상태에
+ * 배분 직접 추가·고정 토글(드롭다운·스피드 탭 상세 목록 공용). 추가: 같은 키 배분이 이미 선택지면 그걸 고르고(관측 배분이면 고정한다), 아니면 상태에
  * 추가(추가와 함께 고정)하고 그 카드를 미리 고른다(계산이 끝나면 맨 위에 보인다). 고정 토글: 관측 배분은 고정만 바꾸고(재계산 없음),
  * 직접 추가 배분의 고정 해제는 삭제다. 추가·삭제 뒤 재계산 중 포커스를 잃으면 그 행의 배분 버튼으로 돌려준다.
  */
@@ -521,7 +521,7 @@ interface ListProps extends PickerProps {
 }
 
 /**
- * 상세 왼쪽 열: 드롭다운과 같은 배분 목록을 세로로 고정(래더는 맨 위 직접 추가 폼, 항목마다 오른쪽 끝 핀).
+ * 스피드 탭 상세 왼쪽 열: 드롭다운과 같은 배분 목록을 세로로 고정(래더는 맨 위 직접 추가 폼, 항목마다 오른쪽 끝 핀).
  * 선택은 radiogroup(↑↓·←→ 이동 즉시 선택, Home/End). 핀은 선택 항목 것만 Tab 순서(radio 다음)에 들어오고, 고정 항목 radio에서
  * Delete·Backspace 키도 고정 해제다(직접 추가 배분은 삭제). 고정 항목은 다른 면 색.
  */
@@ -636,7 +636,7 @@ function BundleList({ tab, group, card, rollSteps, onSelect, dispatch, spMax, op
   )
 }
 
-/** 보이는 항목의 기술 선택 버튼(간단행·상세 공용). 보이는 항목이 목록에 없으면 null */
+/** 간단행의 보이는 항목 기술 선택 버튼. 보이는 항목이 목록에 없으면 null */
 function ShownMove({ game, tab, group, card, rollSteps, items, onChooseItem, onResetItem, dispatch, testId }: Pick<Props, 'game' | 'tab' | 'group' | 'card' | 'rollSteps' | 'items' | 'onChooseItem' | 'onResetItem' | 'dispatch'> & { testId: string }) {
   const shown = items.find((g) => g.item.key === card.shownItem)
   if (shown === undefined) return null
@@ -673,6 +673,7 @@ function ShownMove({ game, tab, group, card, rollSteps, items, onChooseItem, onR
 export const CardItem = memo(function CardItem({ game, tab, group, card, rollSteps, expanded, onToggle, onSelect, target, dispatch, groupLabelId, items, onChooseItem, onResetItem }: Props) {
   const names = namesOf(game)
   const ladder = card.opponent.source === 'ladder'
+  const speed = tab === 'speed'
   const detailId = `card-detail-${encodeURIComponent(group.key)}`
   const multi = group.options.length > 1
   // 래더 행은 직접 추가 폼 때문에 배분이 하나여도 늘 고를 수 있는 배지다(관련 SP가 없으면 추가할 것이 없다).
@@ -768,38 +769,33 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
       ))}
       <div id={detailId} className="card-detail" hidden={!expanded}>
         {expanded && (
-          <div className="detail-grid">
-            <BundleList
-              tab={tab}
-              group={group}
-              card={card}
-              rollSteps={rollSteps}
-              onSelect={onSelect}
-              dispatch={dispatch}
-              spMax={spMax}
-              optionId={optionId}
-              unpinHintId={`${uid}-unpin-hint`}
-            />
-            {/* 오른쪽 영역 이름 = 선택 배분 항목(목록에 없으면 일반 이름) */}
+          // 공격·방어 탭 상세는 판정만(배분·기술 선택은 간단행 배지에서, R9). 스피드 탭은 왼쪽 배분 목록을 그대로 둔다.
+          <div className={`detail-grid${speed ? '' : ' single'}`}>
+            {speed && (
+              <BundleList
+                tab={tab}
+                group={group}
+                card={card}
+                rollSteps={rollSteps}
+                onSelect={onSelect}
+                dispatch={dispatch}
+                spMax={spMax}
+                optionId={optionId}
+                unpinHintId={`${uid}-unpin-hint`}
+              />
+            )}
+            {/* 판정 영역 이름 = 선택 배분 항목(스피드 탭 목록), 그 밖은 배분 문구 */}
             <div
               role="region"
               className="bundle-panel"
-              aria-labelledby={selectedIndex >= 0 ? optionId(selectedIndex) : undefined}
-              aria-label={selectedIndex >= 0 ? undefined : '선택한 노력치 배분의 판정'}
+              aria-labelledby={speed && selectedIndex >= 0 ? optionId(selectedIndex) : undefined}
+              aria-label={speed && selectedIndex >= 0 ? undefined : `${bundleAria(card, isPinned(group, card))} 판정`}
               data-testid="bundle-panel"
             >
               {card.state === 'error' && card.error && <p className="row-error">계산 불가: {koReason(game, card.error)}</p>}
-              {card.shownItem !== undefined && items.length > 0 && (
-                <div className="detail-move" data-testid="detail-move">
-                  <ShownMove game={game} tab={tab} group={group} card={card} rollSteps={rollSteps} items={items} onChooseItem={onChooseItem} onResetItem={onResetItem} dispatch={dispatch} testId="detail-move-pick" />
-                  {card.rows[0]?.basis?.kind === 'rank' && <span className="row-basis">{basisText(game, card.rows[0].basis)}</span>}
-                </div>
-              )}
               {card.rows.length > 0 && (
                 <ol className="rows">
-                  {card.rows.map((r) => (
-                    <RowDetail key={r.id} game={game} tab={tab} row={r} />
-                  ))}
+                  {card.pair !== undefined ? <PairDetail game={game} card={card} /> : card.rows.map((r) => <RowDetail key={r.id} game={game} tab={tab} row={r} />)}
                 </ol>
               )}
               {target !== undefined && <CustomEditor key={card.id} game={game} tab={tab} card={card} target={target} dispatch={dispatch} />}

@@ -255,3 +255,46 @@ export function refsNote(category: 'Physical' | 'Special' | 'Status', refs: Refs
   if (refs.defense && refs.defense !== defense) notes.push(`${other} ${STAT_SHORT[refs.defense]} 참조`)
   return notes.length > 0 ? notes.join(', ') : undefined
 }
+
+export interface SplitLike {
+  hp: number
+  defense: number
+}
+
+/** 내구 분배 "H2 B8"(상승 성격이면 B/D 뒤 '+') */
+export const splitText = (s: SplitLike, stat: 'def' | 'spd', plus: boolean): string => `H${s.hp} ${STAT_SHORT[stat]}${s.defense}${plus ? '+' : ''}`
+
+export interface SumSpanLike {
+  from: number
+  to: number
+  label: string
+  min: SplitLike
+  alt: SplitLike | null
+}
+
+/**
+ * 합계 띠 범례 한 줄 조각: "10~12 저난수1타" + 최소 분배 "최소 H2 B8" + 다른 변형 "/ H0 B0+"(무보정 띠) 또는 "/ 무보정 H2 B8"(상승 띠).
+ * 다른 변형이 닿지 않으면 "/ 상승 불가"·"/ 무보정 불가". 합계 0부터인 구간에서 두 분배가 모두 H0·B/D0이면 분배를 붙이지 않는다.
+ */
+export function sumSpanParts(s: SumSpanLike, stat: 'def' | 'spd', plusBand: boolean): { range: string; min?: string; alt?: string } {
+  const range = `${rangeText(s.from, s.to)} ${categoryLabel(s.label)}`
+  const zero = (p: SplitLike | null) => p !== null && p.hp === 0 && p.defense === 0
+  if (s.from === 0 && zero(s.min) && zero(s.alt)) return { range }
+  const alt = s.alt === null ? (plusBand ? '무보정 불가' : '상승 불가') : plusBand ? `무보정 ${splitText(s.alt, stat, false)}` : splitText(s.alt, stat, true)
+  return { range, min: `최소 ${splitText(s.min, stat, plusBand)}`, alt }
+}
+
+export const sumSpanText = (s: SumSpanLike, stat: 'def' | 'spd', plusBand: boolean): string => {
+  const p = sumSpanParts(s, stat, plusBand)
+  return p.min === undefined ? p.range : `${p.range} → ${p.min} / ${p.alt}`
+}
+
+/** "현재 H2 B0 (합 2) · 중난수1타", 같은 합계 최적이 더 좋으면 " · 같은 합 최적 H0 B2 저난수1타" */
+export function sumCurrentText(
+  c: SplitLike & { sum: number; label?: string; best?: { label: string; split: SplitLike } },
+  stat: 'def' | 'spd',
+  plusBand: boolean,
+): string {
+  const head = `현재 ${splitText(c, stat, plusBand)} (합 ${c.sum})${c.label === undefined ? '' : ` · ${judgementText(c.label)}`}`
+  return c.best === undefined ? head : `${head} · 같은 합 최적 ${splitText(c.best.split, stat, plusBand)} ${judgementText(c.best.label)}`
+}

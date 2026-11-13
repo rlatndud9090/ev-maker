@@ -396,6 +396,32 @@ describe('방어 탭 H·B 최소 조합 2종(예시 세트)', () => {
     }
   })
 
+  it('내구 합계 띠(R10): 변동 쌍 카드의 칸 T = 현재 성격으로 H+B/D 합계 T를 모든 분배로 나눈 최선 판정, 현재 판정 = 현재 분배 실제 판정', () => {
+    const banded = view.cards.filter((c) => c.pair?.band !== undefined)
+    expect(banded.length).toBeGreaterThan(0)
+    for (const c of banded.slice(0, 2)) {
+      const band = c.pair?.band
+      if (band === undefined) continue
+      const filterId = plan.cards.find((x) => x.id === c.id)?.filterIds.find((id) => c.rows.some((r) => plan.rows[r.id]?.gate === id)) as string
+      const spec = plan.filters[filterId]
+      expect(band.defenseStat).toBe(spec.stats[1])
+      expect(band.cells).toHaveLength(2 * spMaxPerStat + 1)
+      const nature = band.fallback ? spec.natures.neutral : band.nature === 'neutral' ? spec.natures.neutral : spec.natures.plus
+      const judge = judgeOf(spec, nature)
+      for (const cell of band.cells) {
+        let best = TIER_ORDER.defense[0]
+        for (let h = Math.max(0, cell.sum - spMaxPerStat); h <= Math.min(spMaxPerStat, cell.sum); h++) {
+          const l = judge(h, cell.sum - h)
+          if (tierRank('defense', l) > tierRank('defense', best)) best = l
+        }
+        expect([cell.sum, cell.label]).toEqual([cell.sum, best])
+      }
+      const cur = { hp: EXAMPLE_SET.sp.hp, defense: EXAMPLE_SET.sp[spec.stats[1]] }
+      expect(band.current).toMatchObject({ ...cur, sum: cur.hp + cur.defense, label: judgeOf(spec, EXAMPLE_SET.nature)(cur.hp, cur.defense) })
+      if (band.current.best !== undefined) expect(judge(band.current.best.split.hp, band.current.best.split.defense)).toBe(band.current.best.label)
+    }
+  }, 20_000)
+
   it('캐시 키: pair는 같은 필터의 extreme과 다르고 성격 변형마다 다르며, 내 H·B/D SP와 무관, 캐시 적중 결과 = 무캐시', () => {
     const filterId = Object.keys(plan.filters)[0]
     const task = { kind: 'pair', filterId, nature: 'plus' } as const

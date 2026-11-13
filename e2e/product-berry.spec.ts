@@ -89,11 +89,14 @@ test.describe('공격 탭 상대 도구: 기합의띠 없음 · 반감열매 별
     const berry = groupRow(page, COLBUR)
     await expect(berry).toHaveCount(1)
     // 열매 행 배분 고정 → 기본 행은 고정 아님
-    await berry.locator('.card-toggle').click()
-    const pin = berry.getByTestId('bundle-list').getByTestId('bundle-pin').first()
+    // (상세 배분 목록은 R9로 없어져 배지 메뉴의 핀으로 고정한다)
+    await berry.locator('button.bundle-btn').click()
+    const menu = berry.getByRole('menu', { name: '노력치 배분', exact: true })
+    const pin = menu.getByTestId('bundle-pin').first()
     await pin.click()
-    await expect(pin).toHaveAttribute('aria-pressed', 'true')
-    await expect(berry.getByTestId('bundle-list').locator('[data-pinned="true"]')).toHaveCount(1)
+    await expect(pin).toHaveAttribute('aria-checked', 'true')
+    await expect(menu.locator('[role="menuitemradio"][data-pinned="true"]')).toHaveCount(1)
+    await menu.press('Escape')
     await expect(groupRow(page, BASCULEGION).locator('[data-pinned="true"]')).toHaveCount(0)
     await expect(groupRow(page, BASCULEGION)).not.toHaveAttribute('data-pinned', 'true')
 

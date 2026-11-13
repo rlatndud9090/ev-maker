@@ -16,8 +16,10 @@ import {
   taskKey,
   type RowJudgements,
 } from './schedule'
-import { tierRank, type JudgementSide } from '../core'
+import { tierRank, type JudgementSide, type RollTier } from '../core'
 import { cellLabel, pairTarget, singleTarget } from './target'
+import { sumBandOf, type SumBandInput } from './sumBand'
+import { variantNature } from './natures'
 import { NATURE_VARIANTS } from './types'
 import type {
   BoundaryView,
@@ -29,6 +31,7 @@ import type {
   ErrorReason,
   Headline,
   ItemView,
+  NatureVariant,
   PairPoint,
   PendingTasks,
   ResultMap,
@@ -37,6 +40,7 @@ import type {
   RowTask,
   RowTaskResult,
   RowView,
+  SumBandView,
   TabPlan,
   TabStatus,
   TabView,
@@ -137,6 +141,30 @@ function targetOf(ctx: Ctx, spec: RowSpec, stat: StatId, j: RowJudgements, at: C
   }
   const current = { hp: ctx.displaySp.hp, defense: ctx.displaySp[plusStat] }
   return pairTarget(points, label, plusStat, current, plan.spTotal - ctx.spSum)
+}
+
+/**
+ * 통과한 극단 필터의 내구 합계 띠. 두 변형 쌍 결과가 다 나와야 띠가 있다(alt 범례에 다른 변형이 필요). 현재 판정은 H 행 현재 칸.
+ * 띠 기준 변형 = 현재 성격과 같은 변형, 어느 쪽도 아니면(B/D 하락 성격) 무보정 + fallback.
+ */
+function pairBand(ctx: Ctx, card: CardSpec, filterId: string, rows: readonly RowView[]): { band?: SumBandView } {
+  const spec = card.rowIds.map((id) => ctx.plan.rows[id]).find((r) => r.gate === filterId && r.natures !== undefined)
+  if (spec?.natures === undefined) return {}
+  const points: Partial<Record<NatureVariant, readonly PairPoint[]>> = {}
+  for (const nature of NATURE_VARIANTS) {
+    const r = ctx.results.get(taskKey({ kind: 'pair', filterId, nature }))
+    if (r?.kind !== 'pair') return {}
+    points[nature] = r.points
+  }
+  const natures = spec.natures
+  const mine = NATURE_VARIANTS.find((v) => variantNature(natures, v) === spec.defender.nature)
+  const defenseStat = ctx.plan.filters[filterId].stats[1]
+  const hRow = rows.find((r) => r.sweepStat === 'hp')
+  const label = hRow?.current.category === undefined ? undefined : cellLabel('defense', { category: hRow.current.category })
+  const current: SumBandInput['current'] = { hp: ctx.displaySp.hp, defense: ctx.displaySp[defenseStat] }
+  if (label !== undefined) current.label = label as RollTier
+  const band = sumBandOf({ points: points as Record<NatureVariant, readonly PairPoint[]>, nature: mine ?? 'neutral', fallback: mine === undefined, defenseStat, current, max: ctx.plan.spMaxPerStat })
+  return { band }
 }
 
 /** 칸들 중 그 관점 가장 유리한 판정(관점 순서 밖 범주는 건너뛴다). 없으면 undefined */
@@ -376,6 +404,7 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
   const shown = shownItemKey(refs, def, selected)
   const isSelected = shown !== undefined && shown === selected
   const ref = refs.find((r) => r.key === shown)
+  let pair: CardView['pair']
   if (ref !== undefined) {
     const c = ref.candidate
     const probeError = c.target !== 'fixed' ? results.get(probeKey(c)) : undefined
@@ -387,6 +416,7 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
       pushRow(c.id)
     } else if (c.target === 'filter') {
       for (const rowId of card.rowIds) if (plan.rows[rowId].gate === c.id) pushRow(rowId)
+      if (filterState(results, c.id).kind === 'passed') pair = pairBand(ctx, card, c.id, rows)
     } else {
       pushFixed(c.id, fixedOrder)
     }
@@ -395,6 +425,7 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
   const headline: Headline = shown === undefined ? { kind: 'updating' } : headlineOf(card, rows, slotOrder(plan, card))
   const view: CardView = { ...base, rows, headline, variable: isVariable(rows), items: itemViews(refs, states), selected: isSelected }
   if (shown !== undefined) view.shownItem = shown
+  if (pair !== undefined) view.pair = pair
   if (def.kind === 'ready') {
     const d: DefaultItemView = { key: def.key, viaPriority: def.viaPriority }
     const basis = states.find((st) => st.key === def.basis)

@@ -96,7 +96,7 @@ test.describe('제품 화면', () => {
     await expect(page.locator('main[data-app="product"]')).toHaveCount(0)
   })
 
-  test('카드 상세 행은 보이는 항목 하나의 행만(공격 1행, 방어 H행·B/D행 쌍 또는 고정 1행): 모든 행이 같은 기술·같은 조건, 랭크·선공기 행은 따로 없다(PRD R7·AC15)', async ({ page }) => {
+  test('카드 상세 행은 보이는 항목 하나의 행만(공격 1행, 방어 H행·B/D행 쌍 = 합계 판정 1개 또는 고정 1행): 모든 행이 같은 기술·같은 조건, 랭크·선공기 행은 따로 없다(PRD R7·AC15)', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     for (const tab of ['공격', '방어'] as const) {
@@ -113,15 +113,16 @@ test.describe('제품 화면', () => {
       const byCard = await cards(page).evaluateAll((els) =>
         els.map((el) => ({
           id: (el as HTMLElement).dataset.cardId ?? '',
-          rows: [...el.querySelectorAll<HTMLElement>('[data-testid="row"]')].map((r) => ({ move: r.dataset.move ?? '', condition: r.dataset.condition ?? '' })),
+          rows: [...el.querySelectorAll<HTMLElement>('[data-testid="row"]')].map((r) => ({ move: r.dataset.move ?? '', condition: r.dataset.condition ?? '', pair: r.dataset.pair === 'true' })),
         })),
       )
       for (const c of byCard) {
         expect(c.rows.length, c.id).toBeGreaterThan(0)
-        expect(c.rows.length, c.id).toBeLessThanOrEqual(tab === '공격' ? 1 : 2)
+        // 방어 탭 H 행·B/D 행 쌍은 상세에서 내구 합계 판정 하나로 보인다(R10)
+        expect(c.rows.length, c.id).toBe(1)
         expect(new Set(c.rows.map((r) => JSON.stringify([r.move, r.condition]))).size, c.id).toBe(1)
       }
-      if (tab === '방어') expect(byCard.some((c) => c.rows.length === 2)).toBe(true)
+      if (tab === '방어') expect(byCard.some((c) => c.rows[0].pair)).toBe(true)
       await expect(page.getByTestId('card-more')).toHaveCount(0)
     }
   })
@@ -243,7 +244,7 @@ test.describe('제품 화면', () => {
     await expect(pick).toHaveAccessibleName(/암석봉인 기술 선택 \(직접 고름\)/)
     await expect(cardLine(card)).toHaveAttribute('aria-expanded', 'false')
     await cardLine(card).click()
-    await expect(card.getByTestId('detail-move-pick')).toHaveAccessibleName(/암석봉인/)
+    await expect(card.getByTestId('row').first()).toHaveAttribute('data-move', 'rocktomb')
     await expect(card.getByTestId('row').first()).toBeVisible()
     await cardLine(card).click()
 
@@ -348,41 +349,33 @@ test.describe('제품 화면', () => {
     // 5% 미만(더스트슈트 3.8%)은 없다
     await expect(menu.locator('[data-move="gunkshot"]')).toHaveCount(0)
   })
-  test('펼친 상세: 행·0~32 띠·현재값·예산 밖 칸 구분, 접힌 줄 대표 문구, 상세 기술 선택(AC9·AC19)', async ({ page }) => {
+  test('펼친 상세: 공격 탭 행 0~32 띠·현재값(빗금 없음), 방어 탭 내구 합계 띠 0~64 하나(AC19·AC27~AC30)', async ({ page }) => {
     await openProduct(page)
-    await waitComplete(page)
-    await selectTab(page, '방어')
-    await waitComplete(page)
-    const first = cards(page).first()
-    await cardLine(first).click()
-    await expect(first.locator('.card-detail')).toBeVisible()
-    await expect(first.getByTestId('detail-move-pick')).toBeVisible()
-    await cardLine(first).click()
-    await expect(cardLine(first)).toHaveAttribute('aria-expanded', 'false')
-    await selectTab(page, '공격')
     await waitComplete(page)
     // 목표 문구는 간단행에 없고(사용자 피드백 2026-11-11) 펼친 상세 행에만 있다.
     await expect(tabPanel(page).getByTestId('headline-target')).toHaveCount(0)
-    // 변화 없음 배분(변동 가능 아님)은 목표가 없으므로 변동 가능한 첫 행에서 본다.
     const withRow = cards(page).and(page.locator('[data-variable="true"]')).first()
     await cardLine(withRow).click()
+    // AC27: 상세에 배분 목록·직접 추가 폼·기술 선택 버튼이 없다(간단행 배지에서만 고른다)
+    const detail = withRow.locator('.card-detail')
+    await expect(detail).toBeVisible()
+    await expect(detail.getByTestId('bundle-list')).toHaveCount(0)
+    await expect(detail.getByTestId('bundle-add')).toHaveCount(0)
+    await expect(detail.getByTestId('detail-move-pick')).toHaveCount(0)
+    await expect(detail.getByRole('button')).toHaveCount(0)
     await expect(withRow.getByTestId('row-target').first()).toHaveText(new RegExp(`^ · ${targetPattern('A\\d+')}$`))
-
-    // 방어 탭 H 행: 내 H는 2, 잔여 0이라 3 이상은 예산 밖.
-    await selectTab(page, '방어')
-    await waitComplete(page)
-    const card = cards(page).and(page.locator('[data-variable="true"]')).first()
-    await cardLine(card).click()
-    await expect(cardLine(card)).toHaveAttribute('aria-expanded', 'true')
-    const row = card.getByTestId('row').filter({ has: page.getByTestId('band-cell') }).first()
+    const row = withRow.getByTestId('row').filter({ has: page.getByTestId('band-cell') }).first()
+    // AC28: 제목은 기술 라벨뿐(행 종류 배지·근거·능력치 접두 없음)
+    await expect(row.locator('.row-head .row-title [data-testid="move-label"]')).toHaveCount(1)
+    await expect(row.locator('.row-kind, .row-basis')).toHaveCount(0)
+    await expect(row.locator('.row-head')).not.toContainText(' · ')
     const cells = row.getByTestId('band-cell')
     await expect(cells).toHaveCount(33)
     await expect(row.locator('[aria-current="true"]')).toHaveCount(1)
-    const current = Number(await row.locator('[aria-current="true"]').getAttribute('data-sp'))
-    const over = await cells.evaluateAll((els) => els.map((e) => ({ sp: Number((e as HTMLElement).dataset.sp), over: (e as HTMLElement).dataset.overBudget === 'true' })))
-    expect(over.filter((c) => c.sp <= current).every((c) => !c.over)).toBe(true)
-    expect(over.filter((c) => c.sp > current).every((c) => c.over)).toBe(true)
-    await expect(row.locator('.band-legend')).toContainText('빗금 = 예산 밖')
+    // AC29: 빗금 칸·빗금 범례·"다른 능력치에서" 없음
+    await expect(row.locator('.cell.over, .over-key, [data-over-budget]')).toHaveCount(0)
+    await expect(detail).not.toContainText('다른 능력치에서')
+    await expect(detail).not.toContainText('빗금')
     // 띠는 색 칸만(칸 안 숫자·기호 없음), 스크롤 상자 없이 한 줄. 아래 0·16·32 눈금.
     await expect(row.locator('.band')).toHaveCount(1)
     await expect(row.locator('.band-scroll')).toHaveCount(0)
@@ -391,43 +384,69 @@ test.describe('제품 화면', () => {
     // 칸 title = 그 칸 SP와 판정(칸 순서 = SP 0~32, title SP = data-sp)
     const titles = await cells.evaluateAll((els) => els.map((e) => [Number((e as HTMLElement).dataset.sp), e.getAttribute('title') ?? '', (e as HTMLElement).dataset.category ?? '']))
     expect(titles.map(([sp]) => sp)).toEqual(Array.from({ length: 33 }, (_, i) => i))
-    for (const [sp, title] of titles) expect(title).toMatch(new RegExp(`^SP ${sp}: ${TIER}`))
+    for (const [sp, title] of titles) expect(title).toMatch(new RegExp(`^SP ${sp}: ${TIER}$`))
     // 같은 판정 칸은 같은 title 판정, 범례 범위와 칸 판정이 맞는다.
-    const spans = await row.locator('.band-legend .span:not(.over-key)').allTextContents()
+    const spans = await row.locator('.band-legend .span').allTextContents()
     for (const text of spans) {
       const m = /^\s*(\d+)(?:~(\d+))? (.+)$/.exec(text)!
       const from = Number(m[1])
       const to = m[2] === undefined ? from : Number(m[2])
-      const labels = new Set(titles.filter(([sp]) => (sp as number) >= from && (sp as number) <= to).map(([, t]) => (t as string).replace(/^SP \d+: /, '').replace(/ \(.*\)$/, '')))
+      const labels = new Set(titles.filter(([sp]) => (sp as number) >= from && (sp as number) <= to).map(([, t]) => (t as string).replace(/^SP \d+: /, '')))
       expect(labels.size, text).toBe(1)
     }
-    // 예산 밖 구간은 칸 툴팁에만 있던 필요 SP 범위를 범례 텍스트로도 보인다(터치·키보드 사용자). H2라 SP n 칸은 n−2 필요.
-    const overSpans = await row.locator('.band-legend .span.over').allTextContents()
-    expect(overSpans.length).toBeGreaterThan(0)
-    for (const text of overSpans) {
-      const m = /^\s*(\d+)(?:~(\d+))? .+ · 다른 능력치에서 (\d+)(?:~(\d+))? 필요$/.exec(text)
-      expect(m, text).not.toBeNull()
-      const [from, to] = [Number(m![1]), m![2] === undefined ? Number(m![1]) : Number(m![2])]
-      const needs = titles.filter(([sp]) => (sp as number) >= from && (sp as number) <= to).map(([, t]) => Number(/다른 능력치에서 (\d+) 필요/.exec(t as string)?.[1] ?? 0)).filter((n) => n > 0)
-      expect([Number(m![3]), m![4] === undefined ? Number(m![3]) : Number(m![4])], text).toEqual([Math.min(...needs), Math.max(...needs)])
-    }
-    await expect(row.locator('.band-legend .over-key .over-swatch')).toHaveCount(1)
-    await expect(row.locator('.band-legend .over-key')).not.toContainText('마우스')
-    // 판정은 색만이 아니라 텍스트 라벨로도 보인다(AC19).
-    // 현재 판정은 목표 문구와 같은 5단 단계명(한 줄 한 어휘).
-    await expect(row.locator('.row-judge')).toHaveText(new RegExp(`현재 H\\d+ ${TIER} 변동 가능 · `))
-    // 상세 행도 경계 문구 대신 H·B/D 함께 조정한 최소 조합 목표 — 무보정 / B·D 상승(사용자 피드백 2026-11-11 2차).
-    await expect(row.getByTestId('row-target')).toHaveText(new RegExp(`^ · ${targetPattern('H\\d+ [BD]\\d+')}$`))
-    await expect(row.locator('.row-judge')).not.toContainText(/까지 줄여도|부터/)
-    await expect(cells.first()).toHaveAttribute('title', new RegExp(`^SP 0: ${TIER}`))
-    await expect(row.locator('.band-legend .span').first()).toHaveText(new RegExp(`\\d+(~\\d+)? ${TIER}`))
-    // 띠 칸 색은 결과 배지와 같은 5색(판정 → 색 한 가지 대응).
+    // 판정은 색만이 아니라 텍스트 라벨로도 보인다(AC19). 현재 판정은 목표 문구와 같은 5단 단계명.
+    await expect(row.locator('.row-judge')).toHaveText(new RegExp(`현재 A\\d+ ${TIER} 변동 가능 · `))
+    // 띠 칸 색은 결과 배지와 같은 5색(판정 → 색 한 가지 대응, 다른 판정은 다른 색).
     const tones = await cells.evaluateAll((els) => els.map((e) => [(e as HTMLElement).dataset.category, [...e.classList].find((c) => c.startsWith('ko-'))]))
     const toneOf = new Map(tones.map(([c, t]) => [c, t]))
     expect(toneOf.size).toBe(new Set(tones.map(([c, t]) => `${c}|${t}`)).size)
-    // 다른 판정은 다른 색(두 단계가 한 색을 나눠 쓰면 실패), 모든 칸에 색 클래스가 있다.
     expect([...toneOf.values()].every((t) => t !== undefined)).toBe(true)
     expect(new Set(toneOf.values()).size).toBe(toneOf.size)
+
+    // 방어 탭(AC30): 변동 카드 상세 = 내구 합계 띠 하나(0~64, 65칸), 현재 합계 칸, 현재 문구, 범례 "최소 H… B…"
+    await selectTab(page, '방어')
+    await waitComplete(page)
+    for (const width of [1280, 400]) {
+      await page.setViewportSize({ width, height: 900 })
+      const card = cards(page).and(page.locator('[data-variable="true"]')).first()
+      if ((await cardLine(card).getAttribute('aria-expanded')) !== 'true') await cardLine(card).click()
+      const d = card.locator('.card-detail')
+      await expect(d.getByTestId('bundle-list')).toHaveCount(0)
+      await expect(d.getByTestId('detail-move-pick')).toHaveCount(0)
+      await expect(d.getByTestId('row')).toHaveCount(1)
+      const pair = d.getByTestId('row')
+      await expect(pair).toHaveAttribute('data-pair', 'true')
+      await expect(pair.locator('.row-head')).not.toContainText(/H · |랭크|기본|%/)
+      await expect(d.locator('.band')).toHaveCount(1)
+      const sum = d.getByTestId('sum-band').getByTestId('band-cell')
+      await expect(sum).toHaveCount(65)
+      expect(await sum.evaluateAll((els) => els.map((e) => Number((e as HTMLElement).dataset.sp)))).toEqual(Array.from({ length: 65 }, (_, i) => i))
+      await expect(d.locator('.band-ticks')).toHaveText('03264')
+      const current = d.getByTestId('sum-current')
+      await expect(current).toHaveText(new RegExp(`^. 현재 H(\\d+) [BD](\\d+)\\+? \\(합 (\\d+)\\) · ${TIER}( · 같은 합 최적 H\\d+ [BD]\\d+\\+? ${TIER})? 변동 가능$`))
+      const [, h, b, s] = /현재 H(\d+) [BD](\d+)\+? \(합 (\d+)\)/.exec((await current.textContent()) ?? '')!
+      expect(Number(s)).toBe(Number(h) + Number(b))
+      await expect(d.getByTestId('sum-band').locator('[aria-current="true"]')).toHaveAttribute('data-sp', s)
+      // 범례: 구간이 0부터 64까지 빈틈없이 이어지고, 구간 칸 판정과 맞으며, 0이 아닌 구간은 최소 분배를 보인다
+      const legend = await d.getByTestId('sum-legend').locator('.span').allTextContents()
+      expect(legend.length).toBeGreaterThan(1)
+      const cats = await sum.evaluateAll((els) => els.map((e) => e.getAttribute('title') ?? ''))
+      let next = 0
+      for (const text of legend) {
+        const m = new RegExp(`^\\s*(\\d+)(?:~(\\d+))? ${TIER}( → 최소 H\\d+ [BD]\\d+\\+? / (H\\d+ [BD]\\d+\\+|무보정 H\\d+ [BD]\\d+|상승 불가|무보정 불가))?$`).exec(text)
+        expect(m, text).not.toBeNull()
+        const from = Number(m![1])
+        const to = m![2] === undefined ? from : Number(m![2])
+        expect(from).toBe(next)
+        if (from > 0) expect(m![4], text).toBeDefined()
+        for (let t = from; t <= to; t++) expect(cats[t]).toBe(`합계 ${t}: ${m![3]}`)
+        next = to + 1
+      }
+      expect(next).toBe(65)
+      await expect(d).not.toContainText('다른 능력치에서')
+      await expect(d.locator('.cell.over, .over-key')).toHaveCount(0)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
+    }
   })
 
   test('상위 N 10 + 포켓몬 2마리 선택: 래더 카드는 그 집합만, 커스텀 카드는 유지(AC10)', async ({ page }) => {
@@ -534,24 +553,27 @@ test.describe('제품 화면', () => {
     expect(defenseAfter.filter((c) => c === 'physical')).toHaveLength(0)
   })
 
-  test('카드 묶음은 그 탭에 관련된 SP만 보이고(AC3), 랭크 행은 수단·점유율 근거를 보인다(AC8)', async ({ page }) => {
+  test('카드 묶음은 그 탭에 관련된 SP만 보이고(AC3), 랭크 후 항목 판정 행 제목은 기술 라벨 "+n 기술"뿐(AC28)', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     // 공격 탭(내 기술 전부 물리): 상대 H·B만.
     for (const text of await ladderCards(page).locator('.card-bundle').allTextContents()) expect(text).toMatch(/^(H\d+[↑↓]?)?( ?B\d+[↑↓]?)? (\d+\.\d%|소수 배분)$/)
 
-    // 방어 탭 상대 랭크 수단(칼춤 등)의 랭크 행: 열어 보며 첫 랭크 행을 찾는다.
+    // 방어 탭 상대 랭크 수단(칼춤 등) 항목의 판정 행: 열어 보며 첫 랭크 행을 찾는다. 근거 문구·종류 배지·점유율 없이 "+2 기술" 라벨만.
     await selectTab(page, '방어')
     await waitComplete(page)
-    let basis: string | null = null
+    let title: Locator | null = null
     const n = await cards(page).count()
-    for (let i = 0; i < n && basis === null; i++) {
+    for (let i = 0; i < n && title === null; i++) {
       const card = cards(page).nth(i)
       await cardLine(card).click()
-      const rank = card.locator('[data-testid="row"][data-row-kind="rank"] .row-basis')
-      if ((await rank.count()) > 0) basis = await rank.first().textContent()
+      const rank = card.locator('[data-testid="row"][data-row-kind="rank"] .row-head')
+      if ((await rank.count()) > 0) title = rank.first()
     }
-    expect(basis).toMatch(/^상대 \S+ \d+\.\d% · 상대 [ABCDS][+−]\d/)
+    expect(title).not.toBeNull()
+    await expect(title!.getByTestId('move-rank')).toHaveText(/^[+−]\d$/)
+    await expect(title!.locator('.row-basis, .row-kind')).toHaveCount(0)
+    await expect(title!).not.toContainText(/%|상대 |내 세트|H · /)
 
     await selectTab(page, '스피드')
     await waitComplete(page)
@@ -690,9 +712,15 @@ test.describe('제품 화면', () => {
       expect(await withLabel.count()).toBeGreaterThan(0)
       const first = withLabel.and(page.locator('[data-variable="true"]')).first()
       await cardLine(first).click()
-      const targets = await first.getByTestId('row-target').allTextContents()
-      expect(targets.length).toBeGreaterThan(0)
-      for (const t of targets) expect(t.replace(/^ · /, '')).toMatch(target)
+      if (tab === '방어') {
+        // 방어 탭은 목표 문구 대신 합계 띠 범례가 단계별 최소 분배를 보인다(R10)
+        await expect(first.getByTestId('sum-legend')).toContainText(/최소 H\d+ [BD]\d+\+? \/ /)
+        await expect(first.getByTestId('row-target')).toHaveCount(0)
+      } else {
+        const targets = await first.getByTestId('row-target').allTextContents()
+        expect(targets.length).toBeGreaterThan(0)
+        for (const t of targets) expect(t.replace(/^ · /, '')).toMatch(target)
+      }
       await cardLine(first).click()
       if (tab !== '스피드') {
         const labels = tabPanel(page).getByTestId('move-label')
@@ -1104,9 +1132,9 @@ test.describe('포켓몬마다 한 행 + 노력치 배분 선택(사용자 피�
     await expect(cardLine(row)).toHaveAttribute('aria-expanded', 'false')
   })
 
-  test('펼친 상세: 왼쪽에 드롭다운과 같은 배분 목록(결과 배지·변동 표시)을 세로로, 고르면 오른쪽 판정·간단행이 바뀌고 펼침은 유지', async ({ page }) => {
+  test('스피드 탭 펼친 상세: 왼쪽에 드롭다운과 같은 배분 목록(결과 배지·변동 표시)을 세로로, 고르면 오른쪽 판정·간단행이 바뀌고 펼침은 유지', async ({ page }) => {
     await openProduct(page)
-    await selectTab(page, '방어')
+    await selectTab(page, '스피드')
     await waitComplete(page)
     const row = await multiRow(page)
     // 드롭다운 항목(배분·결과 배지·변동 표시)을 읽어 둔다
@@ -1181,7 +1209,7 @@ test.describe('포켓몬마다 한 행 + 노력치 배분 선택(사용자 피�
     await expect(panel.locator('.rows')).toHaveCount(1)
   })
 
-  test('직접 추가 폼 "H [ ] B [ ] [추가]"는 드롭다운·상세 왼쪽 목록 모두 한 줄(사용자 피드백 2026-11-12)', async ({ page }) => {
+  test('직접 추가 폼 "H [ ] B [ ] [추가]"는 드롭다운에서 한 줄(상세 목록은 없음, R9)(사용자 피드백 2026-11-12)', async ({ page }) => {
     await openProduct(page)
     for (const tab of ['공격', '방어'] as const) {
       await selectTab(page, tab)
@@ -1200,27 +1228,10 @@ test.describe('포켓몬마다 한 행 + 노력치 배분 선택(사용자 피�
       expect(inMenu.spread, tab).toBeLessThanOrEqual(2)
       expect(inMenu.right, tab).toBeLessThanOrEqual(inMenu.boxRight + 0.5)
       await bundleMenu(row).press('Escape')
+      // 공격·방어 탭 상세에는 배분 목록·직접 추가 폼이 없다(R9, AC27)
       await cardLine(row).click()
-      const listForm = row.getByTestId('bundle-list').getByTestId('bundle-add')
-      const inList = await oneLine(listForm)
-      expect(inList.spread, tab).toBeLessThanOrEqual(2)
-      expect(inList.right, tab).toBeLessThanOrEqual(inList.boxRight + 0.5)
-      if (tab === '방어') {
-        // 관여 능력치가 3개 이상인 드문 배분(실데이터에 없어 칸을 둘 복제해 강제)도 한 줄이고, 왼쪽 열이 그만큼 넓어져 목록 상자 안에 든다.
-        const wide = await listForm.evaluate((form) => {
-          const fields = form.querySelector('.bundle-add-fields')!
-          const label = fields.querySelector('label')!
-          for (let i = 0; i < 2; i++) fields.insertBefore(label.cloneNode(true), label)
-          const parts = [...form.querySelectorAll('label, input, button')].map((e) => e.getBoundingClientRect())
-          const mid = parts.map((r) => r.top + r.height / 2)
-          const side = form.closest('[data-testid="bundle-list"]') as HTMLElement
-          return { labels: fields.querySelectorAll('label').length, spread: Math.max(...mid) - Math.min(...mid), right: Math.max(...parts.map((r) => r.right)), sideRight: side.getBoundingClientRect().right, hScroll: side.scrollWidth - side.clientWidth }
-        })
-        expect(wide.labels).toBeGreaterThanOrEqual(3)
-        expect(wide.spread).toBeLessThanOrEqual(2)
-        expect(wide.right).toBeLessThanOrEqual(wide.sideRight)
-        expect(wide.hScroll).toBeLessThanOrEqual(0)
-      }
+      await expect(row.locator('.card-detail')).toBeVisible()
+      await expect(row.locator('.card-detail').getByTestId('bundle-add')).toHaveCount(0)
       await cardLine(row).click()
     }
     // 드롭다운도 관여 능력치 3개 이상(칸 복제로 강제)이면 한 줄이고 메뉴·화면 안에 든다 — 1280px·400px.
@@ -1303,7 +1314,7 @@ test.describe('포켓몬마다 한 행 + 노력치 배분 선택(사용자 피�
     expect(await menuTotal(0.5)).toBeGreaterThan(15)
   })
 
-  test('묶음 기준 100%면 선택지가 하나라도 래더 배지는 버튼(직접 추가 폼), 상세 왼쪽 목록도 항목 하나 + 추가 폼', async ({ page }) => {
+  test('묶음 기준 100%면 선택지가 하나라도 래더 배지는 버튼(직접 추가 폼), 상세에는 배분 목록 없음(R9)', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     const min = toolbarSpin(page, 'SP 배분 최소(%)')
@@ -1322,10 +1333,8 @@ test.describe('포켓몬마다 한 행 + 노력치 배분 선택(사용자 피�
     await menu.press('Escape')
     await cardLine(row).click()
     await expect(row.locator('.card-detail')).toBeVisible()
-    const list = row.getByTestId('bundle-list')
-    await expect(list.getByRole('radio')).toHaveCount(1)
-    await expect(list.getByRole('radio')).toHaveAttribute('aria-checked', 'true')
-    await expect(list.getByTestId('bundle-add')).toBeVisible()
+    // 공격 탭 상세에는 배분 목록이 없다(R9) — 고르기·추가는 위 배지 메뉴에서만
+    await expect(row.getByTestId('bundle-list')).toHaveCount(0)
   })
 })
 
@@ -1400,7 +1409,6 @@ test.describe('배분 직접 추가·고정(사용자 피드백 2026-11-12)', ()
   /** 카드 id(JSON: 따옴표·역슬래시 포함)를 CSS 속성 선택자 문자열로 */
   const pinFor = (cardId: string) => `[data-pin-for='${cardId.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}']`
   const menuPin = (row: Locator, cardId: string) => bundleMenu(row).locator(pinFor(cardId))
-  const listPin = (row: Locator, cardId: string) => row.getByTestId('bundle-list').locator(pinFor(cardId))
 
   /**
    * 항목들의 결과 배지 오른쪽 끝·핀 칸 왼쪽 끝 x(배지가 없는 항목은 결과 칸 오른쪽 끝). 항목(radio·menuitemradio)과 핀 칸은
@@ -1496,29 +1504,8 @@ test.describe('배분 직접 추가·고정(사용자 피드백 2026-11-12)', ()
     await expect.poll(() => bg(items.first())).toBe(tint)
     expect(await bg(items.nth(1))).not.toBe(tint)
 
-    // 상세 왼쪽 목록도 같은 면 색·맨 앞·핀(눌림), 결과 배지 정렬
+    // (상세 왼쪽 목록은 공격·방어 탭에서 없어졌다 — R9. 같은 면 색·맨 앞·핀은 위 드롭다운에서 확인)
     await bundleMenu(row).press('Escape')
-    await cardLine(row).click()
-    const list = row.getByTestId('bundle-list')
-    const radios = list.getByRole('radio')
-    await expect(radios.first()).toHaveAttribute('data-user-added', 'true')
-    await expect(radios.first()).toHaveAttribute('aria-checked', 'true')
-    await expect(radios.first()).toHaveClass(/pinned-bundle/)
-    await expect(radios.first()).toHaveAttribute('aria-keyshortcuts', 'Delete')
-    await expect(radios.first().locator('.bundle-share')).toHaveText('고정됨')
-    await expect(radios.nth(1)).not.toHaveAttribute('aria-keyshortcuts', 'Delete')
-    const listPins = list.getByRole('button', { name: '배분 고정', exact: true })
-    await expect(listPins).toHaveCount(await radios.count())
-    // radiogroup 안에는 radio만(핀은 형제 열 group "배분 고정")
-    await expect(list.getByRole('radiogroup').getByRole('button')).toHaveCount(0)
-    await expect(list.getByRole('group', { name: '배분 고정', exact: true }).getByRole('button')).toHaveCount(await radios.count())
-    await expect(listPins.first()).toHaveAttribute('aria-pressed', 'true')
-    await expect(listPins.nth(1)).toHaveAttribute('aria-pressed', 'false')
-    await expectAligned(list, '상세 왼쪽 목록')
-    await page.mouse.move(0, 0)
-    await expect.poll(() => bg(radios.first())).toBe(tint)
-    expect(await bg(radios.nth(1))).not.toBe(tint)
-    await cardLine(row).click()
 
     // 두 번째 추가는 첫 번째 뒤(추가 순), 둘 다 맨 위
     await bundleButton(row).click()
@@ -1557,7 +1544,7 @@ test.describe('배분 직접 추가·고정(사용자 피드백 2026-11-12)', ()
     await expect(bundleMenu(row).locator('[data-pinned="true"]')).toHaveCount(0)
   })
 
-  test('관측 배분 핀: 메뉴를 연 채 맨 위로 "고정됨"·고정 면 색(재계산 없음), 해제하면 원래 자리·비중으로. 상세 목록 핀·Delete도 같다', async ({ page }) => {
+  test('관측 배분 핀: 메뉴를 연 채 맨 위로 "고정됨"·고정 면 색(재계산 없음), 해제하면 원래 자리·비중으로. (상세 목록은 R9로 없음)', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     const row = await firstRow(page)
@@ -1609,82 +1596,21 @@ test.describe('배분 직접 추가·고정(사용자 피드백 2026-11-12)', ()
     await expect(row.getByTestId('card-bundle')).toHaveText(target.text.replace(/\s\S+$/, ' 고정됨'))
     await expect(bundleButton(row)).toHaveClass(/pinned-bundle/)
 
-    // 상세 왼쪽 목록: 고정 항목이 맨 위, 핀 해제 → 원래 자리·비중, 선택은 유지
-    await cardLine(row).click()
-    const list = row.getByTestId('bundle-list')
-    const radios = list.getByRole('radio')
-    await expect(radios.first()).toHaveAttribute('data-card-id', target.id)
-    await expect(listPin(row, target.id)).toHaveAttribute('aria-pressed', 'true')
-    // 선택 항목의 핀만 Tab 순서(radio 다음)
-    await radios.first().focus()
-    await page.keyboard.press('Tab')
-    await expect(listPin(row, target.id)).toBeFocused()
-    await page.keyboard.press('Enter')
-    await expect(listPin(row, target.id)).toHaveAttribute('aria-pressed', 'false')
-    await expect(listPin(row, target.id)).toBeFocused()
-    expect(await radios.evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.cardId))).toEqual(original.map((o) => o.id))
-    await expect(radios.nth(targetAt).locator('.bundle-opt-label')).toHaveText(target.text)
+    // 드롭다운 핀 해제 → 원래 자리·비중, 선택은 유지, 재계산 없음(이전에는 상세 왼쪽 목록에서 확인 — 목록은 R9로 없어짐)
+    await bundleButton(row).click()
+    await expect(items.first()).toHaveAttribute('data-card-id', target.id)
+    await menuPin(row, target.id).click()
+    await expect(menuPin(row, target.id)).toHaveAttribute('aria-checked', 'false')
+    await expect(menuPin(row, target.id)).toBeFocused()
+    expect(await items.evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.cardId))).toEqual(original.map((o) => o.id))
+    await expect(items.nth(targetAt).locator('.bundle-opt-label')).toHaveText(target.text)
     await expect(row).toHaveAttribute('data-card-id', target.id)
     await expect(bundleButton(row)).not.toHaveClass(/pinned-bundle/)
     await expect(tabPanel(page)).toHaveAttribute('data-generation', generation!)
-
-    // 상세 목록 핀 클릭으로 다시 고정, 그 radio에서 Delete로 해제(관측 radio의 Delete는 고정 안 된 항목엔 아무것도 하지 않는다)
-    await listPin(row, original[1].id).click()
-    await expect(radios.first()).toHaveAttribute('data-card-id', original[1].id)
-    // 옮겨진 항목의 핀에 포커스가 남는다
-    await expect(listPin(row, original[1].id)).toBeFocused()
-    await expect(radios.first()).toHaveAttribute('aria-keyshortcuts', 'Delete')
-    await expectAligned(list, '관측 고정 상세 목록')
-    const unpinned = radios.and(page.locator(':not([data-pinned])')).first()
-    await unpinned.focus()
-    await page.keyboard.press('Delete')
-    await expect(list.locator('[role="radio"][data-pinned="true"]')).toHaveCount(1)
-    await radios.first().focus()
-    await page.keyboard.press('Delete')
-    await expect(list.locator('[role="radio"][data-pinned="true"]')).toHaveCount(0)
-    expect(await radios.evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.cardId))).toEqual(original.map((o) => o.id))
-    await expect(tabPanel(page)).toHaveAttribute('data-generation', generation!)
-  })
-
-  test('상세 왼쪽 목록: 직접 추가 배분 radio에서 Delete 키, 또는 핀 클릭으로 고정 해제 = 삭제', async ({ page }) => {
-    await openProduct(page)
-    await waitComplete(page)
-    const row = await firstRow(page)
-    const before = await row.getAttribute('data-card-id')
-    const addVia = async (h: string, b: string) => {
-      await bundleButton(row).click()
-      await spInput(row, 'HP').fill(h)
-      await spInput(row, '방어').fill(b)
-      await addButton(row).click()
-      await waitComplete(page)
-      await expect(row).toHaveAttribute('data-user-added', 'true')
-    }
-    await addVia('31', '3')
+    // 공격·방어 탭 상세에는 배분 목록(핀·Delete 키)이 없다
+    await bundleMenu(row).press('Escape')
     await cardLine(row).click()
-    const list = row.getByTestId('bundle-list')
-    const user = list.getByRole('radio').and(page.locator('[data-user-added="true"]'))
-    await expect(user).toHaveCount(1)
-    // 고정 안 된 관측 배분 radio에서 Delete: 변화 없음
-    const observed = list.getByRole('radio').and(page.locator(':not([data-pinned])')).first()
-    await observed.focus()
-    await page.keyboard.press('Delete')
-    await expect(user).toHaveCount(1)
-    // 직접 추가 radio에서 Delete: 삭제되고 기본 배분으로 돌아간다
-    await user.focus()
-    await page.keyboard.press('Delete')
-    await waitComplete(page)
-    await expect(row).toHaveAttribute('data-card-id', before!)
-    await expect(row.getByTestId('bundle-list').locator('[data-user-added="true"]')).toHaveCount(0)
-    // 핀 클릭(마우스)
-    if ((await row.getAttribute('class'))?.includes('open')) await cardLine(row).click()
-    await addVia('30', '5')
-    if (!(await row.getAttribute('class'))?.includes('open')) await cardLine(row).click()
-    const added = await row.getAttribute('data-card-id')
-    await expect(listPin(row, added!)).toHaveAttribute('aria-pressed', 'true')
-    await listPin(row, added!).click()
-    await waitComplete(page)
-    await expect(row).toHaveAttribute('data-card-id', before!)
-    await expect(row.getByTestId('bundle-list').locator('[data-user-added="true"]')).toHaveCount(0)
+    await expect(row.getByTestId('bundle-list')).toHaveCount(0)
   })
 
   test('관측 배분과 같은 값을 추가하면 새 항목 없이 그 배분을 고르고 고정한다', async ({ page }) => {
