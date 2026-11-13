@@ -50,10 +50,28 @@ export interface SumBandInput {
   nature: NatureVariant
   fallback: boolean
   defenseStat: 'def' | 'spd'
-  /** 표시용 현재 H·B/D SP와 현재 분배 실제 판정(H 행 현재 칸) */
+  /** 표시용 현재 H·B/D SP와 현재 분배 실제 판정(pairCurrentCategory) */
   current: SumSplit & { label?: RollTier }
   /** 능력치당 최대 SP */
   max: number
+}
+
+export interface PairRowLike {
+  sweepStat?: string
+  status: string
+  current: { category?: string }
+}
+
+/**
+ * 현재 분배 실제 판정의 출처 칸: H 행 현재 칸, H 행이 갱신 대기(드래그로 B/D가 계획 시점과 다름)면 B/D 행 현재 칸.
+ * 둘 다 ok가 아니면 undefined(계획 시점 칸으로는 표시 SP의 판정을 알 수 없다).
+ */
+export function pairCurrentCategory(rows: readonly PairRowLike[], defenseStat: 'def' | 'spd'): string | undefined {
+  for (const stat of ['hp', defenseStat]) {
+    const r = rows.find((x) => x.sweepStat === stat)
+    if (r?.status === 'ok' && r.current.category !== undefined) return r.current.category
+  }
+  return undefined
 }
 
 /** 내구 합계 띠 뷰. current.best는 같은 합계 최적 판정이 현재 판정보다 좋을 때만(fallback이면 성격 차이라 붙이지 않는다) */

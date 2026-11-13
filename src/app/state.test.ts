@@ -349,3 +349,51 @@ describe('toCardInput', () => {
     expect(toCardInput(broken, game, bo1).mySet.sp.def).toBeNaN()
   })
 })
+
+describe('종 교체(switch-species)', () => {
+  const sneasler = { ...EXAMPLE_DRAFT, species: '포푸니크', ability: 'unburden', item: '하얀허브', nature: 'adamant', moves: ['인파이트', '', '', ''] }
+  it('떠나는 종의 초안을 기억하고 처음 고른 종은 준 초안을 쓴다, 세대 +1·종 교체 세대 기록', () => {
+    const next = reducer(start(), { type: 'switch-species', from: 'garchomp', to: 'sneasler', draft: sneasler })
+    expect(next.draft).toEqual(sneasler)
+    expect(next.draftCache).toEqual({ garchomp: EXAMPLE_DRAFT })
+    expect(next.generation).toBe(1)
+    expect(next.speciesGeneration).toBe(1)
+  })
+
+  it('돌아오면 기억한 초안이 준 초안보다 우선한다(종 칸 글자만 새 입력)', () => {
+    const edited = { ...EXAMPLE_DRAFT, item: '구애스카프', sp: { ...EXAMPLE_DRAFT.sp, hp: '10' } }
+    const s = run(
+      start(),
+      { type: 'set-draft', draft: edited },
+      { type: 'switch-species', from: 'garchomp', to: 'sneasler', draft: sneasler },
+      { type: 'switch-species', from: 'sneasler', to: 'garchomp', draft: { ...sneasler, species: 'garchomp' } },
+    )
+    expect(s.draft).toEqual({ ...edited, species: 'garchomp' })
+    expect(s.draftCache.sneasler).toEqual(sneasler)
+    expect(s.speciesGeneration).toBe(s.generation)
+  })
+
+  it('종 기억·종 교체 세대는 계산 입력이 아니다, SP 변경은 종 교체 세대를 바꾸지 않는다', () => {
+    const { game, bo1 } = realData()
+    const s = reducer(start(), { type: 'switch-species', from: 'garchomp', to: 'sneasler', draft: sneasler })
+    const sp = reducer(s, { type: 'commit-sp', stat: 'hp', value: 5 })
+    expect(sp.generation).toBe(s.generation + 1)
+    expect(sp.speciesGeneration).toBe(s.speciesGeneration)
+    expect(toCardInput(s, game, bo1)).toEqual(toCardInput({ ...s, draftCache: {}, speciesGeneration: 0 }, game, bo1))
+  })
+
+  it('from === to면 set-draft와 같다(기억·종 교체 세대 그대로), from이 없으면 기억하지 않는다', () => {
+    const s = start()
+    const same = reducer(s, { type: 'switch-species', from: 'garchomp', to: 'garchomp', draft: { ...EXAMPLE_DRAFT, item: '' } })
+    expect(same.draftCache).toEqual({})
+    expect(same.speciesGeneration).toBe(0)
+    expect(same.draft.item).toBe('')
+    expect(reducer(s, { type: 'switch-species', from: undefined, to: 'sneasler', draft: sneasler }).draftCache).toEqual({})
+  })
+
+  it('직접 고른 기술 항목은 종이 바뀌면 풀린다', () => {
+    const choice: MoveChoice = { tab: 'attack', source: 'ladder', opponentId: 'incineroar', key: itemKey('earthquake', BASE_CONDITION_ID) }
+    const s = run(start(), { type: 'choose-move', choice }, { type: 'switch-species', from: 'garchomp', to: 'sneasler', draft: sneasler })
+    expect(s.moveChoices).toEqual([])
+  })
+})

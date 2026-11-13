@@ -10,7 +10,9 @@ import {
   spanNeedText,
   spanText,
   spansOf,
+  sumBandAriaLabel,
   sumCurrentText,
+  sumFallbackText,
   sumSpanParts,
   targetSegments,
   type TargetLike,
@@ -52,11 +54,11 @@ const tickSps = (cells: readonly BandCell[]): number[] => {
  * 구간 띠: 칸 안에는 글자 없이 판정 색(결과 배지와 같은 5색)만, 칸 사이 틈은 둔다. 칸은 열 폭에 맞춰 줄어들어(1fr) 가로 스크롤이 없다.
  * 현재 칸은 진한 외곽선. 판정 문구는 칸 title·위 판정 줄·아래 범례에 있다(색만으로 정보를 전하지 않는다). 칸은 포커스 대상이 아니다.
  */
-function Band({ cells, current, className = '', testId }: { cells: readonly BandCell[]; current: number; className?: string; testId?: string }) {
+function Band({ cells, current, className = '', testId, label }: { cells: readonly BandCell[]; current: number; className?: string; testId?: string; label?: string }) {
   const ticks = tickSps(cells)
   return (
     <div className={`band-wrap${className}`} data-testid={testId} style={{ '--band-cells': cells.length } as CSSProperties}>
-      <ol className="band">
+      <ol className="band" aria-label={label}>
         {cells.map((c) => (
           <li
             key={c.sp}
@@ -214,7 +216,7 @@ function SumBand({ band }: { band: SumBandView }) {
   const cells: BandCell[] = band.cells.map((c) => ({ sp: c.sum, category: c.label, title: `합계 ${c.sum}: ${categoryLabel(c.label)}` }))
   return (
     <>
-      <Band cells={cells} current={band.current.sum} className=" sum-band" testId="sum-band" />
+      <Band cells={cells} current={band.current.sum} className=" sum-band" testId="sum-band" label={sumBandAriaLabel(stat, band.max)} />
       <p className="band-legend" data-testid="sum-legend">
         {band.spans.map((s) => {
           const p = sumSpanParts(s, stat, plus)
@@ -231,23 +233,27 @@ function SumBand({ band }: { band: SumBandView }) {
           )
         })}
       </p>
-      {band.fallback && <p className="hint">무보정 성격 기준(현재 성격은 {stat === 'def' ? 'B' : 'D'} 하락)</p>}
+      {band.fallback && <p className="hint" data-testid="sum-fallback">{sumFallbackText(stat, band.fallbackReason)}</p>}
     </>
   )
 }
 
 /**
  * 방어 탭 쌍 항목(극단 필터 통과)의 판정 하나: H 행·B/D 행을 합계 띠 하나로 보인다. 띠 = 두 변형 쌍 결과가 나온 뒤, 그 전에는 "갱신 중".
- * 두 행이 모두 변화 없음(잠정 아님)이면 고정 판정 1줄.
+ * 쌍 오류(card.pair.error)면 띠 자리에 "계산 불가"(행 오류가 이미 보이면 거듭 쓰지 않는다). 두 행이 모두 변화 없음(잠정 아님)이면 고정 판정 1줄.
  */
 export const PairDetail = memo(function PairDetail({ game, card }: { game: Snapshot; card: CardView }) {
   const rows = card.rows
   const head = rows.find((r) => r.sweepStat === 'hp') ?? rows[0]
   if (head === undefined) return null
   const band = card.pair?.band
+  const shownStatus = rows.find((r) => r.status === 'error') ?? rows.find((r) => r.status === 'pending') ?? rows.find((r) => r.status === 'stale')
+  // 행 오류가 이미 보이면 쌍 오류를 거듭 쓰지 않는다.
+  const pairError = band === undefined && shownStatus?.status !== 'error' ? card.pair?.error : undefined
   const variable = rows.some((r) => (r.status === 'ok' || r.status === 'stale') && !r.noChange && r.cells.length > 0)
-  const fixed = !variable && rows.every((r) => r.status === 'ok' && r.noChange && !r.provisional) ? head.current.category : undefined
-  const shownStatus = rows.find((r) => r.status === 'error') ?? rows.find((r) => r.status === 'pending') ?? rows.find((r) => r.status === 'stale') ?? (variable ? undefined : rows.find((r) => r.provisional))
+  const fixed = !variable && pairError === undefined && rows.every((r) => r.status === 'ok' && r.noChange && !r.provisional) ? head.current.category : undefined
+  const status = shownStatus ?? (variable ? undefined : rows.find((r) => r.provisional))
+  const note = rowRefsNote(game, 'defense', head)
   const plus = band !== undefined && band.nature === 'plus' && !band.fallback
   const label = band?.current.label
   return (
@@ -265,14 +271,24 @@ export const PairDetail = memo(function PairDetail({ game, card }: { game: Snaps
         <strong className="row-title">
           <MoveLabel game={game} tab="defense" row={head} />
         </strong>
+        {note && <span className="hint">({note})</span>}
       </div>
-      {shownStatus !== undefined && <RowStatus game={game} row={shownStatus} />}
+      {status !== undefined && <RowStatus game={game} row={status} />}
+      {pairError !== undefined && (
+        <p className="row-error" data-testid="sum-band-error">
+          계산 불가: {koReason(game, pairError)}
+        </p>
+      )}
       {fixed !== undefined && (
         <p className="row-fixed">
           <TierChip tab="defense" category={fixed} /> {fixedText(fixed)}
         </p>
       )}
-      {variable && band === undefined && <p className="hint" data-testid="sum-band-pending">갱신 중</p>}
+      {variable && band === undefined && pairError === undefined && shownStatus?.status !== 'error' && (
+        <p className="hint" data-testid="sum-band-pending">
+          갱신 중
+        </p>
+      )}
       {variable && band !== undefined && (
         <>
           <p className="row-judge" data-testid="sum-current">

@@ -2,23 +2,24 @@ import { useEffect, useId, useMemo, useRef, useState, type Dispatch } from 'reac
 import { CoreError, CoreInputError, STAT_IDS, computeStats, type SpTable } from '../../core'
 import { myMeansNotes, type ErrorReason } from '../../cards'
 import type { Snapshot, StatId, StatTable } from '../../data/schema'
-import { topMoves, type MetaView } from '../../meta'
+import type { MetaView } from '../../meta'
 import { STAT_LABEL, typeNameOf, typeSlug } from '../../ui/labels'
 import { TypeIcon } from '../../ui/TypeIcon'
 import { heldItemIds, namesOf, pickSpecies } from '../../ui/names'
 import { choiceOf, natureIdFor, refreshAuto, toggleMinus, togglePlus, type NatureChoice, type NatureStat } from '../../ui/natureToggle'
-import { MOVE_SLOTS, parseNumber, speciesMoveFill, toPokemonSet, type SetDraft } from '../../ui/setDraft'
+import { MOVE_SLOTS, parseNumber, toPokemonSet, type SetDraft } from '../../ui/setDraft'
 import { searchIndexOf } from '../../ui/search'
 import { STAT_SHORT } from '../../ui/format'
 import { draftFieldOf, koReason, type DraftField } from '../../ui/koErrors'
 import type { AppAction } from '../state'
+import { representativeDraft, speciesOnlyDraft } from '../speciesDraft'
 import { Combobox } from './Combobox'
 import { PokemonIcon } from './PokemonIcon'
 import { TAB_LABEL, meansLabel } from './text'
 
 interface Props {
   game: Snapshot
-  /** 지금 선택한 통계 기준·월의 메타(종을 바꾸면 그 종 기술 사용률 상위로 기술 칸을 채운다) */
+  /** 지금 선택한 통계 기준·월의 메타(처음 고른 종이면 그 종 대표 세트로 채운다) */
   view: MetaView
   draft: SetDraft
   dispatch: Dispatch<AppAction>
@@ -103,22 +104,16 @@ export function MySetPanel({ game, view, draft, dispatch, reasons, onDisplaySp }
   const onMinus = (s: NatureStat) => update(withChoice(toggleMinus(game, choice, s, moveIdsOf(draft.moves))))
 
   const onSpecies = (text: string) => {
-    const next = pickSpecies(game, text)
-    // 메가는 메가 폼 종 이름으로만 고른다(스톤 자동 고정). 메가 폼에서 벗어나면 스톤을 비운다.
-    const patch: Partial<SetDraft> = { species: text, mega: false }
-    if (next) {
-      if (!next.base.abilities.includes(draft.ability)) patch.ability = next.base.abilities[0]
-      if (next.megaStone !== undefined) patch.item = names.items.label(next.megaStone)
-      else if (pick?.megaStone !== undefined) patch.item = ''
+    // 풀린 종이 바뀌면(마지막으로 풀린 종과 비교: 오타를 거쳐 같은 종으로 돌아와도 손으로 고친 세트를 덮지 않는다) 지금 세트를 그
+    // 종 기억에 넣고, 새 종 기억이 있으면 복원·없으면 대표 세트(메타 목록 밖이면 종만 바꾼다).
+    const from = speciesId ?? lastSpeciesId.current
+    const to = names.species.resolve(text)
+    if (to === undefined || to === from) {
+      update(speciesOnlyDraft(game, draft, text))
+      return
     }
-    // 사용자가 종을 바꾸면 그 종(메가 폼은 메가 항목, 없으면 원종 항목) 기술 사용률 상위로 기술 칸을 채운다. 메타 목록 밖 종이면
-    // 기술 그대로. 비교는 마지막으로 풀린 종이라 오타를 거쳐 같은 종으로 돌아와도 손으로 고친 기술을 덮지 않는다.
-    const moves = speciesMoveFill(game, speciesId ?? lastSpeciesId.current, text, (id) => {
-      const entry = view.entry(id)
-      return entry === undefined ? undefined : topMoves(entry, game, MOVE_SLOTS)
-    })
-    if (moves !== undefined) patch.moves = moves
-    update(patch)
+    const next = representativeDraft(game, (id) => view.entry(id), draft, text) ?? speciesOnlyDraft(game, draft, text)
+    dispatch({ type: 'switch-species', from, to, draft: next })
   }
 
   /** 잔여 예산까지(다른 능력치는 확정 값). 이미 초과면 현재 값에서 멈춘다. */

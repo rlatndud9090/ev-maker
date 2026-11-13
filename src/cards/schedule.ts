@@ -100,7 +100,7 @@ export function mayUnlockPair(plan: TabPlan, results: ResultMap, task: RowTask):
 }
 
 /** 쌍 최소 조합이 필요한지: 필터 통과, 그 필터의 두 행 현재·변형 스윕이 모두 끝났고 적어도 한 행은 판정이 바뀐다. */
-function pairReady(plan: TabPlan, card: CardSpec, filterId: string, results: ResultMap): boolean {
+export function pairReady(plan: TabPlan, card: CardSpec, filterId: string, results: ResultMap): boolean {
   if (filterState(results, filterId).kind !== 'passed') return false
   let changes = false
   let rows = 0

@@ -25,6 +25,8 @@ interface Props {
   sortMode: SortMode
   /** 직접 고른 기술 항목(모든 탭) */
   moveChoices: readonly MoveChoice[]
+  /** 마지막으로 내 포켓몬 종을 바꾼 세대(AppState speciesGeneration): 이 세대 이상 뷰가 보이면 그 전에 펼친 카드를 접는다 */
+  speciesGeneration: number
   dispatch: Dispatch<AppAction>
   /** 진행 줄 오른쪽 "포켓몬 추가"(목록 밖 타겟 추가 패널 열기·닫기) */
   customOpen: boolean
@@ -71,20 +73,40 @@ function SectionLabel({ id, tab, bucket, count }: { id: string; tab: Tab; bucket
 }
 
 const NO_ITEMS: readonly GroupItem[] = []
+const NONE: ReadonlySet<string> = new Set()
 
-export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySet, customTargets, pinnedBundles, sortMode, moveChoices, dispatch, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel }: Props) {
+/** 펼친 카드(at = 펼침을 마지막으로 바꿀 때 보이던 뷰 세대) */
+interface Expanded {
+  at: number
+  ids: ReadonlySet<string>
+}
+
+/** 종 교체 세대 이상 뷰가 보이는데 펼침이 그 전 것이면 모두 접힌 것으로 본다(재계산 뒤 접기). */
+const expandedNow = (e: Expanded, shownGeneration: number, speciesGeneration: number): ReadonlySet<string> =>
+  shownGeneration >= speciesGeneration && e.at < speciesGeneration ? NONE : e.ids
+
+export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySet, customTargets, pinnedBundles, sortMode, moveChoices, speciesGeneration, dispatch, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel }: Props) {
   const names = namesOf(game)
   // 펼침·배분 선택은 탭마다 따로(같은 포켓몬이라도 탭이 다르면 다른 행), 배분을 바꿔도 펼침이 유지되게 그룹 키로 둔다.
   const scoped = (groupKey: string) => JSON.stringify([tab, groupKey])
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
+  const shownGeneration = state.kind === 'idle' ? generation : state.generation
+  const [expandedState, setExpanded] = useState<Expanded>(() => ({ at: shownGeneration, ids: NONE }))
+  const expanded = expandedNow(expandedState, shownGeneration, speciesGeneration)
+  // 토글 콜백은 세대마다 바뀌지 않게(행 다시 그리기 방지) 세대를 ref로 읽는다.
+  const gens = useRef({ shown: shownGeneration, species: speciesGeneration })
+  useLayoutEffect(() => {
+    gens.current = { shown: shownGeneration, species: speciesGeneration }
+  }, [shownGeneration, speciesGeneration])
   const onToggle = useCallback(
     (groupKey: string) => {
       const id = JSON.stringify([tab, groupKey])
+      const { shown, species } = gens.current
       setExpanded((cur) => {
-        const next = new Set(cur)
+        const next = new Set(expandedNow(cur, shown, species))
         if (next.has(id)) next.delete(id)
         else next.add(id)
-        return next
+        // 종을 바꾼 뒤(새 뷰가 오기 전) 펼친 카드는 새 뷰가 와도 접지 않는다
+        return { at: Math.max(shown, species), ids: next }
       })
     },
     [tab],

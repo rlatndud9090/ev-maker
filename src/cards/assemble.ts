@@ -8,6 +8,7 @@ import {
   filterState,
   neededVariants,
   opponentKey,
+  pairReady,
   primaryCardIds,
   probeKey,
   rowChanges,
@@ -18,7 +19,7 @@ import {
 } from './schedule'
 import { tierRank, type JudgementSide, type RollTier } from '../core'
 import { cellLabel, pairTarget, singleTarget } from './target'
-import { sumBandOf, type SumBandInput } from './sumBand'
+import { pairCurrentCategory, sumBandOf, type SumBandInput } from './sumBand'
 import { variantNature } from './natures'
 import { NATURE_VARIANTS } from './types'
 import type {
@@ -40,7 +41,6 @@ import type {
   RowTask,
   RowTaskResult,
   RowView,
-  SumBandView,
   TabPlan,
   TabStatus,
   TabView,
@@ -144,26 +144,73 @@ function targetOf(ctx: Ctx, spec: RowSpec, stat: StatId, j: RowJudgements, at: C
 }
 
 /**
- * 통과한 극단 필터의 내구 합계 띠. 두 변형 쌍 결과가 다 나와야 띠가 있다(alt 범례에 다른 변형이 필요). 현재 판정은 H 행 현재 칸.
- * 띠 기준 변형 = 현재 성격과 같은 변형, 어느 쪽도 아니면(B/D 하락 성격) 무보정 + fallback.
+ * 쌍 결과가 아직 없는데 쌍 작업이 끝내 생기지 않는 이유(행·변형 스윕 오류). 기다리는 결과가 있거나 쌍 작업이 생길 수 있으면 undefined.
  */
-function pairBand(ctx: Ctx, card: CardSpec, filterId: string, rows: readonly RowView[]): { band?: SumBandView } {
+function pairBlocked(ctx: Ctx, card: CardSpec, filterId: string): ErrorReason | undefined {
+  const { plan, results } = ctx
+  if (pairReady(plan, card, filterId, results)) return undefined
+  let reason: ErrorReason | undefined
+  for (const rowId of card.rowIds) {
+    const spec = plan.rows[rowId]
+    if (spec.gate !== filterId) continue
+    if (spec.error !== undefined) {
+      reason ??= spec.error
+      continue
+    }
+    const ends = results.get(taskKey({ kind: 'ends', rowId }))
+    if (ends === undefined) return undefined
+    if (ends.kind === 'error') {
+      reason ??= ends.reason
+      continue
+    }
+    const swept = results.get(taskKey({ kind: 'sweep', rowId, stage: 2 }))
+    if (swept === undefined) return undefined
+    if (swept.kind === 'error') {
+      reason ??= swept.reason
+      continue
+    }
+    for (const nature of neededVariants(plan, spec)) {
+      const v = results.get(taskKey({ kind: 'variant', rowId, nature }))
+      if (v === undefined) return undefined
+      if (v.kind === 'error') reason ??= v.reason
+    }
+  }
+  return reason
+}
+
+/**
+ * 통과한 극단 필터의 내구 합계 띠. 두 변형 쌍 결과가 다 나와야 띠가 있다(alt 범례에 다른 변형이 필요).
+ * 쌍 결과 오류·쌍 작업이 끝내 생기지 않는 오류면 error. 현재 판정 = pairCurrentCategory(드래그로 두 행이 다 갱신 대기면 생략).
+ * 띠 기준 변형 = 현재 성격과 같은 변형, 어느 쪽도 아니면 무보정 + fallback(이유: B/D 하락 성격 또는 그 밖).
+ */
+function pairBand(ctx: Ctx, card: CardSpec, filterId: string, rows: readonly RowView[]): NonNullable<CardView['pair']> {
   const spec = card.rowIds.map((id) => ctx.plan.rows[id]).find((r) => r.gate === filterId && r.natures !== undefined)
-  if (spec?.natures === undefined) return {}
   const points: Partial<Record<NatureVariant, readonly PairPoint[]>> = {}
+  let missing = false
   for (const nature of NATURE_VARIANTS) {
     const r = ctx.results.get(taskKey({ kind: 'pair', filterId, nature }))
-    if (r?.kind !== 'pair') return {}
-    points[nature] = r.points
+    if (r?.kind === 'error') return { error: r.reason }
+    if (r?.kind === 'pair') points[nature] = r.points
+    else missing = true
+  }
+  if (missing || spec?.natures === undefined) {
+    const error = pairBlocked(ctx, card, filterId)
+    return error === undefined ? {} : { error }
   }
   const natures = spec.natures
   const mine = NATURE_VARIANTS.find((v) => variantNature(natures, v) === spec.defender.nature)
   const defenseStat = ctx.plan.filters[filterId].stats[1]
-  const hRow = rows.find((r) => r.sweepStat === 'hp')
-  const label = hRow?.current.category === undefined ? undefined : cellLabel('defense', { category: hRow.current.category })
+  const category = pairCurrentCategory(rows, defenseStat)
+  const label = category === undefined ? undefined : cellLabel('defense', { category })
   const current: SumBandInput['current'] = { hp: ctx.displaySp.hp, defense: ctx.displaySp[defenseStat] }
   if (label !== undefined) current.label = label as RollTier
   const band = sumBandOf({ points: points as Record<NatureVariant, readonly PairPoint[]>, nature: mine ?? 'neutral', fallback: mine === undefined, defenseStat, current, max: ctx.plan.spMaxPerStat })
+  if (mine === undefined) {
+    const id = spec.defender.nature
+    const all = ctx.plan.game.data.natures
+    const entry = Object.prototype.hasOwnProperty.call(all, id) ? all[id] : undefined
+    band.fallbackReason = entry !== undefined && entry.minus === defenseStat && entry.plus !== entry.minus ? 'minus' : 'other'
+  }
   return { band }
 }
 

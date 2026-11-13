@@ -420,6 +420,7 @@ test.describe('제품 화면', () => {
       await expect(d.locator('.band')).toHaveCount(1)
       const sum = d.getByTestId('sum-band').getByTestId('band-cell')
       await expect(sum).toHaveCount(65)
+      await expect(d.getByTestId('sum-band').locator('ol.band')).toHaveAttribute('aria-label', /^H\+[BD] 합계 0~64 판정$/)
       expect(await sum.evaluateAll((els) => els.map((e) => Number((e as HTMLElement).dataset.sp)))).toEqual(Array.from({ length: 65 }, (_, i) => i))
       await expect(d.locator('.band-ticks')).toHaveText('03264')
       const current = d.getByTestId('sum-current')
@@ -446,6 +447,53 @@ test.describe('제품 화면', () => {
       await expect(d).not.toContainText('다른 능력치에서')
       await expect(d.locator('.cell.over, .over-key')).toHaveCount(0)
       expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
+    }
+  })
+
+  test('펼친 상세: 간단행 배분 배지로 배분을 바꾸면 펼친 채로 상세 판정이 그 배분 기준으로 바뀐다(AC27)', async ({ page }) => {
+    await openProduct(page)
+    await waitComplete(page)
+    for (const tab of ['공격', '방어'] as const) {
+      await selectTab(page, tab)
+      await waitComplete(page)
+      // 결과 배지 색(= 판정 단계)이 현재 배분과 다른 배분이 있는 첫 행
+      const rows = cards(page).filter({ has: page.locator('button.bundle-btn') })
+      const n = await rows.count()
+      let found: { row: Locator; id: string; tone: string; before: string } | undefined
+      for (let i = 0; i < n && found === undefined; i++) {
+        const row = rows.nth(i)
+        await bundleButton(row).click()
+        const tones = await bundleMenu(row)
+          .getByRole('menuitemradio')
+          .evaluateAll((els) =>
+            els.map((e) => ({
+              id: (e as HTMLElement).dataset.cardId ?? '',
+              checked: e.getAttribute('aria-checked') === 'true',
+              tone: [...(e.querySelector('.ko-badge')?.classList ?? [])].find((c) => /^ko-(red|orange|yellow|lime|green)$/.test(c)) ?? '',
+            })),
+          )
+        await bundleMenu(row).press('Escape')
+        const cur = tones.find((t) => t.checked)
+        const other = tones.find((t) => !t.checked && t.tone !== '' && cur !== undefined && t.tone !== cur.tone)
+        if (cur !== undefined && other !== undefined) {
+          const key = await row.getAttribute('data-group-key')
+          found = { row: cards(page).and(page.locator(`[data-group-key='${key}']`)), id: other.id, tone: other.tone, before: cur.tone }
+        }
+      }
+      expect(found, `${tab}: 판정 단계가 다른 배분이 있는 행`).toBeDefined()
+      const { row, id, tone, before } = found!
+      await cardLine(row).click()
+      const detail = row.locator('.card-detail')
+      // 상세 현재 판정 칩(판정 줄·고정 판정 줄) = 선택 배분의 결과 배지 단계
+      const chip = detail.locator('.row-judge .tier-chip, .row-fixed .tier-chip').first()
+      await expect(chip).toHaveClass(new RegExp(`\\b${before}\\b`))
+      await bundleButton(row).click()
+      await bundleMenu(row).locator(`[role="menuitemradio"][data-card-id='${id.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}']`).click()
+      await expect(row).toHaveAttribute('data-card-id', id)
+      await expect(cardLine(row)).toHaveAttribute('aria-expanded', 'true')
+      await expect(detail).toBeVisible()
+      await expect(chip).toHaveClass(new RegExp(`\\b${tone}\\b`))
+      await cardLine(row).click()
     }
   })
 
@@ -789,12 +837,12 @@ test.describe('제품 화면', () => {
     await waitComplete(page)
     await expect(tabPanel(page).getByTestId('tab-error')).toHaveCount(0)
 
-    // 일반 폼으로 돌아오면 스톤을 비우고 도구를 다시 고를 수 있다.
+    // 일반 폼으로 돌아오면 그 종 마지막 세트(R11: 예시 세트 생명의구슬)로 돌아와 스톤이 남지 않고 도구를 다시 고를 수 있다.
     await species.fill('한카리아스')
     await species.press('Enter')
     const item = combo(me, '도구')
     await expect(item).toBeEnabled()
-    await expect(item).toHaveValue('')
+    await expect(item).toHaveValue('생명의구슬')
     await item.fill('나이트')
     const options = page.getByRole('listbox', { name: '도구 후보' }).getByRole('option')
     await expect(options.filter({ hasText: /나이트$/ })).toHaveCount(0)
@@ -1613,6 +1661,106 @@ test.describe('배분 직접 추가·고정(사용자 피드백 2026-11-12)', ()
     await expect(row.getByTestId('bundle-list')).toHaveCount(0)
   })
 
+  test('스피드 탭 상세 왼쪽 목록: 맨 위 직접 추가 폼으로 추가 → 맨 위 "고정됨" 항목 선택, 직접 추가 radio에서 Delete 키 또는 핀 클릭 = 삭제', async ({ page }) => {
+    await openProduct(page)
+    await selectTab(page, '스피드')
+    await waitComplete(page)
+    const row = await firstRow(page)
+    const before = await row.getAttribute('data-card-id')
+    const listPin = (cardId: string) => row.getByTestId('bundle-list').locator(pinFor(cardId))
+    const open = async () => {
+      if ((await cardLine(row).getAttribute('aria-expanded')) !== 'true') await cardLine(row).click()
+      await expect(row.getByTestId('bundle-list')).toBeVisible()
+    }
+    await open()
+    const list = row.getByTestId('bundle-list')
+    const radios = list.getByRole('radio')
+    // 관측 배분과 겹치지 않을 첫 능력치 값(직접 추가 폼 첫 칸)
+    const form = list.getByTestId('bundle-add')
+    const first = form.getByRole('spinbutton').first()
+    const stat = ((await form.locator('label').first().textContent()) ?? '').trim()
+    const observed = await radios.locator('.bundle-opt-label').allTextContents()
+    const free = [31, 29, 27, 25, 23, 21, 19, 17, 15, 13, 11, 9, 7, 5, 3, 1].filter((v) => !observed.some((t) => new RegExp(`(^|\\s)${stat}${v}(\\D|$)`).test(t)))
+    expect(free.length, observed.join(' | ')).toBeGreaterThan(1)
+    const addVia = async (v: number) => {
+      await open()
+      await first.fill(String(v))
+      await form.getByRole('button', { name: '추가', exact: true }).click()
+      await waitComplete(page)
+      await expect(row).toHaveAttribute('data-user-added', 'true')
+      await open()
+    }
+    // 맨 위 폼으로 추가: 맨 위에 고정 항목, 자동 선택, 그 radio만 Delete 단축
+    await addVia(free[0])
+    const user = radios.and(page.locator('[data-user-added="true"]'))
+    await expect(user).toHaveCount(1)
+    await expect(radios.first()).toHaveAttribute('data-user-added', 'true')
+    await expect(radios.first()).toHaveAttribute('aria-checked', 'true')
+    await expect(radios.first()).toHaveClass(/pinned-bundle/)
+    await expect(radios.first()).toHaveAttribute('aria-keyshortcuts', 'Delete')
+    await expect(radios.first().locator('.bundle-share')).toHaveText('고정됨')
+    await expect(radios.nth(1)).not.toHaveAttribute('aria-keyshortcuts', 'Delete')
+    // radiogroup 안에는 radio만(핀은 형제 열 group "배분 고정"), 핀 수 = 항목 수
+    await expect(list.getByRole('radiogroup').getByRole('button')).toHaveCount(0)
+    await expect(list.getByRole('group', { name: '배분 고정', exact: true }).getByRole('button')).toHaveCount(await radios.count())
+    await expect(listPin((await row.getAttribute('data-card-id'))!)).toHaveAttribute('aria-pressed', 'true')
+    // 고정 안 된 관측 배분 radio에서 Delete: 변화 없음
+    await radios.and(page.locator(':not([data-pinned])')).first().focus()
+    await page.keyboard.press('Delete')
+    await expect(user).toHaveCount(1)
+    // 직접 추가 radio에서 Delete: 삭제되고 기본 배분으로 돌아간다
+    await user.focus()
+    await page.keyboard.press('Delete')
+    await waitComplete(page)
+    await expect(row).toHaveAttribute('data-card-id', before!)
+    await expect(row.locator('[data-testid="bundle-list"] [data-user-added="true"]')).toHaveCount(0)
+    // 핀 클릭(마우스)으로도 삭제
+    await addVia(free[1])
+    const added = await row.getAttribute('data-card-id')
+    await expect(listPin(added!)).toHaveAttribute('aria-pressed', 'true')
+    await listPin(added!).click()
+    await waitComplete(page)
+    await expect(row).toHaveAttribute('data-card-id', before!)
+    await expect(row.locator('[data-testid="bundle-list"] [data-user-added="true"]')).toHaveCount(0)
+  })
+
+  test('스피드 탭 상세 왼쪽 목록: 선택 항목의 핀만 Tab 순서(radio 다음), Enter로 고정 → 맨 위, 그 radio에서 Delete로 해제(재계산 없음)', async ({ page }) => {
+    await openProduct(page)
+    await selectTab(page, '스피드')
+    await waitComplete(page)
+    const row = await firstRow(page)
+    const generation = await tabPanel(page).getAttribute('data-generation')
+    await cardLine(row).click()
+    const list = row.getByTestId('bundle-list')
+    const radios = list.getByRole('radio')
+    const listPin = (cardId: string) => list.locator(pinFor(cardId))
+    const original = await radios.evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.cardId!))
+    expect(original.length).toBeGreaterThan(1)
+    const at = Math.min(2, original.length - 1)
+    const target = original[at]
+    await radios.nth(at).click()
+    await expect(radios.nth(at)).toHaveAttribute('aria-checked', 'true')
+    // 핀은 선택 항목 것만 tabindex 0
+    expect(await list.locator('.bundle-pin').evaluateAll((els) => els.map((e) => (e as HTMLElement).tabIndex))).toEqual(original.map((_, i) => (i === at ? 0 : -1)))
+    await radios.nth(at).focus()
+    await page.keyboard.press('Tab')
+    await expect(listPin(target)).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(listPin(target)).toHaveAttribute('aria-pressed', 'true')
+    await expect(radios.first()).toHaveAttribute('data-card-id', target)
+    await expect(radios.first()).toHaveAttribute('aria-keyshortcuts', 'Delete')
+    // 옮겨진 항목의 핀에 포커스가 남는다
+    await expect(listPin(target)).toBeFocused()
+    await expect(row).toHaveAttribute('data-card-id', target)
+    // 그 radio에서 Delete → 해제, 원래 자리, 선택 유지
+    await radios.first().focus()
+    await page.keyboard.press('Delete')
+    await expect(list.locator('[role="radio"][data-pinned="true"]')).toHaveCount(0)
+    expect(await radios.evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.cardId))).toEqual(original)
+    await expect(row).toHaveAttribute('data-card-id', target)
+    await expect(tabPanel(page)).toHaveAttribute('data-generation', generation!)
+  })
+
   test('관측 배분과 같은 값을 추가하면 새 항목 없이 그 배분을 고르고 고정한다', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
@@ -1691,7 +1839,7 @@ test.describe('배분 직접 추가·고정(사용자 피드백 2026-11-12)', ()
 })
 
 
-test.describe('내 포켓몬 종 변경 → 기술 사용률 상위 4개 미리 채우기(사용자 피드백 2026-11-12)', () => {
+test.describe('내 포켓몬 종 변경 → 대표 세트 기술 미리 채우기(사용자 피드백 2026-11-12, R11)', () => {
   interface Named { name: { ko: string; koLabel?: string } }
   const data = JSON.parse(readFileSync(new URL('../src/data/regulations/m-c/data.json', import.meta.url), 'utf8')) as {
     species: Record<string, Named & { isMega?: boolean }>
@@ -1699,22 +1847,19 @@ test.describe('내 포켓몬 종 변경 → 기술 사용률 상위 4개 미리 
     megas: { forme: string; base: string }[]
   }
   const label = (n: Named) => (n.name.koLabel ? `${n.name.ko}(${n.name.koLabel})` : n.name.ko)
+  interface Entry { id: string; representative: { set: { moves: string[] } } }
   /** 기본 통계(최근 월에서 판수가 더 많은 매치 방식, 동률 Bo1)의 항목 */
-  function defaultEntries(): { id: string; moves: { shares: Record<string, number> } }[] {
+  function defaultEntries(): Entry[] {
     const items = metaIndexItems()
     const month = items.map((i) => i.month).sort().at(-1)!
     const inMonth = items.filter((i) => i.month === month)
     const pick = inMonth.reduce((a, b) => (b.battles > a.battles || (b.battles === a.battles && b.match === 'bo1') ? b : a))
-    return (JSON.parse(readFileSync(new URL(`../src/data/meta/m-c/${month}-${pick.match}.json`, import.meta.url), 'utf8')) as { entries: { id: string; moves: { shares: Record<string, number> } }[] }).entries
+    return (JSON.parse(readFileSync(new URL(`../src/data/meta/m-c/${month}-${pick.match}.json`, import.meta.url), 'utf8')) as { entries: Entry[] }).entries
   }
-  /** 그 항목 기술 사용률 상위 4개(동률 id 순, 게임 데이터에 없는 id 건너뜀)의 한국어 이름, 모자라면 빈칸 */
+  /** 처음 고른 종은 대표 세트로 채운다(R11): 그 항목 대표 세트 기술(게임 데이터에 없는 id 건너뜀)의 한국어 이름, 모자라면 빈칸 */
   function expectedMoves(id: string): string[] {
     const entry = defaultEntries().find((e) => e.id === id)!
-    const top = Object.entries(entry.moves.shares)
-      .filter(([m, s]) => s > 0 && m in data.moves)
-      .sort(([a, x], [b, y]) => y - x || (a < b ? -1 : 1))
-      .slice(0, 4)
-      .map(([m]) => label(data.moves[m]))
+    const top = entry.representative.set.moves.filter((m) => m in data.moves).slice(0, 4).map((m) => label(data.moves[m]))
     return [0, 1, 2, 3].map((i) => top[i] ?? '')
   }
   const moveBoxes = (page: Page) => [1, 2, 3, 4].map((i) => combo(mySet(page), `기술 ${i}`))
@@ -1726,7 +1871,7 @@ test.describe('내 포켓몬 종 변경 → 기술 사용률 상위 4개 미리 
     await expect(species).toHaveValue(text)
   }
 
-  test('목록 안 종(메가 폼 포함)으로 바꾸면 그 종 기술 사용률 상위 4개, 목록 밖 종·같은 종 재확정이면 기술 그대로', async ({ page }) => {
+  test('목록 안 종(메가 폼 포함)으로 바꾸면 그 종 대표 세트 기술, 목록 밖 종·같은 종 재확정이면 기술 그대로', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     const entries = defaultEntries()
@@ -1769,7 +1914,7 @@ test.describe('내 포켓몬 종 변경 → 기술 사용률 상위 4개 미리 
     expect(await movesNow(page)).toEqual(kept)
   })
 
-  test('메가 항목이 없는 메가 폼은 원종 항목 상위 4개, 오타를 거쳐 같은 종으로 돌아오면 손으로 고친 기술 유지', async ({ page }) => {
+  test('메가 항목이 없는 메가 폼은 원종 항목 대표 세트 기술, 오타를 거쳐 같은 종으로 돌아오면 손으로 고친 기술 유지', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     const ids = new Set(defaultEntries().map((e) => e.id))

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { TIER_ORDER, tierRank, type RollTier } from '../core'
-import { bestSplitAt, sumBandOf, sumCells, sumSpans } from './sumBand'
+import { bestSplitAt, pairCurrentCategory, sumBandOf, sumCells, sumSpans } from './sumBand'
 import { minPairPoints } from './target'
 import type { PairPoint } from './types'
 
@@ -131,5 +131,20 @@ describe('sumBandOf', () => {
     const v = sumBandOf({ ...base, nature: 'neutral', fallback: true, current: { hp: 0, defense: 2, label: T[0] } })
     expect(v.fallback).toBe(true)
     expect(v.current.best).toBeUndefined()
+  })
+})
+
+describe('pairCurrentCategory: 현재 분배 판정 출처(드래그 중 모순 방지)', () => {
+  const r = (sweepStat: string, status: string, category?: string) => ({ sweepStat, status, current: category === undefined ? {} : { category } })
+  it('평소엔 H 행 현재 칸', () => {
+    expect(pairCurrentCategory([r('hp', 'ok', 'h'), r('def', 'ok', 'b')], 'def')).toBe('h')
+  })
+  it('B/D 드래그로 H 행이 갱신 대기면 B/D 행 현재 칸(그 행은 표시 B/D·계획 시점 H로 맞다)', () => {
+    expect(pairCurrentCategory([r('hp', 'stale', 'h'), r('def', 'ok', 'b')], 'def')).toBe('b')
+    expect(pairCurrentCategory([r('hp', 'stale', 'h'), r('spd', 'ok', 'd')], 'spd')).toBe('d')
+  })
+  it('두 행이 다 갱신 대기거나 ok가 아니면 없음', () => {
+    expect(pairCurrentCategory([r('hp', 'stale', 'h'), r('def', 'stale', 'b')], 'def')).toBeUndefined()
+    expect(pairCurrentCategory([r('hp', 'error'), r('def', 'pending')], 'def')).toBeUndefined()
   })
 })

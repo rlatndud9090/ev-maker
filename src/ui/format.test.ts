@@ -20,7 +20,9 @@ import {
   spanText,
   spansOf,
   splitText,
+  sumBandAriaLabel,
   sumCurrentText,
+  sumFallbackText,
   sumSpanText,
   targetSegments,
   targetText,
@@ -243,5 +245,15 @@ describe('내구 합계 띠 문구(R10)', () => {
       '현재 H2 B0 (합 2) · 중난수1타 · 같은 합 최적 H0 B2 저난수1타',
     )
     expect(sumCurrentText({ hp: 2, defense: 0, sum: 2 }, 'spd', true)).toBe('현재 H2 D0+ (합 2)')
+  })
+  it('띠 목록 이름 "H+B 합계 0~64 판정"(특수면 H+D)', () => {
+    expect(sumBandAriaLabel('def', 64)).toBe('H+B 합계 0~64 판정')
+    expect(sumBandAriaLabel('spd', 64)).toBe('H+D 합계 0~64 판정')
+  })
+  it('무보정 기준 안내: B/D 하락 성격이면 그 문구, 그 밖(스냅샷에 없는 성격 등)은 일반 안내', () => {
+    expect(sumFallbackText('def', 'minus')).toBe('무보정 성격 기준(현재 성격은 B 하락)')
+    expect(sumFallbackText('spd', 'minus')).toBe('무보정 성격 기준(현재 성격은 D 하락)')
+    expect(sumFallbackText('def', 'other')).toBe('무보정 성격 기준')
+    expect(sumFallbackText('spd', undefined)).toBe('무보정 성격 기준')
   })
 })

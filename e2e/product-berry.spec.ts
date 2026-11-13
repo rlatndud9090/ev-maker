@@ -13,9 +13,20 @@ async function chooseKingambit(page: Page) {
   await species.fill('대도각참')
   await species.press('Enter')
   await expect(species).toHaveValue('대도각참')
-  // 목록 안 종으로 바꾸면 기술 사용률 상위 4개(도각참·기습·아이언헤드·안다리걸기), 도구(생명의구슬)·SP(A32)는 그대로
+  // 처음 고른 종은 대표 세트(R11: 도각참·기습·아이언헤드·안다리걸기, 도구·SP·성격도). 이 시나리오는 예시 세트의 생명의구슬·
+  // 무보정·H2 A32 S32를 쓰므로 손으로 되돌린다.
   await expect(combo(mySet(page), '기술 1')).toHaveValue('도각참')
-  await expect(combo(mySet(page), '도구')).toHaveValue('생명의구슬')
+  const item = combo(mySet(page), '도구')
+  await item.fill('생명의구슬')
+  await item.press('Enter')
+  await expect(item).toHaveValue('생명의구슬')
+  const plus = mySet(page).locator('button.nat-btn.plus[aria-pressed="true"]')
+  if ((await plus.count()) > 0) await plus.click()
+  await expect(plus).toHaveCount(0)
+  const sp = { HP: '2', 공격: '32', 방어: '0', 특공: '0', 특방: '0', 스피드: '32' }
+  // 합계 상한을 넘지 않게 줄이는 칸부터
+  for (const stat of ['HP', '방어', '특공', '특방', '공격', '스피드'] as const) await mySet(page).getByRole('spinbutton', { name: `SP ${stat} 숫자`, exact: true }).fill(sp[stat])
+  for (const [stat, v] of Object.entries(sp)) await expect(mySet(page).getByRole('spinbutton', { name: `SP ${stat} 숫자`, exact: true })).toHaveValue(v)
   await waitComplete(page)
 }
 

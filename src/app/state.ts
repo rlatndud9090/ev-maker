@@ -60,6 +60,13 @@ export interface AppState {
   moveChoices: readonly MoveChoice[]
   /** 계산 입력이 바뀔 때만 +1(탭 전환·같은 값 확정은 그대로) */
   generation: number
+  /**
+   * 종별 마지막 내 세트(풀린 종 id → 떠날 때의 초안, 메모리에만 둔다). 그 종으로 돌아오면 대표 세트보다 우선해 복원한다.
+   * 계산 입력이 아니라 세대를 올리지 않는다.
+   */
+  draftCache: Readonly<Record<string, SetDraft>>
+  /** 마지막으로 종을 바꾼 세대(0 = 바꾼 적 없음). 결과 목록은 이 세대 뷰가 보이면 그 전에 펼친 카드를 접는다 */
+  speciesGeneration: number
 }
 
 /** 직접 고른 기술 항목. key = cards itemKey(기술, 랭크 조건) */
@@ -81,6 +88,11 @@ const sameTarget = (a: Omit<MoveChoice, 'key'>, b: Omit<MoveChoice, 'key'>): boo
 
 export type AppAction =
   | { type: 'set-draft'; draft: SetDraft }
+  /**
+   * 내 포켓몬 종 교체(풀린 종 id가 from → to로 바뀜). 지금 초안을 from 종 기억에 넣고, to 종 기억이 있으면 그 초안(종 칸 글자만
+   * draft.species)을, 없으면 draft(호출자가 만든 대표 세트 또는 종만 바꾼 초안)를 쓴다. from === to면 set-draft와 같다.
+   */
+  | { type: 'switch-species'; from: string | undefined; to: string; draft: SetDraft }
   | { type: 'commit-sp'; stat: StatId; value: number }
   | { type: 'set-meta'; meta: { match: MatchType; month: string } }
   | { type: 'set-tab'; tab: Tab }
@@ -142,6 +154,8 @@ export function initialState(regulation: string): AppState {
     sortMode: 'usage',
     moveChoices: [],
     generation: 0,
+    draftCache: {},
+    speciesGeneration: 0,
   }
 }
 
@@ -219,6 +233,13 @@ export function reducer(state: AppState, action: AppAction): AppState {
       const next = bump(state, { draft: action.draft })
       if (next === state || sameBeyondSpNature(state.draft, action.draft) || next.moveChoices.length === 0) return next
       return { ...next, moveChoices: [] }
+    }
+    case 'switch-species': {
+      if (action.from === action.to) return reducer(state, { type: 'set-draft', draft: action.draft })
+      const draftCache = action.from === undefined ? state.draftCache : { ...state.draftCache, [action.from]: state.draft }
+      const kept = Object.prototype.hasOwnProperty.call(draftCache, action.to) ? draftCache[action.to] : undefined
+      const next = reducer(state, { type: 'set-draft', draft: kept === undefined ? action.draft : { ...kept, species: action.draft.species } })
+      return { ...next, draftCache, speciesGeneration: next.generation === state.generation ? state.speciesGeneration : next.generation }
     }
     case 'commit-sp': {
       if (!Number.isInteger(action.value)) return state

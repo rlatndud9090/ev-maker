@@ -286,6 +286,30 @@ for (const width of [400, 1280]) {
   })
 }
 
+test.describe('제품 화면 400px 방어 탭', () => {
+  test.use({ viewport: { width: 400, height: 900 } })
+
+  test('400px: 방어 탭 간단행 배분 드롭다운(직접 추가 폼 포함)이 화면 가로 안에 열리고 페이지 가로 스크롤이 없다', async ({ page }) => {
+    await openProduct(page)
+    await selectTab(page, '방어')
+    await waitComplete(page)
+    const row = cards(page).filter({ has: page.locator('button.bundle-btn') }).first()
+    await row.locator('button.bundle-btn').click()
+    const menu = row.getByRole('menu', { name: '노력치 배분', exact: true })
+    await expect(menu).toBeVisible()
+    const r = await menu.evaluate((el) => {
+      const b = el.getBoundingClientRect()
+      const form = el.querySelector('[data-testid="bundle-add"]')?.getBoundingClientRect()
+      return { left: b.left, right: b.right, formRight: form?.right ?? NaN, viewport: window.innerWidth }
+    })
+    expect(r.left).toBeGreaterThanOrEqual(0)
+    expect(r.right).toBeLessThanOrEqual(r.viewport)
+    expect(r.formRight).toBeLessThanOrEqual(r.right + 0.5)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
+    await expect(menu.getByRole('menuitemradio').first()).toBeInViewport()
+  })
+})
+
 test('넓은 모니터(1920px): 작업 영역·푸터 폭을 76rem 이하로 제한하고 가운데 정렬', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1000 })
   await openProduct(page)

@@ -18,7 +18,7 @@ import {
   swept,
   variantSwept,
 } from './__fixtures__/handPlan'
-import type { MoveNotice, RowView, TabView } from './types'
+import type { MoveNotice, NatureVariant, PairPoint, RowTaskResult, RowView, TabView } from './types'
 
 vi.mock('./rowTask', () => ({ computeRowTask: vi.fn() }))
 
@@ -563,5 +563,108 @@ describe('assembleTab: 판정 변화와 무관하게 래더 상대·배분 카�
     expect(v.complete).toBe(false)
     expect(v.cards.map((c) => c.id)).toEqual(['A', 'B', 'C'])
     expect(v.cards[1].rows.map((r) => [r.id, r.status])).toEqual([['b', 'pending']])
+  })
+})
+
+describe('assembleTab: 방어 탭 내구 합계 띠(R10) — 드래그 중 현재 판정·쌍 오류·무보정 안내', () => {
+  const dn = { stat: 'def', neutral: 'hardy', plus: 'impish' } as const
+  const fCard = card({
+    id: 'D',
+    rowIds: ['h', 'b'],
+    filterIds: ['f'],
+    conditions: [{ id: JSON.stringify(['base']), candidates: [{ target: 'filter', id: 'f', moveId: 'tackle', priority: false }] }],
+  })
+  const mk = (nature?: string) =>
+    plan({
+      mySide: 'defender',
+      cards: [fCard],
+      rows: [
+        row({ id: 'h', cardId: 'D', stat: 'hp', side: 'defender', gate: 'f', natures: dn, dependsOn: ['def'], nature }),
+        row({ id: 'b', cardId: 'D', order: 1, stat: 'def', side: 'defender', gate: 'f', natures: dn, dependsOn: ['hp'], nature }),
+      ],
+      filters: [filter('f', 'D', 0, dn)],
+      mySp: sp({ hp: 2, def: 0 }),
+    })
+  const low = 'low-roll-ohko'
+  const mid = 'mid-roll-ohko'
+  const neutralPoints: PairPoint[] = [
+    { atLeast: 'guaranteed-ohko', label: mid, hp: 0, defense: 0 },
+    { atLeast: 'high-roll-ohko', label: mid, hp: 0, defense: 0 },
+    { atLeast: mid, label: mid, hp: 0, defense: 0 },
+    { atLeast: low, label: low, hp: 6, defense: 0 },
+  ]
+  const plusPoints: PairPoint[] = [...neutralPoints.slice(0, 3), { atLeast: low, label: low, hp: 0, defense: 0 }]
+  const probe = (): RowTaskResult => ({ kind: 'probe', id: 'f', cell: { sp: 0, category: mid, ohkoChance: 0, maxPercent: 60 } })
+  /** H: 0~5 중난수·6~ 저난수, B(H2 기준): 0~3 중난수·4~ 저난수. 쌍 무보정: 합 6부터 저난수 */
+  const results = (variants: readonly NatureVariant[] = ['plus']) => {
+    const r = resultMap(
+      probe(),
+      extreme('f', mid, 'guaranteed-survive'),
+      ends('h', mid, low),
+      ends('b', mid, low),
+      swept('h', bands([[5, mid], [32, low]])),
+      swept('b', bands([[3, mid], [32, low]])),
+      pairResult('f', 'neutral', neutralPoints),
+      pairResult('f', 'plus', plusPoints),
+    )
+    for (const v of variants) for (const id of ['h', 'b']) r.set(JSON.stringify(['variant', id, v]), variantSwept(id, v, bands([[32, low]])))
+    return r
+  }
+  const pairOf = (v: TabView) => v.cards[0].pair
+  const reason = { code: 'ILLEGAL_MOVE', message: '배울 수 없다' }
+
+  it('평소 현재 판정 = H 행 현재 칸, 같은 합 최적이 같으면 덧붙이지 않는다', () => {
+    expect(pairOf(assembleTab(mk(), results()))?.band?.current).toEqual({ hp: 2, defense: 0, sum: 2, label: mid })
+  })
+
+  it('B 드래그(H 행 갱신 대기): 현재 판정은 B 행 현재 칸 — 현재 판정과 같은 합 최적이 모순되지 않는다', () => {
+    const v = assembleTab(mk(), results(), sp({ hp: 2, def: 4 }))
+    expect(v.cards[0].rows.map((r) => [r.id, r.status])).toEqual([
+      ['h', 'stale'],
+      ['b', 'ok'],
+    ])
+    expect(pairOf(v)?.band?.current).toEqual({ hp: 2, defense: 4, sum: 6, label: low })
+  })
+
+  it('두 행이 다 갱신 대기면 현재 판정·같은 합 최적을 생략한다', () => {
+    const v = assembleTab(mk(), results(), sp({ hp: 3, def: 4 }))
+    expect(v.cards[0].rows.every((r) => r.status === 'stale')).toBe(true)
+    expect(pairOf(v)?.band?.current).toEqual({ hp: 3, defense: 4, sum: 7 })
+  })
+
+  it('쌍 결과 오류 → 띠 없이 error', () => {
+    const r = results()
+    r.set(JSON.stringify(['pair', 'f', 'plus']), failed({ kind: 'pair', filterId: 'f', nature: 'plus' }))
+    expect(pairOf(assembleTab(mk(), r))).toEqual({ error: reason })
+  })
+
+  it('변형 스윕 오류로 쌍 작업이 생기지 않으면 error(영원히 갱신 중이 아니다), 쌍 작업이 생길 수 있으면 기다린다', () => {
+    const flat = resultMap(
+      probe(),
+      extreme('f', mid, 'guaranteed-survive'),
+      ends('h', mid, mid),
+      ends('b', mid, mid),
+      swept('h', bands([[32, mid]])),
+      swept('b', bands([[32, mid]])),
+      variantSwept('b', 'plus', bands([[32, mid]])),
+    )
+    // 변형 결과 대기 중: error 없음
+    expect(pairOf(assembleTab(mk(), flat))).toEqual({})
+    flat.set(JSON.stringify(['variant', 'h', 'plus']), failed({ kind: 'variant', rowId: 'h', nature: 'plus' }))
+    expect(pairOf(assembleTab(mk(), flat))).toEqual({ error: reason })
+    // 판정이 바뀌어 쌍 작업이 생기는 경우(변형 오류가 있어도)는 쌍 결과를 기다린다
+    const r = results()
+    r.delete(JSON.stringify(['pair', 'f', 'plus']))
+    r.set(JSON.stringify(['variant', 'h', 'plus']), failed({ kind: 'variant', rowId: 'h', nature: 'plus' }))
+    expect(pairOf(assembleTab(mk(), r))).toEqual({})
+  })
+
+  it('무보정 변형으로 칠할 때 이유: B 하락 성격이면 minus, 스냅샷에 없는 성격 id면 other', () => {
+    const minus = pairOf(assembleTab(mk('lonely'), results(['neutral', 'plus'])))?.band
+    expect([minus?.fallback, minus?.fallbackReason, minus?.nature]).toEqual([true, 'minus', 'neutral'])
+    const unknown = pairOf(assembleTab(mk('no-such-nature'), results(['neutral', 'plus'])))?.band
+    expect([unknown?.fallback, unknown?.fallbackReason]).toEqual([true, 'other'])
+    const own = pairOf(assembleTab(mk(), results()))?.band
+    expect([own?.fallback, own?.fallbackReason]).toEqual([false, undefined])
   })
 })

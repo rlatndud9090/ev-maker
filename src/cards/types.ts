@@ -527,6 +527,8 @@ export interface SumBandView {
   nature: NatureVariant
   /** 현재 성격이 무보정·상승 어느 변형도 아니어서(B/D 하락) 무보정 기준으로 칠함 */
   fallback: boolean
+  /** fallback일 때 이유: minus = 현재 성격이 B/D 하락, other = 그 밖(스냅샷에 없는 성격 id 등) */
+  fallbackReason?: 'minus' | 'other'
   /** 합계 최대(2 × 능력치당 최대) */
   max: number
   cells: readonly { sum: number; label: RollTier }[]
@@ -571,9 +573,10 @@ export interface CardView {
   /** 보이는 항목이 사용자가 직접 고른 것 */
   selected: boolean
   /**
-   * 방어 탭: 보이는 항목이 극단 필터를 통과한 쌍(rows = H 행·B/D 행)이면 있다. band = 내구 합계 띠(두 변형 쌍 결과가 나온 뒤에만)
+   * 방어 탭: 보이는 항목이 극단 필터를 통과한 쌍(rows = H 행·B/D 행)이면 있다. band = 내구 합계 띠(두 변형 쌍 결과가 나온 뒤에만),
+   * error = 쌍 결과 오류, 또는 행·변형 스윕 오류로 쌍 작업이 끝내 생기지 않음(band 없음)
    */
-  pair?: { band?: SumBandView }
+  pair?: { band?: SumBandView; error?: ErrorReason }
 }
 
 /** 기술 선택 목록의 항목 하나(그 카드 대표 세트 기준 현재 SP·성격 단건 판정) */

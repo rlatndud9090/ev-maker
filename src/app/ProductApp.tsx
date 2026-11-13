@@ -180,6 +180,9 @@ function Workspace({ boot }: { boot: Boot }) {
 
   const mySet = useMemo(() => toPokemonSet(game, draft).set, [game, draft])
   const active = snapshot.tabs[tab]
+  // 재계산으로 카드가 잠시 숨는 동안(이전 세대 뷰 표시·새 세대 기본 항목 미확정)만 목록 박스가 높이를 붙잡아 스크롤 위치를 지킨다.
+  // 이후 단계(스윕·변형)까지 붙잡으면 그 사이 카드를 접어도 빈 공간이 남는다.
+  const recomputing = active.kind === 'view' && (active.superseded || active.generation !== generation || !active.view.stage12Done)
   const source = active.kind === 'view' ? active.view.source : sourceOf(meta.view.meta)
   const tabIdOf = (t: string) => `result-tab-${t}`
   const panelId = 'result-panel'
@@ -208,7 +211,7 @@ function Workspace({ boot }: { boot: Boot }) {
           panelId={panelId}
         />
         {metaError && <Errors title="메타 통계를 불러오지 못했습니다" lines={metaError} />}
-        <ResultBox>
+        <ResultBox hold={recomputing} holdKey={tab}>
           <ResultPanel
             game={game}
             tab={tab}
@@ -221,6 +224,7 @@ function Workspace({ boot }: { boot: Boot }) {
             pinnedBundles={state.pinnedBundles}
             sortMode={state.sortMode}
             moveChoices={state.moveChoices}
+            speciesGeneration={state.speciesGeneration}
             dispatch={dispatch}
             customOpen={customOpen}
             onToggleCustom={() => (customOpen ? closeCustom() : setCustomOpen(true))}

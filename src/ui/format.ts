@@ -298,3 +298,10 @@ export function sumCurrentText(
   const head = `현재 ${splitText(c, stat, plusBand)} (합 ${c.sum})${c.label === undefined ? '' : ` · ${judgementText(c.label)}`}`
   return c.best === undefined ? head : `${head} · 같은 합 최적 ${splitText(c.best.split, stat, plusBand)} ${judgementText(c.best.label)}`
 }
+
+/** 합계 띠 목록 이름 "H+B 합계 0~64 판정"(특수면 H+D) */
+export const sumBandAriaLabel = (stat: 'def' | 'spd', max: number): string => `H+${STAT_SHORT[stat]} 합계 0~${max} 판정`
+
+/** 무보정 기준으로 칠한 띠 안내: 현재 성격이 B/D 하락이면 그렇게, 그 밖(스냅샷에 없는 성격 등)은 일반 안내 */
+export const sumFallbackText = (stat: 'def' | 'spd', reason: 'minus' | 'other' | undefined): string =>
+  reason === 'minus' ? `무보정 성격 기준(현재 성격은 ${STAT_SHORT[stat]} 하락)` : '무보정 성격 기준'
