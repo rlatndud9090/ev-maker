@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>디자인 대안 비교 · 판정 행 기술 선택 목록</title>
+<!--
+  하네스 design-options 템플릿 (adr-helper 디자인 결정 레인).
+  - Claude 아티팩트가 아니다. 이 파일을 docs/raw/<type>/<slug>/design-options.html로
+    떨구고, 사용자가 브라우저에서 직접 연다(자기완결: 외부 CSS/JS/폰트/이미지 참조 없음).
+  - 이 파일을 그대로 cp로 목적지에 복사한 뒤, 채우기 구역만 Edit한다. 파일 전체를 Write로
+    다시 쓰지 않는다 — 고정된 CSS/JS/패널 스캐폴딩 재출력은 순수 출력 토큰 낭비다.
+  - 에이전트가 채우는 곳은 <section class="option"> 카드 안의 .mockup 영역과 data-label·라디오
+    value·.name(대안 이름으로 함께 일치)뿐이다. 카드를 복제/삭제해 대안 수(2개 이상)를 맞춘다.
+  - 사용자는 대안을 나란히 비교 → 베이스 라디오 선택 → 세부 수정 요구사항 작성 →
+    "요약 생성" → "복사"해서 에이전트에게 붙여넣는다(정적 파일이라 서버로 전송 불가 →
+    붙여넣기로 루프를 닫는다). 에이전트는 그 요약을 ADR 선택지/결정/선택 근거로 흡수한다.
+-->
+<style>
+  :root{
+    --bg:#f7f7f8; --fg:#1a1a1e; --muted:#5c5c66; --line:#d9d9e0; --card:#ffffff;
+    --accent:#3b5bdb; --accent-soft:#e7ecfb; --shadow:0 1px 3px rgba(0,0,0,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#16161a; --fg:#ececf0; --muted:#9a9aa5; --line:#2c2c34; --card:#1e1e24;
+      --accent:#7a93f5; --accent-soft:#22283d; --shadow:0 1px 3px rgba(0,0,0,.4); }
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; padding:24px; background:var(--bg); color:var(--fg);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif; }
+  header{ max-width:1200px; margin:0 auto 20px; }
+  h1{ font-size:20px; margin:0 0 6px; }
+  .lead{ color:var(--muted); margin:0 0 12px; }
+  .how{ background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:12px 16px; box-shadow:var(--shadow); }
+  .how ol{ margin:6px 0 0; padding-left:20px; } .how li{ margin:2px 0; }
+  .grid{ max-width:1200px; margin:0 auto; display:grid; gap:16px;
+    grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
+  .option{ background:var(--card); border:1px solid var(--line); border-radius:12px;
+    box-shadow:var(--shadow); display:flex; flex-direction:column; overflow:hidden; }
+  .option.selected{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft),var(--shadow); }
+  .option > header{ display:flex; align-items:center; gap:10px; padding:12px 14px;
+    border-bottom:1px solid var(--line); margin:0; }
+  .option > header label{ font-weight:600; cursor:pointer; display:flex; align-items:center; gap:8px; }
+  .option .name{ font-size:15px; }
+  .mockup{ padding:14px; min-height:160px; overflow-x:auto; }
+  /* 목업 안에서 쓰기 좋은 중립 프리미티브(원하면 무시하고 자유 HTML/CSS로 그려도 됨) */
+  .mockup .box{ border:1px dashed var(--line); border-radius:8px; padding:10px; margin:6px 0;
+    color:var(--muted); }
+  .mockup .bar{ height:12px; border-radius:6px; background:var(--line); margin:6px 0; }
+  .notes{ padding:12px 14px; border-top:1px solid var(--line); }
+  .notes label{ display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  textarea{ width:100%; min-height:64px; resize:vertical; border:1px solid var(--line);
+    border-radius:8px; padding:8px; background:var(--bg); color:var(--fg); font:inherit; }
+  .panel{ max-width:1200px; margin:18px auto 0; background:var(--card); border:1px solid var(--line);
+    border-radius:12px; padding:16px; box-shadow:var(--shadow); }
+  .panel label{ display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  button{ font:inherit; font-weight:600; border:1px solid var(--accent); background:var(--accent);
+    color:#fff; border-radius:8px; padding:8px 16px; cursor:pointer; }
+  button.secondary{ background:transparent; color:var(--accent); }
+  button:disabled{ opacity:.5; cursor:not-allowed; }
+  #summary{ width:100%; min-height:150px; margin-top:12px; white-space:pre; font-family:ui-monospace,
+    SFMono-Regular,Menlo,monospace; font-size:13px; }
+  .hint{ color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>디자인 대안 비교 — 판정 행 기술 선택 목록</h1>
+  <p class="lead">아래 대안을 비교하고, <b>베이스로 삼을 안 하나를 라디오로 선택</b>한 뒤,
+    <b>세부 수정 요구사항</b>을 적어 주세요.</p>
+  <div class="how">
+    <b>사용법</b>
+    <ol>
+      <li>각 대안을 나란히 비교합니다.</li>
+      <li>가장 마음에 드는 안의 <b>◉ 라디오</b>를 선택합니다(베이스 = 이 안을 출발점으로 발전).</li>
+      <li>대안별 칸과 아래 "전체 수정 요구사항"에 원하는 변경을 구체적으로 적습니다.</li>
+      <li><b>"요약 생성"</b>을 누르고 <b>"복사"</b>해서 에이전트에게 붙여넣습니다(이 파일은 정적이라
+        직접 전송되지 않습니다 — 붙여넣기로 전달).</li>
+    </ol>
+  </div>
+</header>
+
+<!-- ▼▼▼ 에이전트가 채우는 영역: 대안 카드(최소 2개). cp한 복사본에서 이 구역만 Edit한다.
+     카드를 복제/삭제해 개수를 맞추고, data-label·라디오 value·.name·.mockup을 이번 유닛의
+     실제 화면 배치로 채운다(value·data-label·.name은 대안 이름으로 함께 일치). ▼▼▼ -->
+<div class="grid" id="grid">
+
+  <style>
+    .m{ font-size:12.5px; color:var(--fg); }
+    .m .cap{ font-size:11px; color:var(--muted); margin:10px 0 4px; font-weight:600; }
+    .m .line{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; border:1px solid var(--line);
+      border-radius:10px; padding:7px 9px; background:var(--card); }
+    .m .ico{ width:18px; height:18px; border-radius:50%; background:#8a8aa0; display:inline-block; }
+    .m .nm{ font-weight:700; min-width:48px; }
+    .m .bd{ border:1px solid var(--line); border-radius:6px; padding:1px 6px; font-weight:700; white-space:nowrap; }
+    .m .bd small{ font-weight:400; color:var(--muted); }
+    .m .mv{ border:1px solid #9a7a5a; background:#efe2d3; color:#3a2a1a; border-radius:7px; padding:1px 7px;
+      font-weight:700; white-space:nowrap; }
+    .m .mv.dk{ border-color:#555; background:#ddd; color:#222; }
+    .m .mv.fi{ border-color:#a8503a; background:#f6d8cf; color:#3a1a10; }
+    .m .mv.btn{ cursor:pointer; box-shadow:inset 0 -2px 0 rgba(0,0,0,.08); }
+    .m .ko{ border-radius:6px; padding:1px 6px; font-weight:700; font-size:11.5px; white-space:nowrap; color:#1d1d1d; }
+    .m .k5{ background:#f3b6ae; } .m .k4{ background:#f6cfa0; } .m .k3{ background:#f4e19a; }
+    .m .k2{ background:#cfeb98; } .m .k1{ background:#a9dcb0; } .m .kx{ background:#ddd; color:#555; }
+    .m .var{ border:1px solid #5b6fd6; color:#3b4fb6; border-radius:5px; padding:0 4px; font-size:11px; }
+    .m .tag{ font-size:10.5px; border:1px solid var(--line); border-radius:4px; padding:0 3px; color:var(--muted); }
+    .m .menu{ border:1px solid var(--line); border-radius:10px; background:var(--card); box-shadow:0 6px 18px rgba(0,0,0,.15);
+      padding:4px; margin:4px 0 0 90px; width:270px; }
+    .m .mi{ display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:6px; }
+    .m .mi .sp{ flex:1; }
+    .m .mi.on{ background:var(--accent-soft); outline:1px solid var(--accent); }
+    .m .mi.reset{ color:var(--accent); font-weight:600; border-bottom:1px solid var(--line); border-radius:0; margin-bottom:2px; }
+    .m .sep{ border-top:1px dashed var(--line); margin:3px 0; }
+    .m .det{ display:flex; gap:8px; border:1px solid var(--line); border-radius:10px; padding:8px; margin-top:4px; background:var(--card); }
+    .m .left{ width:118px; flex:none; border:1px solid var(--line); border-radius:8px; padding:5px; }
+    .m .right{ flex:1; min-width:0; }
+    .m .strip{ height:10px; border-radius:3px; background:linear-gradient(90deg,#f4e19a 0 45%,#cfeb98 45% 60%,#a9dcb0 60%); margin:5px 0 2px; }
+    .m .chips{ display:flex; flex-wrap:wrap; gap:4px; margin:4px 0 6px; }
+    .m .chip{ border:1px solid var(--line); border-radius:999px; padding:1px 7px; font-size:11.5px; white-space:nowrap; background:var(--card); }
+    .m .chip.on{ border-color:var(--accent); background:var(--accent-soft); font-weight:700; }
+    .m .tabs{ display:flex; gap:2px; margin-bottom:5px; }
+    .m .tabs span{ flex:1; text-align:center; border:1px solid var(--line); border-radius:6px; padding:1px 0; font-size:11px; }
+    .m .tabs span.on{ background:var(--accent); color:#fff; border-color:var(--accent); }
+    .m .li{ padding:3px 4px; border-radius:5px; font-size:11.5px; display:flex; justify-content:space-between; gap:4px; }
+    .m .li.on{ background:var(--accent-soft); outline:1px solid var(--accent); }
+    .m .narrow{ width:380px; max-width:100%; border:2px solid var(--line); border-radius:12px; padding:6px; }
+    .m p.d{ color:var(--muted); font-size:11.5px; margin:8px 0 0; line-height:1.5; }
+  </style>
+
+  <section class="option" data-label="대안 A — 드롭다운 메뉴(배분 메뉴와 같은 패턴)">
+    <header>
+      <label><input type="radio" name="base" value="대안 A — 드롭다운 메뉴(배분 메뉴와 같은 패턴)" /><span class="name">대안 A — 드롭다운 메뉴(배분 메뉴와 같은 패턴)</span></label>
+    </header>
+    <div class="mockup m">
+      <div class="cap">간단행 (방어 탭 · 대도각참) — 기술 배지 자체가 버튼, 안에 ▾</div>
+      <div class="line"><span class="ico"></span><span class="nm">대도각참</span>
+        <span class="bd">A32↑ <small>56.3%</small> ▾</span>
+        <span class="mv dk btn">+2 도각참 ▾</span>
+        <span class="ko k3">중난수1타 56.3%</span><span class="var">변동 가능</span></div>
+      <div class="menu">
+        <div class="mi"><span class="mv dk">+2 도각참</span><span class="sp"></span><span class="ko k3">중난수1타</span><span>✓</span></div>
+        <div class="mi"><span class="mv fi">+2 인파이트</span><span class="sp"></span><span class="ko k3">중난수1타</span></div>
+        <div class="mi"><span class="mv fi">인파이트</span><span class="sp"></span><span class="ko k1">확정견딤</span></div>
+        <div class="mi"><span class="mv dk">도각참</span><span class="sp"></span><span class="ko k1">확정견딤</span></div>
+        <div class="mi"><span class="mv dk">기습</span><span class="tag">선공</span><span class="sp"></span><span class="ko k1">확정견딤</span></div>
+        <div class="sep"></div>
+        <div class="mi"><span class="mv">아이언헤드</span><span class="sp"></span><span class="ko kx">계산 불가</span></div>
+      </div>
+      <div class="cap">직접 고른 뒤 — 배지에 "직접" 표시, 메뉴 맨 위에 되돌리기</div>
+      <div class="line"><span class="ico"></span><span class="nm">대도각참</span>
+        <span class="bd">A32↑ <small>56.3%</small> ▾</span>
+        <span class="mv dk btn">도각참 <span class="tag">직접</span> ▾</span>
+        <span class="ko k1">확정견딤</span></div>
+      <div class="menu"><div class="mi reset">↺ 기본값으로 되돌리기 (+2 도각참)</div>
+        <div class="mi"><span class="mv dk">+2 도각참</span><span class="tag">기본</span><span class="sp"></span><span class="ko k3">중난수1타</span></div>
+        <div class="mi on"><span class="mv dk">도각참</span><span class="sp"></span><span class="ko k1">확정견딤</span><span>✓</span></div>
+        <div class="mi" style="color:var(--muted)">…</div></div>
+      <div class="cap">상세 — 판정 행 제목 배지도 같은 메뉴를 연다(행은 항목 1개 = H·B 쌍)</div>
+      <div class="det"><div class="left"><b>A32↑</b> 56.3%<br><span class="ko k3">중난수1타</span><br><br>A25↑ 16.9%</div>
+        <div class="right"><span class="mv dk btn">+2 도각참 ▾</span> <small style="color:var(--muted)">상대 칼춤 12.9% · 상대 A+2</small>
+          <div style="margin-top:4px">H · 현재 H2 중난수1타</div><div class="strip"></div>
+          <div>B · 현재 B0 중난수1타</div><div class="strip"></div></div></div>
+      <div class="cap">400px — 메뉴는 화면 폭에 맞춰 좌우 16px 여백, 아래가 모자라면 위로</div>
+      <div class="narrow"><div class="line"><span class="ico"></span><span class="nm">대도각참</span><span class="bd">A32↑ ▾</span><span class="mv dk btn">+2 도각참 ▾</span><span class="ko k3">중난수1타</span></div></div>
+      <p class="d"><b>우선순위</b> 결과(배지) > 기술 > 배분. <b>어포던스</b> 배분 라벨과 같은 "▾ 버튼" 문법이라 학습 비용이 거의 없음.
+        <b>트레이드오프</b> 목록은 열어야 보임(비교는 메뉴 안에서). 행 클릭(펼침)과 배지 클릭이 인접 — 배지 영역만 버튼으로 분리 필요.</p>
+    </div>
+    <div class="notes">
+      <label>대안 A 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="예: 직접 표시를 아이콘으로, 되돌리기를 메뉴 아래로…"></textarea>
+    </div>
+  </section>
+
+  <section class="option" data-label="대안 B — 간단행 메뉴 + 상세 기술 칩 상시 노출">
+    <header>
+      <label><input type="radio" name="base" value="대안 B — 간단행 메뉴 + 상세 기술 칩 상시 노출" /><span class="name">대안 B — 간단행 메뉴 + 상세 기술 칩 상시 노출</span></label>
+    </header>
+    <div class="mockup m">
+      <div class="cap">간단행 — 대안 A와 같음(배지 ▾ → 드롭다운 메뉴)</div>
+      <div class="line"><span class="ico"></span><span class="nm">대도각참</span>
+        <span class="bd">A32↑ <small>56.3%</small> ▾</span>
+        <span class="mv dk btn">+2 도각참 ▾</span>
+        <span class="ko k3">중난수1타 56.3%</span><span class="var">변동 가능</span></div>
+      <div class="cap">상세 — 판정 행 위에 기술 칩 줄(센 순, 칩마다 현재 판정색 점). 클릭 한 번으로 전환</div>
+      <div class="det"><div class="left"><b>A32↑</b> 56.3%<br><span class="ko k3">중난수1타</span><br><br>A25↑ 16.9%</div>
+        <div class="right">
+          <div class="chips">
+            <span class="chip on">+2 도각참 · <span class="ko k3">중난</span></span>
+            <span class="chip">+2 인파이트 · <span class="ko k3">중난</span></span>
+            <span class="chip">인파이트 · <span class="ko k1">견딤</span></span>
+            <span class="chip">도각참 · <span class="ko k1">견딤</span></span>
+            <span class="chip">기습 <span class="tag">선공</span> · <span class="ko k1">견딤</span></span>
+            <span class="chip" style="color:var(--muted)">아이언헤드 · 계산 불가</span>
+            <span class="chip" style="color:var(--accent)">↺ 기본값</span>
+          </div>
+          <div><span class="mv dk">+2 도각참</span> <small style="color:var(--muted)">상대 칼춤 12.9% · 상대 A+2</small></div>
+          <div style="margin-top:4px">H · 현재 H2 중난수1타</div><div class="strip"></div>
+          <div>B · 현재 B0 중난수1타</div><div class="strip"></div></div></div>
+      <div class="cap">400px — 칩 줄은 줄바꿈(가로 스크롤 없음), 상세가 세로로 길어짐</div>
+      <div class="narrow"><div class="chips"><span class="chip on">+2 도각참</span><span class="chip">+2 인파이트</span><span class="chip">인파이트</span><span class="chip">도각참</span><span class="chip">기습</span><span class="chip">…</span></div></div>
+      <p class="d"><b>우선순위</b> 상세에선 "어떤 기술들이 있고 각각 어떤 판정인가"가 한눈에. <b>어포던스</b> 펼치면 바로 비교·전환(메뉴 열기 불필요).
+        <b>트레이드오프</b> 상세가 한 줄 더 길어짐(2단계 가시성 개편과 겹침). 같은 선택을 두 UI(메뉴·칩)로 제공 → 상태 표시 일관성 관리 필요.</p>
+    </div>
+    <div class="notes">
+      <label>대안 B 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="이 안에 대한 수정 요구사항…"></textarea>
+    </div>
+  </section>
+
+  <section class="option" data-label="대안 C — 상세 왼쪽 패널을 '배분 | 기술' 탭으로">
+    <header>
+      <label><input type="radio" name="base" value="대안 C — 상세 왼쪽 패널을 '배분 | 기술' 탭으로" /><span class="name">대안 C — 상세 왼쪽 패널을 '배분 | 기술' 탭으로</span></label>
+    </header>
+    <div class="mockup m">
+      <div class="cap">간단행 — 대안 A와 같음(배지 ▾ → 드롭다운 메뉴)</div>
+      <div class="line"><span class="ico"></span><span class="nm">대도각참</span>
+        <span class="bd">A32↑ <small>56.3%</small> ▾</span>
+        <span class="mv dk btn">+2 도각참 ▾</span>
+        <span class="ko k3">중난수1타 56.3%</span><span class="var">변동 가능</span></div>
+      <div class="cap">상세 — 왼쪽 목록이 [배분 | 기술] 탭. 기술 탭은 배분 목록과 같은 세로 라디오 목록</div>
+      <div class="det"><div class="left">
+          <div class="tabs"><span>배분</span><span class="on">기술</span></div>
+          <div class="li on"><span>+2 도각참</span><span class="ko k3">중난</span></div>
+          <div class="li"><span>+2 인파이트</span><span class="ko k3">중난</span></div>
+          <div class="li"><span>인파이트</span><span class="ko k1">견딤</span></div>
+          <div class="li"><span>도각참</span><span class="ko k1">견딤</span></div>
+          <div class="li"><span>기습 <span class="tag">선공</span></span><span class="ko k1">견딤</span></div>
+          <div class="li" style="color:var(--muted)"><span>아이언헤드</span><span>불가</span></div>
+          <div class="li" style="color:var(--accent)">↺ 기본값</div></div>
+        <div class="right"><span class="mv dk">+2 도각참</span> <small style="color:var(--muted)">상대 칼춤 12.9% · 상대 A+2</small>
+          <div style="margin-top:4px">H · 현재 H2 중난수1타</div><div class="strip"></div>
+          <div>B · 현재 B0 중난수1타</div><div class="strip"></div></div></div>
+      <div class="cap">400px — 왼쪽 패널이 위로 쌓이고 탭 유지</div>
+      <div class="narrow"><div class="tabs"><span>배분</span><span class="on">기술</span></div><div class="li on"><span>+2 도각참</span><span class="ko k3">중난</span></div><div class="li"><span>+2 인파이트</span><span class="ko k3">중난</span></div></div>
+      <p class="d"><b>우선순위</b> 배분과 기술을 같은 "고르는 자리"에 모음. <b>어포던스</b> 기존 왼쪽 배분 목록과 같은 조작.
+        <b>트레이드오프</b> 배분·기술을 동시에 못 봄(탭 전환 필요) — 분류 전환(특수기 선택 → 배분 바뀜)이 숨겨진 탭에서 일어나 인지 어려움.</p>
+    </div>
+    <div class="notes">
+      <label>대안 C 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="이 안에 대한 수정 요구사항…"></textarea>
+    </div>
+  </section>
+
+</div>
+<!-- ▲▲▲ 에이전트가 채우는 영역 끝 ▲▲▲ -->
+
+<div class="panel">
+  <label for="overall">전체 수정 요구사항 (선택한 베이스를 어떻게 발전시킬지 · 공통 사항)</label>
+  <textarea id="overall" placeholder="예: 모바일 320px에서 컨트롤이 겹치지 않게, 결과 위계를 점수 > 순위 > 상세 순으로…"></textarea>
+  <div class="row">
+    <button id="gen">요약 생성</button>
+    <button id="copy" class="secondary" disabled>복사</button>
+    <span class="hint">요약을 복사해 에이전트 대화창에 붙여넣으세요.</span>
+  </div>
+  <textarea id="summary" readonly placeholder="여기에 붙여넣을 요약이 생성됩니다."></textarea>
+</div>
+
+<script>
+  (function(){
+    var grid = document.getElementById('grid');
+    grid.addEventListener('change', function(e){
+      if (e.target && e.target.name === 'base') {
+        document.querySelectorAll('.option').forEach(function(o){ o.classList.remove('selected'); });
+        var card = e.target.closest('.option');
+        if (card) card.classList.add('selected');
+      }
+    });
+
+    function build(){
+      var checked = document.querySelector('input[name="base"]:checked');
+      var base = checked ? checked.value : '(아직 선택 안 함)';
+      var overall = document.getElementById('overall').value.trim() || '(없음)';
+      var lines = [];
+      lines.push('=== 디자인 선택 요약 (에이전트에게 붙여넣기) ===');
+      lines.push('베이스로 선택: ' + base);
+      lines.push('전체 수정 요구사항:');
+      lines.push(overall);
+      lines.push('');
+      lines.push('대안별 메모:');
+      document.querySelectorAll('.option').forEach(function(o){
+        var label = o.getAttribute('data-label') || '(무명)';
+        var ta = o.querySelector('textarea[data-notes]');
+        var note = (ta && ta.value.trim()) ? ta.value.trim() : '(없음)';
+        lines.push('- ' + label + ': ' + note);
+      });
+      return lines.join('\n');
+    }
+
+    document.getElementById('gen').addEventListener('click', function(){
+      var out = document.getElementById('summary');
+      out.value = build();
+      document.getElementById('copy').disabled = false;
+    });
+
+    document.getElementById('copy').addEventListener('click', function(){
+      var out = document.getElementById('summary');
+      out.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(out.value).then(function(){}, function(){});
+      }
+      this.textContent = ok ? '복사됨 ✓' : '직접 선택해 복사(Ctrl/Cmd+C)';
+      var b = this; setTimeout(function(){ b.textContent = '복사'; }, 1800);
+    });
+  })();
+</script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 ---
 title: "공격·방어 탭 판정 행 기능 확장과 상세 화면 가시성 개편(상대 기술 표시·설정, 화력 도구 행)"
 date: "2026-11-13"
-stage: prd-review
+stage: adr-review
 prd_status: review
 adr_status: proposed
 ---
@@ -42,6 +42,7 @@ adr_status: proposed
 
 - 2026-11-13 kickoff: raw 골격 생성
 - 2026-11-13 prd-review: 1단계(판정 행 기술 선택) PRD 작성 — 사용자 결정 반영, 적대 리뷰(blocker 2·major 8) 반영. ADR 필요(행 모델·계산 범위·선택 상태·화면 배치)
+- 2026-11-13 adr-review: ADR proposed 초안(결정 1~3 구조, 결정 4 화면 배치는 design-options.html 사용자 선택 대기). 서브에이전트 인증 오류로 오케스트레이터가 직접 작성
 
 ## 승인 이벤트
 
