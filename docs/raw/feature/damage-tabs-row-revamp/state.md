@@ -1,9 +1,9 @@
 ---
 title: "공격·방어 탭 판정 행 기능 확장과 상세 화면 가시성 개편(상대 기술 표시·설정, 화력 도구 행)"
 date: "2026-11-13"
-stage: adr-review
-prd_status: review
-adr_status: proposed
+stage: pre-approved
+prd_status: pre-approved
+adr_status: pre-accepted
 ---
 
 # 작업 단계 원장: 공격·방어 탭 판정 행 기능 확장과 상세 화면 가시성 개편(상대 기술 표시·설정, 화력 도구 행)
@@ -43,7 +43,7 @@ adr_status: proposed
 - 2026-11-13 kickoff: raw 골격 생성
 - 2026-11-13 prd-review: 1단계(판정 행 기술 선택) PRD 작성 — 사용자 결정 반영, 적대 리뷰(blocker 2·major 8) 반영. ADR 필요(행 모델·계산 범위·선택 상태·화면 배치)
 - 2026-11-13 adr-review: ADR proposed 초안(결정 1~3 구조, 결정 4 화면 배치는 design-options.html 사용자 선택 대기). 서브에이전트 인증 오류로 오케스트레이터가 직접 작성
-
+- 2026-11-13 pre-approved: 사용자 명시 사전 승인 (harness:approve)
 ## 승인 이벤트
 
 <!-- 이 블록은 `npm run harness:approve`만 기록한다. 사용자의 명시 승인 발화가
@@ -52,4 +52,5 @@ adr_status: proposed
      status의 정합성을 교차검증한다. 손으로 위조하면 여러 아티팩트를 동시에 조작해야
      하며 감사에 드러난다. -->
 
-(아직 사전 승인 없음 — 빌드 진입 불가)
+- PREAPPROVAL prd 2026-11-13 harness:approve :: 사전 승인
+- PREAPPROVAL adr 2026-11-13 harness:approve :: 사전 승인

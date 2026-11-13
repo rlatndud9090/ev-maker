@@ -1,8 +1,8 @@
 ---
 title: "공격·방어 탭 판정 행 기능 확장과 상세 화면 가시성 개편(상대 기술 표시·설정, 화력 도구 행)"
 date: "2026-11-13"
-status: review # draft | review | pre-approved | approved | rejected
-approval:
+status: pre-approved
+approval: "user:2026-11-13:사전 승인"
 unit_type: feature
 # section(섹션, 선택): area보다 큰 상위 단위(웹앱의 최상위 라우팅/제품 영역 단위). 단일 값. 프로젝트에 섹션이 2개 이상 선언되면 wiki가 섹션별 파일로 자동 분리된다. $prd-helper가 채우거나 $kickoff --section이 시드한다. 안 쓰면 비워 둔다(모든 area가 index.md에 남는다).
 section:
