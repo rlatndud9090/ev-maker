@@ -125,15 +125,15 @@ test.describe('공격 탭 상대 도구: 기합의띠 없음 · 반감열매 별
   })
 })
 
-test('통계 설정 줄: 1280에서 형식·기준 월·최소(%) 네 칸이 한 줄이다(반감열매 칸이 혼자 다음 줄로 내려가지 않는다)', async ({ page }) => {
+test('통계 설정 줄: 1280에서 형식·기준 월·최소(%) 다섯 칸이 한 줄이다(반감열매·화력 도구 칸이 혼자 다음 줄로 내려가지 않는다)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 })
   await openProduct(page)
   const stats = page.getByRole('group', { name: '통계 설정', exact: true })
   const controls = stats.locator('select, input')
-  await expect(controls).toHaveCount(6)
+  await expect(controls).toHaveCount(7)
   const bottoms = await controls.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().bottom)))
   expect(new Set(bottoms).size, JSON.stringify(bottoms)).toBe(1)
-  for (const name of ['SP 배분', '랭크업 기술', '구애스카프', '반감열매']) {
+  for (const name of ['SP 배분', '랭크업 기술', '구애스카프', '반감열매', '화력 도구']) {
     const box = await stats.getByRole('spinbutton', { name: `${name} 최소(%)`, exact: true }).boundingBox()
     expect(box?.width ?? 0, name).toBeLessThan(110)
   }

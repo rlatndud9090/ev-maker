@@ -1011,7 +1011,7 @@ td.src {
   width: 6rem;
 }
 
-/* 최소 사용률(%) 입력: 라벨 폭만큼만 차지하고 값 칸은 2~4자리 폭(통계 설정 네 칸이 넓은 화면에서 한 줄에 들어가게) */
+/* 최소 사용률(%) 입력: 라벨 폭만큼만 차지하고 값 칸은 2~4자리 폭(통계 설정 다섯 칸이 넓은 화면에서 한 줄에 들어가게) */
 .tool-row .num-field.share-field {
   width: auto;
   white-space: nowrap;
@@ -1019,6 +1019,11 @@ td.src {
 
 .tool-row .num-field.share-field input {
   width: 5.5rem;
+}
+
+/* 통계 설정 줄(최소 % 다섯 칸): 칸 사이를 좁혀 1280에서 한 줄 */
+.tool-group:has(> .share-field) {
+  column-gap: 0.35rem;
 }
 
 .inline-select select {

@@ -123,12 +123,14 @@ describe('공격 탭 상대 도구: 기본 카드는 도구 없음, 반감열매
     for (const c of cards('basculegion')) for (const id of c.rowIds) expect(plan.rows[id].defender.item).toBeUndefined()
   })
 
-  it('방어·스피드 탭은 대표 도구를 그대로 쓰고 열매 변형이 없다', () => {
+  it('스피드 탭은 대표 도구를 그대로 쓰고, 방어 탭은 기본 카드 도구 없음(R14). 둘 다 반감열매 변형이 없다', () => {
     for (const tab of ['defense', 'speed'] as const) {
       const p = planTab(only(['basculegion']), tab)
       expect(p.cards.length).toBeGreaterThan(0)
-      expect(p.cards.filter((c) => c.bundle.userAdded === undefined).every((c) => c.opponentSet.item === 'focussash'), tab).toBe(true)
-      expect(p.cards.some((c) => c.berry !== undefined), tab).toBe(false)
+      const base = p.cards.filter((c) => c.bundle.userAdded === undefined && c.berry === undefined)
+      expect(base.length, tab).toBeGreaterThan(0)
+      expect(base.every((c) => c.opponentSet.item === (tab === 'speed' ? 'focussash' : undefined)), tab).toBe(true)
+      expect(p.cards.some((c) => c.berry !== undefined && resistBerryType(c.berry.item) !== undefined), tab).toBe(false)
     }
   })
 

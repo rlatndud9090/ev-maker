@@ -65,4 +65,11 @@ describe('addableMoves', () => {
     expect(learner).toBeDefined()
     expect(addableMoves(game, learner as string, [])).not.toContain('shellsidearm')
   })
+
+  it('내던지기는 빠진다(도구 없는 방어 탭 기본 줄에서 실패, 포푸니크는 배운다)', () => {
+    expect(learnableMoves(game, 'sneasler')).toContain('fling')
+    const all = addableMoves(game, 'sneasler', [])
+    expect(all).not.toContain('fling')
+    expect(all).toContain('closecombat')
+  })
 })

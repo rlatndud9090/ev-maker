@@ -176,6 +176,7 @@ function validCriteria(c: Partial<DisplayCriteria>): boolean {
   if (c.rankShareMin !== undefined && !isRatio(c.rankShareMin)) return false
   if (c.scarfShareMin !== undefined && !isRatio(c.scarfShareMin)) return false
   if (c.berryShareMin !== undefined && !isRatio(c.berryShareMin)) return false
+  if (c.powerItemShareMin !== undefined && !isRatio(c.powerItemShareMin)) return false
   return true
 }
 

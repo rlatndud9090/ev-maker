@@ -2,6 +2,7 @@
 import {
   CoreError,
   CoreInputError,
+  HELD_ITEM_POWER_MOVES,
   STAT_IDS,
   checkSpeedSupport,
   compareSpeed,
@@ -26,6 +27,7 @@ import { NO_ITEM } from '../data/meta-schema'
 import type { Snapshot, StatId } from '../data/schema'
 import { observedSpreadAssumption, representativeAssumption, resolveAssumption, type Assumption } from '../meta'
 import { berryActivates, resistBerriesOf } from './berries'
+import { powerItemBoosts, powerItemsOf } from './powerItems'
 import { bundleStats, bundlesOf, natureSign } from './bundles'
 import { addedBundleKey, addedCardId, cardId as makeCardId, presetKey, rowId } from './ids'
 import { presetAssumption } from './presets'
@@ -275,6 +277,25 @@ class PlanBuilder {
     return out
   }
 
+  /**
+   * 방어 탭 래더 상대의 화력 도구 변형(R14): 도구 분포에서 점유율 powerItemShareMin 이상인 화력 도구마다, 상대 후보 기술 중 그 도구가 보정을 주는 기술(triggers).
+   * 보정할 기술이 하나도 없으면 변형을 만들지 않는다. 메가 항목(메가스톤 고정)·목록 밖 타겟은 없다. 상대 타입·특성은 해석된 씨앗 기준.
+   */
+  powerItemVariants(opp: Opponent, seeds: readonly CardSeed[], slots: readonly MoveSlot[]): (BerryVariant & { triggers: string[] })[] {
+    const entry = opp.entry
+    if (entry === undefined || entry.mega !== undefined) return []
+    const resolved = seeds.find((s) => s.resolved !== undefined)?.resolved
+    if (resolved === undefined) return []
+    const user = { types: resolved.species.types, ability: resolved.ability }
+    const target: EffectivenessDefender = { types: this.me.species.types, ability: this.me.ability, item: this.me.item }
+    const out: (BerryVariant & { triggers: string[] })[] = []
+    for (const p of powerItemsOf(entry.items.shares, this.input.criteria.powerItemShareMin)) {
+      const triggers = slots.filter((s) => powerItemBoosts(this.game, s.moveId, p.item, user, target)).map((s) => s.moveId)
+      if (triggers.length > 0) out.push({ ...p, triggers })
+    }
+    return out
+  }
+
   seed(category: Category | null, bundle: BundleSpec, assumption: Assumption): CardSeed {
     const r = resolveAssumption(this.game, assumption)
     if (!r.usable) return { category, bundle, assumption, error: errorReasons(r.error)[0] }
@@ -297,7 +318,7 @@ class PlanBuilder {
   openCard(opp: Opponent, seed: CardSeed, notices: readonly MoveNotice[], berry?: BerryVariant & { triggers: readonly string[] }): CardSpec {
     const bundlePart = seed.bundle.presetIndex ?? seed.bundle.key
     const parts = [this.tab, opp.header.source, opp.header.id, seed.category, bundlePart]
-    // 사용자 추가 배분은 'user' 표지를 붙여 같은 키의 관측 묶음 카드와 id가 겹치지 않게 한다. 반감열매 변형은 'berry' + 열매 id를 붙인다.
+    // 사용자 추가 배분은 'user' 표지를 붙여 같은 키의 관측 묶음 카드와 id가 겹치지 않게 한다. 도구 변형(반감열매·화력 도구)은 'berry' + 도구 id를 붙인다.
     const card: CardSpec = {
       id:
         seed.bundle.userAdded === undefined
@@ -475,8 +496,9 @@ class PlanBuilder {
     errors: readonly MoveSlot[],
     notices: readonly MoveNotice[],
     added: ReadonlySet<string>,
+    power?: BerryVariant & { triggers: readonly string[] },
   ): void {
-    const card = this.openCard(opp, seed, notices)
+    const card = this.openCard(opp, seed, notices, power)
     const resolved = seed.resolved
     if (!resolved) return
     const oppSet = seed.assumption.set
@@ -731,11 +753,11 @@ const isStatus = (game: Snapshot, moveId: string): boolean => hasMove(game, move
 /**
  * 방어 탭 래더 상대 기본 후보(사용률 순, 동률 id 순): 변화기를 뺀 기술 중 사용률 ≥ DEFENSE_MOVE_SHARE_MIN이고 나에게 배율 ≥ 1
  * (effectivenessAgainst: 상대 특성 타입 변화·상대 특성 날씨·필드의 웨더볼·대지의파동 타입·사이코필드 접지 선공기 무효·기술 특례 × 내 특성 보정).
- * 하나도 없으면 변화기를 뺀 사용률 1위 하나. me = 내 계산 폼 타입·특성·도구(접지), opponentAbility = 상대 대표 세트의 계산 특성. 스냅샷에 없거나 배율을 낼 수 없는 기술은 배율 조건 없이 남긴다(계산 불가 항목).
+ * 하나도 없으면 변화기를 뺀 사용률 1위 하나. 지닌 도구로 위력이 정해지는 기술(내던지기)은 도구 없는 기본 줄에서 실패하므로 뺀다. me = 내 계산 폼 타입·특성·도구(접지), opponentAbility = 상대 대표 세트의 계산 특성. 스냅샷에 없거나 배율을 낼 수 없는 기술은 배율 조건 없이 남긴다(계산 불가 항목).
  */
 export function defenseMoveIds(game: Snapshot, entry: MetaEntry, me: EffectivenessDefender, opponentAbility: string): string[] {
   const ranked = Object.entries(entry.moves.shares)
-    .filter(([id]) => !isStatus(game, id))
+    .filter(([id]) => !isStatus(game, id) && !HELD_ITEM_POWER_MOVES.includes(id))
     .sort((a, b) => b[1] - a[1] || byString(a[0], b[0]))
   const hits = (id: string): boolean => {
     if (!hasMove(game, id)) return true
@@ -750,11 +772,11 @@ export function defenseMoveIds(game: Snapshot, entry: MetaEntry, me: Effectivene
   return out.length > 0 ? out : ranked.slice(0, 1).map(([id]) => id)
 }
 
-/** 그 상대에 사용자가 추가한 기술(추가 순, 중복 제거). 스냅샷에 없는 기술·변화기는 뺀다 */
+/** 그 상대에 사용자가 추가한 기술(추가 순, 중복 제거). 스냅샷에 없는 기술·변화기·내던지기(HELD_ITEM_POWER_MOVES)는 뺀다 */
 function addedMoveIds(input: CardInput, opponentId: string): string[] {
   const out: string[] = []
   for (const a of input.addedMoves ?? []) {
-    if (a.opponentId !== opponentId || !hasMove(input.game, a.moveId) || isStatus(input.game, a.moveId) || out.includes(a.moveId)) continue
+    if (a.opponentId !== opponentId || !hasMove(input.game, a.moveId) || isStatus(input.game, a.moveId) || HELD_ITEM_POWER_MOVES.includes(a.moveId) || out.includes(a.moveId)) continue
     out.push(a.moveId)
   }
   return out
@@ -827,7 +849,10 @@ export function planTab(input: CardInput, tab: Tab): TabPlan {
       const errors = all.filter((s) => s.error)
       let categories = CATEGORY_ORDER.filter((c) => ok.some((s) => s.refs?.defense === defenseStatOf(c)))
       if (categories.length === 0 && errors.length > 0) categories = ['physical']
-      for (const category of categories) {
+      // 래더 기본 카드는 상대 도구 없음(메가 항목은 메가스톤 유지), 화력 도구는 점유율 기준 이상마다 별도 변형 카드(원래 카드 바로 뒤, R14).
+      // 목록 밖 타겟은 사용자가 고른 프리셋 도구 그대로다.
+      const strip = opp.entry !== undefined && opp.entry.mega === undefined
+      const seeds = categories.map((category) => {
         const inCategory = ok.filter((s) => s.refs?.defense === defenseStatOf(category))
         // 스피드 의존 기술의 S는 묶음 대표 S로 계산하고 키에 넣지 않는다(목숨걸기 H 같은 나머지 의존은 넣는다).
         const keyStats = unique(
@@ -835,7 +860,12 @@ export function planTab(input: CardInput, tab: Tab): TabPlan {
             .filter((s) => s.refs?.offense?.owner === 'self')
             .flatMap((s) => (s.refs as MoveStatRefs).attackerStats.filter((stat) => stat !== 'spe')),
         )
-        for (const seed of seedsOf(opp, category, keyStats)) b.defenseCard(opp, seed, ok, errors, notices, added)
+        const raw = seedsOf(opp, category, keyStats)
+        return strip ? raw.map((s) => (s.assumption.set.item === undefined ? s : b.withItem(s, undefined))) : raw
+      })
+      seeds.forEach((list) => list.forEach((seed) => b.defenseCard(opp, seed, ok, errors, notices, added)))
+      for (const power of b.powerItemVariants(opp, seeds.flat(), ok)) {
+        seeds.forEach((list) => list.forEach((seed) => b.defenseCard(opp, b.withItem(seed, power.item), ok, errors, notices, added, power)))
       }
     }
   } else {

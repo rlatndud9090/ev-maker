@@ -647,7 +647,8 @@ function defenseCandidates(view: MetaView, e: MetaEntry, mySet: PokemonSet): str
   const oppSet = representativeAssumption(view, e.id).set
   const opp = validateSet(game, oppSet).ability
   const ranked = Object.entries(e.moves.shares)
-    .filter(([m]) => !game.data.moves[m] || game.data.moves[m].category !== 'Status')
+    // 내던지기는 도구 없는 기본 줄에서 실패해 후보가 아니다(PRD R14)
+    .filter(([m]) => m !== 'fling' && (!game.data.moves[m] || game.data.moves[m].category !== 'Status'))
     .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
   const factor = (m: string): number => {
     const move = game.data.moves[m]
@@ -1240,11 +1241,21 @@ describe('AC12 오류 격리', () => {
     for (const r of base) expect(r.error).toBeUndefined()
   })
 
-  it('상대 하양허브 + 껍질깨기(합성): 방어 탭 그 랭크 후 항목의 연속기만 계산 불가로 표시', () => {
+  it('상대 하양허브 + 껍질깨기: 방어 탭 래더 상대(합성)는 기본 줄 도구 없음(R14)이라 계산 불가 항목이 없고, 목록 밖 타겟(하양허브 프리셋)은 그 랭크 후 항목의 연속기만 계산 불가로 표시', () => {
     const w = F8.opponentWhiteHerb
     const view = syntheticView(game, bo1.meta, [...bo1.ranking, whiteHerbShellSmashEntry(entryOf(bo1, 'sneasler'))])
-    const { view: tv } = run('F8-wh-opp', only(EXAMPLE_SET, [w.opponent], { view }), 'defense')
-    const items = tv.cards.filter((c) => c.opponent.id === w.opponent).flatMap((c) => c.items)
+    const { plan, view: tv } = run('F8-wh-opp', only(EXAMPLE_SET, [w.opponent], { view }), 'defense')
+    const ladder = plan.cards.filter((c) => c.opponent.id === w.opponent && c.berry === undefined)
+    expect(ladder.length).toBeGreaterThan(0)
+    for (const c of ladder) expect(c.opponentSet.item, c.id).toBeUndefined()
+    const ladderItems = tv.cards.filter((c) => c.opponent.id === w.opponent).flatMap((c) => c.items)
+    expect(ladderItems.some((i) => i.basis?.means.id === w.means && i.moveId === w.multihit)).toBe(true)
+    expect(ladderItems.filter((i) => i.status === 'error')).toEqual([])
+
+    const edits = Object.fromEntries(([0, 1, 2] as const).map((p) => [presetKey('defense', 'physical', p), { item: 'whiteherb' }]))
+    const target = { rosterId: w.opponent, moves: [w.multihit, w.means], edits }
+    const { view: cv } = run('F8-wh-custom', only(EXAMPLE_SET, [bo1.ranking[0].id], { customTargets: [target] }), 'defense')
+    const items = cv.cards.filter((c) => c.opponent.source === 'custom').flatMap((c) => c.items)
     const bad = items.filter((i) => i.basis?.means.id === w.means && i.moveId === w.multihit)
     expect(bad.length).toBeGreaterThan(0)
     for (const i of bad) expect(i).toMatchObject({ status: 'error', error: { code: 'WHITE_HERB_MULTIHIT' } })
@@ -1364,5 +1375,84 @@ describe('관여 능력치 S(F11): 스피드 의존 기술 행만 내 S에 의�
       expect(rows.length).toBeGreaterThan(0)
       for (const r of rows) expect(r.dependsOn.includes('spe'), label).toBe(depends)
     }
+  })
+})
+
+// ---------- AC35 방어 탭 상대 화력 도구 행(R14) ----------
+
+/** PRD R14 화력 도구 목록(구현 상수와 따로 적는다) */
+const ORACLE_POWER_ITEMS = [
+  'lifeorb',
+  'expertbelt',
+  'muscleband',
+  'wiseglasses',
+  'blackbelt',
+  'blackglasses',
+  'charcoal',
+  'dragonfang',
+  'fairyfeather',
+  'hardstone',
+  'magnet',
+  'metalcoat',
+  'miracleseed',
+  'mysticwater',
+  'nevermeltice',
+  'poisonbarb',
+  'sharpbeak',
+  'twistedspoon',
+  'silverpowder',
+  'silkscarf',
+  'spelltag',
+  'softsand',
+]
+
+describe('AC35 방어 탭 화력 도구 행: 기본 줄 도구 없음, 도구 줄 = 점유율 기준 이상 · 보정 여부는 코어 대미지 비교', () => {
+  it('예시 세트 상위 N: 기본 카드 도구(메가만 메가스톤), 도구 변형 = 기준 이상 화력 도구 중 코어 대미지가 실제로 커지는 기술이 있는 것, triggers = 그 기술들', () => {
+    const { plan } = run('example', top(EXAMPLE_SET), 'defense')
+    let variants = 0
+    let checkedMoves = 0
+    for (const id of new Set(plan.cards.filter((c) => c.opponent.source === 'ladder').map((c) => c.opponent.id))) {
+      const entry = entryOf(bo1, id)
+      const cards = plan.cards.filter((c) => c.opponent.id === id)
+      const base = cards.filter((c) => c.berry === undefined)
+      for (const c of base) expect(c.opponentSet.item, c.id).toBe(entry.mega === undefined ? undefined : entry.representative.set.item)
+      // 변형 카드는 그 상대 기본 카드들 뒤에만 온다
+      const firstVariant = cards.findIndex((c) => c.berry !== undefined)
+      if (firstVariant >= 0) expect(cards.slice(firstVariant).every((c) => c.berry !== undefined), id).toBe(true)
+      // 분류마다 첫 정상 관측 기본 카드의 세트로 기술마다 도구 유무 최대 대미지를 견준다
+      const setOf = new Map<string, PokemonSet>()
+      for (const c of base) {
+        if (c.state !== 'ok' || c.bundle.userAdded !== undefined) continue
+        for (const g of c.conditions.filter((x) => x.id === JSON.stringify(['base'])))
+          for (const cand of g.candidates) if (game.data.moves[cand.moveId] !== undefined && !setOf.has(cand.moveId)) setOf.set(cand.moveId, c.opponentSet)
+      }
+      const maxOf = (set: PokemonSet, move: string): number => {
+        const v = judgeDamage(game, 'defender', set, EXAMPLE_SET, move, undefined, undefined, { rollSteps: N }).value
+        return v.kind === 'damage' ? v.max : 0
+      }
+      const expected: { item: string; share: number; triggers: string[] }[] = []
+      if (entry.mega === undefined) {
+        for (const item of ORACLE_POWER_ITEMS) {
+          const share = entry.items.shares[item] ?? 0
+          if (share < DEFAULT_CRITERIA.powerItemShareMin) continue
+          const triggers = [...setOf].filter(([move, set]) => maxOf({ ...set, item }, move) > maxOf(set, move)).map(([move]) => move)
+          checkedMoves += setOf.size
+          if (triggers.length > 0) expected.push({ item, share, triggers })
+        }
+      }
+      const got = new Map<string, { item: string; share: number; triggers: string[] }>()
+      for (const c of cards) {
+        if (c.berry === undefined) continue
+        expect(c.opponentSet.item, c.id).toBe(c.berry.item)
+        for (const r of c.rowIds) expect(plan.rows[r].attacker.item, r).toBe(c.berry.item)
+        got.set(c.berry.item, { item: c.berry.item, share: c.berry.share, triggers: [...c.berry.triggers].sort() })
+      }
+      const norm = (xs: readonly { item: string; share: number; triggers: string[] }[]) =>
+        xs.map((x) => ({ ...x, triggers: [...x.triggers].sort() })).sort((a, b) => (a.item < b.item ? -1 : 1))
+      expect(norm([...got.values()]), id).toEqual(norm(expected))
+      variants += got.size
+    }
+    expect(variants).toBeGreaterThan(0)
+    expect(checkedMoves).toBeGreaterThan(0)
   })
 })

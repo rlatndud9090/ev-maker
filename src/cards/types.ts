@@ -20,12 +20,15 @@ export interface DisplayCriteria {
   scarfShareMin: number
   /** 반감열매 점유율 기준(0~1, 이상이면 공격 탭에 그 열매를 지닌 별도 행) */
   berryShareMin: number
+  /** 화력 도구 점유율 기준(0~1, 이상이면 방어 탭에 그 도구를 지닌 별도 행) */
+  powerItemShareMin: number
 }
 export const DEFAULT_CRITERIA: Readonly<DisplayCriteria> = Object.freeze({
   bundleShareMin: 0.05,
   rankShareMin: 0.1,
   scarfShareMin: 0.1,
   berryShareMin: 0.05,
+  powerItemShareMin: 0.05,
 })
 
 export interface CardFilters {
@@ -292,9 +295,9 @@ export interface ConditionGroup {
   candidates: readonly MoveCandidate[]
 }
 
-/** 공격 탭 반감열매 변형: 상대가 이 열매를 지닌 가정(기본 카드는 상대 도구 없음). 화면에서 별도 행이다 */
+/** 상대 도구 변형: 공격 탭 반감열매·방어 탭 화력 도구를 지닌 가정(래더 기본 카드는 상대 도구 없음). 화면에서 별도 행이다 */
 export interface BerryVariant {
-  /** 반감열매 도구 id */
+  /** 도구 id(반감열매 또는 화력 도구) */
   item: string
   /** 그 도구의 분포 점유율 */
   share: number
@@ -319,8 +322,9 @@ export interface CardSpec {
   /** 조건별 기술 후보 = 기술 선택 항목(스피드 탭·error 카드는 빈 배열) */
   conditions: readonly ConditionGroup[]
   /**
-   * 반감열매 변형 카드만. triggers = 이 카드 대표 세트에 그 열매가 발동하는 내 기술 id(berryActivates).
-   * 조립은 보이는 항목의 기술이 triggers에 없으면 이 카드를 보이지 않는다(열매가 판정에 관여하지 않으면 별도 행일 필요가 없다)
+   * 도구 변형 카드만(이름은 반감열매에서 왔고 방어 탭 화력 도구도 쓴다). triggers = 이 카드 대표 세트에서 그 도구가 관여하는 기술 id
+   * (공격 탭: 열매가 발동하는 내 기술, berryActivates. 방어 탭: 화력 도구가 보정을 주는 상대 기술, powerItemBoosts).
+   * 조립은 보이는 항목의 기술이 triggers에 없으면 이 카드를 보이지 않는다(도구가 판정에 관여하지 않으면 별도 행일 필요가 없다)
    */
   berry?: BerryVariant & { triggers: readonly string[] }
   /**
@@ -553,7 +557,7 @@ export interface CardView {
   opponent: OpponentHeader
   category: Category | null
   bundle: BundleSpec
-  /** 반감열매 변형 카드(별도 행)면 그 열매 */
+  /** 도구 변형 카드(별도 행: 공격 탭 반감열매·방어 탭 화력 도구)면 그 도구 */
   berry?: BerryVariant
   /**
    * 보이는 항목의 판정 행(공격 탭 1행, 방어 탭 H행·B/D행 쌍 또는 극단 필터 고정 1줄, 계산 불가·판정 전 포함). 스피드 탭은 카드의 모든 행

@@ -53,12 +53,20 @@ describe('reducer', () => {
     const s = start()
     const next = reducer(s, { type: 'set-criteria', criteria: { bundleShareMin: 0.1 } })
     expect(next.criteria).toEqual({ ...DEFAULT_CRITERIA, bundleShareMin: 0.1 })
-    expect(Object.keys(next.criteria).sort()).toEqual(['berryShareMin', 'bundleShareMin', 'rankShareMin', 'scarfShareMin'])
+    expect(Object.keys(next.criteria).sort()).toEqual(['berryShareMin', 'bundleShareMin', 'powerItemShareMin', 'rankShareMin', 'scarfShareMin'])
     expect(next.generation).toBe(1)
-    for (const criteria of [{ bundleShareMin: NaN }, { bundleShareMin: 1.01 }, { rankShareMin: 1.5 }, { scarfShareMin: -0.1 }, { berryShareMin: 2 }]) {
+    for (const criteria of [{ bundleShareMin: NaN }, { bundleShareMin: 1.01 }, { rankShareMin: 1.5 }, { scarfShareMin: -0.1 }, { berryShareMin: 2 }, { powerItemShareMin: -0.01 }, { powerItemShareMin: NaN }]) {
       expect(reducer(next, { type: 'set-criteria', criteria })).toBe(next)
     }
     expect(reducer(next, { type: 'set-criteria', criteria: { bundleShareMin: 0.1 } })).toBe(next)
+  })
+
+  it('화력 도구 최소(기본 5%)를 바꾸면 세대를 올린다(R14)', () => {
+    const s = start()
+    expect(s.criteria.powerItemShareMin).toBe(0.05)
+    const next = reducer(s, { type: 'set-criteria', criteria: { powerItemShareMin: 0.4 } })
+    expect(next.criteria).toEqual({ ...DEFAULT_CRITERIA, powerItemShareMin: 0.4 })
+    expect(next.generation).toBe(s.generation + 1)
   })
 
   it('고난수 기준은 1~15 정수 n 하나만 반영하고 세대를 올린다(같은 값·범위 밖·비정수는 그대로)', () => {

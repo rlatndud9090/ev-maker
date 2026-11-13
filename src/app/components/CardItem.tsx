@@ -192,15 +192,15 @@ function SpeciesName({ label }: { label: string }) {
 
 const stop = (e: MouseEvent) => e.stopPropagation()
 
-/** 반감열매 한국어 이름(스냅샷에 없으면 id) */
-const berryName = (game: Snapshot, item: string): string => game.data.items[item]?.name.ko ?? item
+/** 도구 한국어 이름(스냅샷에 없으면 id) */
+const itemName = (game: Snapshot, item: string): string => game.data.items[item]?.name.ko ?? item
 
 /**
- * 반감열매 행 이름 옆 배지: 도구 이미지(Champions 가방 스프라이트, 툴팁 "마코열매"). 이미지가 없으면 열매 이름에서 "열매"를 뗀 "(마코)".
- * 보이는 그림·글자는 스크린 리더에서 숨기고 "마코열매 지닌 경우"로 읽힌다. data-item-id는 도구 id.
+ * 도구 변형 행 이름 옆 배지: 도구 이미지(Champions 가방 스프라이트, 툴팁 = 도구 이름). 이미지가 없으면 열매 이름에서 "열매"를 뗀 "(마코)".
+ * 보이는 그림·글자는 스크린 리더에서 숨기고 "마코열매 지닌 경우"로 읽힌다(share를 주면 "(사용률 34.4%)"를 덧붙인다). data-item-id는 도구 id.
  */
-function BerryBadge({ game, item }: { game: Snapshot; item: string }) {
-  const name = berryName(game, item)
+function ItemVariantBadge({ game, item, share }: { game: Snapshot; item: string; share?: number }) {
+  const name = itemName(game, item)
   const url = itemIconUrl(item)
   return (
     <span className={`berry-badge${url === undefined ? '' : ' berry-badge-img'}`} data-testid="berry-badge" data-item-id={item} title={url === undefined ? `${name} 지닌 경우` : name}>
@@ -209,7 +209,9 @@ function BerryBadge({ game, item }: { game: Snapshot; item: string }) {
       ) : (
         <img className="item-icon" src={url} alt="" width={22} height={22} loading="lazy" decoding="async" draggable={false} data-item-icon={item} />
       )}
-      <span className="sr-only">{name} 지닌 경우</span>
+      <span className="sr-only">
+        {name} 지닌 경우{share === undefined ? '' : ` (사용률 ${shareText(share)})`}
+      </span>
     </span>
   )
 }
@@ -705,6 +707,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
       data-group-key={group.key}
       data-opponent={card.opponent.id}
       data-berry={group.berry?.item}
+      data-power-item={tab === 'defense' ? group.berry?.item : undefined}
       data-category={card.category ?? 'none'}
       data-origin={ladder ? 'ladder' : 'custom'}
       data-rank={ladder ? card.opponent.rank : undefined}
@@ -724,13 +727,21 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
             {group.berry !== undefined && (
               <>
                 {' '}
-                <BerryBadge game={game} item={group.berry.item} />
+                <ItemVariantBadge game={game} item={group.berry.item} share={tab === 'defense' ? group.berry.share : undefined} />
               </>
             )}
           </span>
           {!ladder && (
             <span className="card-meta">
               <span className="custom-tag">출처: 사용자 지정</span>
+            </span>
+          )}
+          {/* 방어 탭 화력 도구 행: 이름 아래 줄에 "생명의구슬 34.4%"(이름 칸 한 줄 유지, 읽기는 배지 숨김 글자) */}
+          {tab === 'defense' && group.berry !== undefined && (
+            <span className="card-meta" aria-hidden="true">
+              <span className="item-variant-label" data-testid="item-variant-label">
+                {itemName(game, group.berry.item)} {shareText(group.berry.share)}
+              </span>
             </span>
           )}
         </button>

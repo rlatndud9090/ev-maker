@@ -145,7 +145,10 @@ export function sameImageGroups(entries, known = KNOWN_SAME_IMAGE) {
   }
 }
 
-/** 이번에 받는 도구: 반감열매 18종(src/cards/berries.ts RESIST_BERRIES와 같아야 한다, 단위 테스트가 확인). */
+/**
+ * 이번에 받는 도구: 반감열매 18종(src/cards/berries.ts RESIST_BERRIES) + 화력 도구 22종(src/cards/powerItems.ts POWER_ITEMS).
+ * 두 목록의 합과 같아야 한다(단위 테스트가 확인).
+ */
 export const ITEM_ICON_IDS = Object.freeze([
   'babiriberry',
   'chartiberry',
@@ -165,6 +168,28 @@ export const ITEM_ICON_IDS = Object.freeze([
   'tangaberry',
   'wacanberry',
   'yacheberry',
+  'lifeorb',
+  'expertbelt',
+  'muscleband',
+  'wiseglasses',
+  'blackbelt',
+  'blackglasses',
+  'charcoal',
+  'dragonfang',
+  'fairyfeather',
+  'hardstone',
+  'magnet',
+  'metalcoat',
+  'miracleseed',
+  'mysticwater',
+  'nevermeltice',
+  'poisonbarb',
+  'sharpbeak',
+  'twistedspoon',
+  'silverpowder',
+  'silkscarf',
+  'spelltag',
+  'softsand',
 ])
 
 /** 스냅샷들(+메타 등장 종)에서 아이콘을 받을 로스터. 같은 id는 처음 본 스냅샷 기준. */

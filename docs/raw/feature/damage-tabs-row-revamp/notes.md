@@ -85,6 +85,14 @@ Status: draft
 | `plan.test.ts` 실데이터 리자몽메가Y 기본 후보 `['weatherball', 'solarbeam', 'dragonpulse', 'hurricane']` → `['solarbeam', 'dragonpulse', 'hurricane']`(자기 가뭄으로 웨더볼이 불꽃 → 드래곤/땅 반감), `acceptance.test.ts` 오라클 `defenseCandidates`에 공격측 특성 웨더볼·대지의파동 타입 독립 구현(`oracleMoveType`) | PRD R12(이전: 대미지 판정·후보 배율에 날씨·필드 없음) |
 | `plan.test.ts` "조건: 방어 탭도 순풍 없음" 행 조건 전체 일치 → 순풍(attacker/defender)만 비교(공격측 특성 날씨·필드가 합쳐질 수 있음) | PRD R12 |
 | e2e `product.spec.ts` "메가는 종 검색에서 메가 폼으로…" `getByText('메가 폼 고정')` → 도구 칸 안내(`[id$="-mega-item"]`)만(메가 특성 고정 커밋 eb09c7b로 특성 칸에도 같은 안내가 생겨 strict 위반) | PRD R11 후속(메가 폼 특성 고정 표시) |
+| `berries.test.ts` "방어·스피드 탭은 대표 도구를 그대로 쓰고 열매 변형이 없다" → 스피드 탭만 대표 도구, 방어 탭 기본 카드는 도구 없음, 두 탭 모두 반감열매 변형 없음 | PRD R14(이전: 방어 탭 래더 상대는 대표 세트·배분 가정의 도구 그대로) |
+| `acceptance.test.ts` AC12 "상대 하양허브 + 껍질깨기(합성)" → 래더 상대는 기본 줄 도구 없음이라 계산 불가 항목 0, `WHITE_HERB_MULTIHIT` 검사는 하양허브 프리셋 목록 밖 타겟(같은 종·기술)으로 옮김 | PRD R14(이전: 래더 기본 줄에 대표 도구 하양허브 유지) |
+| `state.test.ts` 표시 기준 키 목록·범위 밖 값 목록에 `powerItemShareMin` 추가 | PRD R14(화력 도구 최소(%) 신설) |
+| `images.test.ts` 도구 아이콘 대상 = 반감열매 18종 → 반감열매 18종 + 화력 도구 22종(`ITEM_ICON_IDS`·매니페스트·LICENSE·고지 문구 갱신) | PRD R14(줄 표지에 도구 아이콘) |
+| e2e `product-berry.spec.ts` "통계 설정 줄" 컨트롤 6 → 7, 폭 검사에 화력 도구 칸 추가 · `product-toolbar.spec.ts` "설정 영역 3줄" 통계 설정 컨트롤 순서·기본값·설명에 "화력 도구 최소(%)" 추가 | PRD R14(통계 설정에 화력 도구 최소(%)) |
+| e2e `product.spec.ts` `ladderCards`가 도구 변형 행(`[data-berry]`)을 제외 · "같은 포켓몬은 탭마다 한 행만" 키에 변형 도구 포함 | PRD R14(방어 탭 화력 도구 줄 = 같은 상대의 별도 행) |
+| e2e `product.spec.ts` `ladderCards` 제외 대상 `[data-berry]` → 방어 탭 화력 도구 행만(`[data-power-item]`), 공격 탭 반감열매 행은 이전 범위대로 포함 | PRD R14(화력 도구 줄만 새 별도 행) |
+| `acceptance.test.ts` 오라클 `defenseCandidates`에서 내던지기 제외(포푸니크 AC5 기대 집합에서 `fling` 빠짐, 2026-11-13 결과 기록 "포푸니크 후보 = …내던지기"를 대체) | PRD R14(기본 줄 도구 없음 → 내던지기 실패라 후보·기술 추가 대상 아님) |
 
 ## 결정(빌드 중)
 
@@ -100,6 +108,8 @@ Status: draft
 - 2026-11-14 R12 구현(ADR 결정 7): `src/core/fieldAbilities.ts`(`abilityWeather`·`abilityTerrain`·`withAttackerField`), 모든 대미지 판정 조건은 `PlanBuilder.damageConditions(공격측 해결 특성)` 경유(스피드 탭 제외), 웨더볼·대지의파동 타입(메가솔라 포함)을 `attackMoveType`·후보 배율·반감열매 판정에 반영. 캐시 키는 조건 전체라 자동. 예외: 델타스트림·강한 날씨는 엔진(champions) 미지원으로 각각 무시·쾌청/비 근사(현재 스냅샷에 해당 특성 없음). 대지의파동 타입은 공격측 접지를 보지 않는다(필드 설정 포켓몬이 모두 접지).
 - 2026-11-14 R12 보강·R13: `fieldPriority`(그래스필드 그래스슬라이더 +1, 공격측 접지)·`psychicTerrainBlocks`(사이코필드 선공기 → 접지 대상 무효, 후보 배율 0)·`isGrounded`(엔진 규칙, 중력 제외), 방어 탭 `outspeedsAtMax`에 공격측 날씨·필드 조건. 표시 타입 `judgedMoveType`(판정 spec의 공격측 계산 특성·조건) → `RowView.moveType`·`ItemView.moveType`, 내 기술 칸은 `ui/moveType.ts`. 성능(2026-11-14): 공격 첫 카드 76ms·완료 624ms, 방어 18·587ms, 스피드 19·305ms, Long Task 0ms.
 - 후속(리뷰 MEDIUM): acceptance 오라클이 `card.speedEdge`를 제품 값 그대로 써서 날씨 반영 스피드 비교를 독립 검증하지 않는다. 사이코필드 선공기 무효는 실데이터 해당 상대(벽기리F 속이다 0.75%)가 기준 미만이라 합성 단위 테스트로만 검증된다.
+- 2026-11-14 R14 구현(ADR 결정 8): `powerItems.ts`(22종·보정 판정, 애크러뱃 제외), 방어 탭 기본 카드 도구 제거(메가 스톤 유지), 변형 카드는 반감열매 `berry` 필드 재사용, 툴바 "화력 도구 최소(%)"(`criteria.powerItemShareMin` 0.05), 화력 도구 아이콘 22개(Bulbagarden, 기존 열매 아이콘과 같은 출처·라이선스 문서 갱신). 배분 선택 키 = (탭, 출처, 상대) — 기본·변형 줄 공유(`selectionKey`·`variantCardId`), 반감열매 줄에도 같은 규칙. 내던지기는 후보·추가 검색 제외(`HELD_ITEM_POWER_MOVES`). 성능(2026-11-14): 방어 처음 열기 첫 카드 35ms·완료 1104ms(이전 587ms, 카드 88 → 137), SP 놓기 32·451ms, Long Task 0ms.
+- 후속(리뷰 LOW): 보이지 않을 분류의 변형 카드(예: 힘의머리띠 특수 분류)도 계획·계산한다 — 성능 여유가 줄면 계획 단계에서 거른다. 변형 줄 고정은 줄마다 따로(선택 전 기본값이 기본 줄과 다를 수 있음). 분류 가변 기술(셸암즈)의 힘의머리띠·박식안경 판정은 고정 분류 기준.
 
 ## 검증
 

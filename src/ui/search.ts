@@ -1,5 +1,5 @@
 // 한국어 부분 일치 이름 검색. 결과는 id 목록이고, 표시 라벨은 이름 색인(names.ts)이 만든다.
-import { moveStatRefs } from '../core'
+import { HELD_ITEM_POWER_MOVES, moveStatRefs } from '../core'
 import type { LocalizedName, Snapshot } from '../data/schema'
 import { nameLabel } from './names'
 
@@ -73,10 +73,10 @@ export function learnableMoves(game: Snapshot, rosterId: string): readonly strin
   return base !== undefined && Object.prototype.hasOwnProperty.call(d.species, base) ? d.species[base].learnset : []
 }
 
-/** 방어 탭 상대 기술 추가 검색 대상: 그 종이 배우는 공격기 중 exclude(이미 목록 후보)와 분류 가변 기술(항목이 되지 않음)을 뺀 것 */
+/** 방어 탭 상대 기술 추가 검색 대상: 그 종이 배우는 공격기 중 exclude(이미 목록 후보)·분류 가변 기술(항목이 되지 않음)·내던지기(도구 없는 기본 줄에서 실패)를 뺀 것 */
 export function addableMoves(game: Snapshot, rosterId: string, exclude: readonly string[]): string[] {
   return learnableMoves(game, rosterId).filter((m) => {
-    if (exclude.includes(m) || !Object.prototype.hasOwnProperty.call(game.data.moves, m)) return false
+    if (exclude.includes(m) || HELD_ITEM_POWER_MOVES.includes(m) || !Object.prototype.hasOwnProperty.call(game.data.moves, m)) return false
     const refs = moveStatRefs(game, m)
     return refs.category !== 'Status' && !refs.categoryVaries
   })

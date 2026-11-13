@@ -349,6 +349,20 @@ describe('planTab: 방어 탭', () => {
     expect(plainDefense(e)).not.toContain('rocktomb')
   })
 
+  it('내던지기는 도구 없는 기본 줄에서 실패하므로 후보가 아니다(실데이터 포푸니크 9.8%, 합성 사용률 1위여도)', () => {
+    const e = entryOf('sneasler')
+    expect(e.moves.shares.fling).toBeGreaterThan(DEFENSE_MOVE_SHARE_MIN)
+    expect(defenseMoveIds(game, e, { types: ['Normal'], ability: 'innerfocus' }, repAbility(e))).not.toContain('fling')
+    expect(plainDefense(e)).not.toContain('fling')
+    const only = syntheticEntry(e, { moves: { ...e.moves, shares: { fling: 0.9, closecombat: 0.01 } } })
+    expect(plainDefense(only)).toEqual(['closecombat'])
+    // 사용자가 추가한 내던지기도 후보가 되지 않는다
+    const p = planTab(input({ mySet: PLAIN, filters: { topN: 30, selected: ['sneasler'] }, addedMoves: [{ opponentId: 'sneasler', moveId: 'fling' }] }), 'defense')
+    const sneasler = cardsOf(p, 'sneasler')
+    expect(sneasler.length).toBeGreaterThan(0)
+    for (const c of sneasler) expect(c.conditions.some((g) => g.candidates.some((m) => m.moveId === 'fling')), c.id).toBe(false)
+  })
+
   describe('기본 후보 규칙(합성 통계)', () => {
     const base = entryOf('kingambit')
     const withShares = (shares: Record<string, number>): MetaEntry => syntheticEntry(base, { moves: { ...base.moves, shares } })

@@ -95,18 +95,19 @@ test.describe('설정 영역 3줄', () => {
     const box = (await page.getByTestId('result-box').boundingBox())!
     expect(ys[2]).toBeLessThan(box.y)
 
-    // 1행: 형식 · 기준 월 · 최소 사용률 4종(SP 배분 · 랭크업 기술 · 구애스카프 · 반감열매) 순
+    // 1행: 형식 · 기준 월 · 최소 사용률 5종(SP 배분 · 랭크업 기술 · 구애스카프 · 반감열매 · 화력 도구) 순
     const statNames = await stats.locator('select, input').evaluateAll((els) => els.map((e) => (e as HTMLElement).getAttribute('aria-label') ?? e.closest('label')?.firstChild?.textContent?.trim()))
-    expect(statNames).toEqual(['형식', '기준 월', 'SP 배분 최소(%)', '랭크업 기술 최소(%)', '구애스카프 최소(%)', '반감열매 최소(%)'])
+    expect(statNames).toEqual(['형식', '기준 월', 'SP 배분 최소(%)', '랭크업 기술 최소(%)', '구애스카프 최소(%)', '반감열매 최소(%)', '화력 도구 최소(%)'])
     await expect(combo(stats, '형식')).toHaveValue('bo1')
     await expect(combo(stats, '기준 월')).toBeVisible()
     await expect(spin(stats, 'SP 배분 최소(%)')).toHaveValue('5')
     await expect(spin(stats, '랭크업 기술 최소(%)')).toHaveValue('10')
     await expect(spin(stats, '구애스카프 최소(%)')).toHaveValue('10')
     await expect(spin(stats, '반감열매 최소(%)')).toHaveValue('5')
+    await expect(spin(stats, '화력 도구 최소(%)')).toHaveValue('5')
     await expect(stats).toContainText('통계 설정')
     // 보이는 라벨이 그대로 접근 이름(WCAG 2.5.3), "사용률" 뜻은 설명으로
-    for (const name of ['SP 배분', '랭크업 기술', '구애스카프', '반감열매']) {
+    for (const name of ['SP 배분', '랭크업 기술', '구애스카프', '반감열매', '화력 도구']) {
       await expect(spin(stats, `${name} 최소(%)`)).toHaveAccessibleDescription(new RegExp(`^${name} 최소 사용률\\(%\\)`))
     }
 

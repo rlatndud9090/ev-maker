@@ -27,7 +27,7 @@ export {
 } from './bands'
 export { WEATHER_NEGATING_ABILITIES, finalSpeed, compareSpeed, minSpToOutspeed, checkSpeedSupport } from './speed'
 export { sweep, sweepDamage, sweepSpeed, judgeDamage, judgeSpeed, type CellJudgement, type DamageCategoryOptions, type DamageSweepTarget } from './sweep'
-export { moveStatRefs } from './moveRefs'
+export { HELD_ITEM_POWER_MOVES, moveStatRefs } from './moveRefs'
 export { DEFENDER_ABILITY_IGNORING, defenderAbilityFactor, effectivenessAgainst, type EffectivenessDefender } from './effectiveness'
 export {
   SPEED_DEPENDENT_MOVES,

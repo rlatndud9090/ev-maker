@@ -11,7 +11,8 @@ const targetPattern = (sps: string, label = TIER): string => `${label}: (?!무�
 
 const toolbarSpin = (page: Page, name: string) => page.getByRole('spinbutton', { name, exact: true })
 const customPanel = (page: Page) => region(page, '목록 밖 포켓몬 추가')
-const ladderCards = (page: Page) => cards(page).and(page.locator('[data-origin="ladder"]'))
+// 래더 상대 행. 방어 탭 화력 도구 행(PRD R14)만 뺀다(공격 탭 반감열매 행은 이전처럼 포함)
+const ladderCards = (page: Page) => cards(page).and(page.locator('[data-origin="ladder"]:not([data-power-item])'))
 const customCards = (page: Page) => cards(page).and(page.locator('[data-origin="custom"]'))
 const cardLine = (card: Locator) => card.locator('button[aria-expanded]').first()
 const bundleButton = (card: Locator) => card.locator('button.bundle-btn')
@@ -1081,13 +1082,13 @@ test.describe('포켓몬마다 한 행 + 노력치 배분 선택(사용자 피�
     return cards(page).and(page.locator(`[data-group-key='${key}']`))
   }
 
-  test('같은 포켓몬은 탭마다 한 행만', async ({ page }) => {
+  test('같은 포켓몬은 탭마다 한 행만(도구 변형 행은 도구마다 따로)', async ({ page }) => {
     await openProduct(page)
     await addCustomTarget(page, '워시로토무', ['하이드로펌프'])
     for (const tab of ['공격', '방어', '스피드'] as const) {
       await selectTab(page, tab)
       await waitComplete(page)
-      const keys = await cards(page).evaluateAll((els) => els.map((e) => `${(e as HTMLElement).dataset.origin}/${(e as HTMLElement).dataset.opponent}`))
+      const keys = await cards(page).evaluateAll((els) => els.map((e) => `${(e as HTMLElement).dataset.origin}/${(e as HTMLElement).dataset.opponent}/${(e as HTMLElement).dataset.berry ?? ''}`))
       expect(keys.length, tab).toBeGreaterThan(0)
       expect(new Set(keys).size, tab).toBe(keys.length)
     }

@@ -30,6 +30,24 @@ export function addedCardId(tab: Tab, opponentId: string, category: Category | n
   return cardId(berry === undefined ? [tab, 'ladder', opponentId, category, bundleKey, 'user'] : [tab, 'ladder', opponentId, category, bundleKey, 'user', berry])
 }
 
+/**
+ * 같은 상대의 다른 도구 변형 줄(item = 도구 id, undefined = 기본 줄)에서 같은 분류·묶음에 해당하는 카드 id. 관측 묶음은 [...묶음 5원소, 'berry', 도구],
+ * 사용자 추가는 [...묶음 5원소, 'user', 도구] 규칙(openCard·addedCardId)을 따른다. 이 규칙의 카드 id가 아니면 그대로 돌려준다.
+ */
+export function variantCardId(id: string, item: string | undefined): string {
+  let parts: unknown
+  try {
+    parts = JSON.parse(id)
+  } catch {
+    return id
+  }
+  if (!Array.isArray(parts) || parts.length < 5) return id
+  const base = parts.slice(0, 5) as Part[]
+  if (parts[5] === 'user') return cardId(item === undefined ? [...base, 'user'] : [...base, 'user', item])
+  if (parts.length !== 5 && !(parts.length === 7 && parts[5] === 'berry')) return id
+  return cardId(item === undefined ? base : [...base, 'berry', item])
+}
+
 /** 직접 추가 배분의 고정 항목(키 = 그 배분 카드의 묶음 키: 키 능력치 STAT_IDS 순, 무보정) */
 export function addedBundlePin(added: AddedBundle): PinnedBundle {
   const stats = STAT_IDS.filter((s) => added.sp[s] !== undefined).map((stat) => ({ stat, sp: added.sp[stat] as number }))

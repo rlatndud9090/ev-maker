@@ -132,7 +132,7 @@ function ShareField({ label, value, onValue }: { label: string; value: number; o
 }
 
 /**
- * 결과 목록 위 설정: 탭 줄 → 통계 설정(형식·기준 월·최소 사용률 4종) → 표시 설정(상위 N·정렬·판정 기준(공격·방어 탭)·순풍(스피드 탭)) → 포켓몬 찾기(단독 줄).
+ * 결과 목록 위 설정: 탭 줄 → 통계 설정(형식·기준 월·최소 사용률 5종) → 표시 설정(상위 N·정렬·판정 기준(공격·방어 탭)·순풍(스피드 탭)) → 포켓몬 찾기(단독 줄).
  */
 export function Toolbar(p: Props) {
   const { game, view, state, dispatch } = p
@@ -218,6 +218,7 @@ export function Toolbar(p: Props) {
           <ShareField label="랭크업 기술" value={state.criteria.rankShareMin} onValue={(v) => dispatch({ type: 'set-criteria', criteria: { rankShareMin: v } })} />
           <ShareField label="구애스카프" value={state.criteria.scarfShareMin} onValue={(v) => dispatch({ type: 'set-criteria', criteria: { scarfShareMin: v } })} />
           <ShareField label="반감열매" value={state.criteria.berryShareMin} onValue={(v) => dispatch({ type: 'set-criteria', criteria: { berryShareMin: v } })} />
+          <ShareField label="화력 도구" value={state.criteria.powerItemShareMin} onValue={(v) => dispatch({ type: 'set-criteria', criteria: { powerItemShareMin: v } })} />
         </ToolRow>
 
         <ToolRow id={`${uid}-display`} label="표시 설정" testId="tool-row-display">
