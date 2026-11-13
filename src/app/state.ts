@@ -7,10 +7,13 @@ import {
   ROLL_STEPS,
   DEFAULT_TOP_N,
   MAX_CUSTOM_MOVES,
+  BASE_CONDITION_ID,
   addedBundlePin,
+  itemKey,
   opponentKey,
   samePin,
   type AddedBundle,
+  type AddedMove,
   type CardConditions,
   type CardFilters,
   type CustomTarget,
@@ -38,6 +41,8 @@ export interface AppState {
   customTargets: readonly CustomTarget[]
   /** 사용자가 직접 추가한 래더 상대 배분(추가 순, 메모리에만 둔다) */
   addedBundles: readonly AddedBundle[]
+  /** 방어 탭 래더 상대에 사용자가 추가한 기술(추가 순, 메모리에만 둔다). 계산 입력이다(후보가 바뀐다) */
+  addedMoves: readonly AddedMove[]
   /**
    * 고정한 래더 상대 배분(고정·추가한 순, 메모리에만 둔다). 직접 추가 배분은 추가와 함께 여기에도 들어가고, 고정을 풀면 지워진다
    * (addedBundles의 모든 항목은 고정돼 있다). 계산 입력이 아니라 세대를 올리지 않는다(정렬·표시만).
@@ -115,6 +120,10 @@ export type AppAction =
   | { type: 'choose-move'; choice: MoveChoice }
   /** 직접 선택 해제(기본 항목으로). 없으면 무시 */
   | { type: 'reset-move'; tab: Tab; source: 'ladder' | 'custom'; opponentId: string }
+  /** 방어 탭 래더 상대 기술 추가 + 그 기술 랭크 전 항목 직접 선택. 빈 문자열이거나 이미 있으면 무시 */
+  | { type: 'add-move'; opponentId: string; moveId: string }
+  /** 추가한 기술 삭제. 그 기술이 직접 선택돼 있으면(랭크 후 항목 포함) 선택도 해제. 없으면 무시 */
+  | { type: 'remove-move'; opponentId: string; moveId: string }
 
 export function initialState(regulation: string): AppState {
   return {
@@ -128,6 +137,7 @@ export function initialState(regulation: string): AppState {
     filters: { topN: DEFAULT_TOP_N, selected: [] },
     customTargets: [],
     addedBundles: [],
+    addedMoves: [],
     pinnedBundles: [],
     sortMode: 'usage',
     moveChoices: [],
@@ -177,6 +187,24 @@ function validBundle(bundle: AddedBundle, keyStats: readonly StatId[], spMax: nu
   })
 }
 
+/** SP·성격(하락 자동 지정 포함) 밖의 초안 항목이 같은지 */
+function sameBeyondSpNature(a: SetDraft, b: SetDraft): boolean {
+  const pick = (d: SetDraft) => [d.species, d.ability, d.item, d.moves, d.mega, d.status, d.boosts.atk, d.boosts.def, d.boosts.spa, d.boosts.spd, d.boosts.spe]
+  return same(pick(a), pick(b))
+}
+
+const sameAddedMove = (a: AddedMove, b: AddedMove): boolean => a.opponentId === b.opponentId && a.moveId === b.moveId
+const defenseLadder = (opponentId: string) => ({ tab: 'defense' as const, source: 'ladder' as const, opponentId })
+/** 항목 키(cards itemKey)의 기술 id */
+const moveOfKey = (key: string): string | undefined => {
+  try {
+    const parsed: unknown = JSON.parse(key)
+    return Array.isArray(parsed) && typeof parsed[0] === 'string' ? parsed[0] : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function updateTarget(state: AppState, rosterId: string, f: (t: CustomTarget) => CustomTarget): AppState {
   const i = state.customTargets.findIndex((t) => t.rosterId === rosterId)
   if (i < 0) return state
@@ -187,8 +215,11 @@ function updateTarget(state: AppState, rosterId: string, f: (t: CustomTarget) =>
 
 export function reducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
-    case 'set-draft':
-      return bump(state, { draft: action.draft })
+    case 'set-draft': {
+      const next = bump(state, { draft: action.draft })
+      if (next === state || sameBeyondSpNature(state.draft, action.draft) || next.moveChoices.length === 0) return next
+      return { ...next, moveChoices: [] }
+    }
     case 'commit-sp': {
       if (!Number.isInteger(action.value)) return state
       return bump(state, { draft: { ...state.draft, sp: { ...state.draft.sp, [action.stat]: String(action.value) } } })
@@ -268,6 +299,22 @@ export function reducer(state: AppState, action: AppAction): AppState {
     case 'reset-move': {
       const moveChoices = state.moveChoices.filter((x) => !sameTarget(x, action))
       return moveChoices.length === state.moveChoices.length ? state : { ...state, moveChoices }
+    }
+    case 'add-move': {
+      const m: AddedMove = { opponentId: action.opponentId, moveId: action.moveId }
+      if (typeof m.opponentId !== 'string' || m.opponentId === '' || typeof m.moveId !== 'string' || m.moveId === '') return state
+      if (state.addedMoves.some((x) => sameAddedMove(x, m))) return state
+      const target = defenseLadder(m.opponentId)
+      const choice: MoveChoice = { ...target, key: itemKey(m.moveId, BASE_CONDITION_ID) }
+      const moveChoices = [...state.moveChoices.filter((x) => !sameTarget(x, target)), choice]
+      return { ...bump(state, { addedMoves: [...state.addedMoves, m] }), moveChoices }
+    }
+    case 'remove-move': {
+      const addedMoves = state.addedMoves.filter((x) => !sameAddedMove(x, action))
+      if (addedMoves.length === state.addedMoves.length) return state
+      const target = defenseLadder(action.opponentId)
+      const moveChoices = state.moveChoices.filter((x) => !(sameTarget(x, target) && moveOfKey(x.key) === action.moveId))
+      return { ...bump(state, { addedMoves }), moveChoices: moveChoices.length === state.moveChoices.length ? state.moveChoices : moveChoices }
     }
   }
 }

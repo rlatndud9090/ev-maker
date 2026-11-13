@@ -5,11 +5,13 @@ import {
   STAT_IDS,
   checkSpeedSupport,
   compareSpeed,
+  effectivenessAgainst,
   moveStatRefs,
   normalizeRollSteps,
   validateSet,
   type BattleConditions,
   type BoostTable,
+  type EffectivenessDefender,
   type MoveStatRefs,
   type PokemonSet,
   type ResolvedSet,
@@ -51,8 +53,8 @@ import {
   type TabPlan,
 } from './types'
 
-/** 방어 탭 상대 기술 수(변화기 제외 점유율 상위) */
-export const DEFENSE_MOVES = 5
+/** 방어 탭 래더 상대 기본 후보의 사용률 하한 */
+export const DEFENSE_MOVE_SHARE_MIN = 0.05
 const PRESETS: readonly PresetIndex[] = [0, 1, 2]
 const SCARF = 'choicescarf'
 
@@ -326,9 +328,11 @@ class PlanBuilder {
     return f
   }
 
-  /** priority = 우선도 > 0(스냅샷에 없는 기술은 false) */
-  candidate(target: MoveCandidate['target'], id: string, moveId: string): MoveCandidate {
-    return { target, id, moveId, priority: hasMove(this.game, moveId) && this.game.data.moves[moveId].priority > 0 }
+  /** priority = 우선도 > 0(스냅샷에 없는 기술은 false). added = 사용자가 추가한 상대 기술 */
+  candidate(target: MoveCandidate['target'], id: string, moveId: string, added?: ReadonlySet<string>): MoveCandidate {
+    const c: MoveCandidate = { target, id, moveId, priority: hasMove(this.game, moveId) && this.game.data.moves[moveId].priority > 0 }
+    if (added?.has(moveId) === true) c.added = true
+    return c
   }
 
   /** 후보가 없으면 조건을 두지 않는다. */
@@ -444,7 +448,14 @@ class PlanBuilder {
   }
 
   /** all = 상대 후보 공격기 전부(사용률 순). 이 카드 분류 기술과 스냅샷에 없는 기술(계산 불가 항목)이 후보다. */
-  defenseCard(opp: Opponent, seed: CardSeed, all: readonly MoveSlot[], errors: readonly MoveSlot[], notices: readonly MoveNotice[]): void {
+  defenseCard(
+    opp: Opponent,
+    seed: CardSeed,
+    all: readonly MoveSlot[],
+    errors: readonly MoveSlot[],
+    notices: readonly MoveNotice[],
+    added: ReadonlySet<string>,
+  ): void {
     const card = this.openCard(opp, seed, notices)
     const resolved = seed.resolved
     if (!resolved) return
@@ -477,7 +488,7 @@ class PlanBuilder {
           error,
         }
         if (basis) spec.basis = basis
-        return this.candidate('row', this.addRow(card, parts, spec).id, slot.moveId)
+        return this.candidate('row', this.addRow(card, parts, spec).id, slot.moveId, added)
       }
       const natures = this.natures(def, 'damage', refs, ability)
       const f = this.addFilter(card, ['extreme', ...parts], {
@@ -508,7 +519,7 @@ class PlanBuilder {
         if (basis) spec.basis = basis
         this.addRow(card, [...parts, stat], spec)
       }
-      return this.candidate('filter', f.id, slot.moveId)
+      return this.candidate('filter', f.id, slot.moveId, added)
     }
     const group = (id: string, attacker: PokemonSet, defender: PokemonSet, basis: RankBasis | undefined, herbConsumed: boolean) => {
       const candidates: MoveCandidate[] = []
@@ -535,7 +546,7 @@ class PlanBuilder {
             dependsOn: [],
             error: slot.error,
           })
-          candidates.push(this.candidate('row', r.id, slot.moveId))
+          candidates.push(this.candidate('row', r.id, slot.moveId, added))
         }
       }
       this.addCondition(card, id, candidates)
@@ -616,6 +627,12 @@ export function outspeedsAtMax(game: Snapshot, mySet: PokemonSet, opponentSet: P
 }
 
 const unique = <T>(xs: readonly T[]): T[] => [...new Set(xs)]
+
+/** 기본 후보 + 추가 기술(이미 있으면 그대로), 사용률 순(동률 id 순, 통계에 없는 기술은 0) */
+function withAdded(base: readonly string[], added: ReadonlySet<string>, entry: MetaEntry): string[] {
+  const share = (id: string): number => entry.moves.shares[id] ?? 0
+  return unique([...base, ...added]).sort((a, b) => share(b) - share(a) || byString(a, b))
+}
 const isSp = (v: unknown, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= max
 
 /** 보정 없는 성격(스냅샷 성격 id 정렬 순 첫 번째). 없으면 원래 성격. */
@@ -687,13 +704,45 @@ function opponentsOf(input: CardInput): { ladder: MetaEntry[]; custom: CustomTar
   return { ladder, custom, conflicts }
 }
 
-/** 방어 탭 래더 상대 기술: 변화기를 뺀 점유율 상위(동률 id 순). 스냅샷에 없는 기술도 자리를 차지한다. */
-export function defenseMoveIds(game: Snapshot, entry: MetaEntry): string[] {
-  return Object.entries(entry.moves.shares)
-    .filter(([id]) => !Object.prototype.hasOwnProperty.call(game.data.moves, id) || game.data.moves[id].category !== 'Status')
+const isStatus = (game: Snapshot, moveId: string): boolean => hasMove(game, moveId) && game.data.moves[moveId].category === 'Status'
+
+/**
+ * 방어 탭 래더 상대 기본 후보(사용률 순, 동률 id 순): 변화기를 뺀 기술 중 사용률 ≥ DEFENSE_MOVE_SHARE_MIN이고 나에게 배율 ≥ 1
+ * (effectivenessAgainst: 상대 특성 타입 변화·기술 특례 × 내 특성 보정). 하나도 없으면 변화기를 뺀 사용률 1위 하나.
+ * me = 내 계산 폼 타입·특성, opponentAbility = 상대 대표 세트의 계산 특성. 스냅샷에 없거나 배율을 낼 수 없는 기술은 배율 조건 없이 남긴다(계산 불가 항목).
+ */
+export function defenseMoveIds(game: Snapshot, entry: MetaEntry, me: EffectivenessDefender, opponentAbility: string): string[] {
+  const ranked = Object.entries(entry.moves.shares)
+    .filter(([id]) => !isStatus(game, id))
     .sort((a, b) => b[1] - a[1] || byString(a[0], b[0]))
-    .slice(0, DEFENSE_MOVES)
-    .map(([id]) => id)
+  const hits = (id: string): boolean => {
+    if (!hasMove(game, id)) return true
+    try {
+      return effectivenessAgainst(game, id, { ability: opponentAbility }, me) >= 1
+    } catch (e) {
+      errorReasons(e)
+      return true
+    }
+  }
+  const out = ranked.filter(([id, share]) => share >= DEFENSE_MOVE_SHARE_MIN && hits(id)).map(([id]) => id)
+  return out.length > 0 ? out : ranked.slice(0, 1).map(([id]) => id)
+}
+
+/** 그 상대에 사용자가 추가한 기술(추가 순, 중복 제거). 스냅샷에 없는 기술·변화기는 뺀다 */
+function addedMoveIds(input: CardInput, opponentId: string): string[] {
+  const out: string[] = []
+  for (const a of input.addedMoves ?? []) {
+    if (a.opponentId !== opponentId || !hasMove(input.game, a.moveId) || isStatus(input.game, a.moveId) || out.includes(a.moveId)) continue
+    out.push(a.moveId)
+  }
+  return out
+}
+
+/** 상대 대표 세트의 계산 특성(메가면 메가 폼 특성). 해석할 수 없으면 대표 세트 특성 그대로 */
+function representativeAbility(input: CardInput, entry: MetaEntry): string {
+  const a = representativeAssumption(input.view, entry.id)
+  const r = resolveAssumption(input.game, a)
+  return r.usable ? r.resolved.ability : a.set.ability
 }
 
 export function planTab(input: CardInput, tab: Tab): TabPlan {
@@ -738,9 +787,19 @@ export function planTab(input: CardInput, tab: Tab): TabPlan {
       }
     }
   } else if (tab === 'defense') {
+    const myDefender = { types: me.species.types, ability: me.ability }
     for (const opp of opponents) {
       const notices: MoveNotice[] = []
-      const moveIds = opp.custom ? opp.custom.moves : defenseMoveIds(game, opp.entry as MetaEntry)
+      let moveIds: readonly string[]
+      let added = new Set<string>()
+      if (opp.custom) moveIds = opp.custom.moves
+      else {
+        const entry = opp.entry as MetaEntry
+        const base = defenseMoveIds(game, entry, myDefender, representativeAbility(input, entry))
+        // 기본 후보에 이미 있는 기술은 추가 표시(×)를 달지 않는다: 지워도 후보에서 빠지지 않으므로
+        added = new Set(addedMoveIds(input, entry.id).filter((id) => !base.includes(id)))
+        moveIds = withAdded(base, added, entry)
+      }
       const all = b.opponentSlots(moveIds, notices)
       const ok = all.filter((s) => s.refs)
       const errors = all.filter((s) => s.error)
@@ -754,7 +813,7 @@ export function planTab(input: CardInput, tab: Tab): TabPlan {
             .filter((s) => s.refs?.offense?.owner === 'self')
             .flatMap((s) => (s.refs as MoveStatRefs).attackerStats.filter((stat) => stat !== 'spe')),
         )
-        for (const seed of seedsOf(opp, category, keyStats)) b.defenseCard(opp, seed, ok, errors, notices)
+        for (const seed of seedsOf(opp, category, keyStats)) b.defenseCard(opp, seed, ok, errors, notices, added)
       }
     }
   } else {

@@ -2402,6 +2402,68 @@ img.mon-icon {
   color: var(--muted);
 }
 
+/* 사용자 추가 기술 항목의 × (배분 메뉴의 핀 자리와 같은 방식) */
+.move-opt-row {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.move-opt-row > .move-opt {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.product .move-remove,
+.move-remove-slot {
+  flex: 0 0 1.6rem;
+  width: 1.6rem;
+  align-self: stretch;
+}
+
+.product .move-remove {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.product .move-remove:hover,
+.product .move-remove:focus-visible {
+  background: var(--danger-soft);
+  color: var(--danger);
+  outline: none;
+}
+
+/* 메뉴 아래 "기술 추가" 검색 칸: 항목이 스크롤돼도 바닥에 붙고, 후보 목록은 메뉴 안에서 흐른다 */
+.move-add {
+  position: sticky;
+  bottom: -0.2rem;
+  margin: 0.15rem -0.2rem -0.2rem;
+  padding: 0.3rem 0.45rem;
+  border-top: 1px solid var(--border);
+  background: var(--card);
+}
+
+.move-add input {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 0.85rem;
+}
+
+.move-add .combo-list {
+  position: static;
+  max-height: 9rem;
+  margin-top: 0.2rem;
+  box-shadow: none;
+}
+
 
 /* 펼친 상세: 판정 행 위 기술 선택 + 랭크 근거 */
 .detail-move {

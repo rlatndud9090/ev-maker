@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { loadSnapshotSync } from '../data/testing'
-import { learnableMoves, searchIndexOf, searchNames } from './search'
+import { addableMoves, learnableMoves, searchIndexOf, searchNames } from './search'
 
 const game = loadSnapshotSync()
 
@@ -46,5 +46,23 @@ describe('learnableMoves', () => {
     expect(learnableMoves(game, 'garchompmega')).toEqual(game.data.species.garchomp.learnset)
     expect(learnableMoves(game, 'garchomp')).toContain('earthquake')
     expect(learnableMoves(game, 'nope')).toEqual([])
+  })
+})
+
+describe('addableMoves', () => {
+  it('배우는 공격기만, 제외 목록·변화기 없이(메가는 원종 습득표)', () => {
+    const all = addableMoves(game, 'garchompmega', [])
+    expect(all).toContain('earthquake')
+    expect(all.every((m) => game.data.species.garchomp.learnset.includes(m))).toBe(true)
+    expect(all.some((m) => game.data.moves[m].category === 'Status')).toBe(false)
+    expect(game.data.species.garchomp.learnset.some((m) => game.data.moves[m]?.category === 'Status')).toBe(true)
+    expect(addableMoves(game, 'garchomp', ['earthquake'])).not.toContain('earthquake')
+    expect(addableMoves(game, 'nope', [])).toEqual([])
+  })
+
+  it('분류 가변 기술(셸암즈)은 빠진다', () => {
+    const learner = Object.keys(game.data.species).find((id) => learnableMoves(game, id).includes('shellsidearm'))
+    expect(learner).toBeDefined()
+    expect(addableMoves(game, learner as string, [])).not.toContain('shellsidearm')
   })
 })

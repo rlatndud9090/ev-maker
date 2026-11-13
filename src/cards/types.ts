@@ -78,6 +78,13 @@ export interface AddedBundle {
   sp: Readonly<Partial<Record<StatId, number>>>
 }
 
+/** 방어 탭 래더 상대 후보에 사용자가 더한 기술. 기본 후보 기준과 무관하게 후보다(스냅샷에 없거나 변화기면 무시) */
+export interface AddedMove {
+  /** 래더 메타 항목 id */
+  opponentId: string
+  moveId: string
+}
+
 /**
  * 사용자가 고정한 래더 상대 배분(목록 맨 위, 고정한 순서). key = 그 카드 묶음의 정규화 키(BundleSpec.key).
  * 직접 추가 배분도 추가와 함께 고정된다(키 = addedBundleKey). 고정은 계산 입력이 아니다(정렬·표시만 바꾼다).
@@ -106,6 +113,8 @@ export interface CardInput {
   customTargets: readonly CustomTarget[]
   /** 사용자 추가 배분(추가 순). 없으면 빈 배열 */
   addedBundles?: readonly AddedBundle[]
+  /** 사용자가 추가한 상대 기술(방어 탭 래더 상대 전용, 추가 순). 없으면 빈 배열 */
+  addedMoves?: readonly AddedMove[]
 }
 
 export interface ErrorReason {
@@ -273,6 +282,8 @@ export interface MoveCandidate {
   moveId: string
   /** 우선도 > 0 기술(방어 탭 선공기 우선 규칙) */
   priority: boolean
+  /** 사용자가 추가한 상대 기술(방어 탭 래더 상대, CardInput.addedMoves) */
+  added?: true
 }
 export interface ConditionGroup {
   /** 카드 안 유일: JSON.stringify(['base']) 또는 ['rank', owner, means.kind, means.id] */
@@ -544,6 +555,8 @@ export interface ItemView {
   basis?: RankBasis
   /** 우선도 > 0 */
   priority: boolean
+  /** 사용자가 추가한 상대 기술의 항목(랭크 후 항목 포함, 지우기 대상) */
+  added?: true
   status: 'pending' | 'ok' | 'immune' | 'error'
   cell?: CompactCell
   error?: ErrorReason

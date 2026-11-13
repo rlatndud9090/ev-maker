@@ -209,6 +209,145 @@ test.describe('제품 화면', () => {
     await card.getByTestId('move-reset').click()
     await expect(card.getByTestId('move-pick')).not.toHaveAttribute('data-selected', 'true')
   })
+
+  test('방어 탭 기술 추가: 배우는 공격기만 검색 → 추가·선택·판정 행, × 삭제, 내 포켓몬을 바꿔도 남는다(PRD R8·AC26)', async ({ page }) => {
+    await openProduct(page)
+    await selectTab(page, '방어')
+    await waitComplete(page)
+    // 예시 세트(한카리아스, 드래곤/땅)에 바위는 반감이라 포푸니크 암석봉인(6.6%)은 기본 후보가 아니다
+    const card = ladderCards(page).and(page.locator('[data-opponent="sneasler"]')).first()
+    const pick = card.getByTestId('move-pick')
+    const menu = card.getByTestId('move-menu')
+    await pick.click()
+    await expect(menu.locator('[data-move="rocktomb"]')).toHaveCount(0)
+    await expect(menu.locator('[data-move="closecombat"]').first()).toBeVisible()
+    await expect(card.getByTestId('move-remove')).toHaveCount(0)
+    const search = combo(menu, '기술 추가')
+    const options = menu.getByRole('listbox', { name: '기술 추가 후보' }).getByRole('option')
+    // 배우지 않는 기술·변화기·이미 있는 기술은 후보에 없다
+    for (const text of ['10만볼트', '칼춤', '인파이트']) {
+      await search.fill(text)
+      await expect(options.filter({ hasText: new RegExp(`^${text}$`) })).toHaveCount(0)
+    }
+    await search.fill('암석')
+    await expect(options.filter({ hasText: /^암석봉인$/ })).toHaveCount(1)
+    const gen = async () => Number(await tabPanel(page).getAttribute('data-generation'))
+    const before = await gen()
+    await options.filter({ hasText: /^암석봉인$/ }).click()
+    await expect(menu).toHaveCount(0)
+    await expect.poll(gen).toBeGreaterThan(before)
+    await waitComplete(page)
+    // 추가한 기술이 직접 선택되고 판정 행이 그 기술 기준이다
+    await expect(pick).toBeFocused()
+    await expect(pick).toHaveAttribute('data-selected', 'true')
+    await expect(pick).toHaveAccessibleName(/암석봉인 기술 선택 \(직접 고름\)/)
+    await expect(cardLine(card)).toHaveAttribute('aria-expanded', 'false')
+    await cardLine(card).click()
+    await expect(card.getByTestId('detail-move-pick')).toHaveAccessibleName(/암석봉인/)
+    await expect(card.getByTestId('row').first()).toBeVisible()
+    await cardLine(card).click()
+
+    // 내 포켓몬을 대도각참(악/강철, 바위 반감)으로 바꾸면 직접 선택은 풀리지만 추가한 기술은 남는다
+    const species = combo(mySet(page), '종')
+    await species.fill('대도각참')
+    await species.press('Enter')
+    await expect(species).toHaveValue('대도각참')
+    await waitComplete(page)
+    await expect(pick).not.toHaveAttribute('data-selected', 'true')
+    await pick.click()
+    const added = menu.locator('[data-move="rocktomb"]')
+    await expect(added.first()).toBeVisible()
+    const remove = card.getByRole('menuitem', { name: '추가한 기술 삭제: 암석봉인' })
+    await expect(remove.first()).toBeVisible()
+
+    // 키보드: → 로 ×, ← 로 그 항목
+    await added.first().focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(remove.first()).toBeFocused()
+    await page.keyboard.press('ArrowLeft')
+    await expect(added.first()).toBeFocused()
+
+    // 고른 뒤 × 로 지우면 목록에서 빠지고 기본값으로 돌아간다
+    await added.first().click()
+    await waitComplete(page)
+    await expect(pick).toHaveAttribute('data-selected', 'true')
+    await pick.click()
+    const mid = await gen()
+    await remove.first().click()
+    await expect(menu).toHaveCount(0)
+    await expect.poll(gen).toBeGreaterThan(mid)
+    await waitComplete(page)
+    await expect(pick).not.toHaveAttribute('data-selected', 'true')
+    await pick.click()
+    await expect(menu.locator('[data-move="rocktomb"]')).toHaveCount(0)
+    await expect(card.getByTestId('move-remove')).toHaveCount(0)
+    await page.keyboard.press('Escape')
+
+    // 공격 탭·목록 밖 타겟에는 검색 칸이 없다
+    await selectTab(page, '공격')
+    await waitComplete(page)
+    await ladderCards(page).first().getByTestId('move-pick').click()
+    await expect(ladderCards(page).first().getByTestId('move-menu')).toBeVisible()
+    await expect(tabPanel(page).getByTestId('move-add')).toHaveCount(0)
+  })
+
+  test('기술 추가 검색 칸·× 는 400px·1280px에서 메뉴·화면 안에 들고 가로 넘침이 없다(PRD R8)', async ({ page }) => {
+    await openProduct(page)
+    await selectTab(page, '방어')
+    await waitComplete(page)
+    const card = ladderCards(page).and(page.locator('[data-opponent="sneasler"]')).first()
+    const pick = card.getByTestId('move-pick')
+    const menu = card.getByTestId('move-menu')
+    await pick.click()
+    const search = combo(menu, '기술 추가')
+    await search.fill('암석')
+    await menu.getByRole('option', { name: '암석봉인', exact: true }).click()
+    await waitComplete(page)
+    for (const width of [1280, 400]) {
+      await page.setViewportSize({ width, height: 900 })
+      await pick.click()
+      await combo(menu, '기술 추가').fill('스')
+      const box = await menu.evaluate((m) => {
+        const r = m.getBoundingClientRect()
+        const inside = (e: Element | null) => {
+          const b = e?.getBoundingClientRect()
+          return b !== undefined && b.left >= r.left - 0.5 && b.right <= r.right + 0.5
+        }
+        return {
+          left: r.left,
+          right: r.right,
+          hScroll: m.scrollWidth - m.clientWidth,
+          page: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          parts: [m.querySelector('[data-testid="move-add"] input'), m.querySelector('[role="listbox"]'), m.querySelector('[data-testid="move-remove"]')].map(inside),
+        }
+      })
+      expect(box.hScroll, `${width}`).toBeLessThanOrEqual(0)
+      expect(box.page, `${width}`).toBeLessThanOrEqual(0)
+      expect(box.parts, `${width}`).toEqual([true, true, true])
+      expect([box.left >= 0, box.right <= width], `${width}`).toEqual([true, true])
+      await page.keyboard.press('Escape')
+      await page.keyboard.press('Escape')
+      await expect(menu).toHaveCount(0)
+    }
+  })
+
+  test('방어 탭 목록 기준 화면: 내 세트가 1배 이상이면 포푸니크 목록에 지옥찌르기·암석봉인(PRD AC25)', async ({ page }) => {
+    await openProduct(page)
+    // 고릴타(풀)는 악·바위 모두 1배다(예시 세트 한카리아스는 바위 반감이라 암석봉인이 빠진다)
+    const species = combo(mySet(page), '종')
+    await species.fill('고릴타')
+    await species.press('Enter')
+    await expect(species).toHaveValue('고릴타')
+    await selectTab(page, '방어')
+    await waitComplete(page)
+    const card = ladderCards(page).and(page.locator('[data-opponent="sneasler"]')).first()
+    await card.getByTestId('move-pick').click()
+    const menu = card.getByTestId('move-menu')
+    await expect(menu.locator('[data-move="throatchop"]').first()).toBeVisible()
+    await expect(menu.locator('[data-move="rocktomb"]').first()).toBeVisible()
+    // 5% 미만(더스트슈트 3.8%)은 없다
+    await expect(menu.locator('[data-move="gunkshot"]')).toHaveCount(0)
+  })
   test('펼친 상세: 행·0~32 띠·현재값·예산 밖 칸 구분, 접힌 줄 대표 문구, 상세 기술 선택(AC9·AC19)', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)

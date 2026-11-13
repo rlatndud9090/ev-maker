@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { PokemonSet } from '../core'
 import type { MetaEntry } from '../data/meta-schema'
 import { addedBundleCardId, cardId, presetKey } from './ids'
-import { DEFENSE_MOVES, defenseMoveIds, planTab } from './plan'
+import { representativeAssumption, resolveAssumption } from '../meta'
+import { DEFENSE_MOVE_SHARE_MIN, defenseMoveIds, planTab } from './plan'
 import { coAdoptionFloor } from './rank'
 import { buildTabView } from './batch'
 import { defaultOption, groupCards } from './groups'
@@ -29,6 +30,15 @@ const rowsOf = (plan: TabPlan, card: CardSpec): RowSpec[] => card.rowIds.map((id
 const cardsOf = (plan: TabPlan, id: string): CardSpec[] => plan.cards.filter((c) => c.opponent.id === id)
 const input = (partial: Partial<CardInput> & { mySet: PokemonSet }) => cardInput({ filters: { topN: 10, selected: [] }, ...partial })
 const entryOf = (id: string): MetaEntry => bo1.entry(id) as MetaEntry
+/** PLAIN(한카리아스 까칠한피부) 계산 폼 */
+const PLAIN_ME = { types: ['Dragon', 'Ground'], ability: 'roughskin' }
+/** 대표 세트 계산 특성(테스트 독립 해석) */
+const repAbility = (e: MetaEntry): string => {
+  const r = resolveAssumption(game, representativeAssumption(bo1, e.id))
+  if (!r.usable) throw new Error(e.id)
+  return r.resolved.ability
+}
+const plainDefense = (e: MetaEntry): string[] => defenseMoveIds(game, e, PLAIN_ME, repAbility(e))
 
 describe('planTab: 내 세트', () => {
   it('내 세트가 무효면 그 탭 my-set-error, 카드 없음(이유는 CoreError detail 그대로)', () => {
@@ -277,9 +287,9 @@ describe('planTab: 공격 탭', () => {
 describe('planTab: 방어 탭', () => {
   const plan = planTab(input({ mySet: PLAIN }), 'defense')
 
-  it('상대 기술 = 변화기 뺀 점유율 상위 5, 기술 × 묶음마다 극단 필터 + 그 필터를 gate로 둔 H·B/D 행', () => {
+  it('상대 기술 = 기본 후보(사용률 5%·나에게 1배 이상), 기술 × 묶음마다 극단 필터 + 그 필터를 gate로 둔 H·B/D 행', () => {
     const e = entryOf('kingambit')
-    const moves = defenseMoveIds(game, e)
+    const moves = plainDefense(e)
     expect(moves).toEqual(['kowtowcleave', 'suckerpunch', 'ironhead', 'lowkick'])
     for (const c of cardsOf(plan, 'kingambit').filter((x) => x.state === 'ok')) {
       expect(c.category).toBe('physical')
@@ -310,19 +320,113 @@ describe('planTab: 방어 탭', () => {
     }
   })
 
-  it('상위 5 경계: 변화기 제외 후 5개까지만(부족하면 있는 만큼)', () => {
+  it('실데이터 기본 후보: 변화기 없음, 사용률 5% 이상, 나에게 1배 이상(없으면 1위 하나)', () => {
     for (const e of bo1.ranking.slice(0, 10)) {
-      const ids = defenseMoveIds(game, e)
-      expect(ids.length).toBeLessThanOrEqual(DEFENSE_MOVES)
+      const ids = plainDefense(e)
+      expect(ids.length).toBeGreaterThan(0)
       for (const id of ids) expect(game.data.moves[id].category).not.toBe('Status')
+      if (ids.length > 1) for (const id of ids) expect(e.moves.shares[id]).toBeGreaterThanOrEqual(DEFENSE_MOVE_SHARE_MIN)
     }
+    // 실데이터 리자몽메가Y(가뭄): 열풍(불꽃)·원시의힘(바위)은 드래곤/땅에 반감이라 빠지고, 웨더볼(노말)·솔라빔(풀 2배) 등은 남는다
+    const zard = plainDefense(entryOf('charizardmegay'))
+    expect(zard).not.toContain('heatwave')
+    expect(zard).not.toContain('ancientpower')
+    expect(zard).toEqual(['weatherball', 'solarbeam', 'dragonpulse', 'hurricane'])
+  })
+
+  it('실데이터 포푸니크: 1배 이상인 내 세트면 지옥찌르기(14.8%)·암석봉인(6.6%)이 후보, 5% 미만(더스트슈트 3.8%)은 아니다', () => {
+    const e = entryOf('sneasler')
+    const ids = defenseMoveIds(game, e, { types: ['Normal'], ability: 'innerfocus' }, repAbility(e))
+    expect(ids).toEqual(expect.arrayContaining(['throatchop', 'rocktomb']))
+    expect(ids).not.toContain('gunkshot')
+    // 드래곤/땅에 바위는 반감이라 암석봉인이 빠진다(내 세트에 따라 달라진다)
+    expect(plainDefense(e)).not.toContain('rocktomb')
+  })
+
+  describe('기본 후보 규칙(합성 통계)', () => {
+    const base = entryOf('kingambit')
+    const withShares = (shares: Record<string, number>): MetaEntry => syntheticEntry(base, { moves: { ...base.moves, shares } })
+    const ids = (shares: Record<string, number>, me: { types: string[]; ability: string }, opponentAbility = 'defiant') =>
+      defenseMoveIds(game, withShares(shares), me, opponentAbility)
+
+    it('사용률 5% 미만은 빠지고 5% 이상은 개수 제한 없이 들어간다(사용률 순)', () => {
+      const shares = { kowtowcleave: 0.9, suckerpunch: 0.8, ironhead: 0.7, lowkick: 0.6, crunch: 0.3, throatchop: 0.2, brickbreak: 0.05, knockoff: 0.049, swordsdance: 0.5 }
+      expect(ids(shares, PLAIN_ME)).toEqual(['kowtowcleave', 'suckerpunch', 'ironhead', 'lowkick', 'crunch', 'throatchop', 'brickbreak'])
+    })
+
+    it('타입 상성으로 반감·무효인 기술은 빠진다(4배는 남는다)', () => {
+      const shares = { thunderbolt: 0.9, flareblitz: 0.8, icebeam: 0.7, kowtowcleave: 0.6 }
+      expect(ids(shares, PLAIN_ME)).toEqual(['icebeam', 'kowtowcleave'])
+    })
+
+    it('내 특성 무효(부유+땅)·반감(두꺼운지방+불꽃)은 빠지고, 상대 틀깨기면 특성 보정을 넣지 않는다', () => {
+      const shares = { earthquake: 0.9, flamethrower: 0.8, kowtowcleave: 0.6 }
+      expect(ids(shares, { types: ['Normal'], ability: 'levitate' })).toEqual(['flamethrower', 'kowtowcleave'])
+      expect(ids(shares, { types: ['Normal'], ability: 'thickfat' })).toEqual(['earthquake', 'kowtowcleave'])
+      expect(ids(shares, { types: ['Normal'], ability: 'levitate' }, 'moldbreaker')).toEqual(['earthquake', 'flamethrower', 'kowtowcleave'])
+      expect(ids(shares, { types: ['Normal'], ability: 'thickfat' }, 'moldbreaker')).toEqual(['earthquake', 'flamethrower', 'kowtowcleave'])
+    })
+
+    it('상대 스킨 계열 특성은 바뀐 타입으로 본다(프리즈스킨 하이퍼보이스 → 얼음)', () => {
+      const shares = { hypervoice: 0.9, kowtowcleave: 0.6 }
+      expect(ids(shares, { types: ['Ghost'], ability: 'cursedbody' })).toEqual(['kowtowcleave'])
+      expect(ids(shares, { types: ['Ghost'], ability: 'cursedbody' }, 'refrigerate')).toEqual(['hypervoice', 'kowtowcleave'])
+      expect(ids(shares, { types: ['Normal'], ability: 'thickfat' }, 'refrigerate')).toEqual(['kowtowcleave'])
+    })
+
+    it('후보가 하나도 없으면 변화기를 뺀 사용률 1위 하나', () => {
+      expect(ids({ protect: 0.95, thunderbolt: 0.8, discharge: 0.3, kowtowcleave: 0.04 }, PLAIN_ME)).toEqual(['thunderbolt'])
+      expect(ids({ protect: 0.95, kowtowcleave: 0.04, suckerpunch: 0.03 }, PLAIN_ME)).toEqual(['kowtowcleave'])
+    })
+
+    it('스냅샷에 없는 기술은 배율 조건 없이 사용률로만 남는다(계산 불가 항목)', () => {
+      expect(ids({ nosuchmove: 0.9, thunderbolt: 0.8 }, PLAIN_ME)).toEqual(['nosuchmove'])
+    })
+  })
+
+  it('사용자 추가 기술: 기준과 무관하게 후보(added 표시), 변화기·스냅샷에 없는 기술·다른 상대·중복은 무시, 랭크 후 항목은 수단 자격 규칙대로', () => {
+    const addedMoves = [
+      { opponentId: 'kingambit', moveId: 'stoneedge' },
+      { opponentId: 'kingambit', moveId: 'stoneedge' },
+      { opponentId: 'kingambit', moveId: 'swordsdance' },
+      { opponentId: 'kingambit', moveId: 'nosuchmove' },
+      { opponentId: 'garchomp', moveId: 'crunch' },
+      { opponentId: 'kingambit', moveId: 'suckerpunch' },
+      // 이미 기본 후보인 기술을 추가해도 추가 표시(×)는 없다(지워도 후보에서 빠지지 않으므로)
+      { opponentId: 'kingambit', moveId: 'kowtowcleave' },
+    ]
+    const p = planTab(input({ mySet: PLAIN, filters: { topN: 30, selected: ['kingambit', 'garchomp'] }, addedMoves }), 'defense')
+    const c = cardsOf(p, 'kingambit').find((x) => x.state === 'ok') as CardSpec
+    const baseGroup = c.conditions.find((g) => g.id === JSON.stringify(['base']))
+    // 사용률 순(추가 기술 중 통계에 없는 스톤에지는 맨 뒤), 드래곤/땅에 반감인 스톤에지도 후보다
+    expect(baseGroup?.candidates.map((x) => [x.moveId, x.added === true])).toEqual([
+      ['kowtowcleave', false],
+      // 기습은 이미 기본 후보(사용률 5% 이상·나에게 1배)라 추가해도 추가 표시가 없다
+      ['suckerpunch', false],
+      ['ironhead', false],
+      ['lowkick', false],
+      ['stoneedge', true],
+    ])
+    // 통계에 없는 추가 기술은 칼춤 동시채용 하한이 0이라 랭크 후 항목이 없다
+    const sd = c.conditions.find((g) => g.id !== JSON.stringify(['base']))
+    expect(sd?.candidates.map((x) => x.moveId)).toEqual(['kowtowcleave', 'suckerpunch'])
+    expect(sd?.candidates.every((x) => x.added !== true)).toBe(true)
+    // 다른 상대에 추가한 기술은 그 상대만
+    for (const g of cardsOf(p, 'garchomp').flatMap((x) => x.conditions)) for (const x of g.candidates) expect(x.added === true).toBe(x.moveId === 'crunch')
+    expect(cardsOf(p, 'garchomp').some((x) => x.conditions.some((g) => g.candidates.some((y) => y.moveId === 'crunch')))).toBe(true)
+    // 목록 항목(ItemView)에도 added가 실린다
+    const view = buildTabView(input({ mySet: PLAIN, filters: { topN: 30, selected: ['kingambit'] }, addedMoves }), 'defense')
+    const items = view.cards.filter((x) => x.opponent.id === 'kingambit').flatMap((x) => x.items)
+    expect(items.length).toBeGreaterThan(0)
+    for (const it of items) expect(it.added === true, it.key).toBe(it.moveId === 'stoneedge')
+    expect(items.find((x) => x.moveId === 'stoneedge')?.status).toBe('ok')
   })
 
   it('상대 칼춤(≥10%) → 방어 탭 물리 카드 랭크 행(동시채용 하한 통과 기술만) + 랭크 행 전용 극단 필터', () => {
     const e = entryOf('kingambit')
     const a = e.moves.shares.swordsdance
     // 실제 통계: 칼춤 12.93% × 악식 99.64%·기습 99.46%는 하한 ≥ 10%, 아이언헤드 75.94%·로킥 67.04%는 미달(대표 세트에 칼춤 없음).
-    const passing = defenseMoveIds(game, e).filter((m) => coAdoptionFloor(a, e.moves.shares[m]) >= DEFAULT_CRITERIA.rankShareMin)
+    const passing = plainDefense(e).filter((m) => coAdoptionFloor(a, e.moves.shares[m]) >= DEFAULT_CRITERIA.rankShareMin)
     expect(passing).toEqual(['kowtowcleave', 'suckerpunch'])
     const c = cardsOf(plan, 'kingambit').find((x) => x.state === 'ok') as CardSpec
     const rank = rowsOf(plan, c).filter((r) => r.kind === 'rank')
@@ -340,7 +444,7 @@ describe('planTab: 방어 탭', () => {
   it('실데이터 갑주무사메가: 칼춤 조건에 만나자마자(첫 턴 전용) 없음, 하한 통과 기술(흡혈·아이언헤드)만', () => {
     const e = entryOf('golisopodmega')
     const a = e.moves.shares.swordsdance
-    const moves = defenseMoveIds(game, e)
+    const moves = plainDefense(e)
     expect(moves).toContain('firstimpression')
     // 칼춤 19.45% × 흡혈 98.3% → 17.75%, × 아이언헤드 92.26% → 11.71%, × 기습 66.38%·드릴런·만나자마자 → 0
     expect(moves.filter((m) => coAdoptionFloor(a, e.moves.shares[m]) >= DEFAULT_CRITERIA.rankShareMin).sort()).toEqual(['ironhead', 'leechlife'])
@@ -410,16 +514,17 @@ describe('planTab: 방어 탭', () => {
     for (const c of cs) expect(c.bundle.stats.map((s) => s.stat)).toEqual(['hp', 'spa'])
   })
 
-  it('상대 셸암즈 → 그 상대 모든 카드 머리 안내, 자리는 다음 순위로 채우지 않음', () => {
+  it('상대 셸암즈 → 그 상대 모든 카드 머리 안내, 항목은 되지 않는다', () => {
     const base = entryOf('kingambit')
     const shares = { shellsidearm: 0.99, kowtowcleave: 0.9, suckerpunch: 0.8, ironhead: 0.7, lowkick: 0.6, rockslide: 0.5 }
     const e = syntheticEntry(base, { moves: { shares, keptShare: 4.5, excludedShare: 0 } })
     const view = syntheticView(game, bo1.meta, [e])
-    const p = planTab(input({ mySet: PLAIN, view }), 'defense')
+    // 풀 타입 내 세트: 독(셸암즈)·악·강철·격투·바위가 모두 1배 이상이라 기본 후보다
+    const p = planTab(input({ mySet: mk('rillaboom', 'grassysurge', ['grassyglide', 'fakeout']), view }), 'defense')
     expect(p.cards.length).toBeGreaterThan(0)
     for (const c of p.cards) expect(c.notices).toEqual([{ kind: 'category-varies', moveId: 'shellsidearm', owner: 'opponent' }])
     const moves = new Set(Object.values(p.rows).map((r) => r.moveId))
-    expect(moves).toEqual(new Set(['kowtowcleave', 'suckerpunch', 'ironhead', 'lowkick']))
+    expect(moves).toEqual(new Set(['kowtowcleave', 'suckerpunch', 'ironhead', 'lowkick', 'rockslide']))
     expect(p.notices).toEqual([])
   })
 

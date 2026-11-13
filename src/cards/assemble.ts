@@ -246,6 +246,7 @@ function itemViews(refs: readonly CardItemRef[], states: readonly ItemState[]): 
     const ref = byKey.get(st.key) as CardItemRef
     const v: ItemView = { key: st.key, moveId: st.moveId, priority: st.priority, status: st.probe.kind }
     if (ref.basis !== undefined) v.basis = ref.basis
+    if (ref.candidate.added === true) v.added = true
     if (st.probe.kind === 'ok' || st.probe.kind === 'immune') v.cell = st.probe.cell
     if (st.probe.kind === 'error') v.error = st.probe.reason
     return v

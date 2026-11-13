@@ -5,11 +5,14 @@ import {
   CoreError,
   CoreInputError,
   STAT_IDS,
+  attackEffectiveness,
+  attackMoveType,
   judgeDamage,
   judgeSpeed,
   natureMultiplier,
   sweepDamage,
   sweepSpeed,
+  validateSet,
   type BattleConditions,
   type PokemonSet,
   type SweepResult,
@@ -18,7 +21,7 @@ import { createMetaLoader } from '../data/meta-loader'
 import type { MetaEntry, MetaIndex, MetaSnapshot } from '../data/meta-schema'
 import type { StatId } from '../data/schema'
 import { loadRegulationIndexSync } from '../data/testing'
-import { createMetaView, parseSpreadKey, type MetaView } from '../meta'
+import { createMetaView, parseSpreadKey, representativeAssumption, type MetaView } from '../meta'
 import {
   EXAMPLE_SET,
   F1,
@@ -596,13 +599,40 @@ describe('AC4 혼합 세트·사이코쇼크(F2)', () => {
 
 // ---------- AC 5 방어 극단 필터(F3) ----------
 
-/** 변화기를 뺀 점유율 상위 5(동률 id 순). */
-function topAttackMoves(e: MetaEntry): string[] {
-  return Object.entries(e.moves.shares)
+/** 오라클용 내 특성 보정(PRD R2 목록): 무효 0, 반감 0.5. 상대 틀깨기 계열이면 보지 않는다. */
+const ORACLE_IMMUNE: Record<string, (type: string, flags: readonly string[]) => boolean> = {
+  levitate: (t) => t === 'Ground',
+  eartheater: (t) => t === 'Ground',
+  waterabsorb: (t) => t === 'Water',
+  stormdrain: (t) => t === 'Water',
+  dryskin: (t) => t === 'Water',
+  voltabsorb: (t) => t === 'Electric',
+  lightningrod: (t) => t === 'Electric',
+  motordrive: (t) => t === 'Electric',
+  flashfire: (t) => t === 'Fire',
+  sapsipper: (t) => t === 'Grass',
+  soundproof: (_t, f) => f.includes('sound'),
+}
+const ORACLE_HALVED: Record<string, string[]> = { thickfat: ['Fire', 'Ice'], heatproof: ['Fire'], waterbubble: ['Fire'], purifyingsalt: ['Ghost'] }
+
+/** 방어 탭 래더 상대 기본 후보(PRD R2): 변화기 제외 · 사용률 ≥ 5% · 나에게 1배 이상, 없으면 사용률 1위 하나(동률 id 순). */
+function defenseCandidates(view: MetaView, e: MetaEntry, mySet: PokemonSet): string[] {
+  const me = validateSet(game, mySet)
+  const oppSet = representativeAssumption(view, e.id).set
+  const opp = validateSet(game, oppSet).ability
+  const ranked = Object.entries(e.moves.shares)
     .filter(([m]) => !game.data.moves[m] || game.data.moves[m].category !== 'Status')
     .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
-    .slice(0, 5)
-    .map(([m]) => m)
+  const factor = (m: string): number => {
+    const move = game.data.moves[m]
+    const type = attackMoveType(m, move.type, opp)
+    const eff = attackEffectiveness(type, me.species.types, opp, m)
+    if (['moldbreaker', 'turboblaze', 'teravolt'].includes(opp)) return eff
+    if (ORACLE_IMMUNE[me.ability]?.(type, move.flags)) return 0
+    return ORACLE_HALVED[me.ability]?.includes(type) ? eff / 2 : eff
+  }
+  const hit = ranked.filter(([m, share]) => share >= 0.05 && (!game.data.moves[m] || factor(m) >= 1)).map(([m]) => m)
+  return hit.length > 0 ? hit : ranked.slice(0, 1).map(([m]) => m)
 }
 
 describe('AC5 방어 탭 극단 필터(F3)', () => {
@@ -689,11 +719,16 @@ describe('AC5 방어 탭 극단 필터(F3)', () => {
 
   // "둘 다 저난수 1타"의 실데이터 부재는 __fixtures__/acceptance.test.ts의 전수 탐색이, 분기 표시는 handPlan 조립 테스트가 봉인한다.
 
-  it('판정 행(변화 없음 행 포함)의 상대 기술은 변화기를 뺀 상위 5 안이다', () => {
-    const { view } = run('example', top(EXAMPLE_SET), 'defense')
+  it('래더 카드 항목·판정 행의 상대 기술은 기본 후보(변화기 제외·사용률 5% 이상·나에게 1배 이상, 없으면 1위) 안이고 기본 후보는 모두 항목이다', () => {
+    const { plan, view } = run('example', top(EXAMPLE_SET), 'defense')
     const used = view.cards.filter((c) => c.opponent.source === 'ladder').flatMap((c) => c.rows.map((r) => [c.opponent.id, r.moveId] as const))
     expect(used.length).toBeGreaterThan(0)
-    for (const [id, move] of used) expect(topAttackMoves(entryOf(bo1, id)), id).toContain(move)
+    for (const [id, move] of used) expect(defenseCandidates(bo1, entryOf(bo1, id), EXAMPLE_SET), id).toContain(move)
+    const ids = new Set(plan.cards.filter((c) => c.opponent.source === 'ladder').map((c) => c.opponent.id))
+    for (const id of ids) {
+      const items = new Set(plan.cards.filter((c) => c.opponent.id === id).flatMap((c) => c.conditions.flatMap((g) => g.candidates.map((x) => x.moveId))))
+      expect(items, id).toEqual(new Set(defenseCandidates(bo1, entryOf(bo1, id), EXAMPLE_SET)))
+    }
   })
 
   it('표시 카드·변화 없음 행·표시 행 칸 = 코어 재판정(극단 필터 1건 = 1행)', () => {
@@ -1026,10 +1061,12 @@ describe('AC11a 셸암즈는 카드·행이 되지 않고 안내로만', () => {
     expect(view.cards.flatMap((c) => c.rows).some((r) => r.moveId === 'shellsidearm')).toBe(false)
   })
 
-  it('상대 셸암즈 → 그 상대 항목의 안내로 보이고 행·상위 5 자리를 차지하지 않는다', () => {
+  it('상대 셸암즈 → 그 상대 항목의 안내로 보이고 행·항목이 되지 않는다', () => {
     const synthetic = shellSideArmEntry(entryOf(bo1, 'farigiraf'))
     const view = syntheticView(game, bo1.meta, [...bo1.ranking, synthetic])
-    const { plan, view: tv } = run('F8-opp', only(EXAMPLE_SET, [F8.opponentShellSideArm], { view }), 'defense')
+    // 독(셸암즈)이 1배 이상이라 기본 후보에 드는 풀 타입 내 세트(예시 세트 한카리아스는 독 반감이라 후보가 아니다)
+    const grass: PokemonSet = { ...EXAMPLE_SET, species: 'rillaboom', ability: 'grassysurge', moves: ['grassyglide', 'woodhammer'] }
+    const { plan, view: tv } = run('F8-opp-grass', only(grass, [F8.opponentShellSideArm], { view }), 'defense')
     const cards = plan.cards.filter((c) => c.opponent.id === F8.opponentShellSideArm)
     expect(cards.length).toBeGreaterThan(0)
     for (const c of cards) {

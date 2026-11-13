@@ -1,8 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import type { GroupItem, ItemView, Tab } from '../../cards'
 import { moveStatRefs, type MoveStatRefs } from '../../core'
 import type { Snapshot } from '../../data/schema'
 import { koBadge } from '../../ui/format'
+import { namesOf } from '../../ui/names'
+import { addableMoves, searchIndexOf } from '../../ui/search'
+import { Combobox } from './Combobox'
 import { MoveLabel } from './MoveLabel'
 import { meansLabel, moveRankParts } from './text'
 
@@ -55,6 +58,65 @@ export function ItemContent({ game, tab, item, rollSteps, showMeans }: { game: S
   )
 }
 
+/** 방어 탭 래더 상대의 기술 추가·삭제(R8). 없으면 검색 칸·× 버튼이 없다 */
+export interface MoveAdding {
+  opponentId: string
+  onAdd: (moveId: string) => void
+  onRemove: (moveId: string) => void
+}
+
+/**
+ * 추가·삭제로 재계산되는 동안 기술 버튼이 잠깐 빠졌다 다시 붙으면 포커스가 body로 떨어진다.
+ * 그때 다시 붙은 버튼으로 포커스를 돌려주려고 그 버튼의 키를 기억한다. 다른 곳에 포커스·클릭이 가면 잊는다.
+ */
+let focusReturn: string | null = null
+function rememberFocusReturn(key: string) {
+  focusReturn = key
+  const forget = () => {
+    if (focusReturn === key) focusReturn = null
+    document.removeEventListener('focusin', forget, true)
+    document.removeEventListener('pointerdown', forget, true)
+  }
+  document.addEventListener('focusin', forget, true)
+  document.addEventListener('pointerdown', forget, true)
+}
+
+/** 메뉴 아래 "기술 추가" 검색 칸. 키 입력은 메뉴 조작으로 올리지 않는다(목록이 닫힌 Escape만 메뉴를 닫는다) */
+function MoveAddSearch({ game, adding, exclude, onPicked }: { game: Snapshot; adding: MoveAdding; exclude: readonly string[]; onPicked: () => void }) {
+  const names = namesOf(game)
+  const excludeSig = exclude.join(',')
+  const ids = useMemo(() => addableMoves(game, adding.opponentId, excludeSig.split(',')), [game, adding.opponentId, excludeSig])
+  const index = useMemo(() => searchIndexOf(game.data.moves, ids), [game, ids])
+  return (
+    <div
+      className="move-add"
+      role="group"
+      aria-label="기술 추가"
+      data-testid="move-add"
+      onKeyDown={(e) => {
+        if (e.key !== 'Escape' || e.defaultPrevented) e.stopPropagation()
+      }}
+    >
+      <Combobox
+        label="기술 추가"
+        hideLabel
+        index={index}
+        value=""
+        clearOnCommit
+        optionsOnly
+        limit={8}
+        placeholder="+ 기술 추가"
+        labelOf={names.moves.label}
+        onCommit={(_text, id) => {
+          if (id === undefined) return
+          adding.onAdd(id)
+          onPicked()
+        }}
+      />
+    </div>
+  )
+}
+
 interface Props {
   game: Snapshot
   tab: Tab
@@ -72,12 +134,16 @@ interface Props {
   /** 버튼 접근 가능한 이름(현재 항목 라벨 + "기술 선택") */
   label: string
   testId: string
+  /** 방어 탭 래더 상대만 */
+  adding?: MoveAdding
+  /** 재계산 뒤 포커스를 돌려줄 버튼 키(탭·포켓몬 줄·위치마다 고유) */
+  focusKey: string
 }
 
 const stop = (e: MouseEvent) => e.stopPropagation()
 
 /** 기술 배지: 누르면 기술 선택 드롭다운(배분 메뉴와 같은 조작). 배지를 눌러도 카드는 펼쳐지거나 접히지 않는다 */
-export function MoveMenu({ game, tab, rollSteps, items, shown, selected, onChoose, onReset, children, label, testId }: Props) {
+export function MoveMenu({ game, tab, rollSteps, items, shown, selected, onChoose, onReset, children, label, testId, adding, focusKey }: Props) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLSpanElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
@@ -86,8 +152,21 @@ export function MoveMenu({ game, tab, rollSteps, items, shown, selected, onChoos
     setOpen(false)
     btnRef.current?.focus()
   }
+  // 추가·삭제는 재계산을 부른다: 메뉴를 닫고 기술 버튼으로 돌아간다(다시 붙으면 거기로)
+  const closeAfterEdit = () => {
+    // 닫기(버튼 포커스)가 먼저: 그 focusin이 방금 등록한 되돌림을 지우지 않게(배분 메뉴와 같은 순서)
+    close()
+    rememberFocusReturn(focusKey)
+  }
   const dup = duplicateLabels(game, tab, items)
   const ranked = (i: GroupItem) => i.item.status === 'error' || i.item.status === 'immune'
+  const removable = adding !== undefined && items.some((g) => g.item.added === true)
+  const names = namesOf(game)
+
+  useEffect(() => {
+    const active = document.activeElement
+    if (focusReturn === focusKey && (active === null || active === document.body)) btnRef.current?.focus()
+  }, [focusKey])
 
   useLayoutEffect(() => {
     if (!open) return
@@ -120,9 +199,21 @@ export function MoveMenu({ game, tab, rollSteps, items, shown, selected, onChoos
   }, [open])
 
   const onMenuKey = (e: KeyboardEvent) => {
-    const all = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"], [role="menuitem"]') ?? [])]
-    const at = all.indexOf(document.activeElement as HTMLButtonElement)
-    if (e.key === 'Escape') {
+    // ↑↓·Home/End는 되돌리기·항목만 오간다(× 에 포커스가 있으면 그 항목 기준). → 항목에서 그 ×로, ← ×에서 그 항목으로.
+    const all = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('.move-reset, .move-opt') ?? [])]
+    const active = document.activeElement as HTMLElement | null
+    const rowItem = active?.closest('.move-opt-row')?.querySelector<HTMLButtonElement>('.move-opt') ?? (active as HTMLButtonElement | null)
+    const at = rowItem === null ? -1 : all.indexOf(rowItem)
+    if (e.key === 'ArrowRight' && active?.classList.contains('move-opt')) {
+      const x = active.closest('.move-opt-row')?.querySelector<HTMLElement>('[data-remove-for]')
+      if (x) {
+        e.preventDefault()
+        x.focus()
+      }
+    } else if (e.key === 'ArrowLeft' && active?.hasAttribute('data-remove-for') && rowItem !== null) {
+      e.preventDefault()
+      rowItem.focus()
+    } else if (e.key === 'Escape') {
       e.preventDefault()
       close()
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -194,9 +285,31 @@ export function MoveMenu({ game, tab, rollSteps, items, shown, selected, onChoos
                 >
                   <ItemContent game={game} tab={tab} item={g.item} rollSteps={rollSteps} showMeans={dup.has(g.item.key)} />
                 </button>
+                {removable &&
+                  (g.item.added === true ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="move-remove"
+                      aria-label={`추가한 기술 삭제: ${names.moves.label(g.item.moveId)}`}
+                      title="추가한 기술 삭제"
+                      data-remove-for={g.item.key}
+                      data-testid="move-remove"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        adding?.onRemove(g.item.moveId)
+                        closeAfterEdit()
+                      }}
+                    >
+                      ×
+                    </button>
+                  ) : (
+                    <span className="move-remove-slot" aria-hidden="true" />
+                  ))}
               </div>
             )
           })}
+          {adding !== undefined && <MoveAddSearch game={game} adding={adding} exclude={items.map((g) => g.item.moveId)} onPicked={closeAfterEdit} />}
         </div>
       )}
     </span>

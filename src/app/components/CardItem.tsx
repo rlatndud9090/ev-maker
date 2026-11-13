@@ -11,7 +11,7 @@ import { CustomEditor } from './CustomEditor'
 import { RowDetail } from './RowDetail'
 import { PokemonIcon } from './PokemonIcon'
 import { MoveLabel, VariableTag } from './MoveLabel'
-import { MoveMenu } from './MoveMenu'
+import { MoveMenu, type MoveAdding } from './MoveMenu'
 import { Caret } from './Caret'
 import { basisText, itemKeyLabel, moveNoticeText, rowTitle } from './text'
 
@@ -637,10 +637,19 @@ function BundleList({ tab, group, card, rollSteps, onSelect, dispatch, spMax, op
 }
 
 /** 보이는 항목의 기술 선택 버튼(간단행·상세 공용). 보이는 항목이 목록에 없으면 null */
-function ShownMove({ game, tab, group, card, rollSteps, items, onChooseItem, onResetItem, testId }: Pick<Props, 'game' | 'tab' | 'group' | 'card' | 'rollSteps' | 'items' | 'onChooseItem' | 'onResetItem'> & { testId: string }) {
+function ShownMove({ game, tab, group, card, rollSteps, items, onChooseItem, onResetItem, dispatch, testId }: Pick<Props, 'game' | 'tab' | 'group' | 'card' | 'rollSteps' | 'items' | 'onChooseItem' | 'onResetItem' | 'dispatch'> & { testId: string }) {
   const shown = items.find((g) => g.item.key === card.shownItem)
   if (shown === undefined) return null
   const row = { moveId: shown.item.moveId, basis: shown.item.basis, ...(card.rows[0]?.refs === undefined ? {} : { refs: card.rows[0].refs }) }
+  const opponentId = card.opponent.id
+  const adding: MoveAdding | undefined =
+    tab === 'defense' && card.opponent.source === 'ladder'
+      ? {
+          opponentId,
+          onAdd: (moveId) => dispatch({ type: 'add-move', opponentId, moveId }),
+          onRemove: (moveId) => dispatch({ type: 'remove-move', opponentId, moveId }),
+        }
+      : undefined
   return (
     <MoveMenu
       game={game}
@@ -653,6 +662,8 @@ function ShownMove({ game, tab, group, card, rollSteps, items, onChooseItem, onR
       onReset={() => onResetItem(group)}
       label={`${rowTitle(game, { moveId: shown.item.moveId }, false)} 기술 선택${card.selected ? ' (직접 고름)' : ''}`}
       testId={testId}
+      adding={adding}
+      focusKey={JSON.stringify([tab, group.key, testId])}
     >
       <MoveLabel game={game} tab={tab} row={row} trailing={<Caret />} />
     </MoveMenu>
@@ -733,7 +744,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
         )}
         <span className="card-headline" data-testid="card-headline" id={headlineId}>
           {card.shownItem !== undefined && items.some((g) => g.item.key === card.shownItem) ? (
-            <ShownMove game={game} tab={tab} group={group} card={card} rollSteps={rollSteps} items={items} onChooseItem={onChooseItem} onResetItem={onResetItem} testId="move-pick" />
+            <ShownMove game={game} tab={tab} group={group} card={card} rollSteps={rollSteps} items={items} onChooseItem={onChooseItem} onResetItem={onResetItem} dispatch={dispatch} testId="move-pick" />
           ) : (
             <Headline game={game} tab={tab} card={card} badge={result !== undefined} />
           )}
@@ -780,7 +791,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
               {card.state === 'error' && card.error && <p className="row-error">계산 불가: {koReason(game, card.error)}</p>}
               {card.shownItem !== undefined && items.length > 0 && (
                 <div className="detail-move" data-testid="detail-move">
-                  <ShownMove game={game} tab={tab} group={group} card={card} rollSteps={rollSteps} items={items} onChooseItem={onChooseItem} onResetItem={onResetItem} testId="detail-move-pick" />
+                  <ShownMove game={game} tab={tab} group={group} card={card} rollSteps={rollSteps} items={items} onChooseItem={onChooseItem} onResetItem={onResetItem} dispatch={dispatch} testId="detail-move-pick" />
                   {card.rows[0]?.basis?.kind === 'rank' && <span className="row-basis">{basisText(game, card.rows[0].basis)}</span>}
                 </div>
               )}
