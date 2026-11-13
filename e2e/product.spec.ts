@@ -164,7 +164,7 @@ test.describe('제품 화면', () => {
     }
   })
 
-  test('기술 배지 메뉴: 대도각참 기본 +2 도각참, 기습 선공 표시, 직접 고름·되돌리기, 배지를 눌러도 카드는 펼쳐지지 않는다(PRD R1·R5·AC10·AC11)', async ({ page }) => {
+  test('기술 배지 메뉴: 대도각참 기본 +2 도각참, 기습도 항목(표지 없음), 직접 고름·되돌리기, 배지를 눌러도 카드는 펼쳐지지 않는다(PRD R1·R5·AC10·AC11)', async ({ page }) => {
     await openProduct(page)
     await selectTab(page, '방어')
     await waitComplete(page)
@@ -178,7 +178,11 @@ test.describe('제품 화면', () => {
     await expect(menu).toBeVisible()
     const sd = JSON.stringify(['rank', 'opponent', 'move', 'swordsdance'])
     await expect(menu.locator(`[role="menuitemradio"][aria-checked="true"]`)).toHaveAttribute('data-item-key', JSON.stringify(['kowtowcleave', sd]))
-    await expect(menu.locator('[data-move="suckerpunch"]').first().getByTestId('priority-tag')).toBeVisible()
+    // 선공기도 목록 항목이다. 기본·선공·분산·직접 표지는 없다(사용자 피드백 2026-11-13: 거추장스러움)
+    await expect(menu.locator('[data-move="suckerpunch"]').first()).toBeVisible()
+    await expect(menu.locator('.priority-tag, .spread-tag, .default-tag, .chosen-tag')).toHaveCount(0)
+    // 펼침 화살표는 기술 칩 테두리 안에 있다
+    await expect(pick.getByTestId('move-label').locator('.bundle-caret')).toHaveCount(1)
     // 키보드: ↓ 이동, Esc 닫힘
     await page.keyboard.press('ArrowDown')
     await page.keyboard.press('Escape')
@@ -189,7 +193,8 @@ test.describe('제품 화면', () => {
     await menu.getByRole('menuitemradio', { name: /^악 타입 도각참/ }).click()
     const chosen = card.getByTestId('move-pick')
     await expect(chosen).toHaveAttribute('data-selected', 'true')
-    await expect(chosen.getByTestId('chosen-tag')).toBeVisible()
+    await expect(chosen).toHaveAccessibleName(/직접 고름/)
+    await expect(chosen.locator('.chosen-tag')).toHaveCount(0)
     await expect(cardLine(card)).toHaveAttribute('aria-expanded', 'false')
     // SP를 바꿔도 유지된다
     const gen = async () => Number(await tabPanel(page).getAttribute('data-generation'))
@@ -491,9 +496,9 @@ test.describe('제품 화면', () => {
     await expect(gambit.first()).toHaveAttribute('data-type', 'dark')
     await expect(gambit.first().locator('img[data-type-icon="dark"]')).toHaveCount(1)
     await expect(cards(page).filter({ hasText: '대도각참' }).getByTestId('move-label').filter({ hasText: '아이언헤드' })).toHaveCount(0)
-    // 아이콘 → 랭크 → 기술명 순서.
-    const order = await gambit.first().evaluate((el) => [...el.children].map((c) => c.getAttribute('data-type-icon') ?? c.className))
-    expect(order.filter((c) => c !== 'sr-only')).toEqual(['dark', 'move-rank num', 'move-name'])
+    // 아이콘 → 랭크 → 기술명 → 펼침 화살표(칩 테두리 안 끝) 순서.
+    const order = await gambit.first().evaluate((el) => [...el.children].map((c) => c.getAttribute('data-type-icon') ?? c.getAttribute('class')))
+    expect(order.filter((c) => c !== 'sr-only')).toEqual(['dark', 'move-rank num', 'move-name', 'bundle-caret'])
 
     // 스카프·비스카프(도구) 행 대표 카드는 기술 라벨 앞에 도구 태그를 유지한다(결정 C: "구애스카프" 등).
     // 예시 세트 스피드 탭에는 비스카프 행 대표(생명의구슬)가 있다. 같은 분기라 태그가 사라지면 여기서 잡힌다.
@@ -1387,25 +1392,27 @@ test.describe('배분 직접 추가·고정(사용자 피드백 2026-11-12)', ()
     await expect(bundleMenu(row).locator('.bundle-opt-label').first()).toHaveText('H31 B3 고정됨')
     await expect(bundleMenu(row).locator('.bundle-opt-label').nth(1)).toHaveText('H30 B5 고정됨')
 
-    // 핀 해제 = 직접 추가 배분 삭제: 선택돼 있던 H30 B5를 풀면 기본(최고 비중) 배분으로 돌아간다.
+    // 선택돼 있지 않던 것(H31 B3)을 풀면 선택(H30 B5)은 그대로
+    const first = await items.first().getAttribute('data-card-id')
     const second = await items.nth(1).getAttribute('data-card-id')
+    await menuPin(row, first!).click()
+    // 삭제는 재계산이라 메뉴를 닫고 배분 버튼으로 돌아간다
+    await expect(bundleMenu(row)).toHaveCount(0)
+    await expect(bundleButton(row)).toBeFocused()
+    await waitComplete(page)
+    await expect(row).toHaveAttribute('data-card-id', second!)
+    await expect(row.getByTestId('card-bundle')).toHaveText('H30 B5 고정됨')
+    await bundleButton(row).click()
+    await expect(bundleMenu(row).locator('[data-user-added="true"]')).toHaveCount(1)
+    await expect(bundleMenu(row).locator('.bundle-opt-label').first()).toHaveText('H30 B5 고정됨')
+    // 핀 해제 = 직접 추가 배분 삭제: 선택돼 있던 H30 B5를 풀면 남은 고정이 없어 기본(최고 비중) 배분으로 돌아간다.
+    // (고정이 남아 있으면 그 고정 배분이 기본이다 — 분류 기본 배분 = 고정 배분 우선, 사용자 결정 2026-11-13)
     await menuPin(row, second!).click()
     await expect(bundleMenu(row)).toHaveCount(0)
     await waitComplete(page)
     await expect(row).toHaveAttribute('data-card-id', before.id!)
     await expect(row.getByTestId('card-bundle')).toHaveText(before.text)
     await expect(bundleButton(row)).not.toHaveClass(/pinned-bundle/)
-    await bundleButton(row).click()
-    await expect(bundleMenu(row).locator('[data-user-added="true"]')).toHaveCount(1)
-    await expect(bundleMenu(row).locator('.bundle-opt-label').first()).toHaveText('H31 B3 고정됨')
-    // 선택돼 있지 않던 것을 풀면 선택은 그대로
-    const first = await items.first().getAttribute('data-card-id')
-    await menuPin(row, first!).click()
-    // 삭제는 재계산이라 메뉴를 닫고 배분 버튼으로 돌아간다
-    await expect(bundleMenu(row)).toHaveCount(0)
-    await expect(bundleButton(row)).toBeFocused()
-    await waitComplete(page)
-    await expect(row).toHaveAttribute('data-card-id', before.id!)
     await bundleButton(row).click()
     await expect(bundleMenu(row).locator('[data-user-added="true"]')).toHaveCount(0)
     await expect(bundleMenu(row).locator('[data-pinned="true"]')).toHaveCount(0)
@@ -1439,8 +1446,9 @@ test.describe('배분 직접 추가·고정(사용자 피드백 2026-11-12)', ()
     await expect(items.first().locator('.bundle-opt-label')).toHaveText(target.text.replace(/\s\S+$/, ' 고정됨'))
     await page.mouse.move(0, 0)
     await expect.poll(() => bg(items.first())).toBe(tint)
-    // 선택은 그대로(고정은 선택을 바꾸지 않는다), 재계산하지 않는다
-    await expect(row).toHaveAttribute('data-card-id', selected!)
+    // 직접 고르지 않았으면 고정 배분이 기본이 돼 그 배분으로 바뀐다(분류 기본 배분 = 고정 배분 우선, 사용자 결정 2026-11-13). 재계산하지 않는다
+    expect(selected).not.toBe(target.id)
+    await expect(row).toHaveAttribute('data-card-id', target.id)
     await expect(tabPanel(page)).toHaveAttribute('data-generation', generation!)
     await expect(tabPanel(page)).not.toHaveAttribute('data-superseded', 'true')
     // 나머지는 원래 사용률 순

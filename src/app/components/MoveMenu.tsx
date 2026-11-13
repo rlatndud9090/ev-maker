@@ -6,7 +6,6 @@ import { koBadge } from '../../ui/format'
 import { MoveLabel } from './MoveLabel'
 import { meansLabel, moveRankParts } from './text'
 
-const SPREAD_TARGETS = ['allAdjacentFoes', 'allAdjacent']
 
 function refsOf(game: Snapshot, moveId: string): MoveStatRefs | undefined {
   try {
@@ -15,9 +14,6 @@ function refsOf(game: Snapshot, moveId: string): MoveStatRefs | undefined {
     return undefined
   }
 }
-
-const isSpread = (game: Snapshot, moveId: string): boolean =>
-  Object.prototype.hasOwnProperty.call(game.data.moves, moveId) && SPREAD_TARGETS.includes(game.data.moves[moveId].target)
 
 /** 항목의 라벨 행(MoveLabel 입력) */
 function labelRow(game: Snapshot, item: ItemView) {
@@ -36,17 +32,14 @@ function duplicateLabels(game: Snapshot, tab: Tab, items: readonly GroupItem[]):
   return new Set(items.filter(({ item }) => item.basis !== undefined && (seen.get(sig(item)) ?? 0) > 1).map(({ item }) => item.key))
 }
 
-/** 항목 내용: [기술 라벨][선공][분산][수단] … [현재 판정 배지] */
-export function ItemContent({ game, tab, item, rollSteps, showMeans, isDefault }: { game: Snapshot; tab: Tab; item: ItemView; rollSteps: number; showMeans: boolean; isDefault: boolean }) {
+/** 항목 내용: [기술 라벨][수단(같은 기술 라벨이 겹칠 때만)] … [현재 판정 배지] */
+export function ItemContent({ game, tab, item, rollSteps, showMeans }: { game: Snapshot; tab: Tab; item: ItemView; rollSteps: number; showMeans: boolean }) {
   const badge = item.status === 'ok' || item.status === 'immune' ? koBadge(tab === 'defense' ? 'defense' : 'attack', item.cell, rollSteps) : undefined
   return (
     <>
       <span className="move-opt-label">
         <MoveLabel game={game} tab={tab} row={labelRow(game, item)} />
-        {item.priority && <span className="priority-tag" data-testid="priority-tag">선공</span>}
-        {isSpread(game, item.moveId) && <span className="spread-tag" data-testid="spread-tag">(분산)</span>}
         {showMeans && item.basis !== undefined && <span className="means-tag">{meansLabel(game, item.basis.means)}</span>}
-        {isDefault && <span className="default-tag" data-testid="default-tag">기본</span>}
       </span>
       <span className="move-opt-result">
         {badge !== undefined && (
@@ -70,8 +63,6 @@ interface Props {
   items: readonly GroupItem[]
   /** 지금 보이는 항목 키 */
   shown?: string
-  /** 기본 항목 키(보이는 카드의 것) */
-  defaultKey?: string
   /** 보이는 항목이 직접 고른 것 */
   selected: boolean
   onChoose: (item: GroupItem) => void
@@ -86,7 +77,7 @@ interface Props {
 const stop = (e: MouseEvent) => e.stopPropagation()
 
 /** 기술 배지: 누르면 기술 선택 드롭다운(배분 메뉴와 같은 조작). 배지를 눌러도 카드는 펼쳐지거나 접히지 않는다 */
-export function MoveMenu({ game, tab, rollSteps, items, shown, defaultKey, selected, onChoose, onReset, children, label, testId }: Props) {
+export function MoveMenu({ game, tab, rollSteps, items, shown, selected, onChoose, onReset, children, label, testId }: Props) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLSpanElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
@@ -162,14 +153,6 @@ export function MoveMenu({ game, tab, rollSteps, items, shown, defaultKey, selec
         onKeyDown={(e) => e.stopPropagation()}
       >
         {children}
-        {selected && (
-          <span className="chosen-tag" data-testid="chosen-tag">
-            직접
-          </span>
-        )}
-        <span className="bundle-caret" aria-hidden="true">
-          ▾
-        </span>
       </button>
       {open && (
         <div className="move-menu" role="menu" aria-label="판정 기술" ref={menuRef} tabIndex={-1} onKeyDown={onMenuKey} data-testid="move-menu"
@@ -209,7 +192,7 @@ export function MoveMenu({ game, tab, rollSteps, items, shown, defaultKey, selec
                     close()
                   }}
                 >
-                  <ItemContent game={game} tab={tab} item={g.item} rollSteps={rollSteps} showMeans={dup.has(g.item.key)} isDefault={selected && g.item.key === defaultKey} />
+                  <ItemContent game={game} tab={tab} item={g.item} rollSteps={rollSteps} showMeans={dup.has(g.item.key)} />
                 </button>
               </div>
             )

@@ -10,8 +10,9 @@ import type { AppAction } from '../state'
 import { CustomEditor } from './CustomEditor'
 import { RowDetail } from './RowDetail'
 import { PokemonIcon } from './PokemonIcon'
-import { MoveLabel, PriorityTag, VariableTag } from './MoveLabel'
+import { MoveLabel, VariableTag } from './MoveLabel'
 import { MoveMenu } from './MoveMenu'
+import { Caret } from './Caret'
 import { basisText, itemKeyLabel, moveNoticeText, rowTitle } from './text'
 
 interface Props {
@@ -439,9 +440,7 @@ function BundlePicker({ tab, group, card, rollSteps, onSelect, dispatch, spMax }
         <span className="card-bundle num" data-testid="card-bundle">
           <BundleLabel card={card} pinned={isPinned(group, card)} />
         </span>
-        <span className="bundle-caret" aria-hidden="true">
-          ▾
-        </span>
+        <Caret />
       </button>
       {open && (
         <div
@@ -649,20 +648,13 @@ function ShownMove({ game, tab, group, card, rollSteps, items, onChooseItem, onR
       rollSteps={rollSteps}
       items={items}
       shown={card.shownItem}
-      defaultKey={card.defaultItem?.key}
       selected={card.selected}
       onChoose={(item) => onChooseItem(group, card, item)}
       onReset={() => onResetItem(group)}
       label={`${rowTitle(game, { moveId: shown.item.moveId }, false)} 기술 선택${card.selected ? ' (직접 고름)' : ''}`}
       testId={testId}
     >
-      <MoveLabel game={game} tab={tab} row={row} />
-      {shown.item.priority && (
-        <>
-          {' '}
-          <PriorityTag />
-        </>
-      )}
+      <MoveLabel game={game} tab={tab} row={row} trailing={<Caret />} />
     </MoveMenu>
   )
 }

@@ -271,7 +271,7 @@ export interface MoveCandidate {
   /** rowId·filterId·fixedId */
   id: string
   moveId: string
-  /** 우선도 > 0 기술(선공 표시, 방어 탭 선공기 우선 규칙) */
+  /** 우선도 > 0 기술(방어 탭 선공기 우선 규칙) */
   priority: boolean
 }
 export interface ConditionGroup {
