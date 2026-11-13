@@ -224,7 +224,7 @@ describe('생성 리포트(커밋된 산출물)', () => {
     const ids = lic.entries.map((e) => e.id)
     expect(ids).toEqual(expect.arrayContaining(['npm:@smogon/calc', 'data:showdown-pkmn', 'data:pokeapi']))
     for (const e of lic.entries.filter((x) => !x.attributionOnly)) {
-      expect(['MIT', 'BSD-3-Clause', 'ISC', 'Apache-2.0', '0BSD', 'BSD-2-Clause'], e.id).toContain(e.license)
+      expect(['MIT', 'BSD-3-Clause', 'ISC', 'Apache-2.0', '0BSD', 'BSD-2-Clause', 'CC0-1.0'], e.id).toContain(e.license)
     }
     const notices = readText('THIRD_PARTY_NOTICES.md')
     const metaItems = Object.values(loadMetaIndexSync().regulations).flat()

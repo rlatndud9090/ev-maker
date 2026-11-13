@@ -5,6 +5,27 @@ export { STAT_IDS, statValue, natureMultiplier, type NatureMultiplier } from './
 export { validateSet, computeStats, spNoGainCells, type ResolvedSet } from './set'
 export { DEFAULT_GAME_TYPE } from './conditions'
 export { calcDamage } from './damage'
-export { DEFAULT_THRESHOLDS, attackBand, defenseBand } from './bands'
-export { finalSpeed, compareSpeed, minSpToOutspeed } from './speed'
-export { sweep, sweepDamage, sweepSpeed, type CellJudgement, type DamageSweepTarget } from './sweep'
+export {
+  DEFAULT_THRESHOLDS,
+  JUDGEMENT_ORDER,
+  attackBand,
+  defenseBand,
+  judgementRank,
+  koLabel,
+  nextBetter,
+  normalizeThresholds,
+  ROLL_DENOMINATOR,
+  TIER_ORDER,
+  normalizeRollSteps,
+  nextBetterTier,
+  rollTier,
+  tierRank,
+  type RollTier,
+  type JudgementSide,
+  type KoLabel,
+  type KoSide,
+} from './bands'
+export { finalSpeed, compareSpeed, minSpToOutspeed, checkSpeedSupport } from './speed'
+export { sweep, sweepDamage, sweepSpeed, judgeDamage, judgeSpeed, type CellJudgement, type DamageCategoryOptions, type DamageSweepTarget } from './sweep'
+export { moveStatRefs } from './moveRefs'
+export { SPEED_DEPENDENT_MOVES, SPEED_DEPENDENT_ATTACKER_ABILITIES, attackEffectiveness, attackMoveType, engineMoveOverrides, typeEffectiveness } from './engine'

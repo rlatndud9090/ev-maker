@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>디자인 대안 비교 · 상대 포켓몬 목록 영역</title>
+<!--
+  하네스 design-options 템플릿 (adr-helper 디자인 결정 레인).
+  - Claude 아티팩트가 아니다. 이 파일을 docs/raw/<type>/<slug>/design-options.html로
+    떨구고, 사용자가 브라우저에서 직접 연다(자기완결: 외부 CSS/JS/폰트/이미지 참조 없음).
+  - 이 파일을 그대로 cp로 목적지에 복사한 뒤, 채우기 구역만 Edit한다. 파일 전체를 Write로
+    다시 쓰지 않는다 — 고정된 CSS/JS/패널 스캐폴딩 재출력은 순수 출력 토큰 낭비다.
+  - 에이전트가 채우는 곳은 <section class="option"> 카드 안의 .mockup 영역과 data-label·라디오
+    value·.name(대안 이름으로 함께 일치)뿐이다. 카드를 복제/삭제해 대안 수(2개 이상)를 맞춘다.
+  - 사용자는 대안을 나란히 비교 → 베이스 라디오 선택 → 세부 수정 요구사항 작성 →
+    "요약 생성" → "복사"해서 에이전트에게 붙여넣는다(정적 파일이라 서버로 전송 불가 →
+    붙여넣기로 루프를 닫는다). 에이전트는 그 요약을 ADR 선택지/결정/선택 근거로 흡수한다.
+-->
+<style>
+  :root{
+    --bg:#f7f7f8; --fg:#1a1a1e; --muted:#5c5c66; --line:#d9d9e0; --card:#ffffff;
+    --accent:#3b5bdb; --accent-soft:#e7ecfb; --shadow:0 1px 3px rgba(0,0,0,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#16161a; --fg:#ececf0; --muted:#9a9aa5; --line:#2c2c34; --card:#1e1e24;
+      --accent:#7a93f5; --accent-soft:#22283d; --shadow:0 1px 3px rgba(0,0,0,.4); }
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; padding:24px; background:var(--bg); color:var(--fg);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif; }
+  header{ max-width:1200px; margin:0 auto 20px; }
+  h1{ font-size:20px; margin:0 0 6px; }
+  .lead{ color:var(--muted); margin:0 0 12px; }
+  .how{ background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:12px 16px; box-shadow:var(--shadow); }
+  .how ol{ margin:6px 0 0; padding-left:20px; } .how li{ margin:2px 0; }
+  .grid{ max-width:1200px; margin:0 auto; display:grid; gap:16px;
+    grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
+  .option{ background:var(--card); border:1px solid var(--line); border-radius:12px;
+    box-shadow:var(--shadow); display:flex; flex-direction:column; overflow:hidden; }
+  .option.selected{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft),var(--shadow); }
+  .option > header{ display:flex; align-items:center; gap:10px; padding:12px 14px;
+    border-bottom:1px solid var(--line); margin:0; }
+  .option > header label{ font-weight:600; cursor:pointer; display:flex; align-items:center; gap:8px; }
+  .option .name{ font-size:15px; }
+  .mockup{ padding:14px; min-height:160px; overflow-x:auto; }
+  /* 목업 안에서 쓰기 좋은 중립 프리미티브(원하면 무시하고 자유 HTML/CSS로 그려도 됨) */
+  .mockup .box{ border:1px dashed var(--line); border-radius:8px; padding:10px; margin:6px 0;
+    color:var(--muted); }
+  .mockup .bar{ height:12px; border-radius:6px; background:var(--line); margin:6px 0; }
+  .notes{ padding:12px 14px; border-top:1px solid var(--line); }
+  .notes label{ display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  textarea{ width:100%; min-height:64px; resize:vertical; border:1px solid var(--line);
+    border-radius:8px; padding:8px; background:var(--bg); color:var(--fg); font:inherit; }
+  .panel{ max-width:1200px; margin:18px auto 0; background:var(--card); border:1px solid var(--line);
+    border-radius:12px; padding:16px; box-shadow:var(--shadow); }
+  .panel label{ display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  button{ font:inherit; font-weight:600; border:1px solid var(--accent); background:var(--accent);
+    color:#fff; border-radius:8px; padding:8px 16px; cursor:pointer; }
+  button.secondary{ background:transparent; color:var(--accent); }
+  button:disabled{ opacity:.5; cursor:not-allowed; }
+  #summary{ width:100%; min-height:150px; margin-top:12px; white-space:pre; font-family:ui-monospace,
+    SFMono-Regular,Menlo,monospace; font-size:13px; }
+  .hint{ color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>디자인 대안 비교 — 상대 포켓몬 목록 영역(결과 영역 내부)</h1>
+  <p class="lead">아래 대안을 비교하고, <b>베이스로 삼을 안 하나를 라디오로 선택</b>한 뒤,
+    <b>세부 수정 요구사항</b>을 적어 주세요.</p>
+  <div class="how">
+    <b>사용법</b>
+    <ol>
+      <li>각 대안을 나란히 비교합니다.</li>
+      <li>가장 마음에 드는 안의 <b>◉ 라디오</b>를 선택합니다(베이스 = 이 안을 출발점으로 발전).</li>
+      <li>대안별 칸과 아래 "전체 수정 요구사항"에 원하는 변경을 구체적으로 적습니다.</li>
+      <li><b>"요약 생성"</b>을 누르고 <b>"복사"</b>해서 에이전트에게 붙여넣습니다(이 파일은 정적이라
+        직접 전송되지 않습니다 — 붙여넣기로 전달).</li>
+    </ol>
+  </div>
+</header>
+
+<!-- ▼▼▼ 에이전트가 채우는 영역: 대안 카드(최소 2개). cp한 복사본에서 이 구역만 Edit한다.
+     카드를 복제/삭제해 개수를 맞추고, data-label·라디오 value·.name·.mockup을 이번 유닛의
+     실제 화면 배치로 채운다(value·data-label·.name은 대안 이름으로 함께 일치). ▼▼▼ -->
+<div class="grid" id="grid" style="grid-template-columns:1fr">
+<!-- 목업 전용 보조 스타일(o- 접두, 이 채우기 구역 안에서만 사용). 결과 영역 폭 860px 목업을 담기 위해 대안 카드를 1열로 쌓는다. -->
+<style>
+  .o-cap{font-size:12px;color:var(--muted);margin:0 0 8px}
+  .o-screen{width:860px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-size:12px;line-height:1.45;overflow:hidden}
+  .o-tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);padding:0 10px;background:var(--card)}
+  .o-tab{padding:5px 14px;color:var(--muted)}.o-tab.on{color:var(--fg);font-weight:700;border-bottom:2px solid var(--fg)}
+  .o-bar{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center;padding:7px 10px;background:var(--card);border-bottom:1px solid var(--line)}
+  .o-in{display:inline-block;border:1px solid var(--line);border-radius:4px;padding:0 6px;background:var(--card);white-space:nowrap}
+  .o-btn{display:inline-block;border:1px solid var(--line);border-radius:6px;padding:0 8px;background:var(--card);white-space:nowrap;font-weight:600}
+  .o-tg{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:0 8px;white-space:nowrap}
+  .o-src{color:var(--muted);font-size:11px;white-space:nowrap}
+  .o-sep{width:1px;align-self:stretch;background:var(--line)}
+  .o-body{padding:10px}
+  .o-nc{border:1px dashed var(--line);border-radius:6px;padding:4px 8px;color:var(--muted);margin:0 0 8px;background:var(--card)}
+  .o-card{border:1px solid var(--line);border-radius:8px;background:var(--card);padding:7px 9px}
+  .o-card.sel{outline:2px solid var(--accent)}
+  .o-ch{display:flex;flex-wrap:wrap;gap:2px 8px;align-items:baseline;margin-bottom:3px}
+  .o-no{font-weight:700}.o-nm{font-weight:700;font-size:13px}
+  .o-cls{font-size:11px;border:1px solid var(--line);border-radius:4px;padding:0 4px;white-space:nowrap}
+  .o-mt{color:var(--muted);font-size:11px}
+  .o-tag{font-size:10px;border:1px dashed var(--muted);border-radius:4px;padding:0 4px;color:var(--fg);white-space:nowrap}
+  .o-row{padding:3px 0;border-top:1px solid var(--line)}
+  .o-row.sub{padding-left:14px}
+  .o-mv{font-weight:600}
+  .o-need{display:inline-block;white-space:nowrap;padding:0 4px;border-radius:3px;border:1px dashed var(--muted)}
+  .o-err{color:var(--muted)}.o-err b{color:var(--fg)}
+  .o-fold{color:var(--muted);font-size:11px;border-top:1px solid var(--line);padding-top:3px}
+  .o-ex{color:var(--accent);font-size:11px;white-space:nowrap}
+  /* 판정 칩: 색 + 기호 + 텍스트 병기 */
+  .v{display:inline-block;padding:0 5px;border-radius:4px;font-weight:700;white-space:nowrap;border:1px solid transparent}
+  .v1{background:rgba(46,140,110,.18);border-color:rgba(46,140,110,.45)}
+  .v2{background:rgba(196,140,30,.18);border-color:rgba(196,140,30,.45)}
+  .v3{background:rgba(128,128,145,.14);border-color:rgba(128,128,145,.4)}
+  /* 0~32 띠 */
+  .o-strip{overflow-x:auto;margin:4px 0 2px}
+  .o-sg,.o-ax{display:grid;grid-template-columns:repeat(33,minmax(12px,1fr));min-width:396px}
+  .o-sg>*{grid-row:1}
+  .o-ax{font-size:10px;color:var(--muted)}
+  .o-seg{height:22px;display:flex;align-items:center;justify-content:center;font-size:10px;white-space:nowrap;overflow:hidden;border-right:2px solid var(--card)}
+  .o-ov{height:22px;color:var(--fg);opacity:.32;background:repeating-linear-gradient(45deg,transparent 0 3px,currentColor 3px 4px);pointer-events:none}
+  .o-cur{height:22px;border-left:3px solid var(--fg);z-index:1}
+  .o-lg{font-size:10px;color:var(--muted)}
+  /* 미니 띠(표형 열) */
+  .o-mini{display:grid;grid-template-columns:repeat(33,5px);width:165px}
+  .o-mini>*{grid-row:1;height:12px}
+  .o-mini .o-ov,.o-mini .o-cur{height:12px}
+  .o-mini .o-cur{border-left-width:2px}
+  .o-mini .o-seg{height:12px;border-right:1px solid var(--card)}
+  /* 표형 */
+  .o-tbl{border-collapse:collapse;width:100%;background:var(--card)}
+  .o-tbl th,.o-tbl td{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left;vertical-align:top}
+  .o-tbl th{font-size:11px;color:var(--muted);font-weight:600;background:var(--bg);white-space:nowrap}
+  .o-tbl tr.grp td{border-top:2px solid var(--line)}
+  .o-tbl td.sub{padding-left:16px}
+  /* 그룹 헤더 */
+  .o-gh{display:flex;flex-wrap:wrap;gap:2px 10px;align-items:baseline;padding:6px 9px;background:var(--card);border:1px solid var(--line);border-radius:8px 8px 0 0}
+  .o-gb{border:1px solid var(--line);border-top:0;border-radius:0 0 8px 8px;padding:6px;display:grid;gap:6px;margin-bottom:8px}
+  .o-gb .o-card{border-radius:6px}
+  .o-line{display:flex;flex-wrap:wrap;gap:2px 8px;align-items:baseline;border:1px solid var(--line);border-radius:6px;background:var(--card);padding:4px 8px}
+  /* 하단 보조 */
+  .o-two{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;align-items:flex-start}
+  .o-phone{width:220px;flex:none;border:1px solid var(--line);border-radius:16px;padding:8px 6px;background:var(--bg);font-size:10px;line-height:1.4}
+  .o-phone .o-card{padding:5px 6px;margin-top:5px}
+  .o-pb{border:1px solid var(--line);border-radius:6px;background:var(--card);padding:4px 6px;margin-top:5px}
+  .o-desc{flex:1;min-width:260px;font-size:12px;color:var(--muted)}
+  .o-desc ul{margin:4px 0;padding-left:18px}
+  .o-snip{flex:1;min-width:300px;font-size:12px;border:1px solid var(--line);border-radius:8px;background:var(--card);padding:6px 9px}
+  .o-fake{font-size:10px;color:var(--muted);margin:8px 0 0}
+</style>
+
+  <!-- ================= 대안 A ================= -->
+  <section class="option" data-label="대안 A — 2열 카드 그리드(펼치면 한 줄 전체)">
+    <header>
+      <label><input type="radio" name="base" value="대안 A — 2열 카드 그리드(펼치면 한 줄 전체)" /><span class="name">대안 A — 2열 카드 그리드(펼치면 한 줄 전체)</span></label>
+    </header>
+    <div class="mockup">
+      <p class="o-cap">결과 영역 860px · 탭 → 2줄 툴바 → 변화 없음 요약 → 목록 밖 타겟(고른 경우 맨 위 고정) → 2열 카드 그리드. 카드 하나는 독립 박스(머리줄 + 판정 행들), 펼친 카드는 그리드 한 줄 전체를 차지해 0~32 띠를 넓게 보인다.</p>
+      <div class="o-screen">
+        <div class="o-tabs" role="tablist"><span class="o-tab on">공격</span><span class="o-tab">방어</span><span class="o-tab">스피드</span></div>
+        <div class="o-bar">
+          <span>상위 <span class="o-in">30 ▾</span>마리</span><span class="o-in" style="min-width:210px">포켓몬 선택: 한국어 이름 검색…</span>
+          <span class="o-sep"></span><span class="o-tg">□ 내 순풍</span><span class="o-tg">□ 상대 순풍</span>
+          <span class="o-sep"></span><span class="o-btn">표시 기준 ⚙</span>
+        </div>
+        <div class="o-bar" style="padding:4px 10px"><span class="o-in">Bo1 ▾</span><span class="o-in">2026-10 ▾</span><span class="o-src">출처: Bo1 · 2026-10 · 컷 1760</span><span class="o-mt" style="margin-left:auto">카드 37장 · 계산 중 12/30 ▪▪▪▫▫</span></div>
+        <div class="o-body">
+          <div class="o-nc">▸ 변화 없음 — 행 41개(카드 12장) <span class="o-mt">· 펼치면 "포켓몬·묶음·기술 → 항상 확정 1타 / 항상 중난수 이하" 목록</span></div>
+          <div style="margin:0 0 4px"><b>목록 밖 타겟</b> <span class="o-mt">워시로토무 · <span class="o-tag">출처: 사용자 지정</span> · 점유율·보존률 없음 · 해제 ✕</span></div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
+            <div class="o-card"><div class="o-ch"><b>프리셋 1</b><span class="o-cls">물리</span><span class="o-mt">H32·B32</span></div><div class="o-row">기습 · 현재 A20 <span class="v v3">□ 중난수 이하</span><br>A30부터 고난수(+10, <span class="o-need">다른 능력치에서 10 필요</span>)</div><span class="o-ex">가정 편집 ✎</span></div>
+            <div class="o-card"><div class="o-ch"><b>프리셋 2</b><span class="o-cls">물리</span><span class="o-mt">H32·B32 B↑</span></div><div class="o-row">아이언헤드 · 현재 A20 <span class="v v3">□ 중난수 이하</span><br>A31부터 고난수(+11, <span class="o-need">다른 능력치에서 11 필요</span>)</div><span class="o-ex">가정 편집 ✎</span></div>
+            <div class="o-card"><div class="o-ch"><b>프리셋 3</b><span class="o-cls">물리</span><span class="o-mt">무투자</span></div><div class="o-row">기습 · 현재 A20 <span class="v v2">◧ 고난수 1타</span><br>A24부터 확정 1타(+4, <span class="o-need">다른 능력치에서 4 필요</span>)</div><span class="o-ex">가정 편집 ✎</span></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="o-card" style="grid-column:1/-1">
+              <div class="o-ch"><span class="o-no">#2</span><span class="o-mt">사용률 33.0%</span><span class="o-nm">파오젠</span><span class="o-cls">물리</span><span class="o-mt">H2·B0 · 보정 없음 · 묶음 22.9% · 보존 80%</span><span class="o-ex" style="margin-left:auto">▾ 접기</span></div>
+              <div class="o-row"><span class="o-mv">기습</span> · 현재 A20 <span class="v v2">◧ 고난수 1타</span> · A28부터 확정 1타(+8, <span class="o-need">다른 능력치에서 8 필요</span>)
+                <div class="o-strip" role="img" aria-label="A 0~19 중난수 이하, 20~27 고난수 1타, 28~32 확정 1타, 현재 20, 21 이상 예산 밖">
+                  <div class="o-ax"><span style="grid-column:21;white-space:nowrap;color:var(--fg);font-weight:700">▼현재 A20</span></div>
+                  <div class="o-sg"><span class="o-seg v3" style="grid-column:1/21">0–19 □ 중난수 이하</span><span class="o-seg v2" style="grid-column:21/29">20–27 ◧ 고난수</span><span class="o-seg v1" style="grid-column:29/34">28–32 ■ 확정</span><span class="o-ov" style="grid-column:22/34"></span><span class="o-cur" style="grid-column:21"></span></div>
+                  <div class="o-ax"><span style="grid-column:1">0</span><span style="grid-column:9">8</span><span style="grid-column:17">16</span><span style="grid-column:25">24</span><span style="grid-column:33">32</span></div>
+                </div>
+                <div class="o-lg">빗금 = 예산 밖 칸(잔여 0 → A21 이상은 다른 능력치에서 SP를 빼야 닿음) · 칸 판정은 기호+텍스트 병기</div>
+              </div>
+              <div class="o-row"><span class="o-mv">아이언헤드</span> · 현재 A20 <span class="v v1">■ 확정 1타</span> · A14까지 줄여도 확정 1타(−6) <span class="o-ex">0~32 띠 ▸</span></div>
+              <div class="o-row sub">↳ 내 칼춤 → 내 A+2 · 기습 <span class="v v1">■ 확정 1타</span> · A6까지 줄여도 확정 1타(−14)</div>
+              <div class="o-fold">▸ 변화 없음 1행 (깜짝베기: 항상 중난수 이하)</div>
+            </div>
+            <div class="o-card">
+              <div class="o-ch"><span class="o-no">#1</span><span class="o-mt">48.1%</span><span class="o-nm">어흥염</span><span class="o-cls">물리</span><span class="o-mt">H32·B20 B↑ · 38.4% · 보존 46%</span></div>
+              <div class="o-row"><span class="o-mv">아이언헤드</span> · A20 <span class="v v2">◧ 고난수</span> · A12까지 줄여도 고난수(−8)</div>
+              <div class="o-row sub">↳ 상대 위협 99% → 내 A−1 <span class="v v3">□ 중난수 이하</span> · A27부터 고난수(+7, <span class="o-need">7 필요</span>)</div>
+              <div class="o-row o-err"><span class="o-mv">깜짝베기</span> · <b>계산 불가</b> — 상대 대표 도구가 게임 데이터에 없음</div>
+              <div class="o-ex">▸ 펼치기(0~32)</div>
+            </div>
+            <div class="o-card">
+              <div class="o-ch"><span class="o-no">#1</span><span class="o-mt">48.1%</span><span class="o-nm">어흥염</span><span class="o-cls">물리</span><span class="o-mt">H32·B0 · 17.2% · 보존 46%</span></div>
+              <div class="o-row"><span class="o-mv">아이언헤드</span> · A20 <span class="v v1">■ 확정 1타</span> · A16까지 줄여도 확정(−4)</div>
+              <div class="o-row sub">↳ 상대 위협 99% → 내 A−1 <span class="v v2">◧ 고난수</span> · A29부터 확정(+9, <span class="o-need">9 필요</span>)</div>
+              <div class="o-fold">▸ 변화 없음 1행</div>
+            </div>
+            <div class="o-card">
+              <div class="o-ch"><span class="o-no">#4</span><span class="o-mt">26.7%</span><span class="o-nm">고릴타</span><span class="o-cls">물리</span><span class="o-mt">H20·B4 · <span class="o-tag">소수 배분</span> 4.9% · 보존 38%</span></div>
+              <div class="o-row"><span class="o-mv">기습</span> · A20 <span class="v v3">□ 중난수 이하</span> · A26부터 고난수(+6, <span class="o-need">6 필요</span>)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="o-two">
+        <div class="o-snip"><span class="o-mt">방어 탭 카드(같은 2열 그리드 안) — H 행·B 행 쌍</span>
+          <div class="o-ch" style="margin-top:4px"><span class="o-no">#1</span><span class="o-mt">48.1%</span><span class="o-nm">어흥염</span><span class="o-cls">물리</span><span class="o-mt">A32 A↑ · 52.0% · 보존 46%</span></div>
+          <div class="o-row"><span class="o-mv">플레어드라이브</span> H행 · 현재 H20 <span class="v v2">◐ 저난수 1타</span> · H26부터 확정 버팀(+6, <span class="o-need">6 필요</span>)</div>
+          <div class="o-row">　　　　　　 B행 · 현재 B2 <span class="v v2">◐ 저난수 1타</span> · B9부터 확정 버팀(+7, <span class="o-need">7 필요</span>)</div>
+          <div class="o-row sub">↳ 상대 칼춤 14% → 상대 A+2 · H행 <span class="v v3">○ 중난수 이상 1타</span> · 0~32 어디서도 버팀 없음</div>
+          <div class="o-fold">▸ 변화 없음 3행(극단 필터: 엄청난힘·와일드볼트·DD래리어트)</div>
+          <hr style="border:0;border-top:1px solid var(--line)">
+          <span class="o-mt">스피드 탭 카드 — 스카프 행</span>
+          <div class="o-ch" style="margin-top:4px"><span class="o-no">#6</span><span class="o-mt">18.2%</span><span class="o-nm">마기라스</span><span class="o-mt">S12 · 보정 없음 · 41% · 보존 73%</span></div>
+          <div class="o-row">기본(돌격조끼) · 현재 S24 <span class="v v1">▲ 선공</span> · S9까지 줄여도 선공(−15)</div>
+          <div class="o-row sub">↳ 구애스카프 24% · 현재 S24 <span class="v v3">▽ 후공</span> · S30부터 선공(+6, <span class="o-need">6 필요</span>)</div>
+        </div>
+        <div class="o-phone" aria-label="400px 배치"><b>400px</b>
+          <div class="o-pb" style="display:flex;gap:8px"><b>공격</b><span>방어</span><span>스피드</span></div>
+          <div class="o-pb">상위 30 · 검색 · 순풍 0 · ⚙ <span class="o-ex">필터 ▾</span><br><span class="o-mt">Bo1 · 2026-10 · 1760</span></div>
+          <div class="o-pb o-mt">▸ 변화 없음 — 행 41개(카드 12장)</div>
+          <div class="o-card"><b>#2 파오젠</b> 물리 · H2·B0 22.9% · 보존 80%<br>기습 A20 <span class="v v2">◧고난수</span><br>A28부터 확정(+8, 8 필요) <span class="o-ex">▸</span></div>
+          <div class="o-card"><b>#1 어흥염</b> 물리 · H32·B20 B↑ 38.4%<br>아이언헤드 A20 <span class="v v2">◧고난수</span> · A12까지(−8)<br>↳ 위협 99% A−1 <span class="v v3">□중난수↓</span></div>
+        </div>
+      </div>
+      <p class="o-fake">※ 사용률·점유율·보존률·SP·판정은 배치 설명용으로 지어낸 그럴듯한 예시 값이며 실제 계산 결과가 아니다.</p>
+    </div>
+    <div class="notes">
+      <label>대안 A 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="예: 카드 머리줄 정보 순서, 펼친 카드 폭…"></textarea>
+    </div>
+  </section>
+
+  <!-- ================= 대안 B ================= -->
+  <section class="option" data-label="대안 B — 전체폭 표형(행 정렬 + 미니 0~32 띠 열)">
+    <header>
+      <label><input type="radio" name="base" value="대안 B — 전체폭 표형(행 정렬 + 미니 0~32 띠 열)" /><span class="name">대안 B — 전체폭 표형(행 정렬 + 미니 0~32 띠 열)</span></label>
+    </header>
+    <div class="mockup">
+      <p class="o-cap">결과 영역 860px · 카드 = 표의 행 묶음(굵은 구분선). 판정 행이 같은 열(기술 | 현재 판정 | 경계 | 0~32 미니 띠)에 정렬돼, 위아래로 훑으며 "누가 몇 SP에서 바뀌는가"를 비교한다. 미니 띠는 33칸이 모든 행에서 같은 x 위치라 경계 위치가 세로로 맞춰진다. 행을 펼치면 아래에 큰 띠가 열린다.</p>
+      <div class="o-screen">
+        <div class="o-tabs"><span class="o-tab on">공격</span><span class="o-tab">방어</span><span class="o-tab">스피드</span></div>
+        <div class="o-bar">
+          <span>상위 <span class="o-in">30 ▾</span></span><span class="o-in" style="min-width:180px">포켓몬 선택: 이름 검색…</span><span class="o-tg">□ 내 순풍</span><span class="o-tg">□ 상대 순풍</span><span class="o-btn">표시 기준 ⚙</span>
+          <span class="o-sep"></span><span class="o-in">Bo1 ▾</span><span class="o-in">2026-10 ▾</span><span class="o-src">출처 Bo1 · 2026-10 · 1760</span>
+        </div>
+        <div class="o-body">
+          <div class="o-nc">▸ 변화 없음 — 행 41개(카드 12장) <span class="o-mt">· 펼치면 같은 열 구조의 회색 표로 고정 판정 나열</span></div>
+          <table class="o-tbl">
+            <thead><tr><th>#·사용률</th><th>포켓몬 · 분류</th><th>묶음 · 점유 · 보존</th><th>기술 / 조건</th><th>현재(A20)</th><th>경계</th><th>A 0 ─ 16 ─ 32</th></tr></thead>
+            <tbody>
+              <tr class="grp"><td rowspan="2"><b>타겟</b><br><span class="o-mt">—</span></td><td rowspan="2"><b>워시로토무</b> <span class="o-cls">물리</span><br><span class="o-tag">목록 밖</span></td><td><span class="o-tag">출처: 사용자 지정</span><br>프리셋 1 H32·B32 <span class="o-ex">✎</span></td><td>기습</td><td><span class="v v3">□ 중난수↓</span></td><td>A30부터 고난수(+10, <span class="o-need">10 필요</span>)</td><td><div class="o-mini"><span class="o-seg v3" style="grid-column:1/31"></span><span class="o-seg v2" style="grid-column:31/34"></span><span class="o-ov" style="grid-column:22/34"></span><span class="o-cur" style="grid-column:21"></span></div></td></tr>
+              <tr><td>프리셋 3 무투자 <span class="o-ex">✎</span><br><span class="o-mt">(프리셋 2는 변화 없음 → 요약)</span></td><td>기습</td><td><span class="v v2">◧ 고난수</span></td><td>A24부터 확정(+4, <span class="o-need">4 필요</span>)</td><td><div class="o-mini"><span class="o-seg v3" style="grid-column:1/15"></span><span class="o-seg v2" style="grid-column:15/25"></span><span class="o-seg v1" style="grid-column:25/34"></span><span class="o-ov" style="grid-column:22/34"></span><span class="o-cur" style="grid-column:21"></span></div></td></tr>
+              <tr class="grp"><td rowspan="4"><b>#1</b><br>48.1%</td><td rowspan="4"><b>어흥염</b> <span class="o-cls">물리</span></td><td rowspan="3">H32·B20 B↑<br>38.4% · 보존 46%</td><td>아이언헤드</td><td><span class="v v2">◧ 고난수</span></td><td>A12까지 줄여도 고난수(−8)</td><td><div class="o-mini"><span class="o-seg v3" style="grid-column:1/12"></span><span class="o-seg v2" style="grid-column:12/34"></span><span class="o-ov" style="grid-column:22/34"></span><span class="o-cur" style="grid-column:21"></span></div></td></tr>
+              <tr><td class="sub">↳ 상대 위협 99% · 내 A−1</td><td><span class="v v3">□ 중난수↓</span></td><td>A27부터 고난수(+7, <span class="o-need">7 필요</span>)</td><td><div class="o-mini"><span class="o-seg v3" style="grid-column:1/28"></span><span class="o-seg v2" style="grid-column:28/34"></span><span class="o-ov" style="grid-column:22/34"></span><span class="o-cur" style="grid-column:21"></span></div></td></tr>
+              <tr><td class="o-err">깜짝베기</td><td colspan="3" class="o-err"><b>계산 불가</b> — 상대 대표 도구가 게임 데이터에 없음</td></tr>
+              <tr><td>H32·B0 · 17.2%</td><td>아이언헤드</td><td><span class="v v1">■ 확정</span></td><td>A16까지 줄여도 확정(−4) <span class="o-mt">· 변화 없음 1행 ▸</span></td><td><div class="o-mini"><span class="o-seg v2" style="grid-column:1/17"></span><span class="o-seg v1" style="grid-column:17/34"></span><span class="o-ov" style="grid-column:22/34"></span><span class="o-cur" style="grid-column:21"></span></div></td></tr>
+              <tr class="grp"><td rowspan="3"><b>#2</b><br>33.0%</td><td rowspan="3"><b>파오젠</b> <span class="o-cls">물리</span></td><td rowspan="3">H2·B0<br>22.9% · 보존 80%</td><td><b>기습</b> <span class="o-ex">▾</span></td><td><span class="v v2">◧ 고난수</span></td><td>A28부터 확정(+8, <span class="o-need">8 필요</span>)</td><td><div class="o-mini"><span class="o-seg v3" style="grid-column:1/21"></span><span class="o-seg v2" style="grid-column:21/29"></span><span class="o-seg v1" style="grid-column:29/34"></span><span class="o-ov" style="grid-column:22/34"></span><span class="o-cur" style="grid-column:21"></span></div></td></tr>
+              <tr><td colspan="4" style="background:var(--bg)">
+                <div class="o-strip"><div class="o-ax"><span style="grid-column:21;white-space:nowrap;color:var(--fg);font-weight:700">▼현재 A20</span></div><div class="o-sg"><span class="o-seg v3" style="grid-column:1/21">0–19 □ 중난수 이하</span><span class="o-seg v2" style="grid-column:21/29">20–27 ◧ 고난수</span><span class="o-seg v1" style="grid-column:29/34">28–32 ■ 확정</span><span class="o-ov" style="grid-column:22/34"></span><span class="o-cur" style="grid-column:21"></span></div><div class="o-ax"><span style="grid-column:1">0</span><span style="grid-column:17">16</span><span style="grid-column:33">32</span></div></div>
+                <span class="o-lg">펼친 행: 큰 띠(텍스트 라벨) · 빗금 = 예산 밖</span></td></tr>
+              <tr><td class="sub">↳ 내 칼춤 · 내 A+2</td><td><span class="v v1">■ 확정</span></td><td>A6까지 줄여도 확정(−14)</td><td><div class="o-mini"><span class="o-seg v2" style="grid-column:1/7"></span><span class="o-seg v1" style="grid-column:7/34"></span><span class="o-ov" style="grid-column:22/34"></span><span class="o-cur" style="grid-column:21"></span></div></td></tr>
+              <tr class="grp"><td><b>#4</b><br>26.7%</td><td><b>고릴타</b> <span class="o-cls">물리</span></td><td>H20·B4 · <span class="o-tag">소수 배분</span><br>4.9% · 보존 38%</td><td>기습</td><td><span class="v v3">□ 중난수↓</span></td><td>A26부터 고난수(+6, <span class="o-need">6 필요</span>)</td><td><div class="o-mini"><span class="o-seg v3" style="grid-column:1/27"></span><span class="o-seg v2" style="grid-column:27/34"></span><span class="o-ov" style="grid-column:22/34"></span><span class="o-cur" style="grid-column:21"></span></div></td></tr>
+            </tbody>
+          </table>
+          <div class="o-lg" style="margin-top:4px">미니 띠: 진한 초록 = ■ 확정 · 황색 = ◧ 고난수 · 회색 = □ 중난수 이하 · 세로 막대 = 현재 · 빗금 = 예산 밖. 색 외에 "현재"·"경계" 열 텍스트가 같은 정보를 준다.</div>
+        </div>
+      </div>
+      <div class="o-two">
+        <div class="o-snip"><span class="o-mt">방어 탭 — H 행·B 행이 한 기술 아래 두 줄로 정렬(열 머리는 "내 H/B 0 ─ 32")</span>
+          <table class="o-tbl" style="margin-top:4px">
+            <tr class="grp"><td rowspan="3"><b>#1</b> 어흥염 <span class="o-cls">물리</span><br><span class="o-mt">A32 A↑ · 52.0%</span></td><td rowspan="2">플레어드라이브</td><td>H20</td><td><span class="v v2">◐ 저난수</span></td><td>H26부터 확정 버팀(+6, <span class="o-need">6 필요</span>)</td></tr>
+            <tr><td>B2</td><td><span class="v v2">◐ 저난수</span></td><td>B9부터 확정 버팀(+7, <span class="o-need">7 필요</span>)</td></tr>
+            <tr><td class="sub">↳ 상대 칼춤 14% · A+2</td><td>H20</td><td><span class="v v3">○ 중난수↑</span></td><td>0~32 내내 1타</td></tr>
+          </table>
+          <span class="o-mt">스피드 탭 — 기본 행 아래 "↳ 구애스카프 24%" 행, 열은 "현재(S24) | 선공/동속/후공 | 경계"</span>
+        </div>
+        <div class="o-phone"><b>400px</b>
+          <div class="o-pb" style="display:flex;gap:8px"><b>공격</b><span>방어</span><span>스피드</span></div>
+          <div class="o-pb">상위 30 · 검색 · ⚙ <span class="o-ex">필터 ▾</span></div>
+          <div class="o-pb o-mt">▸ 변화 없음 — 행 41개(카드 12장)</div>
+          <div class="o-pb"><b>#2 파오젠</b> 물리 · H2·B0 22.9%<br>기습 <span class="v v2">◧고난수</span> A28(+8, 8 필요)<br><div class="o-mini" style="margin-top:2px"><span class="o-seg v3" style="grid-column:1/21"></span><span class="o-seg v2" style="grid-column:21/29"></span><span class="o-seg v1" style="grid-column:29/34"></span><span class="o-ov" style="grid-column:22/34"></span><span class="o-cur" style="grid-column:21"></span></div></div>
+        </div>
+        <div class="o-desc"><b>좁은 화면</b><ul><li>표는 행마다 2줄 블록으로 접힌다(열 머리 대신 라벨). 미니 띠는 165px라 그대로 들어간다.</li><li>본문 가로 스크롤 없이, 큰 띠만 자체 스크롤.</li></ul></div>
+      </div>
+      <p class="o-fake">※ 사용률·점유율·보존률·SP·판정은 배치 설명용으로 지어낸 그럴듯한 예시 값이며 실제 계산 결과가 아니다.</p>
+    </div>
+    <div class="notes">
+      <label>대안 B 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="이 안에 대한 수정 요구사항…"></textarea>
+    </div>
+  </section>
+
+  <!-- ================= 대안 C ================= -->
+  <section class="option" data-label="대안 C — 포켓몬별 그룹 헤더 + 묶음 카드 접기">
+    <header>
+      <label><input type="radio" name="base" value="대안 C — 포켓몬별 그룹 헤더 + 묶음 카드 접기" /><span class="name">대안 C — 포켓몬별 그룹 헤더 + 묶음 카드 접기</span></label>
+    </header>
+    <div class="mockup">
+      <p class="o-cap">결과 영역 860px · 포켓몬 하나가 그룹 헤더(순위·사용률·이름·보존률·카드 수)로 한 번만 나오고, 그 아래 묶음 카드가 쌓인다. 점유율 최대 묶음 카드만 펼쳐져 있고 나머지는 한 줄 요약으로 접힌다. 사용률 순 스캔은 그룹 헤더로, 배분별 차이는 그룹 안에서 본다.</p>
+      <div class="o-screen">
+        <div class="o-tabs"><span class="o-tab on">공격</span><span class="o-tab">방어</span><span class="o-tab">스피드</span><span class="o-src" style="margin-left:auto;align-self:center">출처: <span class="o-in">Bo1 ▾</span> <span class="o-in">2026-10 ▾</span> · 컷 1760</span></div>
+        <div class="o-bar">
+          <span>상위 <span class="o-in">30 ▾</span>마리</span><span class="o-in" style="min-width:200px">포켓몬 선택(목록 밖 포함): 이름…</span>
+          <span class="o-tg">□ 내 순풍</span><span class="o-tg">□ 상대 순풍</span><span class="o-btn">표시 기준 ⚙</span><span class="o-ex" style="margin-left:auto">모두 펼치기 · 모두 접기</span>
+        </div>
+        <div class="o-body">
+          <div class="o-nc">▸ 변화 없음 — 행 41개(카드 12장) <span class="o-mt">· 펼치면 포켓몬 그룹별로 고정 판정</span></div>
+          <div class="o-gh"><b>워시로토무</b><span class="o-tag">목록 밖 · 출처: 사용자 지정</span><span class="o-mt">점유율·보존률 없음 · 카드 3장</span><span class="o-ex" style="margin-left:auto">해제 ✕ · ▾</span></div>
+          <div class="o-gb" style="grid-template-columns:repeat(3,1fr)">
+            <div class="o-card"><b>프리셋 1</b> <span class="o-cls">물리</span> <span class="o-mt">H32·B32</span><div class="o-row">기습 <span class="v v3">□ 중난수↓</span><br>A30부터 고난수(+10, <span class="o-need">10 필요</span>)</div><span class="o-ex">가정 편집 ✎</span></div>
+            <div class="o-card"><b>프리셋 2</b> <span class="o-cls">물리</span> <span class="o-mt">H32·B32 B↑</span><div class="o-row">아이언헤드 <span class="v v3">□ 중난수↓</span><br>A31부터 고난수(+11, <span class="o-need">11 필요</span>)</div><span class="o-ex">가정 편집 ✎</span></div>
+            <div class="o-card"><b>프리셋 3</b> <span class="o-cls">물리</span> <span class="o-mt">무투자</span><div class="o-row">기습 <span class="v v2">◧ 고난수</span><br>A24부터 확정(+4, <span class="o-need">4 필요</span>)</div><span class="o-ex">가정 편집 ✎</span></div>
+          </div>
+          <div class="o-gh"><span class="o-no">#1</span><b style="font-size:13px">어흥염</b><span class="o-mt">사용률 48.1% · 배분 보존 46% · 물리 카드 2장 · 위협 99%</span><span class="o-ex" style="margin-left:auto">▾</span></div>
+          <div class="o-gb">
+            <div class="o-card">
+              <div class="o-ch"><span class="o-cls">물리</span><b>H32·B20 B↑</b><span class="o-mt">묶음 38.4%</span><span class="o-ex" style="margin-left:auto">▾ 0~32 띠</span></div>
+              <div class="o-row"><span class="o-mv">아이언헤드</span> · 현재 A20 <span class="v v2">◧ 고난수 1타</span> · A12까지 줄여도 고난수(−8)</div>
+              <div class="o-row sub">↳ 상대 위협 99% → 내 A−1 <span class="v v3">□ 중난수 이하</span> · A27부터 고난수(+7, <span class="o-need">다른 능력치에서 7 필요</span>)</div>
+              <div class="o-row o-err"><span class="o-mv">깜짝베기</span> · <b>계산 불가</b> — 상대 대표 도구가 게임 데이터에 없음</div>
+            </div>
+            <div class="o-line"><span class="o-ex">▸</span><span class="o-cls">물리</span><b>H32·B0</b><span class="o-mt">17.2%</span><span>아이언헤드 <span class="v v1">■ 확정</span> A16까지(−4)</span><span>· 위협 <span class="v v2">◧ 고난수</span> A29부터(+9, <span class="o-need">9 필요</span>)</span><span class="o-mt">· 변화 없음 1행</span></div>
+          </div>
+          <div class="o-gh"><span class="o-no">#2</span><b style="font-size:13px">파오젠</b><span class="o-mt">사용률 33.0% · 배분 보존 80% · 물리 카드 1장</span><span class="o-ex" style="margin-left:auto">▾</span></div>
+          <div class="o-gb">
+            <div class="o-card">
+              <div class="o-ch"><span class="o-cls">물리</span><b>H2·B0</b><span class="o-mt">보정 없음 · 묶음 22.9%</span><span class="o-ex" style="margin-left:auto">▴ 띠 접기</span></div>
+              <div class="o-row"><span class="o-mv">기습</span> · 현재 A20 <span class="v v2">◧ 고난수 1타</span> · A28부터 확정 1타(+8, <span class="o-need">다른 능력치에서 8 필요</span>)
+                <div class="o-strip"><div class="o-ax"><span style="grid-column:21;white-space:nowrap;color:var(--fg);font-weight:700">▼현재 A20</span></div><div class="o-sg"><span class="o-seg v3" style="grid-column:1/21">0–19 □ 중난수 이하</span><span class="o-seg v2" style="grid-column:21/29">20–27 ◧ 고난수</span><span class="o-seg v1" style="grid-column:29/34">28–32 ■ 확정</span><span class="o-ov" style="grid-column:22/34"></span><span class="o-cur" style="grid-column:21"></span></div><div class="o-ax"><span style="grid-column:1">0</span><span style="grid-column:9">8</span><span style="grid-column:17">16</span><span style="grid-column:25">24</span><span style="grid-column:33">32</span></div></div>
+              </div>
+              <div class="o-row sub">↳ 내 칼춤 → 내 A+2 · 기습 <span class="v v1">■ 확정 1타</span> · A6까지 줄여도 확정(−14)</div>
+              <div class="o-fold">▸ 변화 없음 1행 (깜짝베기: 항상 중난수 이하)</div>
+            </div>
+          </div>
+          <div class="o-gh"><span class="o-no">#4</span><b style="font-size:13px">고릴타</b><span class="o-mt">사용률 26.7% · 배분 보존 38% · 물리 1장</span><span class="o-tag">소수 배분</span><span class="o-ex" style="margin-left:auto">▸ 접힘</span></div>
+        </div>
+      </div>
+      <div class="o-two">
+        <div class="o-snip"><span class="o-mt">방어 탭 그룹 — 그룹 헤더 아래 상대 A 묶음 카드, 기술마다 H/B 2줄</span>
+          <div class="o-gh" style="margin-top:4px"><span class="o-no">#1</span><b>어흥염</b><span class="o-mt">48.1% · 보존 46% · 칼춤 14%</span></div>
+          <div class="o-gb"><div class="o-card"><span class="o-cls">물리</span> <b>A32 A↑</b> <span class="o-mt">52.0%</span>
+            <div class="o-row">플레어드라이브 · H20 <span class="v v2">◐ 저난수 1타</span> H26부터 확정 버팀(+6, <span class="o-need">6 필요</span>)<br>　　　　　　 · B2 <span class="v v2">◐ 저난수 1타</span> B9부터 확정 버팀(+7, <span class="o-need">7 필요</span>)</div>
+            <div class="o-row sub">↳ 상대 칼춤 A+2 · <span class="v v3">○ 중난수 이상 1타</span> 0~32 내내</div></div></div>
+          <span class="o-mt">스피드 탭 — 그룹 헤더에 "스카프 24%", 최대 S 묶음 카드 안에 "↳ 구애스카프" 행</span>
+        </div>
+        <div class="o-phone"><b>400px</b>
+          <div class="o-pb" style="display:flex;gap:8px"><b>공격</b><span>방어</span><span>스피드</span></div>
+          <div class="o-pb">상위 30 · 검색 · ⚙ <span class="o-ex">필터 ▾</span></div>
+          <div class="o-pb"><b>#1 어흥염</b> 48.1% · 보존 46% <span class="o-ex">▾</span></div>
+          <div class="o-card">H32·B20 B↑ 38.4%<br>아이언헤드 <span class="v v2">◧고난수</span> A12까지(−8)<br>↳ 위협 A−1 <span class="v v3">□</span> A27(+7, 7 필요)</div>
+          <div class="o-pb">▸ H32·B0 17.2% · <span class="v v1">■확정</span></div>
+          <div class="o-pb"><b>#2 파오젠</b> 33.0% <span class="o-ex">▾</span></div>
+        </div>
+      </div>
+      <p class="o-fake">※ 사용률·점유율·보존률·SP·판정은 배치 설명용으로 지어낸 그럴듯한 예시 값이며 실제 계산 결과가 아니다.</p>
+    </div>
+    <div class="notes">
+      <label>대안 C 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="이 안에 대한 수정 요구사항…"></textarea>
+    </div>
+  </section>
+
+  <!-- ================= 대안 D ================= -->
+  <section class="option" data-label="대안 D — 압축 목록 + 우측 상세 패널">
+    <header>
+      <label><input type="radio" name="base" value="대안 D — 압축 목록 + 우측 상세 패널" /><span class="name">대안 D — 압축 목록 + 우측 상세 패널</span></label>
+    </header>
+    <div class="mockup">
+      <p class="o-cap">결과 영역 860px · 왼쪽 340px는 카드 1장 = 1~2줄의 압축 목록(가장 가까운 경계만), 오른쪽은 선택한 카드의 모든 판정 행과 0~32 띠가 항상 펼쳐진 상세 패널. 키보드 ↑↓로 목록을 옮기면 상세가 바뀐다.</p>
+      <div class="o-screen">
+        <div class="o-tabs"><span class="o-tab on">공격</span><span class="o-tab">방어</span><span class="o-tab">스피드</span></div>
+        <div class="o-bar">
+          <span>상위 <span class="o-in">30 ▾</span></span><span class="o-in" style="min-width:180px">포켓몬 선택: 이름 검색…</span><span class="o-tg">□ 내 순풍</span><span class="o-tg">□ 상대 순풍</span><span class="o-btn">표시 기준 ⚙</span>
+          <span class="o-sep"></span><span class="o-in">Bo1 ▾</span><span class="o-in">2026-10 ▾</span><span class="o-src">· 1760</span>
+        </div>
+        <div style="display:grid;grid-template-columns:340px 1fr">
+          <div style="border-right:1px solid var(--line);padding:8px;display:grid;gap:4px;align-content:start">
+            <div class="o-nc" style="margin:0">▸ 변화 없음 — 행 41개(카드 12장)</div>
+            <div class="o-mt" style="margin-top:4px">목록 밖 타겟 · <span class="o-tag">출처: 사용자 지정</span></div>
+            <div class="o-line"><b>워시로토무</b><span class="o-cls">물리</span><span class="o-mt">프리셋 1 H32·B32</span><span><span class="v v3">□</span> A30(+10, 10 필요)</span></div>
+            <div class="o-line"><b>워시로토무</b><span class="o-cls">물리</span><span class="o-mt">프리셋 2 H32·B32 B↑</span><span><span class="v v3">□</span> A31(+11, 11 필요)</span></div>
+            <div class="o-line"><b>워시로토무</b><span class="o-cls">물리</span><span class="o-mt">프리셋 3 무투자</span><span><span class="v v2">◧</span> A24(+4, 4 필요)</span></div>
+            <div class="o-mt" style="margin-top:4px">메타 · 사용률 순</div>
+            <div class="o-line"><b>#1 어흥염</b><span class="o-cls">물리</span><span class="o-mt">H32·B20 B↑ 38.4%</span><span><span class="v v2">◧ 고난수</span> 3행 · 계산 불가 1</span></div>
+            <div class="o-line"><b>#1 어흥염</b><span class="o-cls">물리</span><span class="o-mt">H32·B0 17.2%</span><span><span class="v v1">■ 확정</span> 2행</span></div>
+            <div class="o-line" style="outline:2px solid var(--accent)"><b>#2 파오젠</b><span class="o-cls">물리</span><span class="o-mt">H2·B0 22.9%</span><span><span class="v v2">◧ 고난수</span> → A28 확정(+8)</span></div>
+            <div class="o-line"><b>#4 고릴타</b><span class="o-cls">물리</span><span class="o-tag">소수 배분</span><span class="o-mt">4.9%</span><span><span class="v v3">□</span> A26(+6)</span></div>
+            <div class="o-line"><b>#5 미끄래곤</b><span class="o-cls">물리</span><span class="o-mt">H32·B12 21.0%</span><span><span class="v v1">■ 확정</span> A11까지(−9)</span></div>
+          </div>
+          <div style="padding:10px">
+            <div class="o-ch"><span class="o-no">#2</span><span class="o-mt">사용률 33.0%</span><span class="o-nm" style="font-size:15px">파오젠</span><span class="o-cls">물리</span></div>
+            <div class="o-mt" style="margin-bottom:6px">묶음 H2·B0 · 보정 없음 · 점유 22.9% · 배분 보존 80% · 같은 포켓몬 다른 묶음: 없음</div>
+            <div class="o-row"><span class="o-mv">기습</span> · 현재 A20 <span class="v v2">◧ 고난수 1타</span><br>A28부터 확정 1타(+8, <span class="o-need">다른 능력치에서 8 필요</span>)
+              <div class="o-strip"><div class="o-ax"><span style="grid-column:21;white-space:nowrap;color:var(--fg);font-weight:700">▼현재 A20</span></div><div class="o-sg"><span class="o-seg v3" style="grid-column:1/21">0–19 □ 중난수 이하</span><span class="o-seg v2" style="grid-column:21/29">20–27 ◧ 고난수</span><span class="o-seg v1" style="grid-column:29/34">28–32 ■ 확정</span><span class="o-ov" style="grid-column:22/34"></span><span class="o-cur" style="grid-column:21"></span></div><div class="o-ax"><span style="grid-column:1">0</span><span style="grid-column:9">8</span><span style="grid-column:17">16</span><span style="grid-column:25">24</span><span style="grid-column:33">32</span></div></div></div>
+            <div class="o-row"><span class="o-mv">아이언헤드</span> · 현재 A20 <span class="v v1">■ 확정 1타</span> · A14까지 줄여도 확정(−6)
+              <div class="o-strip"><div class="o-sg"><span class="o-seg v2" style="grid-column:1/15">0–13 ◧ 고난수</span><span class="o-seg v1" style="grid-column:15/34">14–32 ■ 확정</span><span class="o-ov" style="grid-column:22/34"></span><span class="o-cur" style="grid-column:21"></span></div></div></div>
+            <div class="o-row sub">↳ 내 칼춤 → 내 A+2 · 기습 <span class="v v1">■ 확정 1타</span> · A6까지 줄여도 확정(−14)</div>
+            <div class="o-fold">▸ 변화 없음 1행 (깜짝베기: 항상 중난수 이하)</div>
+            <div class="o-lg" style="margin-top:4px">빗금 = 예산 밖 칸 · 띠는 상세에서 항상 펼침</div>
+          </div>
+        </div>
+      </div>
+      <div class="o-two">
+        <div class="o-snip"><span class="o-mt">방어 탭 상세 — 기술마다 H 띠·B 띠 2단, 목록 줄은 "어흥염 A32 A↑ · ◐ 저난수 · H26 / B9"</span>
+          <div class="o-row">플레어드라이브 · H20 <span class="v v2">◐ 저난수 1타</span> H26부터 확정 버팀(+6, <span class="o-need">6 필요</span>)</div>
+          <div class="o-row">　　　　　　 · B2 <span class="v v2">◐ 저난수 1타</span> B9부터 확정 버팀(+7, <span class="o-need">7 필요</span>)</div>
+          <div class="o-row sub">↳ 상대 칼춤 14% → A+2 · <span class="v v3">○ 중난수 이상 1타</span> 0~32 내내</div>
+          <div class="o-row o-err">와일드볼트 · <b>계산 불가</b> — 상대 특성이 게임 데이터에 없음</div>
+          <span class="o-mt">스피드 탭 상세 — 기본 행 + "↳ 구애스카프 24% · ▽ 후공 · S30부터 선공(+6, 6 필요)"</span>
+        </div>
+        <div class="o-phone"><b>400px</b>
+          <div class="o-pb" style="display:flex;gap:8px"><b>공격</b><span>방어</span><span>스피드</span></div>
+          <div class="o-pb">상위 30 · 검색 · ⚙ <span class="o-ex">필터 ▾</span></div>
+          <div class="o-pb">#1 어흥염 H32·B20 <span class="v v2">◧</span> 3행</div>
+          <div class="o-pb" style="outline:2px solid var(--accent)">#2 파오젠 H2·B0 <span class="v v2">◧</span> A28(+8)</div>
+          <div class="o-pb">#4 고릴타 소수 <span class="v v3">□</span> A26</div>
+          <div class="o-mt" style="margin-top:4px">탭하면 → 전체 화면 상세(← 목록으로)</div>
+        </div>
+        <div class="o-desc"><b>좁은 화면</b><ul><li>2분할 불가 → 목록만 보이고, 고르면 상세가 전체 화면으로 덮는다(뒤로 가면 목록 스크롤 유지).</li><li>여러 카드를 한눈에 비교할 수 없는 점이 가장 크다.</li></ul></div>
+      </div>
+      <p class="o-fake">※ 사용률·점유율·보존률·SP·판정은 배치 설명용으로 지어낸 그럴듯한 예시 값이며 실제 계산 결과가 아니다.</p>
+    </div>
+    <div class="notes">
+      <label>대안 D 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="이 안에 대한 수정 요구사항…"></textarea>
+    </div>
+  </section>
+
+</div>
+<!-- ▲▲▲ 에이전트가 채우는 영역 끝 ▲▲▲ -->
+
+<div class="panel">
+  <label for="overall">전체 수정 요구사항 (선택한 베이스를 어떻게 발전시킬지 · 공통 사항)</label>
+  <textarea id="overall" placeholder="예: 모바일 320px에서 컨트롤이 겹치지 않게, 결과 위계를 점수 > 순위 > 상세 순으로…"></textarea>
+  <div class="row">
+    <button id="gen">요약 생성</button>
+    <button id="copy" class="secondary" disabled>복사</button>
+    <span class="hint">요약을 복사해 에이전트 대화창에 붙여넣으세요.</span>
+  </div>
+  <textarea id="summary" readonly placeholder="여기에 붙여넣을 요약이 생성됩니다."></textarea>
+</div>
+
+<script>
+  (function(){
+    var grid = document.getElementById('grid');
+    grid.addEventListener('change', function(e){
+      if (e.target && e.target.name === 'base') {
+        document.querySelectorAll('.option').forEach(function(o){ o.classList.remove('selected'); });
+        var card = e.target.closest('.option');
+        if (card) card.classList.add('selected');
+      }
+    });
+
+    function build(){
+      var checked = document.querySelector('input[name="base"]:checked');
+      var base = checked ? checked.value : '(아직 선택 안 함)';
+      var overall = document.getElementById('overall').value.trim() || '(없음)';
+      var lines = [];
+      lines.push('=== 디자인 선택 요약 (에이전트에게 붙여넣기) ===');
+      lines.push('베이스로 선택: ' + base);
+      lines.push('전체 수정 요구사항:');
+      lines.push(overall);
+      lines.push('');
+      lines.push('대안별 메모:');
+      document.querySelectorAll('.option').forEach(function(o){
+        var label = o.getAttribute('data-label') || '(무명)';
+        var ta = o.querySelector('textarea[data-notes]');
+        var note = (ta && ta.value.trim()) ? ta.value.trim() : '(없음)';
+        lines.push('- ' + label + ': ' + note);
+      });
+      return lines.join('\n');
+    }
+
+    document.getElementById('gen').addEventListener('click', function(){
+      var out = document.getElementById('summary');
+      out.value = build();
+      document.getElementById('copy').disabled = false;
+    });
+
+    document.getElementById('copy').addEventListener('click', function(){
+      var out = document.getElementById('summary');
+      out.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(out.value).then(function(){}, function(){});
+      }
+      this.textContent = ok ? '복사됨 ✓' : '직접 선택해 복사(Ctrl/Cmd+C)';
+      var b = this; setTimeout(function(){ b.textContent = '복사'; }, 1800);
+    });
+  })();
+</script>
+</body>
+</html>

@@ -1,10 +1,10 @@
 // 번들되는 코드·데이터의 라이선스·출처 목록과 고지 파일.
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { META_SCHEMA_VERSION } from '../../../src/data/meta-schema.ts'
 import { PipelineError, cmp } from './util.mjs'
 
-const KNOWN_LICENSES = new Set(['MIT', 'BSD-3-Clause', 'ISC', 'Apache-2.0', '0BSD', 'BSD-2-Clause'])
+const KNOWN_LICENSES = new Set(['MIT', 'BSD-3-Clause', 'ISC', 'Apache-2.0', '0BSD', 'BSD-2-Clause', 'CC0-1.0'])
 const LICENSE_FILES = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'license', 'LICENCE']
 
 const mitText = (holder) =>
@@ -71,6 +71,59 @@ function runtimePackages(root) {
   }
   Object.keys(top).forEach(walk)
   return [...out].sort(cmp)
+}
+
+/**
+ * 저장소에 원본 그대로 둔 정적 자산(sources.config.json assets). 고지 원문은 자산 옆 licenseFile에서 읽는다.
+ * 커밋 고정 저장소 자산: repo·commit(40자 SHA)·license(알려진 라이선스), 선택 path(저장소 안 경로).
+ * attributionOnly 자산(오픈 라이선스가 아닌 팬 위키 이미지 등): license NOASSERTION·source URL·retrievedAt(수집일), 출처·저작권 고지만 한다.
+ */
+function assetNotice(root, a) {
+  const w = `asset ${a?.id}`
+  const common = ['id', 'name', 'license', 'copyright', 'dir', 'licenseFile', 'usage']
+  const own = a?.attributionOnly === true ? ['source', 'retrievedAt'] : ['repo', 'commit']
+  for (const k of [...common, ...own]) {
+    if (typeof a?.[k] !== 'string' || !a[k]) throw new PipelineError(`${w}: ${k} 필요`)
+  }
+  if (!a.id.startsWith('asset:')) throw new PipelineError(`${w}: id는 asset: 접두`)
+  if (a.attributionOnly === true) {
+    if (a.license !== 'NOASSERTION') throw new PipelineError(`${w}: attributionOnly 자산 license는 NOASSERTION`)
+    if (!/^https:\/\//.test(a.source)) throw new PipelineError(`${w}: source는 https URL`)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(a.retrievedAt)) throw new PipelineError(`${w}: retrievedAt은 YYYY-MM-DD`)
+  } else {
+    if (!/^[0-9a-f]{40}$/.test(a.commit)) throw new PipelineError(`${w}: commit은 40자 SHA`)
+    if (!KNOWN_LICENSES.has(a.license)) throw new PipelineError(`${w}: 라이선스 불명확(${a.license})`)
+  }
+  if (!existsSync(join(root, a.dir)) || !readdirSync(join(root, a.dir)).length) throw new PipelineError(`${w}: ${a.dir} 없음`)
+  const file = join(root, a.licenseFile)
+  if (!existsSync(file)) throw new PipelineError(`${w}: ${a.licenseFile} 없음`)
+  const text = readFileSync(file, 'utf8').replace(/\r\n/g, '\n').trimEnd() + '\n'
+  if (!text.includes(a.copyright)) throw new PipelineError(`${w}: 고지 원문에 저작권 표기(${a.copyright}) 없음`)
+  if (a.attributionOnly === true) {
+    const entry = {
+      id: a.id,
+      kind: 'asset',
+      name: a.name,
+      version: `${a.retrievedAt} 수집`,
+      license: a.license,
+      attributionOnly: true,
+      source: a.source,
+      usage: a.usage,
+      noticeSource: `${a.licenseFile}(출처·저작권 고지, 오픈 라이선스 아님)`,
+    }
+    return { entry, text: { title: `${a.name} (${a.retrievedAt} 수집, 오픈 라이선스 아님, ${a.dir})`, text } }
+  }
+  const entry = {
+    id: a.id,
+    kind: 'asset',
+    name: a.name,
+    version: a.commit,
+    license: a.license,
+    source: `https://github.com/${a.repo}/tree/${a.commit}${a.path ? `/${a.path}` : ''}`,
+    usage: a.usage,
+    noticeSource: `${a.licenseFile}(${a.repo} ${a.licenseName ?? 'LICENSE'} @ ${a.commit} 원문)`,
+  }
+  return { entry, text: { title: `${a.name} @ ${a.commit} (${a.license}, ${a.dir})`, text } }
 }
 
 export const TRADEMARK =
@@ -149,6 +202,11 @@ export function buildLicenses(root, config, pokeapiLicenseText, metaIndex) {
     noticeSource: `${config.ko.repo}/${config.ko.license.path} @ ${config.ko.commit}`,
   })
   texts.push({ title: `PokeAPI @ ${config.ko.commit} (BSD-3-Clause)`, text: pokeapiLicenseText.replace(/\r\n/g, '\n').trimEnd() + '\n' })
+  for (const a of config.assets ?? []) {
+    const n = assetNotice(root, a)
+    entries.push(n.entry)
+    texts.push(n.text)
+  }
   if (months.length) {
     entries.push({
       id: 'data:smogon-stats',

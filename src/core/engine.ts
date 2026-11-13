@@ -17,8 +17,8 @@ type EngineTypes = Pokemon['types']
 const ENGINE_ALIASES = aliasesJson.engine as Record<string, Record<string, string> | undefined>
 const SPREAD_TARGETS = ['allAdjacent', 'allAdjacentFoes']
 /** 엔진 대미지 경로가 엔진 자체 스피드(gen 0에 999 상한)로 위력·순서를 정하는 기술과 특성 */
-const SPEED_DEPENDENT_MOVES = ['electroball', 'gyroball', 'payback']
-const SPEED_DEPENDENT_ATTACKER_ABILITIES = ['analytic']
+export const SPEED_DEPENDENT_MOVES: readonly string[] = ['electroball', 'gyroball', 'payback']
+export const SPEED_DEPENDENT_ATTACKER_ABILITIES: readonly string[] = ['analytic']
 
 /** 스냅샷 id → 엔진 표시명. 엔진에 없으면 ENGINE_UNSUPPORTED(매니페스트 기록이 빠진 경우의 방어선). */
 function engineName(kind: EngineKind, id: string): string {
@@ -26,6 +26,74 @@ function engineName(kind: EngineKind, id: string): string {
   const entry = gen[kind].get(toID(eid))
   if (!entry) throw coreError('ENGINE_UNSUPPORTED', kind, `${id}은 계산 엔진 데이터에 없다`)
   return entry.name
+}
+
+/** 엔진 기술 데이터의 능력치 대체 표시(바디프레스 offensiveStat 'def', 속임수 offensivePokemon 'target', 사이코쇼크 defensiveStat 'def'). */
+export function engineMoveOverrides(moveId: string): { defensiveStat?: string; offensiveStat?: string; offensivePokemon?: string } {
+  const m = gen.moves.get(toID(engineName('moves', moveId)))
+  const out: { defensiveStat?: string; offensiveStat?: string; offensivePokemon?: string } = {}
+  if (m?.overrideDefensiveStat) out.defensiveStat = m.overrideDefensiveStat
+  if (m?.overrideOffensiveStat) out.offensiveStat = m.overrideOffensiveStat
+  if (m?.overrideOffensivePokemon) out.offensivePokemon = m.overrideOffensivePokemon
+  return out
+}
+
+/**
+ * 기본 타입 상성 배율(엔진 타입표): 기술 타입 → 방어측 타입들의 곱(0·0.25·0.5·1·2·4).
+ * 특성·도구·날씨·테라 등에 따른 타입·상성 변화는 넣지 않는다. 엔진 타입표에 없는 타입은 CoreError(ENGINE_UNSUPPORTED).
+ */
+export function typeEffectiveness(moveType: string, defenderTypes: readonly string[]): number {
+  const t = gen.types.get(toID(moveType))
+  if (!t) throw coreError('ENGINE_UNSUPPORTED', 'move', `${moveType} 타입은 계산 엔진 데이터에 없다`)
+  const table = t.effectiveness as Readonly<Record<string, number | undefined>>
+  return defenderTypes.reduce((m, d) => {
+    const e = table[d]
+    if (e === undefined) throw coreError('ENGINE_UNSUPPORTED', 'defender', `${d} 타입은 계산 엔진 데이터에 없다`)
+    return m * e
+  }, 1)
+}
+
+/** 스킨 계열 특성: 노말 기술 → 그 타입(엔진 gen789 대미지 경로와 같은 규칙) */
+const ATE_ABILITIES: Readonly<Record<string, string>> = { aerilate: 'Flying', galvanize: 'Electric', pixilate: 'Fairy', refrigerate: 'Ice', dragonize: 'Dragon' }
+/** 엔진이 특성 타입 변화를 넣지 않는 기술 */
+const NO_TYPE_CHANGE_MOVES: readonly string[] = ['revelationdance', 'judgment', 'naturepower', 'technoblast', 'multiattack', 'naturalgift', 'weatherball', 'terrainpulse', 'struggle']
+/** 노말·격투 기술이 고스트에 맞는 특성(배짱·심안) */
+const GHOST_REVEALING_ABILITIES: readonly string[] = ['scrappy', 'mindseye']
+
+const abilityKey = (ability: string): string => toID(ENGINE_ALIASES.abilities?.[ability] ?? ability)
+
+/**
+ * 공격측 특성에 따른 기술 타입(엔진 대미지 경로와 같은 규칙): 스킨 특성(노말 → 비행·전기·페어리·얼음·드래곤), 촉촉보이스(소리 기술 → 물),
+ * 노말스킨(모든 기술 → 노말). 도구·날씨·테라 등에 따른 변화(웨더볼 등)는 넣지 않는다. 엔진에 없는 기술은 기본 타입 그대로.
+ */
+export function attackMoveType(moveId: string, baseType: string, ability: string): string {
+  if (NO_TYPE_CHANGE_MOVES.includes(moveId)) return baseType
+  const key = abilityKey(ability)
+  const ate = ATE_ABILITIES[key]
+  if (ate !== undefined) return baseType === 'Normal' ? ate : baseType
+  if (key === 'liquidvoice') {
+    const m = gen.moves.get(toID(ENGINE_ALIASES.moves?.[moveId] ?? moveId))
+    return m?.flags?.sound ? 'Water' : baseType
+  }
+  if (key === 'normalize') return 'Normal'
+  return baseType
+}
+
+/**
+ * 공격측 특성을 넣은 상성 배율(엔진 getMoveEffectiveness와 같은 타입별 곱): attackMoveType으로 바꾼 타입의 기본 상성, 배짱·심안이면
+ * 노말·격투 기술의 고스트 무효를 등배로. moveId를 주면 기술별 특례도 넣는다(프리즈드라이: 물에 2배, 플라잉프레스: 비행 상성을 곱함,
+ * 니힐라이트: 페어리에 등배). 방어측 특성(부유 등)·도구·필드는 넣지 않는다. 엔진 타입표에 없는 타입은 CoreError(ENGINE_UNSUPPORTED).
+ */
+export function attackEffectiveness(moveType: string, defenderTypes: readonly string[], ability: string, moveId?: string): number {
+  const revealed = GHOST_REVEALING_ABILITIES.includes(abilityKey(ability)) && (moveType === 'Normal' || moveType === 'Fighting')
+  const move = moveId === undefined ? '' : toID(ENGINE_ALIASES.moves?.[moveId] ?? moveId)
+  return defenderTypes.reduce((m, d) => {
+    if (revealed && d === 'Ghost') return m
+    if (move === 'freezedry' && d === 'Water') return m * 2
+    if (move === 'nihillight' && d === 'Fairy') return m
+    const e = typeEffectiveness(moveType, [d])
+    return m * (move === 'flyingpress' ? e * typeEffectiveness('Flying', [d]) : e)
+  }, 1)
 }
 
 /** 엔진은 overrides.types를 배열 깊은 병합하고 clone()마다 재병합하므로, 인스턴스와 그 사본에 타입을 다시 고정한다. */

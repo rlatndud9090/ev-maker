@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
-import { ALL_SP_ZERO, combo, fillSet, openPage, region } from './helpers'
+import { ALL_SP_ZERO, cards, combo, fillSet, openPage, openProduct, region, selectTab, waitComplete } from './helpers'
 
-test('로드·계산·조회 중 외부 origin 요청 0건', async ({ page, baseURL }) => {
+test('개발 화면(/#/dev) 로드·계산·조회 중 외부 origin 요청 0건', async ({ page, baseURL }) => {
   const origin = new URL(baseURL!).origin
   const all: string[] = []
   page.on('request', (r) => all.push(r.url()))
@@ -17,6 +17,26 @@ test('로드·계산·조회 중 외부 origin 요청 0건', async ({ page, base
   await expect(page.getByTestId('regulation-rules')).toContainText('M-B')
   await combo(page, '레귤레이션').selectOption('m-c')
   await expect(page.getByTestId('regulation-rules')).toContainText('M-C')
+
+  expect(all.length).toBeGreaterThan(0)
+  expect(all.filter((u) => !u.startsWith('data:') && new URL(u).origin !== origin)).toEqual([])
+})
+
+test('제품 화면 로드·탭 전환·카드 펼침·Bo3 전환 중 외부 origin 요청 0건', async ({ page, baseURL }) => {
+  const origin = new URL(baseURL!).origin
+  const all: string[] = []
+  page.on('request', (r) => all.push(r.url()))
+
+  await openProduct(page)
+  for (const tab of ['방어', '스피드', '공격'] as const) {
+    await selectTab(page, tab)
+    await waitComplete(page)
+  }
+  await cards(page).first().locator('button[aria-expanded]').first().click()
+  await expect(cards(page).first().getByTestId('row').first()).toBeVisible()
+  await combo(page, '형식').selectOption('bo3')
+  await expect(page.getByTestId('meta-source')).toContainText('Bo3')
+  await waitComplete(page)
 
   expect(all.length).toBeGreaterThan(0)
   expect(all.filter((u) => !u.startsWith('data:') && new URL(u).origin !== origin)).toEqual([])

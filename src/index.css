@@ -1,19 +1,154 @@
+/*
+ * 테마 토큰 — PokeQuiz(poke-battle-quiz) 팔레트 기반 2층 구조.
+ * raw 팔레트(--mb-*)는 순수 색값, 컴포넌트는 그 아래 역할 토큰(--bg/--card/--accent …)만 쓴다.
+ * 다크는 prefers-color-scheme로만 적용한다(토글 없음). 공식 포켓몬 UI·로고는 흉내 내지 않는다.
+ */
 :root {
-  --bg: #f7f7f5;
-  --panel: #fff;
-  --text: #1d1d1b;
-  --muted: #5d5d58;
-  --line: #d6d6d0;
-  --accent: #2456a6;
-  --boundary: #fff1c2;
-  --over: #ececec;
-  --error-bg: #fdecec;
-  --error: #9b1c1c;
+  /* ── raw 팔레트 ── */
+  --mb-red: #ee1515; /* 브랜드 빨강 — 큰 면·보더 한정, 본문 텍스트 금지 */
+  --mb-ink: #222224;
+  --mb-lavender: #7b64c2;
+  --mb-lavender-deep: #6a4fb0;
+  --mb-lavender-dark: #a091db;
+  --mb-lavender-bright: #b3a6e4;
+  --mb-lavender-ink: #1e1633;
+  --mb-white: #ffffff;
+  --mb-grey-100: #f4f4f5;
+  --mb-grey-200: #e4e4e7;
+  --mb-grey-500: #8a8a90;
+  --mb-grey-600: #64646b;
+  --mb-danger-light: #c0392b;
+  --mb-danger-dark: #ff6b66;
+  /* 판정 파스텔(PokeQuiz tier) — 위 글자는 항상 --tier-ink(대비 ≥ 4.5:1) */
+  --mb-tier-super: #d1ebd6;
+  --mb-tier-neutral: #f4e7b0;
+  --mb-tier-weak: #f8dcc0;
+  --mb-tier-none: #f2ccc8;
+  --mb-tier-on-dark: #3a2e22;
+  /* 타입색(partywhale 아이콘 원본 팔레트) — 테두리·연한 배경 섞기용, 글자색 금지 */
+  --type-normal: #828282;
+  --type-fire: #e4613e;
+  --type-water: #3a9de2;
+  --type-electric: #dfbc28;
+  --type-grass: #439837;
+  --type-ice: #47c8c8;
+  --type-fighting: #e49021;
+  --type-poison: #9354cb;
+  --type-ground: #a4733c;
+  --type-flying: #74aad0;
+  --type-psychic: #e96c8c;
+  --type-bug: #9f9f28;
+  --type-rock: #a9a481;
+  --type-ghost: #6f4570;
+  --type-dragon: #576fbc;
+  --type-dark: #4f4747;
+  --type-steel: #77b2cb;
+  --type-fairy: #e18ce1;
+
+  /* ── 역할 토큰(라이트) ── */
   color-scheme: light;
-  font-family: system-ui, -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --bg: #f7f7f8;
+  --bg-gradient:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.9), transparent 26%),
+    linear-gradient(180deg, #fafafa 0%, #f2f2f4 100%);
+  --card: var(--mb-white);
+  --input: var(--mb-grey-100);
+  --surface: var(--mb-grey-100);
+  --text: #2b2b30;
+  --text-strong: #131315;
+  --muted: var(--mb-grey-600);
+  --border: var(--mb-grey-200);
+  --control-border: var(--mb-grey-500);
+  --accent: var(--mb-lavender);
+  --accent-soft: rgba(123, 100, 194, 0.12);
+  --accent-strong: var(--mb-lavender-deep);
+  --on-accent: var(--mb-white);
+  --danger: var(--mb-danger-light);
+  --danger-soft: rgba(192, 57, 43, 0.1);
+  --danger-border: rgba(192, 57, 43, 0.45);
+  /* 포켓몬 아이콘 뒤 받침: 라이트는 없음, 다크는 어두운 아이콘(오롱털 등)이 배경에 묻히지 않게 옅은 밝은 원 */
+  --mon-icon-halo: none;
+  --shadow:
+    0 20px 40px rgba(17, 17, 17, 0.08),
+    0 6px 16px rgba(17, 17, 17, 0.08);
+  --shadow-card:
+    0 1px 2px rgba(17, 17, 17, 0.05),
+    0 3px 10px rgba(17, 17, 17, 0.04);
+  --scroll-shade: rgba(17, 17, 17, 0.16);
+  /* 판정 색: 면(파스텔)·면 위 글자·카드 위 글자 */
+  --tier-good: var(--mb-tier-super);
+  --tier-mid: var(--mb-tier-neutral);
+  --tier-warn: var(--mb-tier-weak);
+  --tier-bad: var(--mb-tier-none);
+  --tier-ink: var(--mb-tier-on-dark);
+  --tier-ink-muted: #5c4f42;
+  /* 5단 판정 면(결과 배지·0~32 띠·칩 공용): 확정1타·고난수·중난수·저난수·확정견딤 — 글자는 --tier-ink(대비 ≥ 4.5:1) */
+  --badge-red: #f6b8b0;
+  --badge-orange: #f9cc98;
+  --badge-yellow: #f6e58d;
+  --badge-lime: #cfeb98;
+  --badge-green: #a9dcb0;
+  --mid: #7a5a00;
+  --bad: #b1352a;
+  /* 고정한 배분(직접 추가 포함 — 배지·메뉴 항목·상세 탭) 면 — 본문·회색 글자 대비 ≥ 4.5:1 */
+  --pinned-bundle-bg: #e3f0f5;
+  /* dev 표 강조(경계 행·예산 밖 행) */
+  --boundary: var(--mb-tier-neutral);
+  --over: var(--surface);
+
+  font-family: system-ui, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
   line-height: 1.45;
   color: var(--text);
-  background: var(--bg);
+  background: var(--bg-gradient), var(--bg);
+  background-attachment: fixed;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --mb-ink: #3a3a42;
+    --bg: #121212;
+    --bg-gradient:
+      radial-gradient(circle at top left, rgba(255, 255, 255, 0.04), transparent 26%),
+      linear-gradient(180deg, #161616 0%, #101010 100%);
+    --card: #1e1e20;
+    --input: #1a1a1c;
+    --surface: #232326;
+    --text: #e8e8ea;
+    --text-strong: #f4f4f6;
+    --muted: #9a9aa2;
+    --border: #33333a;
+    --control-border: #6e6e75;
+    --accent: var(--mb-lavender-dark);
+    --accent-soft: rgba(160, 145, 219, 0.18);
+    --accent-strong: var(--mb-lavender-bright);
+    --on-accent: var(--mb-lavender-ink);
+    --danger: var(--mb-danger-dark);
+    --danger-soft: rgba(255, 107, 102, 0.12);
+    --danger-border: rgba(255, 107, 102, 0.45);
+    --shadow:
+      0 20px 40px rgba(0, 0, 0, 0.5),
+      0 6px 16px rgba(0, 0, 0, 0.4);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --scroll-shade: rgba(0, 0, 0, 0.6);
+    /* 다크에서도 판정 면은 밝은 파스텔 + 어두운 잉크(대비 유지), 살짝 무광 */
+    --tier-good: #bfe3c8;
+    --tier-mid: #ecdaa4;
+    --tier-warn: #eccfb6;
+    --tier-bad: #e6c2be;
+    --tier-ink: #2a201a;
+    --tier-ink-muted: #4f4236;
+    --pinned-bundle-bg: #1f353f;
+    --badge-red: #e9a9a1;
+    --badge-orange: #eabf8e;
+    --badge-yellow: #e6d585;
+    --badge-lime: #c2dc8c;
+    --badge-green: #9ccfa4;
+    --mid: #e3c56a;
+    --bad: #ff8a80;
+    --boundary: rgba(236, 218, 164, 0.22);
+    --mon-icon-halo: radial-gradient(circle closest-side, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08) 75%, transparent);
+  }
 }
 
 * {
@@ -55,9 +190,9 @@ h3 {
 }
 
 .panel {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
   padding: 0.75rem;
   min-width: 0;
 }
@@ -86,9 +221,9 @@ select {
   width: 100%;
   min-width: 0;
   padding: 0.3rem 0.4rem;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: #fff;
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  background: var(--input);
   color: inherit;
 }
 
@@ -103,8 +238,8 @@ select:focus-visible {
 }
 
 fieldset {
-  border: 1px solid var(--line);
-  border-radius: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   margin: 0.75rem 0 0;
   padding: 0.5rem;
   min-width: 0;
@@ -199,7 +334,7 @@ caption {
 
 th,
 td {
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   padding: 0.25rem 0.4rem;
   text-align: left;
   font-variant-numeric: tabular-nums;
@@ -229,9 +364,9 @@ td.src {
 }
 
 .errors {
-  background: var(--error-bg);
-  color: var(--error);
-  border-radius: 4px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-radius: 8px;
   padding: 0.5rem 0.75rem;
   margin-top: 0.75rem;
 }
@@ -239,4 +374,1878 @@ td.src {
 .errors ul {
   margin: 0.25rem 0 0;
   padding-left: 1.2rem;
+}
+
+/* ---------- 제품 화면(main[data-app='product']) ---------- */
+
+/* 넓은 모니터에서 줄이 너무 길어지지 않게 작업 영역·푸터 폭을 제한하고 가운데 정렬 */
+:root {
+  --page-max: 76rem;
+}
+
+.product {
+  /* 불투명: 반투명이면 sticky 줄 뒤로 스크롤된 카드 문구가 비친다 */
+  --sticky-bg: var(--bg);
+  /* sticky 줄 위 안전 영역(노치)까지 같은 배경으로 덮는다 */
+  --sticky-cover: 0 calc(-1 * env(safe-area-inset-top, 0px)) 0 var(--sticky-bg);
+  max-width: var(--page-max);
+}
+
+/* hidden 속성이 아래 display 지정에 지지 않게 */
+.product [hidden] {
+  display: none !important;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.product button {
+  font: inherit;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  background: var(--card);
+  color: inherit;
+  cursor: pointer;
+}
+
+.product button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.product button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.product button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.product button.danger {
+  color: var(--danger);
+  border-color: currentColor;
+  justify-self: start;
+}
+
+.product button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.product button.primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.product-header h1 {
+  margin: 0;
+  color: var(--text-strong);
+}
+
+.product-layout {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+/*
+ * 넓은 화면: 페이지는 뷰포트 높이에 고정(문서 세로 스크롤 없음).
+ * 사이드바와 상대 목록 박스가 각자 스크롤한다(사용자 피드백 2026-11-10).
+ */
+@media (min-width: 60rem) {
+  .product {
+    height: calc(100dvh - 2rem);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .product-layout {
+    grid-template-columns: minmax(20rem, 24rem) minmax(0, 1fr);
+    align-items: stretch;
+    min-height: 0;
+  }
+  .sidebar {
+    min-height: 0;
+    overflow-y: auto;
+    border-radius: 12px;
+  }
+  .results {
+    min-height: 0;
+    /* 추가 패널이 아주 길 때만 열 전체가 스크롤하는 안전장치 */
+    overflow-y: auto;
+  }
+  .result-box {
+    min-height: 14rem;
+  }
+  .my-set .collapse-btn {
+    display: none;
+  }
+}
+
+.my-set {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  padding: 0.75rem;
+  min-width: 0;
+}
+
+.my-set-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.my-set-head h2 {
+  margin: 0;
+}
+
+.my-set-summary {
+  margin: 0.4rem 0 0;
+  font-size: 0.9rem;
+}
+
+.chips {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.chip-field {
+  min-width: 0;
+}
+
+.chip-field.wide-chip {
+  grid-column: 1 / -1;
+}
+
+.chip-field label.check {
+  padding-top: 1.3rem;
+}
+
+.field-label {
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 0.15rem;
+}
+
+.move-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+/* 기술 칸: 해석된 기술이면 data-type으로 타입색 테두리 + 연한 타입색 배경(글자는 --text) */
+.move-slot {
+  --slot-type: var(--control-border);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0 0 0 0.35rem;
+  border: 1px solid var(--slot-type);
+  border-radius: 8px;
+  background: var(--input);
+}
+
+.move-slot[data-type] {
+  background: color-mix(in srgb, var(--slot-type) 20%, var(--input));
+}
+
+.move-slot:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.move-slot .combo {
+  flex: 1;
+}
+
+.move-slot input {
+  border: 0;
+  background: transparent;
+  padding-left: 0.05rem;
+  /* 오른쪽 목록의 기술 라벨(.move-chip)과 같은 굵기·크기 */
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.move-slot input:focus-visible {
+  outline: none;
+}
+
+.type-icon {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+:is(.move-slot, .move-chip)[data-type='normal'] { --slot-type: var(--type-normal); }
+:is(.move-slot, .move-chip)[data-type='fire'] { --slot-type: var(--type-fire); }
+:is(.move-slot, .move-chip)[data-type='water'] { --slot-type: var(--type-water); }
+:is(.move-slot, .move-chip)[data-type='electric'] { --slot-type: var(--type-electric); }
+:is(.move-slot, .move-chip)[data-type='grass'] { --slot-type: var(--type-grass); }
+:is(.move-slot, .move-chip)[data-type='ice'] { --slot-type: var(--type-ice); }
+:is(.move-slot, .move-chip)[data-type='fighting'] { --slot-type: var(--type-fighting); }
+:is(.move-slot, .move-chip)[data-type='poison'] { --slot-type: var(--type-poison); }
+:is(.move-slot, .move-chip)[data-type='ground'] { --slot-type: var(--type-ground); }
+:is(.move-slot, .move-chip)[data-type='flying'] { --slot-type: var(--type-flying); }
+:is(.move-slot, .move-chip)[data-type='psychic'] { --slot-type: var(--type-psychic); }
+:is(.move-slot, .move-chip)[data-type='bug'] { --slot-type: var(--type-bug); }
+:is(.move-slot, .move-chip)[data-type='rock'] { --slot-type: var(--type-rock); }
+:is(.move-slot, .move-chip)[data-type='ghost'] { --slot-type: var(--type-ghost); }
+:is(.move-slot, .move-chip)[data-type='dragon'] { --slot-type: var(--type-dragon); }
+:is(.move-slot, .move-chip)[data-type='dark'] { --slot-type: var(--type-dark); }
+:is(.move-slot, .move-chip)[data-type='steel'] { --slot-type: var(--type-steel); }
+:is(.move-slot, .move-chip)[data-type='fairy'] { --slot-type: var(--type-fairy); }
+
+.combo {
+  position: relative;
+  min-width: 0;
+}
+
+.combo-list {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  top: 100%;
+  margin: 2px 0 0;
+  padding: 0.2rem 0;
+  list-style: none;
+  max-height: 16rem;
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.combo-list li {
+  padding: 0.3rem 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.combo-list li.active,
+.combo-list li:hover {
+  background: var(--accent-soft);
+}
+
+.field-alert {
+  margin: 0.2rem 0 0;
+  padding: 0.2rem 0.4rem;
+  border-radius: 8px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 0.82rem;
+}
+
+.means-notes {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  color: var(--accent);
+}
+
+.sp-block {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.sp-remaining {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.sp-row {
+  display: grid;
+  grid-template-columns: 1.7rem 1.7rem minmax(3rem, 1fr) 1.7rem 3rem 3rem 2.4rem;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.sp-row .sp-alert {
+  grid-column: 1 / -1;
+}
+
+.sp-row .sp-alert:empty {
+  display: none;
+}
+
+.sp-stat {
+  font-weight: 700;
+}
+
+.nat-plus {
+  color: var(--bad);
+}
+
+.nat-minus {
+  color: var(--accent);
+}
+
+.product .sp-row .step {
+  padding: 0.1rem 0;
+  width: 1.7rem;
+  text-align: center;
+}
+
+/* 성격 보정 토글(+ 상승 / − 하락). +·−는 각각 한 줄에만 켜진다. */
+.nat-btns {
+  display: inline-flex;
+  gap: 0.15rem;
+}
+
+.product .nat-btn {
+  width: 1.4rem;
+  font-size: 0.7rem;
+  padding: 0.1rem 0;
+  text-align: center;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.product .nat-btn.plus[aria-pressed='true'] {
+  background: var(--tier-bad);
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.product .nat-btn.minus[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+/* 자동 지정 하락: 흐리게 + 점선 */
+.product .nat-btn.minus[data-auto='true'] {
+  background: var(--accent-soft);
+  border-style: dashed;
+  color: var(--accent);
+}
+
+.sp-row input[type='range'] {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.sp-row .sp-num {
+  padding: 0.2rem 0.3rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* 결과 영역 */
+.results {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.results > * {
+  flex: none;
+}
+
+/* 넓은 화면의 툴바는 목록 박스 밖에 있어 sticky가 필요 없다(좁은 화면은 아래에서 탭 줄만 고정). */
+.toolbar {
+  padding-block: 0.1rem 0.2rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+/* 상대 목록 박스: 남은 높이를 채우는 자체 스크롤 영역(테두리·배경·안쪽 여백·스크롤 그림자) */
+.result-box {
+  position: relative;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+.results > .result-box {
+  flex: 1 1 auto;
+}
+
+.result-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 0.6rem 0.75rem;
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+  scrollbar-gutter: stable;
+}
+
+.result-box::before,
+.result-box::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0.9rem;
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.result-box::before {
+  top: 0;
+  background: radial-gradient(farthest-side at 50% 0, var(--scroll-shade), transparent);
+}
+
+.result-box::after {
+  bottom: 0;
+  background: radial-gradient(farthest-side at 50% 100%, var(--scroll-shade), transparent);
+}
+
+.result-box[data-shade-top='true']::before,
+.result-box[data-shade-bottom='true']::after {
+  opacity: 1;
+}
+
+/* 페이지 푸터: 뷰포트에 맞춘 작업 영역 아래, 경계선으로 구분 */
+.product-footer {
+  max-width: var(--page-max);
+  margin: 1.5rem auto 0;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.product-footer .panel {
+  background: var(--card);
+}
+
+.tabs-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.product .tabs [role='tab'] {
+  padding: 0.35rem 1rem;
+  font-weight: 600;
+}
+
+.product .tabs [role='tab'][aria-selected='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.meta-source {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.toolbar-controls {
+  display: grid;
+  gap: 0.45rem;
+}
+
+/* 설정 줄: 왼쪽 작은 굵은 라벨 + 컨트롤 줄(넓은 화면 한 줄, 좁으면 라벨 위·컨트롤 줄바꿈) */
+.tool-row {
+  display: grid;
+  grid-template-columns: 4.6rem minmax(0, 1fr);
+  align-items: end;
+  gap: 0.2rem 0.6rem;
+  min-width: 0;
+}
+
+.tool-row-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  padding-bottom: 0.45rem;
+  white-space: nowrap;
+}
+
+/* 포켓몬 찾기 줄은 라벨 없이 검색창이 전체 폭 */
+.tool-row-search {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 40rem) {
+  .tool-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tool-row-label {
+    padding-bottom: 0;
+  }
+}
+
+/* 정렬: 라벨 + 두 버튼 한 덩어리(하나만 눌림) */
+.sort-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.9rem;
+}
+
+.segmented {
+  display: inline-flex;
+}
+
+.product .segmented button {
+  border-radius: 0;
+  white-space: nowrap;
+}
+
+.product .segmented button:first-child {
+  border-radius: 8px 0 0 8px;
+}
+
+.product .segmented button:last-child {
+  border-radius: 0 8px 8px 0;
+  margin-left: -1px;
+}
+
+.product .segmented button[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  position: relative;
+}
+
+.tool-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.4rem 0.75rem;
+}
+
+.num-field {
+  width: 7rem;
+}
+
+/* 판정 기준 "고난수 기준 [n]/16 (87.5%)": 입력 칸 옆에 분모·백분율·안내를 한 줄로 */
+.roll-field {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-end;
+  gap: 0.2rem 0.4rem;
+}
+
+/* 라벨 "고난수 견딤 기준"은 한 줄, 입력 칸만 좁게 */
+.roll-input {
+  white-space: nowrap;
+}
+
+.roll-input input {
+  width: 5.5rem;
+}
+
+.roll-field .field-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 단위·백분율은 입력 바로 옆 한 줄 */
+.roll-unit {
+  flex: none;
+  padding-bottom: 0.35rem;
+  white-space: nowrap;
+}
+
+.roll-denom,
+.roll-percent {
+  font-variant-numeric: tabular-nums;
+}
+
+.roll-percent {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.field-hint {
+  color: var(--danger);
+  font-size: 0.8rem;
+  padding-bottom: 0.35rem;
+}
+
+.tool-row .num-field {
+  width: 8.5rem;
+}
+
+.tool-row .num-field:first-child {
+  width: 6rem;
+}
+
+/* 최소 사용률(%) 입력: 라벨 폭만큼만 차지하고 값 칸은 2~4자리 폭(통계 설정 네 칸이 넓은 화면에서 한 줄에 들어가게) */
+.tool-row .num-field.share-field {
+  width: auto;
+  white-space: nowrap;
+}
+
+.tool-row .num-field.share-field input {
+  width: 5.5rem;
+}
+
+.inline-select select {
+  width: auto;
+}
+
+.pick {
+  min-width: 0;
+}
+
+.pick-chips,
+.move-chips {
+  list-style: none;
+  margin: 0.3rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.pick-chips li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 0.05rem 0.2rem 0.05rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.product .pick-chips button {
+  padding: 0 0.4rem;
+  border-radius: 999px;
+}
+
+
+.custom-panel {
+  background: var(--card);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.custom-panel h2 {
+  margin: 0;
+}
+
+.group-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.move-picker {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.move-chips {
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.chip-check {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.85rem;
+  background: var(--card);
+}
+
+.chip-check.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.product .chip-check button {
+  padding: 0 0.35rem;
+  border-radius: 999px;
+}
+
+.panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.tab-panel {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.tab-panel:focus-visible {
+  outline: 2px solid var(--accent);
+}
+
+.tab-panel.superseded .cards {
+  opacity: 0.5;
+}
+
+.panel-status {
+  /* 목록 박스 안에서 진행 줄은 위에 붙어 있는다(불투명 배경) */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
+  padding-block: 0.5rem 0.3rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* 진행 줄 오른쪽 끝(목록 뷰 오른쪽 위) */
+.product .custom-add-btn {
+  margin-left: auto;
+  color: var(--text);
+  font-size: 0.85rem;
+  padding: 0.2rem 0.6rem;
+}
+
+/* 계산결과순 그룹 라벨(목록 안 구분 항목) */
+.sort-group {
+  padding-top: 0.45rem;
+}
+
+.sort-group:first-child {
+  padding-top: 0;
+}
+
+.sort-group-label {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+/* 배지와 "까지 가능"은 붙여 쓴다(사용자 표기 "확정1타까지 가능"). 인라인 흐름이라 접근 이름에도 빈칸이 끼지 않는다. */
+.sort-group-name {
+  display: inline;
+}
+
+.sort-group-name .ko-badge {
+  margin-right: 0.12rem;
+}
+
+.sort-group-count {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.78rem;
+}
+
+.updating-badge {
+  background: var(--tier-mid);
+  color: var(--tier-ink);
+  border-radius: 999px;
+  padding: 0.05rem 0.4rem;
+  font-weight: 600;
+}
+
+.tab-error {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+}
+
+.tab-error p {
+  margin: 0.25rem 0 0;
+}
+
+.tab-error ul {
+  margin: 0.25rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.tab-notice,
+.card-notice {
+  margin: 0;
+  padding: 0.3rem 0.5rem;
+  background: var(--accent-soft);
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.empty {
+  margin: 0;
+  padding: 0.75rem;
+  background: var(--card);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  min-width: 0;
+}
+
+.card.card-error {
+  border-color: var(--danger-border);
+}
+
+.product .card-line {
+  width: 100%;
+  box-sizing: border-box;
+  cursor: pointer;
+  text-align: left;
+  /* 표처럼 열을 맞춘다: 포켓몬 | 배분 | 기술 | 결과 | 외 n행 (모든 카드가 같은 열 폭, 외 n행만 오른쪽 끝) */
+  display: grid;
+  /* 배분 열은 버튼(테두리·▾ 포함) "H32↑ B32↑ 100.0%"가 들어가는 폭: 이웃 열을 침범하지 않게.
+     결과 열은 "고난수1타 93.8%" 배지 + "변동 가능" 태그가 한 줄에 들어가는 폭 */
+  /* 이름 열은 "나인테일(알로라의 모습)"처럼 폼 이름이 붙어도 한 줄(기술 열의 남는 폭에서 가져온다) */
+  /* 이름 열은 아이콘(2rem) + 틈 포함 */
+  grid-template-columns: 12.6rem 10.5rem minmax(0, 10.8rem) 11rem minmax(2.8rem, 1fr);
+  grid-template-areas: 'name bundle move result more';
+  align-items: center;
+  gap: 0.2rem 0.6rem;
+  padding: 0.5rem 0.6rem;
+}
+
+.card-who {
+  grid-area: name;
+  min-width: 0;
+  /* 아이콘 | 이름(+출처 태그) */
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  column-gap: 0.4rem;
+}
+
+.card-who > .mon-icon {
+  align-self: center;
+}
+
+/* 출처 태그 줄이 있는 커스텀 행만 아이콘이 두 줄에 걸친다(없으면 빈 둘째 줄이 이름을 위로 밀지 않게) */
+.card-who:has(> .card-meta) > .mon-icon {
+  grid-row: span 2;
+}
+
+.card-who > :not(.mon-icon) {
+  grid-column: 2;
+  min-width: 0;
+}
+
+/* 포켓몬 아이콘(Champions 메뉴 아이콘). 이미지가 없으면 같은 크기 빈 자리 */
+.mon-icon {
+  display: block;
+  flex: none;
+  object-fit: contain;
+  image-rendering: auto;
+}
+
+.mon-icon-empty {
+  box-sizing: border-box;
+  border-radius: 6px;
+}
+
+/* 다크: 그림이 있는 목록 아이콘 뒤 받침 원(빈 자리는 그대로) */
+img.mon-icon {
+  background: var(--mon-icon-halo);
+}
+
+.card-who > .mon-icon {
+  width: 2rem;
+  height: 2rem;
+}
+
+/* 내 포켓몬: 종 검색 왼쪽 이미지 영역 */
+.species-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.species-row > .combo {
+  flex: 1 1 auto;
+}
+
+.my-mon-icon {
+  width: 3.5rem;
+  height: 3.5rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--mon-icon-halo), var(--surface);
+  box-sizing: border-box;
+}
+
+.my-mon-icon.mon-icon-empty {
+  border-style: dashed;
+}
+
+/* 펼침 토글(이름 칸): 투명 버튼. 클릭은 줄(.card-line)로 버블돼 거기서 토글한다 */
+.product .card-toggle {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  align-items: flex-start;
+}
+
+/* 이름 칸(아이콘 | 이름): 이름을 아이콘 세로 가운데에. 위 .card-toggle의 flex-start보다 구체적이어야 이긴다 */
+.product .card-toggle.card-who {
+  align-items: center;
+}
+
+.product .card-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.card-line > .bundle-cell {
+  grid-area: bundle;
+  justify-self: start;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+}
+/* 열보다 긴 배분 라벨도 이웃 칸(기술)을 덮지 않고 칸 안에서 자른다 */
+.card-line > .bundle-cell > .bundle-btn,
+.card-line > .bundle-cell > .card-bundle {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 고를 수 없는 배분(선택지 하나)은 테두리 없이 글자만: 고를 수 있는 배지(.bundle-btn)와 구분된다. 패딩은 열 정렬용으로 남긴다 */
+.card-line > .bundle-cell > .card-bundle {
+  border-color: transparent;
+}
+
+.bundle-pick {
+  position: relative;
+  display: inline-block;
+}
+
+/* 고를 수 있는 배분 배지: 일반 배지보다 진한 테두리 + ▾, 호버·포커스 때 강조색 면 */
+.product .bundle-btn {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0.05rem 0.4rem 0.05rem 0.45rem;
+  border: 1px solid var(--control-border);
+  border-radius: 6px;
+  background: var(--card);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background-color 0.12s,
+    border-color 0.12s;
+}
+
+.product .bundle-btn .card-bundle {
+  padding: 0;
+  border: 0;
+}
+
+.product .bundle-btn:hover,
+.product .bundle-btn:focus-visible,
+.product .bundle-btn[aria-expanded='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.product .bundle-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.bundle-caret {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.product .bundle-btn:hover .bundle-caret,
+.product .bundle-btn[aria-expanded='true'] .bundle-caret {
+  color: var(--accent-strong);
+}
+
+.bundle-menu {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  top: calc(100% + 3px);
+  /* 내용 폭(한 줄 직접 추가 폼·항목)만큼 넓어지되 화면을 넘지 않는다 */
+  width: max-content;
+  min-width: 100%;
+  max-width: min(20rem, calc(100vw - 2rem));
+  box-sizing: border-box;
+  max-height: min(15rem, 50vh);
+  overflow-y: auto;
+  padding: 0.2rem;
+  display: grid;
+  gap: 1px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  cursor: default;
+  /* 키보드로 옮긴 항목이 맨 위 고정 추가 폼 밑에 가리지 않게 */
+  scroll-padding-top: 2.6rem;
+}
+
+/* 메뉴 빈 곳 클릭으로 메뉴 자체가 포커스를 받을 때(tabindex −1) 테두리를 그리지 않는다 */
+.bundle-menu:focus {
+  outline: none;
+}
+
+.bundle-menu.up {
+  top: auto;
+  bottom: calc(100% + 3px);
+}
+
+.product .bundle-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.3rem 0.45rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.product .bundle-opt:hover,
+.product .bundle-opt:focus-visible {
+  background: var(--accent-soft);
+  outline: none;
+}
+
+.product .bundle-opt[aria-checked='true'] {
+  box-shadow: inset 3px 0 0 var(--accent);
+  background: var(--surface);
+}
+
+.product .bundle-opt[aria-checked='true']:hover,
+.product .bundle-opt[aria-checked='true']:focus-visible {
+  background: var(--accent-soft);
+}
+
+.product .bundle-opt-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+}
+
+/* 항목 오른쪽: 결과 배지 + 변동 표시 */
+.bundle-opt-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+}
+
+/* 판정이 내 SP·성격 조정으로 바뀔 수 있음(결과 배지 옆) */
+.variable-tag {
+  display: inline-block;
+  padding: 0 0.35em;
+  border: 1px solid var(--accent);
+  border-radius: 0.25rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--accent-strong);
+  white-space: nowrap;
+}
+
+.variable-tag.compact {
+  padding: 0 0.25em;
+  font-size: 0.62rem;
+}
+
+.ko-badge.ko-small {
+  font-size: 0.7rem;
+  padding: 0 0.4rem;
+}
+
+/* 고정한 배분(직접 추가 포함): 배지·메뉴 항목·상세 탭 모두 같은 면 색(호버·포커스·선택 강조는 그 위에 그대로) */
+.product .bundle-btn.pinned-bundle,
+.product .bundle-opt.pinned-bundle {
+  background: var(--pinned-bundle-bg);
+}
+
+/* 호버만 강조색 면. 포커스·펼침·선택에서는 사용자 면 색을 유지하고 테두리·윤곽선으로 강조한다
+   (추가 직후 포커스가 배지로 돌아와도 다른 면 색이 그대로 보이게) */
+.product .bundle-btn.pinned-bundle:hover,
+.product .bundle-opt.pinned-bundle:hover {
+  background: var(--accent-soft);
+}
+
+.product .bundle-btn.pinned-bundle:focus-visible,
+.product .bundle-btn.pinned-bundle[aria-expanded='true'] {
+  background: var(--pinned-bundle-bg);
+}
+
+.product .bundle-opt.pinned-bundle:focus-visible {
+  background: var(--pinned-bundle-bg);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* 선택된 사용자 항목: 면 색은 그대로, 왼쪽 막대 + 둘레 선으로 선택 표시 */
+.product .bundle-opt.pinned-bundle[aria-checked='true'],
+.product .bundle-opt.pinned-bundle[aria-checked='true']:focus-visible {
+  background: var(--pinned-bundle-bg);
+  box-shadow:
+    inset 3px 0 0 var(--accent),
+    inset 0 0 0 1px var(--accent);
+}
+
+.product .bundle-opt.pinned-bundle[aria-checked='true']:hover {
+  background: var(--accent-soft);
+}
+
+/* 배분 항목 줄: 선택 항목 + 오른쪽 끝 같은 폭 핀 칸(모든 항목이 같은 칸을 가져 결과 배지가 세로로 맞는다) */
+.bundle-opt-row {
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+}
+
+.bundle-opt-row > .bundle-opt {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.product .bundle-pin {
+  flex: 0 0 1.75rem;
+  width: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.product .bundle-pin[aria-pressed='true'],
+.product .bundle-pin[aria-checked='true'] {
+  color: var(--accent-strong);
+}
+
+.product .bundle-pin:hover,
+.product .bundle-pin:focus-visible {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.product .bundle-pin:hover {
+  box-shadow: none;
+}
+
+/* 핀이 없는 항목(목록 밖 타겟 프리셋)의 빈 칸 */
+.product .bundle-pin.pin-slot {
+  cursor: default;
+}
+
+.pin-icon {
+  display: block;
+}
+
+/* 변동 표시가 없는 항목의 같은 폭 빈 칸 */
+.variable-tag.variable-slot {
+  visibility: hidden;
+}
+
+/* 직접 추가 폼(메뉴 최상단·상세 왼쪽 목록 위): "H [ ] B [ ] [추가]"는 한 줄, 안내만 아래 줄 */
+.bundle-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.3rem 0.45rem 0.4rem;
+  margin-bottom: 0.15rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+  /* 선택지가 많아 메뉴·목록을 스크롤해도 맨 위에 남는다(메뉴 패딩 0.2rem만큼 위로) */
+  position: sticky;
+  top: -0.2rem;
+  z-index: 1;
+  background: var(--card);
+}
+
+.bundle-add-fields {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.bundle-add label {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.15rem;
+  font-weight: 600;
+}
+
+.bundle-add input {
+  width: 2.6rem;
+  padding: 0.05rem 0.25rem;
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: right;
+  /* 두 자리 숫자가 잘리지 않게 스핀 버튼을 숨긴다(↑↓ 키로는 그대로 증감) */
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.bundle-add input::-webkit-outer-spin-button,
+.bundle-add input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.product .bundle-add button {
+  flex: 0 0 auto;
+  padding: 0.05rem 0.45rem;
+  font-size: 0.8rem;
+  border-radius: 6px;
+  /* "추가" 두 글자가 좁은 폭에서 두 줄로 갈라지지 않게 */
+  white-space: nowrap;
+}
+
+.bundle-add-hint {
+  flex-basis: 100%;
+  font-size: 0.75rem;
+  white-space: normal;
+  color: var(--danger);
+}
+
+/* 펼친 상세: 왼쪽 배분 목록(세로 고정) | 오른쪽 선택 배분의 판정 행 */
+.detail-grid {
+  display: grid;
+  /* 왼쪽 열은 13rem(두 능력치 한 줄 추가 폼이 들어가는 폭), 관여 능력치가 3개 이상이라 폼이 더 넓으면 그 폭까지 늘어난다.
+     오른쪽 SP 띠에 폭을 더 주려고 하한만 둔다 */
+  grid-template-columns: minmax(13rem, min-content) minmax(0, 1fr);
+  align-items: start;
+  gap: 0.6rem 0.9rem;
+  min-width: 0;
+}
+
+.bundle-side {
+  display: grid;
+  gap: 1px;
+  align-content: start;
+  min-width: 0;
+  max-height: min(26rem, 70vh);
+  overflow-y: auto;
+  padding: 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  scrollbar-width: thin;
+  /* 키보드로 옮긴 항목이 맨 위 고정 추가 폼 밑에 가리지 않게 */
+  scroll-padding-top: 2.6rem;
+}
+
+/* 상세 목록: 선택 열(radiogroup) + 핀 열(group). 두 열이 같은 줄을 공유해(subgrid) 항목과 핀이 같은 높이, 결과 배지는 핀 열 바로 왼쪽에 맞는다 */
+.bundle-rows {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: repeat(var(--bundle-rows, 1), auto);
+  gap: 1px;
+  min-width: 0;
+}
+
+.bundle-radios,
+.bundle-pins {
+  display: grid;
+  grid-row: 1 / span var(--bundle-rows, 1);
+  grid-template-rows: subgrid;
+  min-width: 0;
+}
+
+/* 목록 항목은 좁은 열에서 배지를 다음 줄로 보낼 수 있다(배지는 항목 오른쪽 끝, 그 뒤 핀 칸) */
+.bundle-side .bundle-opt {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 0.15rem 0.5rem;
+  white-space: normal;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.bundle-side .bundle-opt-result {
+  margin-left: auto;
+}
+
+.bundle-side .bundle-opt-label {
+  white-space: nowrap;
+}
+
+.product .bundle-side .bundle-opt:not(.pinned-bundle)[aria-checked='true'] {
+  background: var(--accent-soft);
+}
+
+.bundle-panel {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+@media (max-width: 44rem) {
+  /* 좁은 화면: 배분 목록이 위(낮은 상자 + 자체 세로 스크롤), 판정 행이 아래 */
+  .detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bundle-side {
+    /* 추가 폼 + 항목 5개가 스크롤 없이 들어가는 높이, 그보다 길면 자체 세로 스크롤 */
+    max-height: 13rem;
+  }
+}
+
+.card-line .card-headline,
+.card-line .row-headline {
+  display: contents;
+}
+
+.card-line .hl-move {
+  grid-area: move;
+  justify-self: start;
+  min-width: 0;
+}
+
+/* 갱신 중·계산 불가·고정 판정 문구는 기술 칸을 쓴다 */
+.card-line .headline:not(.row-headline) {
+  grid-area: move;
+  min-width: 0;
+}
+
+.card-line > .card-result {
+  grid-area: result;
+  justify-self: start;
+  display: inline-flex;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  align-items: center;
+  gap: 0.2rem 0.3rem;
+  min-width: 0;
+}
+
+@media (max-width: 44rem) {
+  /* 결과(배지 + 변동 가능)와 외 n행은 내용 폭 그대로, 남는 폭은 이름이 쓴다(결과가 외 n행 칸으로 넘치지 않게) */
+  .product .card-line > .card-result {
+    min-width: max-content;
+  }
+  .product .card-line {
+    grid-template-columns: auto minmax(0, 1fr) max-content max-content;
+    grid-template-areas:
+      'name name result more'
+      'bundle move move move';
+  }
+}
+
+.card-meta {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.card-name {
+  font-weight: 700;
+}
+
+/* 폼 이름 꼬리 "(알로라의 모습)"는 작은 보통 굵기 글씨(이름 열 한 줄 유지) */
+.card-name .form-suffix {
+  font-size: 0.8em;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* 반감열매 행 배지: 이름 옆 도구 이미지(없으면 "(마코)" 작은 보통 굵기 글씨) */
+.card-name .berry-badge {
+  font-size: 0.8em;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.card-name .berry-badge-img {
+  display: inline-block;
+  vertical-align: middle;
+  line-height: 0;
+}
+
+.card-name .item-icon {
+  display: inline-block;
+  width: 1.375rem;
+  height: 1.375rem;
+  margin: -0.2rem 0;
+  object-fit: contain;
+}
+
+.ko-badge {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  color: var(--tier-ink);
+  white-space: nowrap;
+}
+
+.ko-red {
+  background: var(--badge-red);
+}
+
+.ko-orange {
+  background: var(--badge-orange);
+}
+
+.ko-yellow {
+  background: var(--badge-yellow);
+}
+
+.ko-lime {
+  background: var(--badge-lime);
+}
+
+.ko-green {
+  background: var(--badge-green);
+}
+
+/* 배지 단계명 뒤 1타 확률 "93.8%"는 작은 글씨 */
+.ko-chance {
+  font-size: 0.82em;
+  font-weight: 600;
+}
+
+.ko-gray {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+/* 배분 묶음 라벨 "A32↑ 56.3%": 한 라벨 안에 묶음(본문색)과 비중(작은 회색) */
+.card-bundle {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  padding: 0 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.bundle-stats {
+  font-weight: 600;
+}
+
+.bundle-share {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+/* 드롭다운은 내용 폭이라 비중("56.3%")이 "고정됨"으로 바뀌어도 메뉴 폭·결과 배지 열이 움직이지 않게 같은 폭을 잡는다 */
+.bundle-menu .bundle-share {
+  display: inline-block;
+  min-width: 3.2em;
+}
+
+.custom-tag {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.badge-error {
+  color: var(--danger);
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.card-headline {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.headline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.45rem;
+  max-width: 100%;
+}
+
+/* 간단행 기술 라벨: 내 기술 칸처럼 타입색 테두리 + 연한 타입색 배경. [아이콘][랭크][기술명][그 밖의 랭크] */
+.move-chip {
+  --slot-type: var(--border);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  padding: 0.05rem 0.45rem 0.05rem 0.25rem;
+  border: 1px solid var(--slot-type);
+  border-radius: 8px;
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.move-chip[data-type] {
+  background: color-mix(in srgb, var(--slot-type) 20%, var(--card));
+}
+
+.move-chip .type-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+/* 기술 라벨은 한 줄: 기술명이 글자 단위로 꺾이지 않는다(랭크는 판정 관여 능력치만이라 짧다) */
+.move-chip {
+  white-space: nowrap;
+}
+.move-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.move-boosts {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.priority-tag {
+  display: inline-block;
+  padding: 0 0.35em;
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--muted);
+  white-space: nowrap;
+  vertical-align: 0.05em;
+}
+
+.headline.updating {
+  color: var(--mid);
+}
+
+.headline.error {
+  color: var(--danger);
+}
+
+.headline.fixed {
+  color: var(--muted);
+}
+
+.card-more {
+  grid-area: more;
+  justify-self: end;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.card .card-notice {
+  margin: 0 0.6rem 0.4rem;
+}
+
+.card-detail {
+  border-top: 1px solid var(--border);
+  padding: 0.5rem 0.6rem;
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.row {
+  min-width: 0;
+}
+
+.row-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.5rem;
+  align-items: baseline;
+}
+
+.row-kind {
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 0.3rem;
+  color: var(--muted);
+}
+
+.row-basis {
+  font-size: 0.82rem;
+  color: var(--accent);
+}
+
+/* 간단행: 대표 행이 스카프 행이면 그 도구(구애스카프 등)를 기술 라벨 앞에 */
+.basis-tag {
+  font-size: 0.78rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.row-judge,
+.row-fixed,
+.row-error,
+.badge-stale {
+  margin: 0.2rem 0;
+  font-size: 0.9rem;
+}
+
+.row-error {
+  color: var(--danger);
+}
+
+.badge-stale {
+  color: var(--mid);
+}
+
+.row-stale .band {
+  opacity: 0.55;
+}
+
+/* 상세 행의 판정 칩: 결과 배지와 같은 5색 면 + 그 탭 관점 기호(◎○△▽×) */
+.tier-chip {
+  display: inline-block;
+  min-width: 1.3em;
+  padding: 0 0.2em;
+  border-radius: 4px;
+  text-align: center;
+  font-weight: 700;
+  color: var(--tier-ink);
+}
+
+/* 목표 문구의 SP 조합("H0 B0+")은 한 덩어리로만 줄바꿈 */
+.sp-combo {
+  white-space: nowrap;
+}
+
+/* 0~최대 SP 구간 띠: 글자 없는 색 칸(스펙트럼), 칸 사이 틈 유지, 오른쪽 열 폭에 맞춰 줄어들어 가로 스크롤 없음 */
+.band-wrap {
+  min-width: 0;
+  /* 현재 칸 외곽선(2px + 간격 1px)이 띠 끝에서 잘리지 않게 */
+  padding: 3px 3px 0;
+  --band-cells: 33;
+}
+
+.band,
+.band-ticks {
+  display: grid;
+  grid-template-columns: repeat(var(--band-cells), minmax(0, 1fr));
+  gap: 2px;
+}
+
+.band {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.band .cell {
+  height: 1.25rem;
+  border-radius: 2px;
+}
+
+/* 예산 밖 빗금: 띠 칸과 범례 견본이 같은 무늬 */
+.band .cell.over,
+.over-swatch {
+  background-image: repeating-linear-gradient(135deg, rgba(0, 0, 0, 0.22) 0 2px, transparent 2px 5px);
+}
+
+/* 현재 칸: 진한 외곽선(띠 위로 살짝 키워 좁은 칸에서도 보이게) */
+.band .cell.current {
+  outline: 2px solid var(--text-strong);
+  outline-offset: 1px;
+  position: relative;
+  z-index: 1;
+}
+
+.band-ticks {
+  margin-top: 0.1rem;
+  font-size: 0.62rem;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.band-tick {
+  justify-self: center;
+  white-space: nowrap;
+}
+
+.band-tick[data-edge='start'] {
+  justify-self: start;
+}
+
+.band-tick[data-edge='end'] {
+  justify-self: end;
+}
+
+/* 범례의 판정 색 견본 */
+.tier-swatch {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  border-radius: 2px;
+  vertical-align: -0.05em;
+}
+
+.band-legend {
+  margin: 0.2rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.band-legend .span.over {
+  text-decoration: underline dotted;
+}
+
+.band-legend .span-need {
+  color: var(--muted);
+}
+
+/* 범례의 빗금 견본: 무늬가 보이게 판정 색 견본보다 조금 크고 테두리를 둔다 */
+.over-swatch {
+  width: 1.1em;
+  border: 1px solid var(--muted);
+  background-color: transparent;
+}
+
+.custom-editor {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.preset-sp {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+  gap: 0.4rem;
+}
+
+.preset-sp .num-field {
+  width: auto;
+}
+
+.preset-fields {
+  margin-top: 0.4rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: 0.4rem;
+}
+
+.target-moves {
+  display: grid;
+  gap: 0.3rem;
+}
+
+/* 좁은 화면: 탭 줄만 고정하고 나머지 툴바는 흐름대로 */
+@media (max-width: 59.99rem) {
+  .toolbar {
+    display: contents;
+  }
+  .tabs-row {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 10;
+    background: var(--sticky-bg);
+    box-shadow: var(--sticky-cover);
+    border-bottom: 1px solid var(--border);
+    padding-block: 0.4rem;
+  }
+  /* 좁은 화면: 목록 박스는 탭 줄을 뺀 화면 높이(최소 60dvh)의 자체 스크롤 박스.
+     페이지 스크롤과 공존하므로 끝에 닿으면 페이지로 스크롤이 이어진다. */
+  .result-box {
+    height: max(60dvh, calc(100dvh - var(--tabs-row-h, 3.5rem) - 1rem));
+  }
+  .result-scroll {
+    overscroll-behavior: auto;
+  }
 }

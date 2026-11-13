@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>디자인 대안 비교 · SP 구간 판정 화면 전체 레이아웃</title>
+<!--
+  하네스 design-options 템플릿 (adr-helper 디자인 결정 레인).
+  - Claude 아티팩트가 아니다. 이 파일을 docs/raw/<type>/<slug>/design-options.html로
+    떨구고, 사용자가 브라우저에서 직접 연다(자기완결: 외부 CSS/JS/폰트/이미지 참조 없음).
+  - 이 파일을 그대로 cp로 목적지에 복사한 뒤, 채우기 구역만 Edit한다. 파일 전체를 Write로
+    다시 쓰지 않는다 — 고정된 CSS/JS/패널 스캐폴딩 재출력은 순수 출력 토큰 낭비다.
+  - 에이전트가 채우는 곳은 <section class="option"> 카드 안의 .mockup 영역과 data-label·라디오
+    value·.name(대안 이름으로 함께 일치)뿐이다. 카드를 복제/삭제해 대안 수(2개 이상)를 맞춘다.
+  - 사용자는 대안을 나란히 비교 → 베이스 라디오 선택 → 세부 수정 요구사항 작성 →
+    "요약 생성" → "복사"해서 에이전트에게 붙여넣는다(정적 파일이라 서버로 전송 불가 →
+    붙여넣기로 루프를 닫는다). 에이전트는 그 요약을 ADR 선택지/결정/선택 근거로 흡수한다.
+-->
+<style>
+  :root{
+    --bg:#f7f7f8; --fg:#1a1a1e; --muted:#5c5c66; --line:#d9d9e0; --card:#ffffff;
+    --accent:#3b5bdb; --accent-soft:#e7ecfb; --shadow:0 1px 3px rgba(0,0,0,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#16161a; --fg:#ececf0; --muted:#9a9aa5; --line:#2c2c34; --card:#1e1e24;
+      --accent:#7a93f5; --accent-soft:#22283d; --shadow:0 1px 3px rgba(0,0,0,.4); }
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; padding:24px; background:var(--bg); color:var(--fg);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif; }
+  header{ max-width:1200px; margin:0 auto 20px; }
+  h1{ font-size:20px; margin:0 0 6px; }
+  .lead{ color:var(--muted); margin:0 0 12px; }
+  .how{ background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:12px 16px; box-shadow:var(--shadow); }
+  .how ol{ margin:6px 0 0; padding-left:20px; } .how li{ margin:2px 0; }
+  .grid{ max-width:1200px; margin:0 auto; display:grid; gap:16px;
+    grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
+  .option{ background:var(--card); border:1px solid var(--line); border-radius:12px;
+    box-shadow:var(--shadow); display:flex; flex-direction:column; overflow:hidden; }
+  .option.selected{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft),var(--shadow); }
+  .option > header{ display:flex; align-items:center; gap:10px; padding:12px 14px;
+    border-bottom:1px solid var(--line); margin:0; }
+  .option > header label{ font-weight:600; cursor:pointer; display:flex; align-items:center; gap:8px; }
+  .option .name{ font-size:15px; }
+  .mockup{ padding:14px; min-height:160px; overflow-x:auto; }
+  /* 목업 안에서 쓰기 좋은 중립 프리미티브(원하면 무시하고 자유 HTML/CSS로 그려도 됨) */
+  .mockup .box{ border:1px dashed var(--line); border-radius:8px; padding:10px; margin:6px 0;
+    color:var(--muted); }
+  .mockup .bar{ height:12px; border-radius:6px; background:var(--line); margin:6px 0; }
+  .notes{ padding:12px 14px; border-top:1px solid var(--line); }
+  .notes label{ display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  textarea{ width:100%; min-height:64px; resize:vertical; border:1px solid var(--line);
+    border-radius:8px; padding:8px; background:var(--bg); color:var(--fg); font:inherit; }
+  .panel{ max-width:1200px; margin:18px auto 0; background:var(--card); border:1px solid var(--line);
+    border-radius:12px; padding:16px; box-shadow:var(--shadow); }
+  .panel label{ display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  button{ font:inherit; font-weight:600; border:1px solid var(--accent); background:var(--accent);
+    color:#fff; border-radius:8px; padding:8px 16px; cursor:pointer; }
+  button.secondary{ background:transparent; color:var(--accent); }
+  button:disabled{ opacity:.5; cursor:not-allowed; }
+  #summary{ width:100%; min-height:150px; margin-top:12px; white-space:pre; font-family:ui-monospace,
+    SFMono-Regular,Menlo,monospace; font-size:13px; }
+  .hint{ color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>디자인 대안 비교 — SP 구간 판정 화면 전체 레이아웃(와이어프레임)</h1>
+  <p class="lead">아래 대안을 비교하고, <b>베이스로 삼을 안 하나를 라디오로 선택</b>한 뒤,
+    <b>세부 수정 요구사항</b>을 적어 주세요.</p>
+  <div class="how">
+    <b>사용법</b>
+    <ol>
+      <li>각 대안을 나란히 비교합니다.</li>
+      <li>가장 마음에 드는 안의 <b>◉ 라디오</b>를 선택합니다(베이스 = 이 안을 출발점으로 발전).</li>
+      <li>대안별 칸과 아래 "전체 수정 요구사항"에 원하는 변경을 구체적으로 적습니다.</li>
+      <li><b>"요약 생성"</b>을 누르고 <b>"복사"</b>해서 에이전트에게 붙여넣습니다(이 파일은 정적이라
+        직접 전송되지 않습니다 — 붙여넣기로 전달).</li>
+    </ol>
+  </div>
+</header>
+
+<!-- ▼▼▼ 에이전트가 채우는 영역: 대안 카드(최소 2개). cp한 복사본에서 이 구역만 Edit한다.
+     카드를 복제/삭제해 개수를 맞추고, data-label·라디오 value·.name·.mockup을 이번 유닛의
+     실제 화면 배치로 채운다(value·data-label·.name은 대안 이름으로 함께 일치). ▼▼▼ -->
+<div class="grid" id="grid">
+
+  <style>
+    .option:has(.lo-wrap){ grid-column:1/-1; }
+    .lo-wrap{ display:flex; flex-wrap:wrap; gap:18px; align-items:flex-start; font-size:12px; }
+    .lo-fig{ flex:1 1 560px; min-width:0; max-width:780px; }
+    .lo-cap{ font-size:11px; color:var(--muted); margin:0 0 4px; }
+    .lo-desk{ aspect-ratio:1280/800; border:1px solid var(--line); border-radius:8px; background:var(--bg);
+      padding:8px; display:grid; gap:6px; overflow:hidden; font-size:10px; line-height:1.35; position:relative; }
+    .lo-side{ flex:1 1 320px; display:flex; gap:12px; flex-wrap:wrap; min-width:0; align-items:flex-start; }
+    .lo-phs{ display:flex; gap:10px; flex-wrap:wrap; }
+    .lo-ph{ width:150px; aspect-ratio:400/860; border:1px solid var(--line); border-radius:14px; background:var(--bg);
+      padding:6px; display:flex; flex-direction:column; gap:4px; overflow:hidden; font-size:9px; line-height:1.3;
+      flex:none; position:relative; }
+    .lo-r{ border:1px dashed var(--muted); border-radius:6px; padding:5px; display:flex; flex-direction:column;
+      gap:4px; min-width:0; min-height:0; background:var(--card); overflow:hidden; }
+    .lo-r.lo-soft{ border-color:var(--line); }
+    .lo-t{ font-weight:600; color:var(--fg); display:flex; gap:4px; align-items:center; flex-wrap:wrap; }
+    .lo-pin{ font-weight:600; font-size:8px; border:1px solid var(--fg); border-radius:3px; padding:0 3px; color:var(--fg); }
+    .lo-g{ background:var(--line); border-radius:3px; height:7px; flex:none; }
+    .lo-g.h2{ height:14px; } .lo-g.h3{ height:24px; }
+    .lo-c{ border:1px solid var(--line); border-radius:4px; padding:4px; display:flex; flex-direction:column; gap:3px;
+      background:var(--card); flex:none; }
+    .lo-c.on{ border-color:var(--fg); }
+    .lo-row{ display:flex; gap:4px; align-items:center; flex-wrap:wrap; }
+    .lo-tab{ border:1px solid var(--line); border-radius:4px; padding:0 5px; color:var(--muted); }
+    .lo-tab.on{ border-color:var(--fg); color:var(--fg); font-weight:600; }
+    .lo-chip{ border:1px dashed var(--muted); border-radius:999px; padding:0 5px; color:var(--muted); white-space:nowrap; }
+    .lo-end{ margin-left:auto; }
+    .lo-fill{ flex:1 1 auto; }
+    .lo-strip{ display:grid; grid-template-columns:repeat(33,1fr); gap:1px; }
+    .lo-strip i{ height:9px; background:var(--line); }
+    .lo-strip i.cur{ background:var(--fg); }
+    .lo-ov{ position:absolute; background:var(--card); border:1px solid var(--fg); border-radius:8px;
+      box-shadow:0 4px 14px rgba(0,0,0,.18); padding:6px; display:flex; flex-direction:column; gap:4px; }
+    .lo-dim{ position:absolute; inset:0; background:rgba(0,0,0,.18); border-radius:inherit; }
+    .lo-note{ flex:1 1 180px; min-width:0; margin:0; font-size:12px; }
+    .lo-note dt{ font-weight:600; margin-top:6px; } .lo-note dt:first-child{ margin-top:0; }
+    .lo-note dd{ margin:0; color:var(--muted); }
+    .lo-meta{ margin-top:12px; display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:8px 18px; font-size:13px; }
+    .lo-meta b{ display:block; font-size:12px; }
+    .lo-fake{ font-size:11px; color:var(--muted); margin:8px 0 0; }
+  </style>
+
+  <!-- ===================== 대안 A ===================== -->
+  <section class="option" data-label="대안 A — 좌 고정 사이드바 + 우 결과">
+    <header>
+      <label><input type="radio" name="base" value="대안 A — 좌 고정 사이드바 + 우 결과" /><span class="name">대안 A — 좌 고정 사이드바 + 우 결과</span></label>
+    </header>
+    <div class="mockup">
+      <div class="lo-wrap">
+        <div class="lo-fig">
+          <p class="lo-cap">1280px · 설정 300px 고정 사이드바 | 결과 나머지 폭(카드 1열)</p>
+          <div class="lo-desk" style="grid-template-columns:23.5% 1fr;">
+            <div class="lo-r">
+              <span class="lo-t">내 포켓몬 설정 <b class="lo-pin">고정 · 자체 스크롤</b></span>
+              <div class="lo-g h2"></div>
+              <div class="lo-row"><div class="lo-g lo-fill"></div><div class="lo-g lo-fill"></div><div class="lo-g lo-fill"></div></div>
+              <span>SP 6행 · 합계·잔여</span>
+              <div class="lo-g"></div><div class="lo-g"></div><div class="lo-g"></div><div class="lo-g"></div><div class="lo-g"></div><div class="lo-g"></div>
+              <div class="lo-g" style="width:60%"></div>
+              <span>기술 4</span>
+              <div class="lo-g h2"></div><div class="lo-g h2"></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;min-height:0;">
+              <div class="lo-r">
+                <span class="lo-t">결과 머리 <b class="lo-pin">고정(sticky)</b></span>
+                <div class="lo-row"><span class="lo-tab on">공격</span><span class="lo-tab">방어</span><span class="lo-tab">스피드</span></div>
+                <div class="lo-row"><span class="lo-chip">필터: 상위 N · 포켓몬 선택 · 목록 밖 추가</span><span class="lo-chip">순풍 내/상대</span><span class="lo-chip">표시 기준</span><span class="lo-chip lo-end">메타 출처</span></div>
+              </div>
+              <div class="lo-r lo-soft"><span class="lo-t">변화 없음 — 행 N개(카드 M장) ▸ <span style="font-weight:400;color:var(--muted)">목록 맨 위, 접힘</span></span></div>
+              <div class="lo-r lo-fill">
+                <span class="lo-t">상대 목록(카드 1열, 페이지 스크롤)</span>
+                <div class="lo-c"><div class="lo-g" style="width:35%"></div><div class="lo-g"></div></div>
+                <div class="lo-c"><div class="lo-g" style="width:35%"></div><div class="lo-g"></div></div>
+                <div class="lo-c"><div class="lo-g" style="width:35%"></div><div class="lo-g"></div><div class="lo-strip"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="cur"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+                <div class="lo-c"><div class="lo-g" style="width:35%"></div><div class="lo-g"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="lo-side">
+          <div>
+            <p class="lo-cap">400px · 위아래 스택</p>
+            <div class="lo-ph">
+              <div class="lo-r" style="flex:0 0 44%;">
+                <span class="lo-t">설정(펼침) <span style="font-weight:400">접기 ▴</span></span>
+                <div class="lo-g h2"></div><div class="lo-g"></div><div class="lo-g"></div><div class="lo-g"></div><div class="lo-g"></div><div class="lo-g h2"></div>
+              </div>
+              <div class="lo-r"><span class="lo-t">탭 + 툴바 <b class="lo-pin">sticky</b></span>
+                <div class="lo-row"><span class="lo-tab on">공격</span><span class="lo-tab">방어</span><span class="lo-tab">S</span></div>
+                <div class="lo-row"><span class="lo-chip">필터</span><span class="lo-chip">순풍</span><span class="lo-chip">⋯</span></div>
+              </div>
+              <div class="lo-r lo-soft"><span>변화 없음 ▸</span></div>
+              <div class="lo-c"><div class="lo-g" style="width:50%"></div><div class="lo-g"></div></div>
+              <div class="lo-c"><div class="lo-g" style="width:50%"></div><div class="lo-g"></div></div>
+            </div>
+          </div>
+          <dl class="lo-note">
+            <dt>스크롤 시 고정</dt><dd>1280: 사이드바 전체(뷰포트 높이, 내부 스크롤) + 결과 머리(탭·툴바). 목록만 흐른다.</dd>
+            <dt>400px 순서·전환</dt><dd>설정 → 탭·툴바 → 변화 없음 → 목록의 단순 스택. 설정은 접기 가능(접으면 1줄 요약). 탭·툴바만 sticky. 툴바의 표시 기준·메타 출처는 ⋯ 안으로.</dd>
+          </dl>
+        </div>
+      </div>
+      <div class="lo-meta">
+        <div><b>정보 우선순위</b>설정과 결과가 동급. 설정을 고치며 결과가 바뀌는 걸 동시에 본다.</div>
+        <div><b>상호작용</b>SP를 바꾸면 우측 목록이 그 자리에서 갱신. 펼친 카드(0~32 띠)는 목록 안에서 늘어난다.</div>
+        <div><b>트레이드오프</b>가장 익숙하고 구현 단순. 대신 결과 폭이 약 950px로 줄고, 400px에서는 설정이 첫 화면을 거의 다 차지해 결과까지 스크롤이 길다.</div>
+      </div>
+      <p class="lo-fake">와이어프레임 — 영역 크기·내부 블록은 개략이며, 화면 속 수치·라벨은 예시용 가짜다.</p>
+    </div>
+    <div class="notes">
+      <label>대안 A 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="예: 사이드바 폭, 400px에서 설정 기본 접힘 여부…"></textarea>
+    </div>
+  </section>
+
+  <!-- ===================== 대안 B ===================== -->
+  <section class="option" data-label="대안 B — 상단 접이식 설정 바 + 전체폭 결과">
+    <header>
+      <label><input type="radio" name="base" value="대안 B — 상단 접이식 설정 바 + 전체폭 결과" /><span class="name">대안 B — 상단 접이식 설정 바 + 전체폭 결과</span></label>
+    </header>
+    <div class="mockup">
+      <div class="lo-wrap">
+        <div class="lo-fig">
+          <p class="lo-cap">1280px · 설정은 상단 가로 패널(펼침/접힘) · 결과 전체폭(카드 2열 그리드)</p>
+          <div class="lo-desk" style="grid-template-rows:auto auto auto auto 1fr;">
+            <div class="lo-r">
+              <span class="lo-t">설정 요약 바 <b class="lo-pin">고정(sticky, 탭과 한 덩어리)</b><span class="lo-end" style="font-weight:400">설정 펼치기 ▾</span></span>
+              <div class="lo-row"><div class="lo-g h2" style="width:14%"></div><div class="lo-g" style="width:22%"></div><div class="lo-g" style="width:28%"></div><div class="lo-g" style="width:20%"></div></div>
+            </div>
+            <div class="lo-r lo-soft" style="display:grid;grid-template-columns:1fr 1.4fr 1fr;gap:6px;">
+              <div style="display:flex;flex-direction:column;gap:3px;"><span class="lo-t">(펼침 시) 종·특성·도구·성격</span><div class="lo-g h2"></div><div class="lo-g"></div><div class="lo-g"></div></div>
+              <div style="display:flex;flex-direction:column;gap:3px;"><span class="lo-t">SP 6 · 합계·잔여</span><div class="lo-g"></div><div class="lo-g"></div><div class="lo-g"></div><div class="lo-g"></div></div>
+              <div style="display:flex;flex-direction:column;gap:3px;"><span class="lo-t">기술 4</span><div class="lo-g h2"></div><div class="lo-g h2"></div></div>
+            </div>
+            <div class="lo-r">
+              <span class="lo-t">탭 + 툴바 <b class="lo-pin">고정(sticky)</b></span>
+              <div class="lo-row"><span class="lo-tab on">공격</span><span class="lo-tab">방어</span><span class="lo-tab">스피드</span><span class="lo-chip" style="margin-left:12px">필터</span><span class="lo-chip">순풍 내/상대</span><span class="lo-chip">표시 기준</span><span class="lo-chip lo-end">메타 출처</span></div>
+            </div>
+            <div class="lo-r lo-fill" style="display:grid;grid-template-columns:1fr 1fr;gap:5px;align-content:start;">
+              <div class="lo-c"><div class="lo-g" style="width:40%"></div><div class="lo-g"></div></div>
+              <div class="lo-c"><div class="lo-g" style="width:40%"></div><div class="lo-g"></div></div>
+              <div class="lo-c"><div class="lo-g" style="width:40%"></div><div class="lo-g"></div></div>
+              <div class="lo-c"><div class="lo-g" style="width:40%"></div><div class="lo-g"></div></div>
+              <div class="lo-c"><div class="lo-g" style="width:40%"></div><div class="lo-g"></div></div>
+              <div class="lo-c"><div class="lo-g" style="width:40%"></div><div class="lo-g"></div></div>
+            </div>
+            <div class="lo-r lo-soft"><span class="lo-t">변화 없음 — 행 N개(카드 M장) ▸ <span style="font-weight:400;color:var(--muted)">목록 끝, 접힘</span></span></div>
+          </div>
+        </div>
+        <div class="lo-side">
+          <div>
+            <p class="lo-cap">400px · 요약 바 + 바텀 시트</p>
+            <div class="lo-ph">
+              <div class="lo-r"><span class="lo-t">설정 요약 1줄 <b class="lo-pin">sticky</b></span><div class="lo-g"></div></div>
+              <div class="lo-r"><span class="lo-t">탭 + 툴바 <b class="lo-pin">sticky</b></span>
+                <div class="lo-row"><span class="lo-tab on">공격</span><span class="lo-tab">방어</span><span class="lo-tab">S</span><span class="lo-chip">필터</span></div>
+              </div>
+              <div class="lo-c"><div class="lo-g" style="width:50%"></div><div class="lo-g"></div></div>
+              <div class="lo-c"><div class="lo-g" style="width:50%"></div><div class="lo-g"></div></div>
+              <div class="lo-dim"></div>
+              <div class="lo-ov" style="left:4px;right:4px;bottom:4px;height:56%;">
+                <span class="lo-t">설정 시트 ▾ (요약 줄 탭)</span>
+                <div class="lo-g h2"></div><div class="lo-g"></div><div class="lo-g"></div><div class="lo-g"></div><div class="lo-g h2"></div>
+              </div>
+            </div>
+          </div>
+          <dl class="lo-note">
+            <dt>스크롤 시 고정</dt><dd>1280: 설정 요약 1줄 + 탭·툴바(펼친 설정 패널은 스크롤과 함께 사라지고 요약만 남음).</dd>
+            <dt>400px 순서·전환</dt><dd>요약 줄 → 탭·툴바 → 목록 → 변화 없음. 설정 전체는 요약 줄을 누르면 뜨는 바텀 시트. 필터·표시 기준도 시트.</dd>
+          </dl>
+        </div>
+      </div>
+      <div class="lo-meta">
+        <div><b>정보 우선순위</b>결과가 주인공. 설정은 처음 한 번 맞추고 접어 두는 보조.</div>
+        <div><b>상호작용</b>설정 펼침 ↔ 접힘 토글. 결과는 2열 그리드라 한 화면에 카드가 가장 많이 보인다.</div>
+        <div><b>트레이드오프</b>결과 밀도 최고, 400px 전환도 자연스러움. 대신 SP를 조금씩 바꿔 보며 결과를 동시에 보기 어렵다(펼치면 목록이 밀려 내려감).</div>
+      </div>
+      <p class="lo-fake">와이어프레임 — 영역 크기·내부 블록은 개략이며, 화면 속 수치·라벨은 예시용 가짜다.</p>
+    </div>
+    <div class="notes">
+      <label>대안 B 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="이 안에 대한 수정 요구사항…"></textarea>
+    </div>
+  </section>
+
+  <!-- ===================== 대안 C ===================== -->
+  <section class="option" data-label="대안 C — 3단(설정 | 목록 | 상세)">
+    <header>
+      <label><input type="radio" name="base" value="대안 C — 3단(설정 | 목록 | 상세)" /><span class="name">대안 C — 3단(설정 | 목록 | 상세)</span></label>
+    </header>
+    <div class="mockup">
+      <div class="lo-wrap">
+        <div class="lo-fig">
+          <p class="lo-cap">1280px · 설정 280 | 목록(1줄 행) 440 | 선택 카드 상세 나머지</p>
+          <div class="lo-desk" style="grid-template-columns:22% 35% 1fr;grid-template-rows:auto 1fr;">
+            <div class="lo-r" style="grid-row:1 / 3;">
+              <span class="lo-t">내 포켓몬 설정 <b class="lo-pin">고정</b></span>
+              <div class="lo-g h2"></div><div class="lo-g"></div><div class="lo-g"></div>
+              <span>SP 6</span><div class="lo-g"></div><div class="lo-g"></div><div class="lo-g"></div><div class="lo-g"></div><div class="lo-g"></div><div class="lo-g"></div>
+              <span>기술 4</span><div class="lo-g h2"></div><div class="lo-g h2"></div>
+            </div>
+            <div class="lo-r" style="grid-column:2 / 4;">
+              <span class="lo-t">탭 + 툴바 <b class="lo-pin">고정</b> <span style="font-weight:400;color:var(--muted)">(목록·상세 위에 걸침)</span></span>
+              <div class="lo-row"><span class="lo-tab on">공격</span><span class="lo-tab">방어</span><span class="lo-tab">스피드</span><span class="lo-chip" style="margin-left:12px">필터</span><span class="lo-chip">순풍</span><span class="lo-chip">표시 기준</span><span class="lo-chip lo-end">메타 출처</span></div>
+            </div>
+            <div class="lo-r">
+              <span class="lo-t">상대 목록(1줄 행, 이 열만 스크롤)</span>
+              <div class="lo-c"><div class="lo-g"></div></div>
+              <div class="lo-c on"><div class="lo-g"></div></div>
+              <div class="lo-c"><div class="lo-g"></div></div>
+              <div class="lo-c"><div class="lo-g"></div></div>
+              <div class="lo-c"><div class="lo-g"></div></div>
+              <div class="lo-c"><div class="lo-g"></div></div>
+              <div class="lo-c"><div class="lo-g"></div></div>
+              <div class="lo-r lo-soft"><span>변화 없음 — 행 N개(카드 M장) ▸ (목록 끝)</span></div>
+            </div>
+            <div class="lo-r">
+              <span class="lo-t">선택한 카드 상세 <b class="lo-pin">고정</b></span>
+              <div class="lo-g h2" style="width:55%"></div>
+              <span>판정 행들 · 경계</span>
+              <div class="lo-g"></div><div class="lo-g"></div><div class="lo-g" style="width:70%"></div>
+              <span>0~32 칸 띠(항상 펼친 상태)</span>
+              <div class="lo-strip"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="cur"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="lo-strip"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="cur"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              <span>묶음 SP · 점유율 · 보존률</span><div class="lo-g" style="width:60%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="lo-side">
+          <div>
+            <p class="lo-cap">400px · 상단 탭 전환 + 상세 push</p>
+            <div class="lo-phs">
+              <div class="lo-ph">
+                <div class="lo-r"><span class="lo-t">[설정 | 결과] <b class="lo-pin">sticky</b></span></div>
+                <div class="lo-r"><span class="lo-t">탭 + 툴바 <b class="lo-pin">sticky</b></span><div class="lo-row"><span class="lo-tab on">공격</span><span class="lo-tab">방어</span><span class="lo-tab">S</span></div></div>
+                <div class="lo-c"><div class="lo-g"></div></div><div class="lo-c on"><div class="lo-g"></div></div><div class="lo-c"><div class="lo-g"></div></div><div class="lo-c"><div class="lo-g"></div></div><div class="lo-c"><div class="lo-g"></div></div>
+                <div class="lo-r lo-soft"><span>변화 없음 ▸</span></div>
+              </div>
+              <div class="lo-ph">
+                <div class="lo-r"><span class="lo-t">← 목록 · 상대 이름</span></div>
+                <div class="lo-g h2"></div><div class="lo-g"></div><div class="lo-g"></div>
+                <span>0~32 띠(자체 가로 스크롤)</span><div class="lo-g h2"></div>
+                <div class="lo-g"></div>
+              </div>
+            </div>
+          </div>
+          <dl class="lo-note">
+            <dt>스크롤 시 고정</dt><dd>1280: 설정 열·상세 열·탭/툴바가 모두 고정, 가운데 목록 열만 스크롤.</dd>
+            <dt>400px 순서·전환</dt><dd>상단 [설정 | 결과] 세그먼트로 한 번에 한 영역만. 목록 행을 누르면 상세 화면이 전체로 push, ←로 복귀.</dd>
+          </dl>
+        </div>
+      </div>
+      <div class="lo-meta">
+        <div><b>정보 우선순위</b>"누구와 붙나"(목록 훑기)와 "몇 SP부터 바뀌나"(상세)를 분리. 목록은 1줄 요약만.</div>
+        <div><b>상호작용</b>행 선택 → 우측 상세 갱신. 키보드 ↑↓로 목록 이동하며 상세 비교. 카드 펼치기 대신 선택.</div>
+        <div><b>트레이드오프</b>한 매치업을 깊게 보기 가장 좋음. 대신 여러 카드의 0~32 띠를 동시에 비교 못 하고, 400px에서는 설정·결과·상세가 세 화면으로 갈라진다.</div>
+      </div>
+      <p class="lo-fake">와이어프레임 — 영역 크기·내부 블록은 개략이며, 화면 속 수치·라벨은 예시용 가짜다.</p>
+    </div>
+    <div class="notes">
+      <label>대안 C 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="이 안에 대한 수정 요구사항…"></textarea>
+    </div>
+  </section>
+
+  <!-- ===================== 대안 D ===================== -->
+  <section class="option" data-label="대안 D — 접히는 설정 + 아이콘 레일">
+    <header>
+      <label><input type="radio" name="base" value="대안 D — 접히는 설정 + 아이콘 레일" /><span class="name">대안 D — 접히는 설정 + 아이콘 레일</span></label>
+    </header>
+    <div class="mockup">
+      <div class="lo-wrap">
+        <div class="lo-fig">
+          <p class="lo-cap">1280px · 설정을 접은 상태(56px 레일). 펼치면 A처럼 300px 패널 · 레일 아이콘 = 섹션 플라이아웃</p>
+          <div class="lo-desk" style="grid-template-columns:5% 1fr;">
+            <div class="lo-r" style="align-items:center;padding:4px 2px;">
+              <span class="lo-pin">고정</span>
+              <div class="lo-g h3" style="width:80%"></div>
+              <span>종</span><div class="lo-g h2" style="width:70%"></div>
+              <span>SP</span><div class="lo-g h2" style="width:70%;background:var(--fg)"></div>
+              <span>기술</span><div class="lo-g h2" style="width:70%"></div>
+              <span style="margin-top:auto">»</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;min-height:0;">
+              <div class="lo-r">
+                <span class="lo-t">결과 머리 <b class="lo-pin">고정(sticky)</b> <span style="font-weight:400;color:var(--muted)">내 포켓몬 요약 1줄 포함</span></span>
+                <div class="lo-row"><div class="lo-g" style="width:30%"></div></div>
+                <div class="lo-row"><span class="lo-tab on">공격</span><span class="lo-tab">방어</span><span class="lo-tab">스피드</span><span class="lo-chip" style="margin-left:12px">필터</span><span class="lo-chip">순풍 내/상대</span><span class="lo-chip">표시 기준</span><span class="lo-chip lo-end">메타 출처</span></div>
+              </div>
+              <div class="lo-r lo-soft"><span class="lo-t">변화 없음 — 행 N개(카드 M장) ▸ <span style="font-weight:400;color:var(--muted)">목록 맨 위, 접힘</span></span></div>
+              <div class="lo-r lo-fill" style="display:grid;grid-template-columns:1fr 1fr;gap:5px;align-content:start;">
+                <div class="lo-c"><div class="lo-g" style="width:40%"></div><div class="lo-g"></div></div>
+                <div class="lo-c"><div class="lo-g" style="width:40%"></div><div class="lo-g"></div></div>
+                <div class="lo-c"><div class="lo-g" style="width:40%"></div><div class="lo-g"></div></div>
+                <div class="lo-c"><div class="lo-g" style="width:40%"></div><div class="lo-g"></div></div>
+                <div class="lo-c"><div class="lo-g" style="width:40%"></div><div class="lo-g"></div></div>
+                <div class="lo-c"><div class="lo-g" style="width:40%"></div><div class="lo-g"></div></div>
+              </div>
+            </div>
+            <div class="lo-ov" style="left:6%;top:30%;width:24%;">
+              <span class="lo-t">SP 플라이아웃(결과 위에 겹침)</span>
+              <div class="lo-g"></div><div class="lo-g"></div><div class="lo-g"></div><div class="lo-g"></div><div class="lo-g"></div><div class="lo-g"></div>
+              <div class="lo-g" style="width:55%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="lo-side">
+          <div>
+            <p class="lo-cap">400px · 하단 고정 레일 + 섹션 시트</p>
+            <div class="lo-ph">
+              <div class="lo-r"><span class="lo-t">탭 + 요약 <b class="lo-pin">sticky</b></span><div class="lo-g"></div><div class="lo-row"><span class="lo-tab on">공격</span><span class="lo-tab">방어</span><span class="lo-tab">S</span><span class="lo-chip">필터</span></div></div>
+              <div class="lo-r lo-soft"><span>변화 없음 ▸</span></div>
+              <div class="lo-c"><div class="lo-g" style="width:50%"></div><div class="lo-g"></div></div>
+              <div class="lo-c"><div class="lo-g" style="width:50%"></div><div class="lo-g"></div></div>
+              <div class="lo-c"><div class="lo-g" style="width:50%"></div><div class="lo-g"></div></div>
+              <div class="lo-r" style="margin-top:auto;"><span class="lo-t">하단 레일 <b class="lo-pin">fixed</b></span><div class="lo-row" style="justify-content:space-between"><span class="lo-chip">종</span><span class="lo-chip">SP</span><span class="lo-chip">기술</span><span class="lo-chip">조건</span></div></div>
+            </div>
+          </div>
+          <dl class="lo-note">
+            <dt>스크롤 시 고정</dt><dd>1280: 레일(또는 펼친 패널) + 결과 머리(내 포켓몬 요약·탭·툴바).</dd>
+            <dt>400px 순서·전환</dt><dd>결과가 첫 화면. 설정은 하단 고정 레일의 섹션 버튼(종·SP·기술·조건)으로 해당 부분만 시트로 연다.</dd>
+          </dl>
+        </div>
+      </div>
+      <div class="lo-meta">
+        <div><b>정보 우선순위</b>결과 우선, 그러나 설정은 한 번 클릭 거리. 자주 바꾸는 SP만 빠르게 열어 조정.</div>
+        <div><b>상호작용</b>레일 접힘/펼침 토글(«/»). 레일 아이콘 → 그 섹션만 플라이아웃(데스크톱)·시트(400px).</div>
+        <div><b>트레이드오프</b>결과 폭과 설정 접근성의 절충. 대신 펼침/레일/플라이아웃 세 상태라 구현·포커스 관리가 가장 복잡하고, 플라이아웃이 결과 일부를 가린다.</div>
+      </div>
+      <p class="lo-fake">와이어프레임 — 영역 크기·내부 블록은 개략이며, 화면 속 수치·라벨은 예시용 가짜다.</p>
+    </div>
+    <div class="notes">
+      <label>대안 D 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="이 안에 대한 수정 요구사항…"></textarea>
+    </div>
+  </section>
+
+</div>
+<!-- ▲▲▲ 에이전트가 채우는 영역 끝 ▲▲▲ -->
+
+<div class="panel">
+  <label for="overall">전체 수정 요구사항 (선택한 베이스를 어떻게 발전시킬지 · 공통 사항)</label>
+  <textarea id="overall" placeholder="예: 모바일 320px에서 컨트롤이 겹치지 않게, 결과 위계를 점수 > 순위 > 상세 순으로…"></textarea>
+  <div class="row">
+    <button id="gen">요약 생성</button>
+    <button id="copy" class="secondary" disabled>복사</button>
+    <span class="hint">요약을 복사해 에이전트 대화창에 붙여넣으세요.</span>
+  </div>
+  <textarea id="summary" readonly placeholder="여기에 붙여넣을 요약이 생성됩니다."></textarea>
+</div>
+
+<script>
+  (function(){
+    var grid = document.getElementById('grid');
+    grid.addEventListener('change', function(e){
+      if (e.target && e.target.name === 'base') {
+        document.querySelectorAll('.option').forEach(function(o){ o.classList.remove('selected'); });
+        var card = e.target.closest('.option');
+        if (card) card.classList.add('selected');
+      }
+    });
+
+    function build(){
+      var checked = document.querySelector('input[name="base"]:checked');
+      var base = checked ? checked.value : '(아직 선택 안 함)';
+      var overall = document.getElementById('overall').value.trim() || '(없음)';
+      var lines = [];
+      lines.push('=== 디자인 선택 요약 (에이전트에게 붙여넣기) ===');
+      lines.push('베이스로 선택: ' + base);
+      lines.push('전체 수정 요구사항:');
+      lines.push(overall);
+      lines.push('');
+      lines.push('대안별 메모:');
+      document.querySelectorAll('.option').forEach(function(o){
+        var label = o.getAttribute('data-label') || '(무명)';
+        var ta = o.querySelector('textarea[data-notes]');
+        var note = (ta && ta.value.trim()) ? ta.value.trim() : '(없음)';
+        lines.push('- ' + label + ': ' + note);
+      });
+      return lines.join('\n');
+    }
+
+    document.getElementById('gen').addEventListener('click', function(){
+      var out = document.getElementById('summary');
+      out.value = build();
+      document.getElementById('copy').disabled = false;
+    });
+
+    document.getElementById('copy').addEventListener('click', function(){
+      var out = document.getElementById('summary');
+      out.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(out.value).then(function(){}, function(){});
+      }
+      this.textContent = ok ? '복사됨 ✓' : '직접 선택해 복사(Ctrl/Cmd+C)';
+      var b = this; setTimeout(function(){ b.textContent = '복사'; }, 1800);
+    });
+  })();
+</script>
+</body>
+</html>

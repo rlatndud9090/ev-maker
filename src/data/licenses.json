@@ -1,6 +1,37 @@
 {
   "entries": [
     {
+      "attributionOnly": true,
+      "id": "asset:bulbagarden-champions-bag",
+      "kind": "asset",
+      "license": "NOASSERTION",
+      "name": "Bulbagarden Archives — Champions Bag sprites",
+      "noticeSource": "src/assets/item-icons/LICENSE(출처·저작권 고지, 오픈 라이선스 아님)",
+      "source": "https://archives.bulbagarden.net/wiki/Category:Champions_Bag_sprites",
+      "usage": "반감열매 도구 아이콘 18종(48px PNG 원본 그대로 정적 파일로 번들). 이미지 IP © Nintendo/Creatures/GAME FREAK(The Pokémon Company). 오픈 라이선스 아님, 비상업 팬 도구의 식별 목적",
+      "version": "2026-11-12 수집"
+    },
+    {
+      "id": "asset:partywhale-type-icons",
+      "kind": "asset",
+      "license": "MIT",
+      "name": "Pokémon Type Icons(partywhale)",
+      "noticeSource": "src/assets/type-icons/LICENSE(partywhale/pokemon-type-icons LICENSE @ fcbe6978c61c359680bc07636c3f9bdc0f346b43 원문)",
+      "source": "https://github.com/partywhale/pokemon-type-icons/tree/fcbe6978c61c359680bc07636c3f9bdc0f346b43",
+      "usage": "기술 타입 아이콘(SVG, 원본 그대로 번들)",
+      "version": "fcbe6978c61c359680bc07636c3f9bdc0f346b43"
+    },
+    {
+      "id": "asset:pokeapi-champions-icons",
+      "kind": "asset",
+      "license": "CC0-1.0",
+      "name": "PokeAPI sprites — Pokémon Champions 메뉴 아이콘",
+      "noticeSource": "src/assets/pokemon-icons/LICENSE(PokeAPI/sprites LICENCE.txt @ ba403973fdf9d0ac59175813861e6a1f8ed5020c 원문)",
+      "source": "https://github.com/PokeAPI/sprites/tree/ba403973fdf9d0ac59175813861e6a1f8ed5020c/sprites/pokemon/versions/generation-ix/champions/icons",
+      "usage": "포켓몬 아이콘(내 포켓몬·상대 목록, 128px PNG 원본 그대로 정적 파일로 번들). 이미지 IP © Nintendo/Creatures/GAME FREAK(The Pokémon Company)",
+      "version": "ba403973fdf9d0ac59175813861e6a1f8ed5020c"
+    },
+    {
       "id": "data:pokeapi",
       "kind": "data",
       "license": "BSD-3-Clause",

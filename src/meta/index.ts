@@ -5,6 +5,7 @@ export {
   ladderSource,
   representativeAssumption,
   observedSpreadAssumption,
+  parseSpreadKey,
   resolveAssumption,
   setDisplayNames,
   topAssumptions,
@@ -12,3 +13,4 @@ export {
   mergeOverlay,
   lookupOpponent,
 } from './assumptions'
+export { topMoves } from './moves'

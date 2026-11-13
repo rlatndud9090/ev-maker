@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>디자인 대안 비교 · 내 포켓몬 설정 영역</title>
+<!--
+  하네스 design-options 템플릿 (adr-helper 디자인 결정 레인).
+  - Claude 아티팩트가 아니다. 이 파일을 docs/raw/<type>/<slug>/design-options.html로
+    떨구고, 사용자가 브라우저에서 직접 연다(자기완결: 외부 CSS/JS/폰트/이미지 참조 없음).
+  - 이 파일을 그대로 cp로 목적지에 복사한 뒤, 채우기 구역만 Edit한다. 파일 전체를 Write로
+    다시 쓰지 않는다 — 고정된 CSS/JS/패널 스캐폴딩 재출력은 순수 출력 토큰 낭비다.
+  - 에이전트가 채우는 곳은 <section class="option"> 카드 안의 .mockup 영역과 data-label·라디오
+    value·.name(대안 이름으로 함께 일치)뿐이다. 카드를 복제/삭제해 대안 수(2개 이상)를 맞춘다.
+  - 사용자는 대안을 나란히 비교 → 베이스 라디오 선택 → 세부 수정 요구사항 작성 →
+    "요약 생성" → "복사"해서 에이전트에게 붙여넣는다(정적 파일이라 서버로 전송 불가 →
+    붙여넣기로 루프를 닫는다). 에이전트는 그 요약을 ADR 선택지/결정/선택 근거로 흡수한다.
+-->
+<style>
+  :root{
+    --bg:#f7f7f8; --fg:#1a1a1e; --muted:#5c5c66; --line:#d9d9e0; --card:#ffffff;
+    --accent:#3b5bdb; --accent-soft:#e7ecfb; --shadow:0 1px 3px rgba(0,0,0,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#16161a; --fg:#ececf0; --muted:#9a9aa5; --line:#2c2c34; --card:#1e1e24;
+      --accent:#7a93f5; --accent-soft:#22283d; --shadow:0 1px 3px rgba(0,0,0,.4); }
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; padding:24px; background:var(--bg); color:var(--fg);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif; }
+  header{ max-width:1200px; margin:0 auto 20px; }
+  h1{ font-size:20px; margin:0 0 6px; }
+  .lead{ color:var(--muted); margin:0 0 12px; }
+  .how{ background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:12px 16px; box-shadow:var(--shadow); }
+  .how ol{ margin:6px 0 0; padding-left:20px; } .how li{ margin:2px 0; }
+  .grid{ max-width:1200px; margin:0 auto; display:grid; gap:16px;
+    grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
+  .option{ background:var(--card); border:1px solid var(--line); border-radius:12px;
+    box-shadow:var(--shadow); display:flex; flex-direction:column; overflow:hidden; }
+  .option.selected{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft),var(--shadow); }
+  .option > header{ display:flex; align-items:center; gap:10px; padding:12px 14px;
+    border-bottom:1px solid var(--line); margin:0; }
+  .option > header label{ font-weight:600; cursor:pointer; display:flex; align-items:center; gap:8px; }
+  .option .name{ font-size:15px; }
+  .mockup{ padding:14px; min-height:160px; overflow-x:auto; }
+  /* 목업 안에서 쓰기 좋은 중립 프리미티브(원하면 무시하고 자유 HTML/CSS로 그려도 됨) */
+  .mockup .box{ border:1px dashed var(--line); border-radius:8px; padding:10px; margin:6px 0;
+    color:var(--muted); }
+  .mockup .bar{ height:12px; border-radius:6px; background:var(--line); margin:6px 0; }
+  .notes{ padding:12px 14px; border-top:1px solid var(--line); }
+  .notes label{ display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  textarea{ width:100%; min-height:64px; resize:vertical; border:1px solid var(--line);
+    border-radius:8px; padding:8px; background:var(--bg); color:var(--fg); font:inherit; }
+  .panel{ max-width:1200px; margin:18px auto 0; background:var(--card); border:1px solid var(--line);
+    border-radius:12px; padding:16px; box-shadow:var(--shadow); }
+  .panel label{ display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  button{ font:inherit; font-weight:600; border:1px solid var(--accent); background:var(--accent);
+    color:#fff; border-radius:8px; padding:8px 16px; cursor:pointer; }
+  button.secondary{ background:transparent; color:var(--accent); }
+  button:disabled{ opacity:.5; cursor:not-allowed; }
+  #summary{ width:100%; min-height:150px; margin-top:12px; white-space:pre; font-family:ui-monospace,
+    SFMono-Regular,Menlo,monospace; font-size:13px; }
+  .hint{ color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>디자인 대안 비교 — 내 포켓몬 설정 영역 내부 구성(세로 패널 340px · 가로 바 축약형)</h1>
+  <p class="lead">아래 대안을 비교하고, <b>베이스로 삼을 안 하나를 라디오로 선택</b>한 뒤,
+    <b>세부 수정 요구사항</b>을 적어 주세요.</p>
+  <div class="how">
+    <b>사용법</b>
+    <ol>
+      <li>각 대안을 나란히 비교합니다.</li>
+      <li>가장 마음에 드는 안의 <b>◉ 라디오</b>를 선택합니다(베이스 = 이 안을 출발점으로 발전).</li>
+      <li>대안별 칸과 아래 "전체 수정 요구사항"에 원하는 변경을 구체적으로 적습니다.</li>
+      <li><b>"요약 생성"</b>을 누르고 <b>"복사"</b>해서 에이전트에게 붙여넣습니다(이 파일은 정적이라
+        직접 전송되지 않습니다 — 붙여넣기로 전달).</li>
+    </ol>
+  </div>
+</header>
+
+<!-- ▼▼▼ 에이전트가 채우는 영역: 대안 카드(최소 2개). cp한 복사본에서 이 구역만 Edit한다.
+     카드를 복제/삭제해 개수를 맞추고, data-label·라디오 value·.name·.mockup을 이번 유닛의
+     실제 화면 배치로 채운다(value·data-label·.name은 대안 이름으로 함께 일치). ▼▼▼ -->
+<div class="grid" id="grid">
+
+<style>
+  .s-cap{font-size:11px;color:var(--muted);margin:0 0 6px}
+  .s-cap.t{margin-top:12px;font-weight:600;color:var(--fg)}
+  .s-pnl{width:340px;max-width:100%;border:1px solid var(--line);border-radius:8px;background:var(--card);font-size:12px;line-height:1.45;padding:10px}
+  .s-h{display:flex;justify-content:space-between;align-items:baseline;font-weight:700;margin:0 0 4px;gap:6px}
+  .s-sec{border-top:1px solid var(--line);padding-top:6px;margin-top:6px}
+  .s-lb{font-size:11px;color:var(--muted);font-weight:600;margin-bottom:3px;display:flex;justify-content:space-between;gap:6px}
+  .s-f{display:grid;grid-template-columns:34px 1fr auto;gap:6px;align-items:center;margin:3px 0}
+  .s-f>span:first-child{color:var(--muted)}
+  .s-in{display:inline-block;border:1px solid var(--line);border-radius:4px;padding:1px 6px;background:var(--bg);white-space:nowrap}
+  .s-dis{opacity:.5}
+  .s-mt{color:var(--muted);font-size:11px}
+  .s-num{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:var(--bg);vertical-align:middle}
+  .s-num>i{font-style:normal;padding:0 5px;color:var(--muted)}
+  .s-num>b{padding:0 4px;min-width:22px;text-align:center;border-left:1px solid var(--line);border-right:1px solid var(--line);background:var(--card)}
+  .s-cat{display:inline-block;font-size:10px;border:1px solid var(--line);border-radius:3px;padding:0 3px;margin-right:5px;white-space:nowrap}
+  .s-mv{display:flex;align-items:center;border:1px solid var(--line);border-radius:4px;padding:1px 6px;margin:2px 0;background:var(--bg)}
+  .s-mv .s-mt{margin-left:auto}
+  .s-err{border:1px dashed var(--fg);border-radius:4px;padding:3px 6px;margin-top:6px;font-size:11px;background:var(--card)}
+  .s-rk{border:1px solid var(--line);border-radius:999px;padding:0 8px;font-size:11px;display:inline-block;background:var(--accent-soft)}
+  .s-live{font-size:10px;color:var(--muted)}
+  .s-bud{height:8px;border-radius:4px;background:var(--bg);border:1px solid var(--line);overflow:hidden;display:flex;margin:3px 0}
+  .s-bud>span{height:100%;border-right:1px solid var(--card)}
+  .s-g1{background:rgba(128,128,145,.25)}.s-g2{background:rgba(128,128,145,.45)}.s-g3{background:rgba(128,128,145,.65)}
+  .s-acc{border:1px solid var(--line);border-radius:6px;margin:6px 0;background:var(--card)}
+  .s-ah{display:flex;justify-content:space-between;gap:6px;padding:4px 8px;font-weight:600}
+  .s-ah .s-mt{font-weight:400;text-align:right}
+  .s-ab{padding:6px 8px;border-top:1px solid var(--line)}
+  .s-g3c{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+  .s-cell{border:1px solid var(--line);border-radius:5px;padding:3px 4px;text-align:center;background:var(--bg)}
+  .s-cell .s-mt{display:block}
+  .s-sl{display:grid;grid-template-columns:30px 1fr auto 34px;gap:8px;align-items:center;margin:9px 0}
+  .s-sl>b{font-size:13px}
+  .s-tr{position:relative;height:6px;border-radius:3px;background:var(--line)}
+  .s-tr>.fl{position:absolute;left:0;top:0;bottom:0;background:var(--fg);opacity:.5;border-radius:3px}
+  .s-tr>.th{position:absolute;top:-5px;width:16px;height:16px;border-radius:50%;background:var(--card);border:2px solid var(--fg);margin-left:-8px}
+  .s-tr>.tk{position:absolute;top:-5px;height:16px;border-left:2px dotted var(--muted)}
+  .s-big{font-size:15px;font-weight:700;text-align:right}
+  .s-tbl{border-collapse:collapse;width:100%;font-size:12px}
+  .s-tbl th,.s-tbl td{border-bottom:1px solid var(--line);padding:3px 4px;text-align:center;white-space:nowrap}
+  .s-tbl th{font-size:10px;color:var(--muted);font-weight:600}
+  .s-tbl td:first-child,.s-tbl th:first-child{text-align:left}
+  .s-tbl tfoot td{font-weight:600;border-bottom:0}
+  .s-tbl .on{font-weight:700;border:1px solid var(--fg);border-radius:3px;padding:0 3px}
+  .s-bw{overflow-x:auto}
+  .s-bar{display:flex;flex-wrap:nowrap;gap:8px;align-items:center;min-width:1100px;border:1px solid var(--line);border-radius:8px;background:var(--card);padding:6px 10px;font-size:12px;white-space:nowrap}
+  .s-sep{width:1px;align-self:stretch;background:var(--line)}
+  .s-desc{font-size:12px;color:var(--muted);margin:0}
+  .s-desc ul{margin:2px 0 0;padding-left:18px}
+  .s-desc b{color:var(--fg)}
+  .s-fake{font-size:10px;color:var(--muted);margin-top:10px;border-top:1px dashed var(--line);padding-top:4px}
+  .s-lgd{font-size:10px;color:var(--muted);margin-top:4px}
+</style>
+
+  <!-- ================= 대안 A ================= -->
+  <section class="option" data-label="대안 A — 폼 일렬 나열">
+    <header>
+      <label><input type="radio" name="base" value="대안 A — 폼 일렬 나열" /><span class="name">대안 A — 폼 일렬 나열</span></label>
+    </header>
+    <div class="mockup">
+      <p class="s-cap">1280px 화면의 세로 패널(340px) · 입력 순서 그대로 위→아래. 모든 항목이 항상 펼쳐져 있고 SP는 숫자 스테퍼 + 실능치 상시 표시.</p>
+      <div class="s-pnl">
+        <div class="s-h">내 포켓몬 <span class="s-mt">예시로 채워짐 · 초기화</span></div>
+        <div class="s-f"><span>종</span><span class="s-in">대도각참 &nbsp;⌕ 한국어 검색</span><span class="s-in s-dis">메가 없음</span></div>
+        <div class="s-f"><span>특성</span><span class="s-in">총대장 ▾</span><span></span></div>
+        <div class="s-f"><span>도구</span><span class="s-in">검은안경 ▾</span><span></span></div>
+        <div class="s-f"><span>성격</span><span class="s-in">고집 ▾</span><span class="s-mt">A↑ · C↓</span></div>
+        <div class="s-sec">
+          <div class="s-lb"><span>SP · 합계 66 / 66 · 잔여 0</span><span>상한 32</span></div>
+          <div class="s-f"><span>H</span><span class="s-num"><i>−</i><b>20</b><i>+</i></span><span>195</span></div>
+          <div class="s-f"><span>A ↑</span><span class="s-num"><i>−</i><b>20</b><i>+</i></span><span><b>192</b></span></div>
+          <div class="s-f"><span>B</span><span class="s-num"><i>−</i><b>2</b><i>+</i></span><span>142</span></div>
+          <div class="s-f"><span>C ↓</span><span class="s-num"><i>−</i><b>0</b><i>+</i></span><span>72</span></div>
+          <div class="s-f"><span>D</span><span class="s-num"><i>−</i><b>0</b><i>+</i></span><span>105</span></div>
+          <div class="s-f"><span>S</span><span class="s-num"><i>−</i><b>24</b><i>+</i></span><span>94</span></div>
+          <div class="s-live">SP를 바꾸면 결과 카드가 바로 다시 계산됨(오른쪽 열 = 실능치)</div>
+        </div>
+        <div class="s-sec">
+          <div class="s-lb"><span>기술</span></div>
+          <div class="s-mv"><span class="s-cat">◆ 물리</span>기습</div>
+          <div class="s-mv"><span class="s-cat">◆ 물리</span>아이언헤드</div>
+          <div class="s-mv"><span class="s-cat">◆ 물리</span>깜짝베기</div>
+          <div class="s-mv"><span class="s-cat">○ 변화</span>칼춤</div>
+        </div>
+        <div class="s-sec">
+          <div class="s-lb"><span>랭크 변화 수단</span></div>
+          <span class="s-rk">칼춤 → 공격 탭 모든 카드에 "A +2" 행 추가</span>
+        </div>
+        <div class="s-sec">
+          <div class="s-lb"><span>규칙 확인</span></div>
+          <div class="s-mt">위반 없음</div>
+        </div>
+      </div>
+      <p class="s-cap t">위반 시(패널 맨 아래 "규칙 확인" 칸)</p>
+      <div class="s-err">⚠ 규칙 위반 · SP 합계가 74로 66을 8 넘었습니다. 다른 능력치에서 8을 줄이세요.</div>
+      <p class="s-cap t">가로 바 축약형(한 줄) · 읽기 전용 요약 + "편집"으로 위 폼을 아래로 펼침</p>
+      <div class="s-bw"><div class="s-bar">
+        <b>대도각참</b><span class="s-sep"></span>총대장<span class="s-sep"></span>검은안경<span class="s-sep"></span>고집 A↑C↓<span class="s-sep"></span>
+        <span>H20 A20 B2 C0 D0 S24 · 잔여 0</span><span class="s-sep"></span>
+        <span><span class="s-cat">◆</span>기습 <span class="s-cat">◆</span>아이언헤드 <span class="s-cat">◆</span>깜짝베기 <span class="s-cat">○</span>칼춤</span><span class="s-sep"></span>
+        <span class="s-rk">칼춤 A+2</span><span class="s-mt">위반 없음</span><span style="margin-left:auto" class="s-in">편집 ▾</span>
+      </div></div>
+      <p class="s-cap t">400px</p>
+      <div class="s-desc">패널이 결과 위로 그대로 쌓여 세로 약 640px — 첫 화면에 결과 카드가 거의 안 보인다. 편집이 끝나면 위 한 줄 요약(줄바꿈 허용)으로 접는 버튼이 필요하다.</div>
+      <p class="s-cap t">판단 포인트</p>
+      <div class="s-desc"><ul>
+        <li><b>정보 우선순위</b>: 입력 순서 = 표시 순서(종 → 특성·도구·성격 → SP → 기술 → 랭크 → 위반). 강조 없음.</li>
+        <li><b>상호작용</b>: SP는 −/+ 또는 숫자 직접 입력(키보드 ↑↓). 실능치는 상시 표시.</li>
+        <li><b>트레이드오프</b>: 가장 단순·예측 가능하지만 길다. 위반 안내가 원인(SP)과 멀리 떨어진다.</li>
+      </ul></div>
+      <div class="s-lgd">기술 분류: ◆ 물리 · ◎ 특수 · ○ 변화(기호+글자 병기, 색 의존 없음)</div>
+      <div class="s-fake">예시 수치(실능치·SP·위반 문구)는 배치 확인용 가짜 값입니다.</div>
+    </div>
+    <div class="notes">
+      <label>대안 A 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="예: 실능치 열은 토글로, 위반 안내는 SP 바로 아래로…"></textarea>
+    </div>
+  </section>
+
+  <!-- ================= 대안 B ================= -->
+  <section class="option" data-label="대안 B — 종·SP만 펼치고 나머지 아코디언">
+    <header>
+      <label><input type="radio" name="base" value="대안 B — 종·SP만 펼치고 나머지 아코디언" /><span class="name">대안 B — 종·SP만 펼치고 나머지 아코디언</span></label>
+    </header>
+    <div class="mockup">
+      <p class="s-cap">1280px 화면의 세로 패널(340px) · 자주 바꾸는 종·SP는 항상 펼침, 한 번 정하면 잘 안 바꾸는 특성·도구·성격·기술은 요약 한 줄로 접힘.</p>
+      <div class="s-pnl">
+        <div class="s-h">내 포켓몬 <span class="s-mt">초기화</span></div>
+        <div class="s-acc">
+          <div class="s-ah">종 <span class="s-mt">항상 펼침</span></div>
+          <div class="s-ab">
+            <div class="s-f" style="grid-template-columns:1fr auto"><span class="s-in" style="color:var(--fg)">대도각참 &nbsp;⌕</span><span class="s-in s-dis">□ 메가(폼 없음)</span></div>
+            <div class="s-mt">악·강철 · 종족값 100/135/120/60/85/50</div>
+          </div>
+        </div>
+        <div class="s-acc">
+          <div class="s-ah">SP <span class="s-mt">66 / 66 · 잔여 0 · 상한 32</span></div>
+          <div class="s-ab">
+            <div class="s-bud"><span class="s-g1" style="width:30.3%"></span><span class="s-g3" style="width:30.3%"></span><span class="s-g1" style="width:3%"></span><span class="s-g2" style="width:36.4%"></span></div>
+            <div class="s-g3c" style="margin-top:6px">
+              <div class="s-cell">H <span class="s-num"><i>−</i><b>20</b><i>+</i></span><span class="s-mt">195</span></div>
+              <div class="s-cell"><b>A ↑</b> <span class="s-num"><i>−</i><b>20</b><i>+</i></span><span class="s-mt">192</span></div>
+              <div class="s-cell">B <span class="s-num"><i>−</i><b>2</b><i>+</i></span><span class="s-mt">142</span></div>
+              <div class="s-cell">C ↓ <span class="s-num"><i>−</i><b>0</b><i>+</i></span><span class="s-mt">72</span></div>
+              <div class="s-cell">D <span class="s-num"><i>−</i><b>0</b><i>+</i></span><span class="s-mt">105</span></div>
+              <div class="s-cell">S <span class="s-num"><i>−</i><b>24</b><i>+</i></span><span class="s-mt">94</span></div>
+            </div>
+            <div class="s-lb" style="margin:5px 0 0"><span class="s-live">바꾸면 결과 즉시 갱신</span><span>☑ 실능치 표시</span></div>
+          </div>
+        </div>
+        <div class="s-acc">
+          <div class="s-ah">▸ 특성·도구·성격 <span class="s-mt">총대장 · 검은안경 · 고집 A↑C↓</span></div>
+        </div>
+        <div class="s-acc">
+          <div class="s-ah">▸ 기술 4 <span class="s-mt">◆기습 ◆아이언헤드 ◆깜짝베기 ○칼춤</span></div>
+        </div>
+        <span class="s-rk">랭크 변화: 칼춤 → 공격 탭 "A +2" 행</span>
+      </div>
+      <p class="s-cap t">위반 시 · 원인 섹션 헤더에 배지, 접혀 있던 섹션은 자동으로 펼침</p>
+      <div class="s-acc"><div class="s-ah">SP <span class="s-mt">⚠ 74 / 66 · 8 초과</span></div><div class="s-ab"><div class="s-err" style="margin:0">⚠ 규칙 위반 · SP 합계가 66을 8 넘었습니다.</div></div></div>
+      <div class="s-acc"><div class="s-ah">▾ 기술 4 <span class="s-mt">⚠ 1건</span></div><div class="s-ab"><div class="s-err" style="margin:0">⚠ "파도타기"는 대도각참이 배울 수 없는 기술입니다.</div></div></div>
+      <p class="s-cap t">가로 바 축약형(한 줄) · SP만 바에서 바로 편집, 나머지는 요약 칩(눌러 팝오버)</p>
+      <div class="s-bw"><div class="s-bar">
+        <span class="s-in">대도각참 ▾</span><span class="s-sep"></span>
+        <b>SP</b> H<span class="s-num"><b>20</b></span> A↑<span class="s-num"><b>20</b></span> B<span class="s-num"><b>2</b></span> C↓<span class="s-num"><b>0</b></span> D<span class="s-num"><b>0</b></span> S<span class="s-num"><b>24</b></span><span class="s-mt">잔여 0</span><span class="s-sep"></span>
+        <span class="s-in">총대장 · 검은안경 · 고집 ▸</span><span class="s-in">기술 4 ▸</span><span class="s-rk">칼춤 A+2</span><span class="s-mt" style="margin-left:auto">위반 없음</span>
+      </div></div>
+      <p class="s-cap t">400px</p>
+      <div class="s-desc">종 + SP 3×2 격자 + 접힌 두 줄로 세로 약 360px. SP 격자는 3열 그대로 들어간다(칸당 ~115px). 결과 카드가 첫 화면 아래쪽에 바로 보인다.</div>
+      <p class="s-cap t">판단 포인트</p>
+      <div class="s-desc"><ul>
+        <li><b>정보 우선순위</b>: 종 &gt; SP(예산 막대·잔여) &gt; 특성·도구·성격 요약 &gt; 기술 요약 &gt; 랭크 칩.</li>
+        <li><b>상호작용</b>: SP는 격자 칸 스테퍼, 실능치 표시 토글. 접힌 섹션은 헤더 클릭/Enter로 펼침.</li>
+        <li><b>트레이드오프</b>: 짧고 SP 조작이 가깝다. 대신 성격 ±가 접혀 있어 SP 칸의 ↑↓ 표시가 유일한 단서다.</li>
+      </ul></div>
+      <div class="s-lgd">기술 분류: ◆ 물리 · ◎ 특수 · ○ 변화 · 예산 막대 = 능력치별 배분 비율(텍스트 합계 병기)</div>
+      <div class="s-fake">예시 수치(종족값·실능치·SP·위반 문구)는 배치 확인용 가짜 값입니다.</div>
+    </div>
+    <div class="notes">
+      <label>대안 B 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="이 안에 대한 수정 요구사항…"></textarea>
+    </div>
+  </section>
+
+  <!-- ================= 대안 C ================= -->
+  <section class="option" data-label="대안 C — SP 슬라이더 크게 + 나머지 컴팩트">
+    <header>
+      <label><input type="radio" name="base" value="대안 C — SP 슬라이더 크게 + 나머지 컴팩트" /><span class="name">대안 C — SP 슬라이더 크게 + 나머지 컴팩트</span></label>
+    </header>
+    <div class="mockup">
+      <p class="s-cap">1280px 화면의 세로 패널(340px) · 위쪽에 종·특성·도구·성격·기술을 2열 칩으로 압축, 패널 대부분을 SP 슬라이더 6줄에 준다. 슬라이더 위 점선 눈금 = 현재 결과의 경계 SP(선택 기능).</p>
+      <div class="s-pnl">
+        <div class="s-h">내 포켓몬 <span class="s-mt">초기화</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+          <span class="s-in">대도각참 ⌕ <span class="s-mt">메가 없음</span></span><span class="s-in">총대장 ▾</span>
+          <span class="s-in">검은안경 ▾</span><span class="s-in">고집 <span class="s-mt">A↑ C↓</span> ▾</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:4px">
+          <span class="s-mv" style="margin:0"><span class="s-cat">◆</span>기습</span><span class="s-mv" style="margin:0"><span class="s-cat">◆</span>아이언헤드</span>
+          <span class="s-mv" style="margin:0"><span class="s-cat">◆</span>깜짝베기</span><span class="s-mv" style="margin:0"><span class="s-cat">○</span>칼춤</span>
+        </div>
+        <div class="s-sec">
+          <div class="s-lb"><span style="font-size:13px;color:var(--fg)">SP 66 / 66 · 잔여 <b>0</b></span><span>상한 32 · 실능치</span></div>
+          <div class="s-bud" style="height:10px"><span class="s-g1" style="width:30.3%"></span><span class="s-g3" style="width:30.3%"></span><span class="s-g1" style="width:3%"></span><span class="s-g2" style="width:36.4%"></span></div>
+          <div class="s-sl"><b>H</b><div class="s-tr"><span class="fl" style="width:62.5%"></span><span class="tk" style="left:37.5%"></span><span class="th" style="left:62.5%"></span></div><span class="s-num"><i>−</i><b>20</b><i>+</i></span><span class="s-big">195</span></div>
+          <div class="s-sl"><b>A ↑</b><div class="s-tr"><span class="fl" style="width:62.5%"></span><span class="tk" style="left:87.5%"></span><span class="th" style="left:62.5%"></span></div><span class="s-num"><i>−</i><b>20</b><i>+</i></span><span class="s-big">192</span></div>
+          <div class="s-sl"><b>B</b><div class="s-tr"><span class="fl" style="width:6.25%"></span><span class="tk" style="left:50%"></span><span class="th" style="left:6.25%"></span></div><span class="s-num"><i>−</i><b>2</b><i>+</i></span><span class="s-big">142</span></div>
+          <div class="s-sl"><b>C ↓</b><div class="s-tr"><span class="th" style="left:0%"></span></div><span class="s-num"><i>−</i><b>0</b><i>+</i></span><span class="s-big">72</span></div>
+          <div class="s-sl"><b>D</b><div class="s-tr"><span class="tk" style="left:25%"></span><span class="th" style="left:0%"></span></div><span class="s-num"><i>−</i><b>0</b><i>+</i></span><span class="s-big">105</span></div>
+          <div class="s-sl"><b>S</b><div class="s-tr"><span class="fl" style="width:75%"></span><span class="tk" style="left:84.4%"></span><span class="th" style="left:75%"></span></div><span class="s-num"><i>−</i><b>24</b><i>+</i></span><span class="s-big">94</span></div>
+          <div class="s-live">끄는 동안 결과 카드가 따라 갱신 · 잔여 0이면 슬라이더는 예산 밖 구간(빗금)까지 끌 수 있고 놓으면 위반 안내</div>
+        </div>
+        <div class="s-sec"><span class="s-rk">랭크 변화: 칼춤 → 공격 탭 "A +2" 행</span></div>
+      </div>
+      <p class="s-cap t">위반 시 · 예산 막대 바로 아래(SP 블록 안)</p>
+      <div class="s-err">⚠ 규칙 위반 · SP 합계 74 / 66 — 8 초과. 다른 능력치에서 8을 줄이세요.</div>
+      <p class="s-cap t">가로 바 축약형(한 줄) · 능력치마다 미니 막대 + 숫자, 누르면 그 능력치 슬라이더 팝오버</p>
+      <div class="s-bw"><div class="s-bar">
+        <span class="s-in">대도각참 · 고집 A↑C↓ ▾</span><span class="s-sep"></span>
+        <span>H <b>20</b> <span class="s-bud" style="display:inline-flex;width:40px;vertical-align:middle"><span class="s-g2" style="width:62%"></span></span></span>
+        <span>A↑ <b>20</b> <span class="s-bud" style="display:inline-flex;width:40px;vertical-align:middle"><span class="s-g2" style="width:62%"></span></span></span>
+        <span>B <b>2</b> <span class="s-bud" style="display:inline-flex;width:40px;vertical-align:middle"><span class="s-g2" style="width:6%"></span></span></span>
+        <span>C↓ <b>0</b> <span class="s-bud" style="display:inline-flex;width:40px;vertical-align:middle"></span></span>
+        <span>D <b>0</b> <span class="s-bud" style="display:inline-flex;width:40px;vertical-align:middle"></span></span>
+        <span>S <b>24</b> <span class="s-bud" style="display:inline-flex;width:40px;vertical-align:middle"><span class="s-g2" style="width:75%"></span></span></span>
+        <b>잔여 0</b><span class="s-sep"></span>
+        <span class="s-mt">총대장 · 검은안경 · ◆◆◆○ 기술 4</span><span class="s-rk">칼춤 A+2</span><span class="s-in" style="margin-left:auto">설정 ▾</span>
+      </div></div>
+      <p class="s-cap t">400px</p>
+      <div class="s-desc">슬라이더가 엄지 조작에 유리(트랙 ~200px). 세로 약 470px. 칩 2열은 그대로, 실능치 숫자는 슬라이더 오른쪽 유지. 스크롤 중 슬라이더 오조작 방지를 위해 트랙 높이·간격을 넉넉히.</div>
+      <p class="s-cap t">판단 포인트</p>
+      <div class="s-desc"><ul>
+        <li><b>정보 우선순위</b>: SP(잔여·실능치) &gt;&gt; 종·성격 칩 &gt; 기술 칩 &gt; 랭크 칩. 가장 잦은 조작에 면적을 몰아 줌.</li>
+        <li><b>상호작용</b>: 슬라이더 끌기(결과 연속 갱신) + 스테퍼 미세 조정. 경계 눈금으로 "어디까지 올리면 바뀌나"를 설정 쪽에서도 봄.</li>
+        <li><b>트레이드오프</b>: SP 탐색이 가장 빠르나, 끄는 동안 연속 재계산 부하(반응성 기준)와 경계 눈금의 결과→설정 역참조가 구현 복잡도를 올린다.</li>
+      </ul></div>
+      <div class="s-lgd">기술 분류: ◆ 물리 · ◎ 특수 · ○ 변화 · 점선 눈금 = 결과 경계 SP(예시)</div>
+      <div class="s-fake">예시 수치(실능치·SP·경계 눈금 위치·위반 문구)는 배치 확인용 가짜 값입니다.</div>
+    </div>
+    <div class="notes">
+      <label>대안 C 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="이 안에 대한 수정 요구사항…"></textarea>
+    </div>
+  </section>
+
+  <!-- ================= 대안 D ================= -->
+  <section class="option" data-label="대안 D — 실능치 표 일체형">
+    <header>
+      <label><input type="radio" name="base" value="대안 D — 실능치 표 일체형" /><span class="name">대안 D — 실능치 표 일체형</span></label>
+    </header>
+    <div class="mockup">
+      <p class="s-cap">1280px 화면의 세로 패널(340px) · 능력치 6행 표 하나에 종족값·SP·성격 ±·실능치·랭크를 모은다. 성격은 표의 ↑/↓ 칸을 눌러 고르고(이름 자동 표시), 기술은 참조 능력치와 함께 아래 표.</p>
+      <div class="s-pnl">
+        <div class="s-h">내 포켓몬 <span class="s-mt">초기화</span></div>
+        <div class="s-f" style="grid-template-columns:1fr auto"><span class="s-in" style="color:var(--fg)">대도각참 ⌕</span><span class="s-in s-dis">메가 없음</span></div>
+        <div class="s-f" style="grid-template-columns:1fr 1fr"><span class="s-in" style="color:var(--fg)">특성 총대장 ▾</span><span class="s-in" style="color:var(--fg)">도구 검은안경 ▾</span></div>
+        <div class="s-sec" style="overflow-x:auto">
+          <table class="s-tbl">
+            <thead><tr><th>능력</th><th>종족</th><th>SP</th><th>성격<br>고집</th><th>실능치</th><th>랭크</th></tr></thead>
+            <tbody>
+              <tr><td>H</td><td class="s-mt">100</td><td><span class="s-num"><i>−</i><b>20</b><i>+</i></span></td><td class="s-mt">·</td><td><b>195</b></td><td class="s-mt">·</td></tr>
+              <tr><td>A</td><td class="s-mt">135</td><td><span class="s-num"><i>−</i><b>20</b><i>+</i></span></td><td><span class="on">↑</span></td><td><b>192</b></td><td>+2 <span class="s-mt">칼춤</span></td></tr>
+              <tr><td>B</td><td class="s-mt">120</td><td><span class="s-num"><i>−</i><b>2</b><i>+</i></span></td><td class="s-mt">↑↓</td><td><b>142</b></td><td class="s-mt">·</td></tr>
+              <tr><td>C</td><td class="s-mt">60</td><td><span class="s-num"><i>−</i><b>0</b><i>+</i></span></td><td><span class="on">↓</span></td><td><b>72</b></td><td class="s-mt">·</td></tr>
+              <tr><td>D</td><td class="s-mt">85</td><td><span class="s-num"><i>−</i><b>0</b><i>+</i></span></td><td class="s-mt">↑↓</td><td><b>105</b></td><td class="s-mt">·</td></tr>
+              <tr><td>S</td><td class="s-mt">50</td><td><span class="s-num"><i>−</i><b>24</b><i>+</i></span></td><td class="s-mt">↑↓</td><td><b>94</b></td><td class="s-mt">·</td></tr>
+            </tbody>
+            <tfoot><tr><td>합계</td><td></td><td>66/66</td><td colspan="3" class="s-mt" style="text-align:right">잔여 0 · 상한 32</td></tr></tfoot>
+          </table>
+          <div class="s-live">SP 칸을 바꾸면 실능치 열과 결과 카드가 함께 갱신 · 랭크 열 = 내 랭크 변화 수단이 공격 탭에 추가하는 행</div>
+        </div>
+        <div class="s-sec">
+          <table class="s-tbl">
+            <thead><tr><th>기술</th><th>분류</th><th>참조</th><th>적용 탭</th></tr></thead>
+            <tbody>
+              <tr><td>기습</td><td><span class="s-cat" style="margin:0">◆ 물리</span></td><td class="s-mt">내 A → 상대 B</td><td class="s-mt">공격</td></tr>
+              <tr><td>아이언헤드</td><td><span class="s-cat" style="margin:0">◆ 물리</span></td><td class="s-mt">내 A → 상대 B</td><td class="s-mt">공격</td></tr>
+              <tr><td>깜짝베기</td><td><span class="s-cat" style="margin:0">◆ 물리</span></td><td class="s-mt">내 A → 상대 B</td><td class="s-mt">공격</td></tr>
+              <tr><td>칼춤</td><td><span class="s-cat" style="margin:0">○ 변화</span></td><td class="s-mt">A +2</td><td class="s-mt">공격(랭크 행)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p class="s-cap t">위반 시 · 문제 행에 직접 표시 + 표 아래 요약</p>
+      <table class="s-tbl" style="background:var(--card)"><tbody><tr><td>S</td><td class="s-mt">50</td><td><span class="s-num" style="border-color:var(--fg)"><i>−</i><b>34</b><i>+</i></span></td><td colspan="3" style="text-align:left">⚠ 상한 32 초과(+2)</td></tr></tbody></table>
+      <div class="s-err">⚠ 규칙 위반 1건 · S의 SP는 32까지입니다.</div>
+      <p class="s-cap t">가로 바 축약형(한 줄) · 표를 가로로 눕힘: 능력치 열마다 SP(편집) / 실능치 두 줄</p>
+      <div class="s-bw"><div class="s-bar">
+        <span class="s-in">대도각참 ▾</span><span class="s-mt">총대장 · 검은안경 · 고집</span><span class="s-sep"></span>
+        <table class="s-tbl" style="width:auto"><tbody>
+          <tr><td>SP</td><td>H <b>20</b></td><td>A↑ <b>20</b></td><td>B <b>2</b></td><td>C↓ <b>0</b></td><td>D <b>0</b></td><td>S <b>24</b></td><td class="s-mt">잔여 0</td></tr>
+          <tr><td class="s-mt">실능치</td><td class="s-mt">195</td><td class="s-mt">192 (+2)</td><td class="s-mt">142</td><td class="s-mt">72</td><td class="s-mt">105</td><td class="s-mt">94</td><td></td></tr>
+        </tbody></table><span class="s-sep"></span>
+        <span class="s-mt">◆기습 ◆아이언헤드 ◆깜짝베기 ○칼춤</span><span class="s-in" style="margin-left:auto">설정 ▾</span>
+      </div></div>
+      <p class="s-cap t">400px</p>
+      <div class="s-desc">표 6열이 368px에 빠듯하다 → 400px에서는 "종족" 열을 숨기고 성격 열을 좁힌다(약 330px). 세로 약 520px. 기술 표의 "참조" 열은 줄바꿈 허용.</div>
+      <p class="s-cap t">판단 포인트</p>
+      <div class="s-desc"><ul>
+        <li><b>정보 우선순위</b>: 능력치별 결과(SP→실능치→랭크)를 한 행으로 대조 &gt; 종·특성·도구 &gt; 기술의 참조 능력치.</li>
+        <li><b>상호작용</b>: SP 칸 스테퍼/직접 입력, 성격은 ↑·↓ 칸 클릭(드롭다운 병행), 위반은 해당 칸에 바로 표시.</li>
+        <li><b>트레이드오프</b>: 계산 근거가 가장 투명하고 위반 위치가 정확하지만, 정보 밀도가 높아 초심자에게 부담이고 좁은 폭에서 열을 줄여야 한다.</li>
+      </ul></div>
+      <div class="s-lgd">기술 분류: ◆ 물리 · ◎ 특수 · ○ 변화 · 성격 열: 굵은 테두리 ↑/↓ = 선택된 보정</div>
+      <div class="s-fake">예시 수치(종족값·실능치·SP·위반 문구)는 배치 확인용 가짜 값입니다.</div>
+    </div>
+    <div class="notes">
+      <label>대안 D 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="이 안에 대한 수정 요구사항…"></textarea>
+    </div>
+  </section>
+
+</div>
+<!-- ▲▲▲ 에이전트가 채우는 영역 끝 ▲▲▲ -->
+
+<div class="panel">
+  <label for="overall">전체 수정 요구사항 (선택한 베이스를 어떻게 발전시킬지 · 공통 사항)</label>
+  <textarea id="overall" placeholder="예: 모바일 320px에서 컨트롤이 겹치지 않게, 결과 위계를 점수 > 순위 > 상세 순으로…"></textarea>
+  <div class="row">
+    <button id="gen">요약 생성</button>
+    <button id="copy" class="secondary" disabled>복사</button>
+    <span class="hint">요약을 복사해 에이전트 대화창에 붙여넣으세요.</span>
+  </div>
+  <textarea id="summary" readonly placeholder="여기에 붙여넣을 요약이 생성됩니다."></textarea>
+</div>
+
+<script>
+  (function(){
+    var grid = document.getElementById('grid');
+    grid.addEventListener('change', function(e){
+      if (e.target && e.target.name === 'base') {
+        document.querySelectorAll('.option').forEach(function(o){ o.classList.remove('selected'); });
+        var card = e.target.closest('.option');
+        if (card) card.classList.add('selected');
+      }
+    });
+
+    function build(){
+      var checked = document.querySelector('input[name="base"]:checked');
+      var base = checked ? checked.value : '(아직 선택 안 함)';
+      var overall = document.getElementById('overall').value.trim() || '(없음)';
+      var lines = [];
+      lines.push('=== 디자인 선택 요약 (에이전트에게 붙여넣기) ===');
+      lines.push('베이스로 선택: ' + base);
+      lines.push('전체 수정 요구사항:');
+      lines.push(overall);
+      lines.push('');
+      lines.push('대안별 메모:');
+      document.querySelectorAll('.option').forEach(function(o){
+        var label = o.getAttribute('data-label') || '(무명)';
+        var ta = o.querySelector('textarea[data-notes]');
+        var note = (ta && ta.value.trim()) ? ta.value.trim() : '(없음)';
+        lines.push('- ' + label + ': ' + note);
+      });
+      return lines.join('\n');
+    }
+
+    document.getElementById('gen').addEventListener('click', function(){
+      var out = document.getElementById('summary');
+      out.value = build();
+      document.getElementById('copy').disabled = false;
+    });
+
+    document.getElementById('copy').addEventListener('click', function(){
+      var out = document.getElementById('summary');
+      out.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(out.value).then(function(){}, function(){});
+      }
+      this.textContent = ok ? '복사됨 ✓' : '직접 선택해 복사(Ctrl/Cmd+C)';
+      var b = this; setTimeout(function(){ b.textContent = '복사'; }, 1800);
+    });
+  })();
+</script>
+</body>
+</html>

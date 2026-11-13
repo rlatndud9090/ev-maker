@@ -107,6 +107,8 @@ export interface MetaIndexItem {
   format: string
   url: string
   publishedAt: string
+  /** 원천 info["number of battles"](스냅샷 manifest.source.battles와 같다). 기본 매치 방식 선택에 쓴다 */
+  battles: number
 }
 
 /** src/data/meta/index.json. 각 배열은 (month, match) 순 */

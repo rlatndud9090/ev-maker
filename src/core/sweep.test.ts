@@ -128,7 +128,7 @@ describe('스윕 예산·임계값·입력', () => {
     expect(imm.boundaries).toEqual([])
     expect(() => sweepDamage(MC, { side: 'attacker', stat: 'atk' }, kingambit, delphox, 'swordsdance')).toThrow(CoreInputError)
     expect(() => sweepDamage(MC, { side: 'attacker', stat: 'spe' }, kingambit, delphox, 'suckerpunch')).toThrow(CoreInputError)
-    expect(() => sweepDamage(MC, { side: 'defender', stat: 'atk' }, kingambit, delphox, 'suckerpunch')).toThrow(CoreInputError)
+    expect(() => sweepDamage(MC, { side: 'defender', stat: 'spa' }, kingambit, delphox, 'suckerpunch')).toThrow(CoreInputError)
     expect(() => sweepDamage(MC, { side: 'both' as never, stat: 'atk' }, kingambit, delphox, 'suckerpunch')).toThrow(CoreInputError)
     expect(() => sweepDamage(MC, { side: 'attacker', stat: 'atk' }, kingambit, delphox, 'suckerpunch', undefined, { highRoll: 0 })).toThrow(
       CoreInputError,

@@ -1,0 +1,50 @@
+// 카드·행·프리셋 키. 서로 다른 조합이 같은 문자열이 되지 않게 라벨을 잇지 않고 튜플을 직렬화한다.
+import { STAT_IDS } from '../core'
+import type { AddedBundle, Category, PinnedBundle, PresetIndex, Tab } from './types'
+
+type Part = string | number | null
+
+export function cardId(parts: readonly Part[]): string {
+  return JSON.stringify(parts)
+}
+
+/** 카드 id를 첫 원소로 둔 튜플이라 다른 카드의 행과 겹치지 않는다. */
+export function rowId(cardId: string, parts: readonly Part[]): string {
+  return JSON.stringify([cardId, ...parts])
+}
+
+export function presetKey(tab: Tab, category: Category | null, preset: PresetIndex): string {
+  return JSON.stringify([tab, category, preset])
+}
+
+/** 사용자 추가 배분의 묶음 키(성격 보정은 늘 neutral). stats는 키 능력치 STAT_IDS 순. */
+export function addedBundleKey(stats: readonly { stat: string; sp: number }[]): string {
+  return JSON.stringify(stats.map((s) => ({ stat: s.stat, sp: s.sp, nature: 'neutral' })))
+}
+
+/**
+ * 사용자 추가 배분 카드 id: 관측 묶음 카드 id 뒤에 'user' 표지를 붙여 같은 키의 관측 카드와 겹치지 않는다.
+ * 반감열매 변형 카드(berry = 열매 id)는 뒤에 그 열매를 붙인다(같은 직접 추가 배분이 기본 행·열매 행에 함께 생긴다).
+ */
+export function addedCardId(tab: Tab, opponentId: string, category: Category | null, bundleKey: string, berry?: string): string {
+  return cardId(berry === undefined ? [tab, 'ladder', opponentId, category, bundleKey, 'user'] : [tab, 'ladder', opponentId, category, bundleKey, 'user', berry])
+}
+
+/** 직접 추가 배분의 고정 항목(키 = 그 배분 카드의 묶음 키: 키 능력치 STAT_IDS 순, 무보정) */
+export function addedBundlePin(added: AddedBundle): PinnedBundle {
+  const stats = STAT_IDS.filter((s) => added.sp[s] !== undefined).map((stat) => ({ stat, sp: added.sp[stat] as number }))
+  return { tab: added.tab, opponentId: added.opponentId, category: added.category, key: addedBundleKey(stats) }
+}
+
+/** 같은 (탭, 상대, 분류, 묶음 키, 반감열매 행) 고정인지 */
+export const samePin = (a: PinnedBundle, b: PinnedBundle): boolean =>
+  a.tab === b.tab && a.opponentId === b.opponentId && a.category === b.category && a.key === b.key && (a.item ?? null) === (b.item ?? null)
+
+/** 화면이 추가 직후(계산이 끝나기 전) 그 카드를 미리 고를 때 쓰는 id. 계획(plan)과 같은 규칙이다. */
+export function addedBundleCardId(
+  added: { tab: Tab; opponentId: string; category: Category | null },
+  stats: readonly { stat: string; sp: number }[],
+  berry?: string,
+): string {
+  return addedCardId(added.tab, added.opponentId, added.category, addedBundleKey(stats), berry)
+}

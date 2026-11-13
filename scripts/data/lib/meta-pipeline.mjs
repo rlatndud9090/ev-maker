@@ -78,6 +78,7 @@ function rebuildIndex(outRoot, outputs) {
       format: m.source.format,
       url: m.source.url,
       publishedAt: m.source.publishedAt,
+      battles: m.source.battles,
     })
   }
   if (wrongVersion.length) {

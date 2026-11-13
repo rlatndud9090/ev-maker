@@ -325,7 +325,7 @@ describe('무결성', () => {
     expect(onDisk).toEqual(items.map((x) => x.file).sort())
   })
 
-  it('manifest.source의 sha256·publishedAt·url이 meta.config.json 기록과 같다', () => {
+  it('manifest.source의 sha256·publishedAt·url이 meta.config.json 기록과 같고 인덱스 판수가 manifest와 같다', () => {
     const { sources } = readJson<{ sources: MetaConfigSource[] }>('scripts/data/meta.config.json')
     for (const x of items) {
       const meta = readJson<MetaSnapshot>(`src/data/meta/${x.file}`)
@@ -336,6 +336,7 @@ describe('무결성', () => {
       expect(meta.manifest.source.url).toBe(rec?.url)
       expect(meta.manifest.source.format).toBe(rec?.format)
       expect(x.publishedAt).toBe(rec?.publishedAt)
+      expect(x.battles, x.file).toBe(meta.manifest.source.battles)
     }
   })
 

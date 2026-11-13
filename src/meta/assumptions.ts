@@ -73,6 +73,14 @@ export function representativeAssumption(view: MetaView, entryId: string): Assum
   return a
 }
 
+/** spread 키 "성격id:H/A/B/C/D/S"를 성격과 SP 표로 푼다. 형식이 틀리면 throw. */
+export function parseSpreadKey(key: string): { nature: string; sp: SpTable } {
+  const m = SPREAD_KEY.exec(key)
+  if (!m) throw new Error(`spread 키 형식이 잘못됐다: ${key}`)
+  const sp = Object.fromEntries(STAT_IDS.map((s: StatId, i) => [s, Number(m[i + 2])])) as SpTable
+  return { nature: m[1], sp }
+}
+
 /** 대표 세트의 성격·SP만 spreads.kept[spreadIndex]로 바꾼 관측 배분 가정. */
 export function observedSpreadAssumption(view: MetaView, entryId: string, spreadIndex: number): Assumption {
   const entry = requireEntry(view, entryId)
@@ -81,11 +89,10 @@ export function observedSpreadAssumption(view: MetaView, entryId: string, spread
     throw new RangeError(`${entryId}의 보존 spread 인덱스는 0~${kept.length - 1}이다(받은 값: ${spreadIndex})`)
   }
   const [key, share] = kept[spreadIndex]
-  const m = SPREAD_KEY.exec(key)
-  if (!m) throw new Error(`${entryId}의 spread 키 형식이 잘못됐다: ${key}`)
-  const sp = Object.fromEntries(STAT_IDS.map((s: StatId, i) => [s, Number(m[i + 2])])) as SpTable
+  if (!SPREAD_KEY.test(key)) throw new Error(`${entryId}의 spread 키 형식이 잘못됐다: ${key}`)
+  const { nature, sp } = parseSpreadKey(key)
   const a = representativeAssumption(view, entryId)
-  a.set = { ...a.set, nature: m[1], sp }
+  a.set = { ...a.set, nature, sp }
   a.basis = 'observed-spread'
   a.share = share
   return a
