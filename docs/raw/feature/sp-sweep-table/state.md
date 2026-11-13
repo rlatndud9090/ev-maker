@@ -1,9 +1,9 @@
 ---
 title: "SP 구간 판정 표 화면(메타 카드 리스트)"
 date: "2026-11-07"
-stage: implementing
-prd_status: pre-approved
-adr_status: pre-accepted
+stage: approved
+prd_status: approved
+adr_status: accepted
 ---
 
 # 작업 단계 원장: SP 구간 판정 표 화면(메타 카드 리스트)
@@ -74,7 +74,11 @@ adr_status: pre-accepted
 - 2026-11-12 implementing: 사용자 피드백 — 공격 탭 상대 도구 없음 기본(기합의띠 제외)·반감열매 별도 행("(마코)" 배지, 최소 5%), 구간 띠 색 칸만·스크롤 없음, 순풍 토글 스피드 탭 전용. 방어 탭 화력 도구 행·성묘는 사용자 통합 검토 후로 보류 — 사용자 요청
 - 2026-11-12 implementing: 사용자 피드백 — Champions 메뉴 아이콘(내 포켓몬·목록)과 반감열매 이미지(행 이름 옆) 번들, 출처·라이선스 고지 — 사용자 요청
 - 2026-11-12 implementing: 사용자 피드백 — 랭크 조건은 능동 랭크업만(하락·반응 제외, 위협은 추후), 첫 턴 전용 기술 제외, 래더 상대 랭크업×판정 기술 동시채용 하한 필터(사용자 선택: 규칙 + 동시채용 하한) — 사용자 요청
+- 2026-11-13 approved: 사용자 명시 최종 승인 (harness:approve --final)
 ## 승인 이벤트
+
+- APPROVAL prd 2026-11-13 make-pr :: 지금 진행
+- APPROVAL adr 2026-11-13 make-pr :: 지금 진행
 
 <!-- 이 블록은 `npm run harness:approve`만 기록한다. 사용자의 명시 승인 발화가
      verbatim으로 남는다. 두 종류: `PREAPPROVAL`(사전 승인 — 빌드 진입 게이트)과
@@ -84,3 +88,7 @@ adr_status: pre-accepted
 
 - PREAPPROVAL prd 2026-11-09 harness:approve :: 사전 승인
 - PREAPPROVAL adr 2026-11-09 harness:approve :: 사전 승인
+
+## 지식 기록
+
+- KNOWLEDGE 2026-11-13 invariants=INV-261113-attack-opp-no-item,INV-261113-rank-active-means-only,INV-261113-engine-boost-not-means gotchas=none via=make-pr

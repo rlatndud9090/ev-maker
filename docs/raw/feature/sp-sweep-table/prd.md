@@ -1,8 +1,8 @@
 ---
 title: "SP 구간 판정 표 화면(메타 카드 리스트)"
 date: "2026-11-07"
-status: pre-approved
-approval: "user:2026-11-09:사전 승인"
+status: approved
+approval: "user:2026-11-13:지금 진행"
 unit_type: feature
 # section(섹션, 선택): area보다 큰 상위 단위(웹앱의 최상위 라우팅/제품 영역 단위). 단일 값. 프로젝트에 섹션이 2개 이상 선언되면 wiki가 섹션별 파일로 자동 분리된다. $prd-helper가 채우거나 $kickoff --section이 시드한다. 안 쓰면 비워 둔다(모든 area가 index.md에 남는다).
 section:
