@@ -194,15 +194,26 @@ export function groupItems(group: CardGroup): GroupItem[] {
  */
 export function chosenOption(group: CardGroup, tab: Tab, chosen: string | undefined): CardView {
   if (chosen === undefined) return defaultOption(group)
+  return matchedOption(group, tab, chosen) ?? defaultOption(group)
+}
+
+/**
+ * 도구 변형 줄(group.berry)이 같은 상대에서 공유 중인 배분 선택(chosen)의 대응 카드를 갖지 못하면 참: 그 줄은 다른 배분을 보이지 않고 숨는다
+ * (도구 유무만 다른 비교라는 기대와 어긋나므로). 기본 줄과 선택이 없는 경우는 거짓.
+ */
+export function sharedChoiceMissing(group: CardGroup, tab: Tab, chosen: string | undefined): boolean {
+  return chosen !== undefined && group.berry !== undefined && matchedOption(group, tab, chosen) === undefined
+}
+
+function matchedOption(group: CardGroup, tab: Tab, chosen: string): CardView | undefined {
   const id = variantCardId(chosen, group.berry?.item)
   const hit = group.options.find((o) => o.id === id)
   if (hit !== undefined) return hit
-  const same = group.options.find(
+  return group.options.find(
     (o) =>
       o.opponent.source === 'ladder' &&
       o.bundle.userAdded === undefined &&
       o.bundle.stats.every((s) => s.nature === 'neutral') &&
       addedCardId(tab, o.opponent.id, o.category, addedBundleKey(o.bundle.stats), o.berry?.item) === id,
   )
-  return same ?? defaultOption(group)
 }

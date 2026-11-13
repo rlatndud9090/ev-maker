@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type FocusEvent, type ReactNode, type Ref } from 'react'
 import type { PokemonSet } from '../../core'
-import { chosenOption, groupCards, groupItems, selectionKey, sortByResult, type CardGroup, type CardView, type CustomTarget, type GroupItem, type PinnedBundle, type ResultBucket, type SortMode, type Tab } from '../../cards'
+import { chosenOption, groupCards, groupItems, selectionKey, sharedChoiceMissing, sortByResult, type CardGroup, type CardView, type CustomTarget, type GroupItem, type PinnedBundle, type ResultBucket, type SortMode, type Tab } from '../../cards'
 import type { Snapshot } from '../../data/schema'
 import { namesOf } from '../../ui/names'
 import { categoryBadge, orderBadge, progressText } from '../../ui/format'
@@ -142,7 +142,10 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
   )
   // 행마다 보이는 배분 카드. 계산결과순은 그 카드로 그룹을 정한다(사용률 순은 그룹 하나·라벨 없음).
   const sections = useMemo(() => {
-    const rows = groups.map((g) => ({ group: g, card: chosenOption(g, tab, chosen.get(JSON.stringify([tab, selectionKey(g.key)]))) }))
+    const rows = groups.flatMap((g) => {
+      const pick = chosen.get(JSON.stringify([tab, selectionKey(g.key)]))
+      return sharedChoiceMissing(g, tab, pick) ? [] : [{ group: g, card: chosenOption(g, tab, pick) }]
+    })
     if (sortMode === 'usage') return [{ key: 'all', bucket: undefined, items: rows }]
     return sortByResult(rows, tab, (r) => r.card)
   }, [groups, tab, chosen, sortMode])

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { addedBundleCardId } from './ids'
-import { chosenOption, defaultOption, groupCards, groupKey, isPinned, pinOf, selectionKey } from './groups'
+import { chosenOption, defaultOption, groupCards, groupKey, isPinned, pinOf, selectionKey, sharedChoiceMissing } from './groups'
 import type { CardView, PinnedBundle, PresetIndex } from './types'
 
 let seq = 0
@@ -233,7 +233,7 @@ describe('배분 선택 공유: 같은 상대의 기본 줄·도구 변형 줄(P
     expect(selectionKey(groupKey({ source: 'custom', id: 'x' }))).not.toBe(sel(groups[0]))
   })
 
-  it('기본 줄에서 고른 배분이 변형 줄에서는 같은 분류·묶음의 도구 카드로, 반대 방향도 같다. 변형 줄에 없는 배분이면 그 줄 기본값', () => {
+  it('기본 줄에서 고른 배분이 변형 줄에서는 같은 분류·묶음의 도구 카드로, 반대 방향도 같다. 변형 줄에 없는 배분이면 그 줄 기본값이고 화면에서는 숨긴다', () => {
     const cards = [
       real({ opp: 'x', key: 'hi', share: 0.5 }),
       real({ opp: 'x', key: 'lo', share: 0.1 }),
@@ -250,6 +250,11 @@ describe('배분 선택 공유: 같은 상대의 기본 줄·도구 변형 줄(P
     const sp = base.options.find((o) => o.category === 'special')!
     expect(chosenOption(base, 'defense', sp.id).id).toBe(sp.id)
     expect(chosenOption(orb, 'defense', sp.id).id).toBe(defaultOption(orb).id)
+    // 대응 카드가 없는 변형 줄은 다른 배분을 보이지 않고 숨긴다(sharedChoiceMissing). 기본 줄·대응이 있는 변형 줄·선택 없음은 숨기지 않는다
+    expect(sharedChoiceMissing(orb, 'defense', sp.id)).toBe(true)
+    expect(sharedChoiceMissing(orb, 'defense', lo.id)).toBe(false)
+    expect(sharedChoiceMissing(base, 'defense', orbHi.id)).toBe(false)
+    expect(sharedChoiceMissing(orb, 'defense', undefined)).toBe(false)
   })
 
   it('공격 탭 반감열매 줄끼리·기본 줄과도 같은 배분을 따른다', () => {
