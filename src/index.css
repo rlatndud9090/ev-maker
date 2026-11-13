@@ -799,7 +799,8 @@ td.src {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 0 0.6rem 0.75rem;
+  /* 좌우 여백은 원래 0.6rem + 스크롤바 폭(약 0.5rem): 오버레이 스크롤바(macOS)가 카드 오른쪽 끝을 덮지 않게, 왼쪽도 같은 폭으로 대칭 */
+  padding: 0 1.1rem 0.75rem;
   display: grid;
   align-content: start;
   gap: 0.75rem;
@@ -1783,7 +1784,8 @@ img.mon-icon {
   display: contents;
 }
 
-.card-line .hl-move {
+.card-line .hl-move,
+.card-line .move-pick {
   grid-area: move;
   justify-self: start;
   min-width: 0;
@@ -1793,6 +1795,29 @@ img.mon-icon {
 .card-line .headline:not(.row-headline) {
   grid-area: move;
   min-width: 0;
+}
+
+/* 줄 오른쪽 끝 펼침 화살표: 줄이 아코디언처럼 펼쳐진다는 표시(펼치면 위로 뒤집힘). 버튼은 이름 칸(card-toggle)이라 장식만 */
+.card-line > .card-chev {
+  grid-area: more;
+  justify-self: end;
+  align-self: center;
+  display: inline-flex;
+  color: var(--muted);
+}
+
+.card-chev .bundle-caret {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.15s;
+}
+
+.card-chev[data-open='true'] .bundle-caret {
+  transform: rotate(180deg);
+}
+
+.product .card-line:hover > .card-chev {
+  color: var(--text);
 }
 
 .card-line > .card-result {

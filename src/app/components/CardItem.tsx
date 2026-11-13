@@ -746,6 +746,9 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
             {card.variable && <VariableTag id={variableId} />}
           </span>
         )}
+        <span className="card-chev" data-testid="card-chev" data-open={expanded ? 'true' : 'false'} aria-hidden="true">
+          <Caret />
+        </span>
       </div>
       {card.notices.map((n) => (
         <p key={JSON.stringify([n.kind, n.owner, n.moveId])} className="card-notice" data-testid="card-notice">

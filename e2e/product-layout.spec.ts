@@ -232,6 +232,22 @@ for (const width of [400, 1280]) {
       }))
       expect(m.overflowY).toBe('auto')
       expect(m.scrollHeight).toBeGreaterThan(m.clientHeight)
+      // 카드 좌우는 스크롤 박스 안쪽에서 스크롤바 폭만큼 더 떨어진다(오버레이 스크롤바가 카드 오른쪽 끝을 덮지 않게, 사용자 피드백 2026-11-13)
+      const gap = await listScroll(page).evaluate((el) => {
+        const box = el.getBoundingClientRect()
+        const card = el.querySelector('[data-testid="card"]')!.getBoundingClientRect()
+        const inner = box.left + el.clientLeft + el.clientWidth
+        return { left: card.left - box.left - el.clientLeft, right: inner - card.right }
+      })
+      expect(gap.left).toBeGreaterThanOrEqual(16)
+      expect(gap.right).toBeGreaterThanOrEqual(16)
+      // 줄 오른쪽 끝 펼침 화살표: 펼친 줄은 위로(data-open), 접힌 줄은 아래로, 카드 오른쪽 끝에 붙는다
+      const chev = cards(page).first().getByTestId('card-chev')
+      await expect(chev).toHaveAttribute('data-open', 'true')
+      await expect(cards(page).nth(1).getByTestId('card-chev')).toHaveAttribute('data-open', 'false')
+      const edge = await cards(page).first().evaluate((c) => c.getBoundingClientRect().right - c.querySelector('[data-testid="card-chev"]')!.getBoundingClientRect().right)
+      expect(edge).toBeGreaterThan(0)
+      expect(edge).toBeLessThan(24)
       // 넓은 화면: 작업 영역(main)이 첫 화면에 꼭 맞는다(페이지 스크롤은 푸터에 닿을 때만).
       if (width >= 1280) expect(m.mainBottom).toBeLessThanOrEqual(m.viewport)
       else expect(m.boxHeight).toBeGreaterThanOrEqual(m.viewport * 0.6)
