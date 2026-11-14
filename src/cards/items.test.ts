@@ -5,7 +5,7 @@ import { EXAMPLE_SET } from './__fixtures__/acceptance'
 import { assembleTab } from './assemble'
 import { buildTabView } from './batch'
 import { computeRowTask } from './rowTask'
-import { BASE_CONDITION_ID, compareItems, itemKey, resolveDefault, type ItemState, type ItemVariability } from './items'
+import { BASE_CONDITION_ID, cardItems, compareItems, itemKey, resolveDefault, type ItemState, type ItemVariability } from './items'
 import { outspeedsAtMax, planTab } from './plan'
 import { cardExplore, nextStage, opponentKey, pendingTasks, taskCardId, taskKey } from './schedule'
 import { cardInput, realData } from './testing'
@@ -158,6 +158,42 @@ describe('resolveDefault: 방어 탭 선공기 우선(R4-2, PRD AC8)', () => {
   })
 })
 
+describe('resolveDefault: 성묘 위력 항목(R15) — 성묘(100) = P, 성묘(150)·(200)·랭크 후 = Q 후보', () => {
+  const faint = (n: number) => JSON.stringify(['faint', n])
+  const lr = (cond: string, rankBefore: boolean, probe: ItemState['probe'], variability: ItemVariability, conditionOrder: number) => ({
+    ...item('lastrespects', rankBefore, probe, variability, { conditionOrder }),
+    key: itemKey('lastrespects', cond),
+  })
+  function set(p: ItemVariability, q2: ItemVariability, q3: ItemVariability, rank?: ItemVariability) {
+    const P = lr(faint(1), true, ok(0.3, 90), p, 1)
+    const Q2 = lr(faint(2), false, ok(0.8, 130), q2, 2)
+    const Q3 = lr(faint(3), false, ok(1, 170), q3, 3)
+    const out = [Q3, item('phantomforce', true, ok(0.1, 80), VAR), Q2, P]
+    if (rank !== undefined) out.push(lr(RANK, false, ok(0.9, 150), rank, 4))
+    return { P, Q2, Q3, items: out }
+  }
+
+  it('성묘(100)이 기준 기술 P: 변동이면 Q와 무관하게 성묘(100)', () => {
+    const s = set(VAR, VAR, VAR)
+    expect(pick(s.items)).toMatchObject({ kind: 'ready', key: s.P.key, basis: s.P.key })
+  })
+
+  it('P 확정견딤 고정 → 변동 우선: 성묘(150)만 변동이면 성묘(150), 셋 다 확정견딤이면 가장 센 성묘(200)', () => {
+    const a = set(SURVIVE, VAR, OHKO)
+    expect(pick(a.items)).toMatchObject({ kind: 'ready', key: a.Q2.key })
+    const b = set(SURVIVE, SURVIVE, SURVIVE)
+    expect(pick(b.items)).toMatchObject({ kind: 'ready', key: b.Q3.key })
+    // Q가 확정1타 고정이면 P(표 8번 줄)
+    const c = set(SURVIVE, OHKO, OHKO)
+    expect(pick(c.items)).toMatchObject({ kind: 'ready', key: c.P.key })
+  })
+
+  it('랭크 후 항목(성묘(100) 기준 칼춤)도 같은 Q 후보: 그것만 변동이면 그 항목', () => {
+    const s = set(SURVIVE, OHKO, OHKO, VAR)
+    expect(pick(s.items)).toMatchObject({ kind: 'ready', key: itemKey('lastrespects', RANK) })
+  })
+})
+
 describe('compareItems: 가장 세게 치는 순(R3, PRD AC2)', () => {
   it('1타 확률 → 최대 대미지 비율 → 같은 기술 랭크 전 먼저 → 기술 순 / 계산 불가는 정상 뒤·무효 앞, 무효는 맨 뒤', () => {
     const a = item('a', true, ok(0.5, 100), VAR, { moveOrder: 0 })
@@ -255,6 +291,41 @@ describe('실데이터: 목록·기본 항목·직접 선택', () => {
     expect(card?.selected).toBe(true)
     expect(card?.defaultItem?.key).toBe(itemKey('kowtowcleave', JSON.stringify(['rank', 'opponent', 'move', 'swordsdance'])))
     expect(card?.rows.every((r) => r.moveId === 'kowtowcleave' && r.kind !== 'rank')).toBe(true)
+  })
+
+  it('공격 탭 내 성묘(R15): 성묘(100)·(150)·(200) + 성묘(100) 기준 +1(멀리짖음), 위력 50 항목 없음, 성묘(100)만 랭크 전', () => {
+    const houndstone = mon({ species: 'houndstone', ability: 'fluffy', nature: 'adamant', sp: { hp: 32, atk: 32 }, moves: ['lastrespects', 'howl', 'bodypress', 'protect'] })
+    const input = cardInput({ mySet: houndstone, filters: only('kingambit') })
+    const v = buildTabView(input, 'attack')
+    const card = v.cards.find((c) => c.opponent.id === 'kingambit' && c.category === 'physical')
+    expect(card).toBeDefined()
+    const howl = JSON.stringify(['rank', 'me', 'move', 'howl'])
+    const lr = (cond: string) => itemKey('lastrespects', cond)
+    const faint = (n: number) => JSON.stringify(['faint', n])
+    expect(new Set(card?.items.map((i) => i.key))).toEqual(new Set([lr(faint(1)), lr(faint(2)), lr(faint(3)), lr(howl), itemKey('bodypress', BASE_CONDITION_ID)]))
+    const power = (key: string) => card?.items.find((i) => i.key === key)?.power
+    expect([power(lr(faint(1))), power(lr(faint(2))), power(lr(faint(3))), power(lr(howl))]).toEqual([100, 150, 200, 100])
+    expect(power(itemKey('bodypress', BASE_CONDITION_ID))).toBeUndefined()
+    const plan = planTab(input, 'attack')
+    const spec = plan.cards.find((c) => c.id === card?.id) as CardSpec
+    const refs = cardItems(plan, spec)
+    expect(refs.filter((r) => r.rankBefore).map((r) => r.key).sort()).toEqual([itemKey('bodypress', BASE_CONDITION_ID), lr(faint(1))].sort())
+    // 랭크 후 행은 1기절 조건
+    const rankRef = refs.find((r) => r.key === lr(howl))
+    expect(rankRef?.candidate.target).toBe('row')
+    expect(plan.rows[rankRef?.candidate.id as string].conditions.lastRespectsFainted).toBe(1)
+    expect(plan.rows[refs.find((r) => r.key === itemKey('bodypress', BASE_CONDITION_ID))?.candidate.id as string].conditions.lastRespectsFainted).toBeUndefined()
+  })
+
+  it('방어 탭 목록 밖 타겟의 성묘(R15): 세 위력 항목 + 성묘(100) 기준 +1, 위력 50 항목 없음', () => {
+    const v = buildTabView(cardInput({ mySet: EXAMPLE_SET, filters: only('kingambit'), customTargets: [{ rosterId: 'houndstone', moves: ['lastrespects', 'howl'], edits: {} }] }), 'defense')
+    const card = v.cards.find((c) => c.opponent.id === 'houndstone' && c.opponent.source === 'custom' && c.category === 'physical')
+    expect(card).toBeDefined()
+    const keys = card?.items.map((i) => i.key) ?? []
+    const faintKeys = [1, 2, 3].map((n) => itemKey('lastrespects', JSON.stringify(['faint', n])))
+    expect(new Set(keys)).toEqual(new Set([...faintKeys, itemKey('lastrespects', JSON.stringify(['rank', 'opponent', 'move', 'howl']))]))
+    expect(keys).not.toContain(itemKey('lastrespects', BASE_CONDITION_ID))
+    expect(card?.defaultItem?.key.startsWith(JSON.stringify(['lastrespects']).slice(0, -1))).toBe(true)
   })
 
   it('그 카드에 없는 항목 키는 무시하고 기본 항목을 보인다(다른 분류 항목 선택은 그 분류 배분에서만)', () => {

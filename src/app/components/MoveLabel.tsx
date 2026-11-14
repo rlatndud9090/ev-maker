@@ -8,7 +8,7 @@ import { moveRankParts, rowTitle } from './text'
 interface Props {
   game: Snapshot
   tab: Tab
-  row: Pick<RowView, 'moveId' | 'moveType' | 'sweepStat' | 'basis' | 'refs'>
+  row: Pick<RowView, 'moveId' | 'moveType' | 'power' | 'sweepStat' | 'basis' | 'refs'>
   /** 칩 테두리 안 끝에 붙일 것(기술 선택 버튼의 펼침 화살표) */
   trailing?: ReactNode
 }

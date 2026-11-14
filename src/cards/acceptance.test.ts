@@ -46,6 +46,7 @@ import { buildTabView } from './batch'
 import { defaultOption, groupCards, groupItems } from './groups'
 import { BASE_CONDITION_ID, itemKey } from './items'
 import { opponentKey } from './schedule'
+import { judgementKey } from './key'
 import { createLruCache } from './cache'
 import { presetKey } from './ids'
 import { planTab } from './plan'
@@ -1423,7 +1424,8 @@ describe('AC35 방어 탭 화력 도구 행: 기본 줄 도구 없음, 도구 �
       const setOf = new Map<string, PokemonSet>()
       for (const c of base) {
         if (c.state !== 'ok' || c.bundle.userAdded !== undefined) continue
-        for (const g of c.conditions.filter((x) => x.id === JSON.stringify(['base'])))
+        // 성묘의 랭크 전 항목은 1기절 조건(R15)
+        for (const g of c.conditions.filter((x) => x.id === JSON.stringify(['base']) || x.id === JSON.stringify(['faint', 1])))
           for (const cand of g.candidates) if (game.data.moves[cand.moveId] !== undefined && !setOf.has(cand.moveId)) setOf.set(cand.moveId, c.opponentSet)
       }
       const maxOf = (set: PokemonSet, move: string): number => {
@@ -1454,5 +1456,50 @@ describe('AC35 방어 탭 화력 도구 행: 기본 줄 도구 없음, 도구 �
     }
     expect(variants).toBeGreaterThan(0)
     expect(checkedMoves).toBeGreaterThan(0)
+  })
+})
+
+// ---------- AC37 성묘 위력 항목(R15) ----------
+
+describe('AC37 방어 탭 타부자고 vs 대쓰여너: 성묘(100)·(150)·(200), 위력 50 항목 없음, 기본 기준 기술 성묘 계열', () => {
+  const gholdengo = entryOf(bo1, 'gholdengo').representative.set
+  const faint = (n: number) => JSON.stringify(['faint', n])
+  const lr = (n: number) => itemKey('lastrespects', faint(n))
+
+  it('기본 카드마다 성묘 세 항목(위력 100·150·200)이 있고 기본 조건 성묘가 없으며, 기본 항목이 성묘 계열이다', () => {
+    const { plan, view } = run('ac37-gholdengo', only(gholdengo, ['basculegion']), 'defense')
+    const cards = view.cards.filter((c) => c.opponent.id === 'basculegion' && c.berry === undefined)
+    expect(cards.length).toBeGreaterThan(0)
+    for (const c of cards) {
+      const keys = c.items.map((i) => i.key)
+      expect(keys, c.id).toEqual(expect.arrayContaining([lr(1), lr(2), lr(3)]))
+      expect(keys, c.id).not.toContain(itemKey('lastrespects', BASE_CONDITION_ID))
+      expect([1, 2, 3].map((n) => c.items.find((i) => i.key === lr(n))?.power)).toEqual([100, 150, 200])
+      expect(JSON.parse(c.defaultItem?.key ?? '[]')[0], c.id).toBe('lastrespects')
+      // 성묘(100) 단건 판정이 고스트다이브보다 세다
+      const max = (key: string) => c.items.find((i) => i.key === key)?.cell?.maxPercent ?? 0
+      expect(max(lr(1)), c.id).toBeGreaterThan(max(itemKey('phantomforce', BASE_CONDITION_ID)))
+    }
+    // 계획의 성묘 극단 필터는 쓰러진 아군 수만 다른 조건이고 판정 캐시 키가 서로 다르다
+    const spec = plan.cards.find((c) => c.id === cards[0].id) as CardSpec
+    const filters = [1, 2, 3].map((n) => spec.conditions.find((g) => g.id === faint(n))?.candidates[0])
+    expect(filters.map((f) => f?.target)).toEqual(['filter', 'filter', 'filter'])
+    expect(filters.map((f) => plan.filters[f?.id as string].conditions.lastRespectsFainted)).toEqual([1, 2, 3])
+    const keys = filters.map((f) => judgementKey(plan, { kind: 'extreme', filterId: f?.id as string }))
+    expect(new Set(keys).size).toBe(3)
+  })
+
+  it('코어 직접 호출: 성묘 대미지는 1·2·3기절 순으로 커지고, 성묘(100)이 고스트다이브보다 세다', () => {
+    const opp = entryOf(bo1, 'basculegion').representative.set
+    const at = (move: string, c?: BattleConditions) => {
+      const v = judgeDamage(game, 'defender', opp, gholdengo, move, c, undefined, { rollSteps: N }).value
+      if (v.kind !== 'damage') throw new Error(`${move} 대미지 결과가 아니다`)
+      return v.max
+    }
+    const [p100, p150, p200] = [1, 2, 3].map((n) => at('lastrespects', { lastRespectsFainted: n }))
+    expect(at('lastrespects')).toBeLessThan(p100)
+    expect(p100).toBeLessThan(p150)
+    expect(p150).toBeLessThan(p200)
+    expect(p100).toBeGreaterThan(at('phantomforce'))
   })
 })

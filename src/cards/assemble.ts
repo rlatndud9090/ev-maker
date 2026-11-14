@@ -1,5 +1,5 @@
 // 계획 + 행 작업 결과 → 탭 뷰. 판정을 다시 하지 않고 표시용 SP로 산술·조회만 한다. 비용 O(행 × 33).
-import { WEATHER_NEGATING_ABILITIES, attackMoveType, validateSet, type BattleConditions, type PokemonSet, type SpTable } from '../core'
+import { WEATHER_NEGATING_ABILITIES, attackMoveType, conditionMovePower, validateSet, type BattleConditions, type PokemonSet, type SpTable } from '../core'
 import type { Snapshot, StatId } from '../data/schema'
 import { cardItems, compareItems, itemStates, type CardItemRef, type ItemState } from './items'
 import {
@@ -126,13 +126,15 @@ export function judgedMoveType(game: Snapshot, moveId: string, spec: { attacker:
   return attackMoveType(moveId, game.data.moves[moveId].type, attacker, { weather: negated ? 'none' : spec.conditions.weather, terrain: spec.conditions.terrain })
 }
 
-type RowHead = Pick<RowView, 'id' | 'kind' | 'order' | 'moveId' | 'moveType' | 'sweepStat' | 'refs' | 'basis'>
+type RowHead = Pick<RowView, 'id' | 'kind' | 'order' | 'moveId' | 'moveType' | 'power' | 'sweepStat' | 'refs' | 'basis'>
 
 function headOf(game: Snapshot, spec: RowSpec): RowHead {
   const head: RowHead = { id: spec.id, kind: spec.kind, order: spec.order }
   if (spec.moveId !== undefined) head.moveId = spec.moveId
   const moveType = spec.moveId === undefined ? undefined : judgedMoveType(game, spec.moveId, spec)
   if (moveType !== undefined) head.moveType = moveType
+  const power = spec.moveId === undefined ? undefined : conditionMovePower(spec.moveId, spec.conditions)
+  if (power !== undefined) head.power = power
   if (spec.sweep !== undefined) head.sweepStat = spec.sweep.stat
   if (spec.refs !== undefined) head.refs = spec.refs
   if (spec.basis !== undefined) head.basis = spec.basis
@@ -356,6 +358,8 @@ function itemViews(plan: TabPlan, refs: readonly CardItemRef[], states: readonly
     const spec = c.target === 'row' ? plan.rows[c.id] : c.target === 'filter' ? plan.filters[c.id] : plan.fixed[c.id]
     const moveType = spec === undefined ? undefined : judgedMoveType(plan.game, st.moveId, spec)
     if (moveType !== undefined) v.moveType = moveType
+    const power = spec === undefined ? undefined : conditionMovePower(st.moveId, spec.conditions)
+    if (power !== undefined) v.power = power
     if (ref.basis !== undefined) v.basis = ref.basis
     if (ref.candidate.added === true) v.added = true
     if (st.probe.kind === 'ok' || st.probe.kind === 'immune') v.cell = st.probe.cell
@@ -404,6 +408,8 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
     if (spec.refs !== undefined) head.refs = spec.refs
     const moveType = judgedMoveType(plan.game, filter.moveId, filter)
     if (moveType !== undefined) head.moveType = moveType
+    const power = conditionMovePower(filter.moveId, filter.conditions)
+    if (power !== undefined) head.power = power
     return head
   }
   const filterDone = new Set<string>()

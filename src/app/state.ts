@@ -7,7 +7,7 @@ import {
   ROLL_STEPS,
   DEFAULT_TOP_N,
   MAX_CUSTOM_MOVES,
-  BASE_CONDITION_ID,
+  baseConditionOf,
   addedBundlePin,
   itemKey,
   opponentKey,
@@ -327,7 +327,7 @@ export function reducer(state: AppState, action: AppAction): AppState {
       if (typeof m.opponentId !== 'string' || m.opponentId === '' || typeof m.moveId !== 'string' || m.moveId === '') return state
       if (state.addedMoves.some((x) => sameAddedMove(x, m))) return state
       const target = defenseLadder(m.opponentId)
-      const choice: MoveChoice = { ...target, key: itemKey(m.moveId, BASE_CONDITION_ID) }
+      const choice: MoveChoice = { ...target, key: itemKey(m.moveId, baseConditionOf(m.moveId)) }
       const moveChoices = [...state.moveChoices.filter((x) => !sameTarget(x, target)), choice]
       return { ...bump(state, { addedMoves: [...state.addedMoves, m] }), moveChoices }
     }

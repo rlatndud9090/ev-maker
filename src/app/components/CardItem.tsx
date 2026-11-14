@@ -656,7 +656,7 @@ function ShownMove({
   const onOpenChange = useCallback((open: boolean) => onMenuCards(open ? (JSON.parse(menuSig) as string[]) : []), [menuSig, onMenuCards])
   const shown = items.find((g) => g.item.key === card.shownItem)
   if (shown === undefined) return null
-  const row = { moveId: shown.item.moveId, moveType: shown.item.moveType, basis: shown.item.basis, ...(card.rows[0]?.refs === undefined ? {} : { refs: card.rows[0].refs }) }
+  const row = { moveId: shown.item.moveId, moveType: shown.item.moveType, power: shown.item.power, basis: shown.item.basis, ...(card.rows[0]?.refs === undefined ? {} : { refs: card.rows[0].refs }) }
   const opponentId = card.opponent.id
   const adding: MoveAdding | undefined =
     tab === 'defense' && card.opponent.source === 'ladder'
@@ -676,7 +676,7 @@ function ShownMove({
       selected={card.selected}
       onChoose={(item) => onChooseItem(group, card, item)}
       onReset={() => onResetItem(group)}
-      label={`${rowTitle(game, { moveId: shown.item.moveId }, false)} 기술 선택${card.selected ? ' (직접 고름)' : ''}`}
+      label={`${rowTitle(game, { moveId: shown.item.moveId, power: shown.item.power }, false)} 기술 선택${card.selected ? ' (직접 고름)' : ''}`}
       testId={testId}
       adding={adding}
       focusKey={JSON.stringify([tab, group.key, testId])}

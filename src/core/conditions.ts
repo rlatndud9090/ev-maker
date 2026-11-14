@@ -6,7 +6,7 @@ export const DEFAULT_GAME_TYPE: GameType = 'Doubles'
 const GAME_TYPES: readonly GameType[] = ['Doubles', 'Singles']
 const WEATHERS: readonly Weather[] = ['none', 'Sun', 'Rain', 'Sand', 'Snow']
 const TERRAINS: readonly Terrain[] = ['none', 'Electric', 'Grassy', 'Psychic', 'Misty']
-const CONDITION_KEYS = ['gameType', 'weather', 'terrain', 'attacker', 'defender', 'critical', 'spreadTargets', 'hits']
+const CONDITION_KEYS = ['gameType', 'weather', 'terrain', 'attacker', 'defender', 'critical', 'spreadTargets', 'hits', 'lastRespectsFainted']
 const SIDE_KEYS = ['tailwind', 'helpingHand', 'friendGuard', 'reflect', 'lightScreen', 'alliesFainted']
 const MAX_ALLIES_FAINTED = 5
 
@@ -22,6 +22,8 @@ export interface NormalizedConditions {
   spreadTargets: 1 | 2
   /** 지정하지 않으면 undefined(엔진 기본 타수) */
   hits?: number
+  /** 성묘 위력용 쓰러진 아군 수(attacker.alliesFainted와 별개) */
+  lastRespectsFainted: number
 }
 
 function side(v: unknown, field: string): NormalizedSide {
@@ -51,6 +53,8 @@ export function normalizeConditions(c: BattleConditions | undefined): Normalized
     defender: side(raw.defender, 'conditions.defender'),
     critical: optionalBoolean(raw.critical, 'conditions.critical'),
     spreadTargets: raw.spreadTargets === undefined ? 2 : (integerInRange(raw.spreadTargets, 1, 2, 'conditions.spreadTargets') as 1 | 2),
+    lastRespectsFainted:
+      raw.lastRespectsFainted === undefined ? 0 : integerInRange(raw.lastRespectsFainted, 0, MAX_ALLIES_FAINTED, 'conditions.lastRespectsFainted'),
   }
   // 타수 범위는 기술을 알아야 검사할 수 있어 calcDamage에서 다시 확인한다.
   if (raw.hits !== undefined) out.hits = integerInRange(raw.hits, 1, 10, 'conditions.hits')

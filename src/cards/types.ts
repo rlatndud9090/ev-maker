@@ -289,7 +289,7 @@ export interface MoveCandidate {
   added?: true
 }
 export interface ConditionGroup {
-  /** 카드 안 유일: JSON.stringify(['base']) 또는 ['rank', owner, means.kind, means.id] */
+  /** 카드 안 유일: JSON.stringify(['base']), ['faint', 1|2|3](성묘 위력 조건, ids.faintConditionId) 또는 ['rank', owner, means.kind, means.id] */
   id: string
   /** 기존 순서(공격 탭 내 기술 슬롯 순, 방어 탭 상대 기술 사용률 순). 동률이면 앞이 이긴다 */
   candidates: readonly MoveCandidate[]
@@ -459,6 +459,8 @@ export interface RowView {
   moveId?: string
   /** 판정에서 실제 쓰는 기술 타입(공격측 특성·날씨·필드 반영, attackMoveType). 스냅샷에 없는 기술이면 없음 */
   moveType?: string
+  /** 판정 조건이 덮어쓴 기술 위력(성묘 쓰러진 아군 수, conditionMovePower). 라벨에 "(위력)"으로 붙는다 */
+  power?: number
   sweepStat?: StatId
   /** 기술 분류와 참조가 다를 때 표기용(예: 사이코쇼크 → 상대 def) */
   refs?: MoveStatRefs
@@ -592,6 +594,8 @@ export interface ItemView {
   moveId: string
   /** 그 항목 판정의 기술 타입(RowView.moveType과 같은 규칙) */
   moveType?: string
+  /** RowView.power와 같은 규칙 */
+  power?: number
   /** 랭크 후 항목이면 그 랭크 근거 */
   basis?: RankBasis
   /** 우선도 > 0 */

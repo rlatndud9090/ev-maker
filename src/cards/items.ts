@@ -1,9 +1,16 @@
 // 판정 행 기술 선택 항목: 항목 키·단건 판정 상태·변동 판정·정렬·기본 항목 결정. 판정은 하지 않는다(결과 조회만).
 import { filterState, neededVariants, probeKey, rowChanges, rowJudgements, taskKey } from './schedule'
+import { LAST_RESPECTS, faintConditionId } from './ids'
 import type { CardSpec, CompactCell, ConditionGroup, ErrorReason, MoveCandidate, RankBasis, ResultMap, TabPlan } from './types'
 
 /** 계획의 기본 조건 그룹 id(plan BASE_CONDITION과 같은 값) */
 export const BASE_CONDITION_ID = JSON.stringify(['base'])
+
+/** 성묘 위력 조건 중 랭크 전 항목(P 자리) = 1기절(위력 100). 2·3기절은 랭크 후 항목처럼 Q 후보다 */
+const FAINT_BASE_ID = faintConditionId(1)
+
+/** 그 기술의 랭크 전 항목 조건 id(성묘는 1기절, 그 밖은 기본 조건) */
+export const baseConditionOf = (moveId: string): string => (moveId === LAST_RESPECTS ? FAINT_BASE_ID : BASE_CONDITION_ID)
 
 /** 항목(기술 × 랭크 조건)의 안정 키. 카드(배분·분류) id를 담지 않아 같은 상대의 모든 카드에서 같다 */
 export const itemKey = (moveId: string, conditionId: string): string => JSON.stringify([moveId, conditionId])
@@ -48,7 +55,7 @@ export function cardItems(plan: TabPlan, card: CardSpec): CardItemRef[] {
   const out: CardItemRef[] = []
   groups.forEach((g, gi) => {
     for (const c of g.candidates) {
-      const ref: CardItemRef = { key: itemKey(c.moveId, g.id), conditionId: g.id, candidate: c, rankBefore: g.id === BASE_CONDITION_ID, moveOrder: order(c.moveId), conditionOrder: gi }
+      const ref: CardItemRef = { key: itemKey(c.moveId, g.id), conditionId: g.id, candidate: c, rankBefore: g.id === BASE_CONDITION_ID || g.id === FAINT_BASE_ID, moveOrder: order(c.moveId), conditionOrder: gi }
       const basis = basisOf(plan, c)
       if (basis !== undefined) ref.basis = basis
       out.push(ref)

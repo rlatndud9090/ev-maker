@@ -149,10 +149,20 @@ export function buildEnginePokemon(snapshot: Snapshot, r: ResolvedSet, side: Nor
   })
 }
 
+/** 성묘: 엔진이 쓰러진 아군 수 위력 규칙을 넣지 않아 위력을 직접 덮어쓴다(50 × (1 + n)) */
+const LAST_RESPECTS = 'lastrespects'
+const LAST_RESPECTS_STEP = 50
+
+/** 판정 조건이 위력을 덮어쓰는 기술의 위력(성묘에 lastRespectsFainted가 있을 때만). 그 밖은 undefined */
+export function conditionMovePower(moveId: string, c: { lastRespectsFainted?: number } | undefined): number | undefined {
+  if (moveId !== LAST_RESPECTS || c?.lastRespectsFainted === undefined) return undefined
+  return LAST_RESPECTS_STEP * (1 + c.lastRespectsFainted)
+}
+
 function buildMove(attacker: ResolvedSet, move: MoveEntry, c: NormalizedConditions): Move {
   const spreadToSingle = c.gameType === 'Doubles' && c.spreadTargets === 1 && SPREAD_TARGETS.includes(move.target)
   const overrides = {
-    basePower: move.basePower,
+    basePower: conditionMovePower(move.id, c) ?? move.basePower,
     type: move.type,
     category: move.category,
     // 단타면 1을 명시해 엔진 데이터의 타수를 덮는다.

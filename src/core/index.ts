@@ -34,6 +34,7 @@ export {
   SPEED_DEPENDENT_ATTACKER_ABILITIES,
   attackEffectiveness,
   attackMoveType,
+  conditionMovePower,
   engineMoveOverrides,
   typeEffectiveness,
   type MoveTypeField,

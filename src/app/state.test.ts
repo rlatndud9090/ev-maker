@@ -293,6 +293,11 @@ describe('상대 기술 추가·직접 선택 해제', () => {
     expect(added.moveChoices).toEqual([choice('kingambit', 'x', 'attack'), choice('kingambit', itemKey('thunderpunch', BASE_CONDITION_ID))])
   })
 
+  it('add-move 성묘: 직접 선택은 랭크 전 항목인 성묘(100) 조건 항목이다(위력 50 항목은 없다, PRD R15)', () => {
+    const added = reducer(start(), addMove('basculegion', 'lastrespects'))
+    expect(added.moveChoices).toEqual([choice('basculegion', itemKey('lastrespects', JSON.stringify(['faint', 1])))])
+  })
+
   it('add-move: 같은 (상대, 기술)이 이미 있거나 빈 문자열이면 무시', () => {
     const s = reducer(start(), addMove('kingambit', 'thunderpunch'))
     expect(reducer(s, addMove('kingambit', 'thunderpunch'))).toBe(s)

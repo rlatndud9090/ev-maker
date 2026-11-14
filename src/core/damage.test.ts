@@ -172,6 +172,23 @@ describe('대미지 PRD 수용 기준', () => {
     expect(() => calcDamage(MC, so, delphoxMega, 'suckerpunch', { attacker: { alliesFainted: 6 } })).toThrow(CoreInputError)
   })
 
+  it('성묘 위력은 lastRespectsFainted로 50 × (1 + n)이고 다른 기술·총대장에는 영향이 없다', () => {
+    const basculegion = mkSet({ species: 'basculegion', ability: 'swiftswim', nature: 'adamant', sp: { atk: 32 } })
+    const max = (n: number | undefined, moveId = 'lastrespects', set = basculegion) =>
+      ok(calcDamage(MC, set, incineroar, moveId, n === undefined ? {} : { lastRespectsFainted: n })).max
+    const [p50, p100, p150, p200] = [undefined, 1, 2, 3].map((n) => max(n))
+    expect(max(0)).toBe(p50)
+    expect(p50).toBeLessThan(p100)
+    expect(p100).toBeLessThan(p150)
+    expect(p150).toBeLessThan(p200)
+    // 위력 비례(반올림 오차 범위): 100 ≈ 2 × 50
+    expect(Math.abs(p100 - 2 * p50)).toBeLessThanOrEqual(3)
+    expect(max(3, 'wavecrash')).toBe(max(undefined, 'wavecrash'))
+    const so = { ...kingambit, ability: 'supremeoverlord', nature: 'adamant' }
+    expect(max(5, 'suckerpunch', so)).toBe(max(undefined, 'suckerpunch', so))
+    expect(() => calcDamage(MC, basculegion, incineroar, 'lastrespects', { lastRespectsFainted: 6 })).toThrow(CoreInputError)
+  })
+
   it('레귤레이션·대전 형식을 생략하면 M-C·더블로 계산된다', () => {
     const def = loadSnapshotSync()
     expect(def.manifest.regulation.id).toBe('m-c')

@@ -26,6 +26,7 @@ export {
 } from './schedule'
 export {
   BASE_CONDITION_ID,
+  baseConditionOf,
   itemKey,
   cardItems,
   compareItems,

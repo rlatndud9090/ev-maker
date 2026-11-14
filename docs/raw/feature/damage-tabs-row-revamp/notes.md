@@ -95,6 +95,8 @@ Status: draft
 | `acceptance.test.ts` 오라클 `defenseCandidates`에서 내던지기 제외(포푸니크 AC5 기대 집합에서 `fling` 빠짐, 2026-11-13 결과 기록 "포푸니크 후보 = …내던지기"를 대체) | PRD R14(기본 줄 도구 없음 → 내던지기 실패라 후보·기술 추가 대상 아님) |
 | e2e `product-power-item.spec.ts` 화력 도구 줄 표지 `/^생명의구슬 34\.\d%$/` → `/^생명의구슬$/`, 접근 가능한 이름 "… 생명의구슬 지닌 경우 (사용률 34.n%)" → "… 생명의구슬 지닌 경우"(%·"사용률" 없음) | PRD R14(이전: 줄 표지에 도구 이름·점유율), AC36 |
 | `items.test.ts`·`executor.test.ts` 메뉴 항목 변동 판정(`cardExplore`·`setMenuCards`) 신설, e2e `product-move-variable.spec.ts` 신설(항목별 변동 표시 없음을 검사하던 기존 테스트는 없음) | PRD R3(이전: 항목별 변동 표시 없음, 2026-11-13), AC36 |
+| `acceptance.test.ts` AC35 오라클 기술 수집 그룹 `['base']` → `['base']` + `['faint', 1]`(성묘 랭크 전 항목이 1기절 조건으로 옮겨 감, triggers 기대에 성묘가 다시 들어감) | PRD R15(이전: 성묘 = 기본 조건 항목 하나·위력 50), AC37 |
+| `damage.test.ts`·`items.test.ts`·`state.test.ts`·`acceptance.test.ts` AC37 신설, e2e `product-last-respects.spec.ts` 신설(성묘 위력 항목을 검사하던 기존 테스트는 없음) | PRD R15, AC37 |
 
 ## 결정(빌드 중)
 
@@ -115,6 +117,9 @@ Status: draft
 
 - 2026-11-14 기술 선택 목록 항목 "변동" 배지(R3 개정): `ItemView.variable`(itemVariability 노출), 실행기 메뉴 층(`setMenuCards`, 선택 다음·기본 카드 앞, 완료 판정 밖 — 진행률 숫자는 늘 수 있음). 메뉴 열기 → 배지 7~18ms. 화력 도구 줄 표지 점유율 제거. 성능: 공격 첫 카드 77ms·완료 777ms, 방어 35·1103ms, 스피드 20·465ms, Long Task 0ms.
 - 후속(리뷰 LOW): 스윕 정보 없는 행은 변동 배지가 붙지 않을 수 있다(배지 없음으로 남음). 메뉴 카드 id 서명 직렬화 정리.
+
+- 2026-11-14 R15 성묘: 코어 `conditions.lastRespectsFainted`(0~5, 성묘만 위력 50×(1+n), 총대장 `attacker.alliesFainted`와 분리)·`conditionMovePower`, 조건 묶음 `['faint', 1|2|3]`(성묘는 기본 묶음에서 빠짐, 랭크 후는 1기절), 랭크 전 항목 = 기본 또는 `['faint', 1]` → P = 성묘(100), 150·200은 Q 후보. 라벨 "성묘(100)". 성능: 방어 처음 열기 35ms·1117ms, Long Task 0ms.
+- 후속(리뷰 LOW): 완전 동률 정렬에서 성묘가 원래 슬롯·사용률 순보다 뒤(moveOrder가 조건 묶음 순회 순). 총대장+성묘 동시 반영 없음(총대장 후속). 펼친 상세 판정 행 `data-condition`은 성묘 1·2·3기절 모두 "base"(위력은 라벨로만 구분).
 
 ## 검증
 

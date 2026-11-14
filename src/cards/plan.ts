@@ -29,7 +29,7 @@ import { observedSpreadAssumption, representativeAssumption, resolveAssumption, 
 import { berryActivates, resistBerriesOf } from './berries'
 import { powerItemBoosts, powerItemsOf } from './powerItems'
 import { bundleStats, bundlesOf, natureSign } from './bundles'
-import { addedBundleKey, addedCardId, cardId as makeCardId, presetKey, rowId } from './ids'
+import { LAST_RESPECTS, LAST_RESPECTS_FAINTS, addedBundleKey, addedCardId, faintConditionId, cardId as makeCardId, presetKey, rowId } from './ids'
 import { presetAssumption } from './presets'
 import { TAB_MEANS_OWNERS, ladderMeans, rankMoveAllowed, rankVariants, setMeansCandidates, type CardRefStats, type MeansCandidate } from './rank'
 import type { BoostStat } from './rankMeans'
@@ -90,6 +90,10 @@ const hasMove = (game: Snapshot, moveId: string): boolean => Object.prototype.ha
 const isMultihit = (game: Snapshot, moveId: string): boolean => hasMove(game, moveId) && game.data.moves[moveId].multihit !== undefined
 const BASE_CONDITION = JSON.stringify(['base'])
 const rankCondition = (b: RankBasis): string => JSON.stringify(['rank', ...meansParts(b)])
+const isLastRespects = (slot: MoveSlot): boolean => slot.moveId === LAST_RESPECTS
+/** 성묘 판정 조건: 쓰러진 아군 수 지정(그 밖의 기술은 그대로). 랭크 후 항목은 1기절 */
+const faintConditions = (c: BattleConditions, moveId: string, fainted = 1): BattleConditions =>
+  moveId === LAST_RESPECTS ? { ...c, lastRespectsFainted: fainted } : c
 
 const WHITE_HERB_MULTIHIT: ErrorReason = {
   code: 'WHITE_HERB_MULTIHIT',
@@ -457,15 +461,23 @@ class PlanBuilder {
       }
       return this.addRow(card, parts, spec)
     }
-    const baseRows = new Map(base.map((slot) => [slot.moveId, row(slot, this.mySet, oppSet, {}, ['base', slot.moveId]).id]))
+    const baseRows = new Map(base.filter((slot) => !isLastRespects(slot)).map((slot) => [slot.moveId, row(slot, this.mySet, oppSet, {}, ['base', slot.moveId]).id]))
     this.addCondition(
       card,
       BASE_CONDITION,
-      slots.map((slot) => {
+      slots.filter((slot) => !isLastRespects(slot)).map((slot) => {
         const fixedId = fixedOf.get(slot.moveId)
         return fixedId === undefined ? this.candidate('row', baseRows.get(slot.moveId) as string, slot.moveId, this.me) : this.candidate('fixed', fixedId, slot.moveId, this.me)
       }),
     )
+    const lastRespects = base.find(isLastRespects)
+    if (lastRespects !== undefined) {
+      for (const n of LAST_RESPECTS_FAINTS) {
+        const conditions = faintConditions(this.damageConditions(this.me.ability), LAST_RESPECTS, n)
+        const r = row(lastRespects, this.mySet, oppSet, { conditions }, ['faint', LAST_RESPECTS, String(n)])
+        this.addCondition(card, faintConditionId(n), [this.candidate('row', r.id, LAST_RESPECTS, this.me)])
+      }
+    }
     if (base.length === 0) return
     const refs: CardRefStats = {
       my: unique(base.map((s) => s.refs?.offense?.stat as BoostStat)),
@@ -479,7 +491,7 @@ class PlanBuilder {
         if (!this.rankMoveAllowed(opp, v.basis, 'me', slot.moveId)) continue
         // 랭크 변화가 그 기술의 판정 능력치(내 공격 능력치)에 들 때만 랭크 후 항목이다(명상은 물리기에 항목을 만들지 않는다).
         if (!v.basis.myBoosts[slot.refs?.offense?.stat as BoostStat]) continue
-        const extra: Partial<RowSpec> = { kind: 'rank', basis: v.basis }
+        const extra: Partial<RowSpec> = { kind: 'rank', basis: v.basis, conditions: faintConditions(this.damageConditions(this.me.ability), slot.moveId) }
         if (v.whiteHerbConsumed && isMultihit(this.game, slot.moveId)) extra.error = WHITE_HERB_MULTIHIT
         const r = row(slot, attacker, defender, extra, ['rank', slot.moveId, ...meansParts(v.basis)])
         candidates.push(this.candidate('row', r.id, slot.moveId, this.me))
@@ -503,7 +515,7 @@ class PlanBuilder {
     if (!resolved) return
     const oppSet = seed.assumption.set
     card.speedEdge = this.speedEdge(oppSet, resolved.ability)
-    const conditions = this.damageConditions(resolved.ability)
+    const baseConditions = this.damageConditions(resolved.ability)
     const def = defenseStatOf(seed.category as Category)
     const inCategory = (slot: MoveSlot) => slot.refs?.defense === def
     const slots = all.filter(inCategory)
@@ -515,7 +527,9 @@ class PlanBuilder {
       basis: RankBasis | undefined,
       error: ErrorReason | undefined,
       parts: (string | null)[],
+      fainted?: number,
     ): MoveCandidate => {
+      const conditions = faintConditions(baseConditions, slot.moveId, fainted)
       const refs = slot.refs as MoveStatRefs
       const ability = resolved.ability
       if (error) {
@@ -567,6 +581,7 @@ class PlanBuilder {
     const group = (id: string, attacker: PokemonSet, defender: PokemonSet, basis: RankBasis | undefined, herbConsumed: boolean) => {
       const candidates: MoveCandidate[] = []
       for (const slot of slots) {
+        if (basis === undefined && isLastRespects(slot)) continue
         if (basis) {
           if (!this.rankMoveAllowed(opp, basis, 'opponent', slot.moveId)) continue
           // 랭크 변화가 그 기술의 판정 능력치(상대 공격 능력치)에 들 때만 랭크 후 항목이다(상대 속임수는 내 능력치라 없다).
@@ -585,7 +600,7 @@ class PlanBuilder {
             moveId: slot.moveId,
             attacker: oppSet,
             defender: this.mySet,
-            conditions,
+            conditions: baseConditions,
             dependsOn: [],
             error: slot.error,
           })
@@ -595,6 +610,12 @@ class PlanBuilder {
       this.addCondition(card, id, candidates)
     }
     group(BASE_CONDITION, oppSet, this.mySet, undefined, false)
+    const lastRespects = slots.find(isLastRespects)
+    if (lastRespects !== undefined) {
+      for (const n of LAST_RESPECTS_FAINTS) {
+        this.addCondition(card, faintConditionId(n), [pair(lastRespects, oppSet, this.mySet, undefined, undefined, ['faint', LAST_RESPECTS, String(n)], n)])
+      }
+    }
     if (slots.length === 0) return
     const refs: CardRefStats = {
       opponent: unique(slots.filter((s) => s.refs?.offense?.owner === 'self').map((s) => s.refs?.offense?.stat as BoostStat)),

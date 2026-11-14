@@ -21,7 +21,7 @@ function refsOf(game: Snapshot, moveId: string): MoveStatRefs | undefined {
 /** 항목의 라벨 행(MoveLabel 입력) */
 function labelRow(game: Snapshot, item: ItemView) {
   const refs = refsOf(game, item.moveId)
-  return { moveId: item.moveId, moveType: item.moveType, basis: item.basis, ...(refs === undefined ? {} : { refs }) }
+  return { moveId: item.moveId, moveType: item.moveType, power: item.power, basis: item.basis, ...(refs === undefined ? {} : { refs }) }
 }
 
 /** 같은 기술·같은 랭크 표기의 랭크 후 항목이 둘 이상이면 수단 이름으로 가른다 */
