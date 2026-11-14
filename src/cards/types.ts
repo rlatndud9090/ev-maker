@@ -289,8 +289,8 @@ export interface MoveCandidate {
   share: number
   /** 기존 기술 순서: 그 상대의 모든 분류 후보 기술 중 순번(공격 탭 내 기술 칸 순, 방어 탭 상대 후보 순·목록 밖 타겟 지정 순, 계산 불가 기술은 뒤) */
   order: number
-  /** 그 상대의 모든 분류 후보 중 그 판정 타입에서 채용률 1위 기술(동률은 기존 기술 순서, PRD R4-1 대표 기술) */
-  representative: boolean
+  /** 주력 기술(PRD R4-1): 공격 탭 내 기술 전부, 방어 탭 items.mainMoves(선공기 제외·채용률 하한, 분류 카드를 가로질러 정함) */
+  main: boolean
   /** 사용자가 추가한 상대 기술(방어 탭 래더 상대, CardInput.addedMoves) */
   added?: true
 }
@@ -623,7 +623,7 @@ export interface DefaultItemView {
   key: string
   /** 방어 탭 선공기 우선으로 정해짐 */
   viaPriority: boolean
-  /** 정상 대표 기술이 없어 목록 첫 정상 항목(없으면 첫 항목)으로 정해짐(PRD R4-1). 분류 사이 비교에서 대표로 정해진 쪽에 진다 */
+  /** 정상 주력 기술이 없어 목록 첫 정상 항목(없으면 첫 항목)으로 정해짐(PRD R4-1). 분류 사이 비교에서 대표로 정해진 쪽에 진다 */
   fallback?: true
   /** 기준 기술 랭크 전 항목의 단건 판정 칸 */
   basisCell?: CompactCell

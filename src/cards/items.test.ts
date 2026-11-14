@@ -5,7 +5,7 @@ import { EXAMPLE_SET } from './__fixtures__/acceptance'
 import { assembleTab } from './assemble'
 import { buildTabView } from './batch'
 import { computeRowTask } from './rowTask'
-import { BASE_CONDITION_ID, cardItems, compareItems, compareStrength, itemKey, representativeMoves, resolveDefault, type ItemState, type ItemVariability } from './items'
+import { BASE_CONDITION_ID, cardItems, compareItems, compareStrength, itemKey, mainMoves, resolveDefault, type ItemState, type ItemVariability } from './items'
 import { defaultOption, groupCards, groupItems } from './groups'
 import { outspeedsAtMax, planTab } from './plan'
 import { cardExplore, nextStage, opponentKey, pendingTasks, taskCardId, taskKey } from './schedule'
@@ -24,20 +24,20 @@ const MID = fixed('mid-roll-ohko')
 let order = 0
 function item(moveId: string, rankBefore: boolean, probe: ItemState['probe'], variability: ItemVariability, patch: Partial<ItemState> = {}): ItemState {
   const conditionId = rankBefore ? BASE_CONDITION_ID : RANK
-  // 기본은 모든 기술이 서로 다른 판정 타입의 대표(채용률 0): 대표 선정과 무관한 표·선공기 규칙 검사용
-  return { key: itemKey(moveId, conditionId), moveId, rankBefore, priority: false, share: 0, representative: true, probe, variability, moveOrder: order++, conditionOrder: rankBefore ? 0 : 1, ...patch }
+  // 기본은 모든 기술이 주력(채용률 0): 주력 선정과 무관한 표·선공기 규칙 검사용
+  return { key: itemKey(moveId, conditionId), moveId, rankBefore, priority: false, share: 0, main: true, probe, variability, moveOrder: order++, conditionOrder: rankBefore ? 0 : 1, ...patch }
 }
 const ok = (p: number, m: number) => ({ kind: 'ok' as const, cell: cell(p, m) })
 const immune = { kind: 'immune' as const, cell: { sp: 0, category: 'guaranteed-survive', immune: true as const } }
 const error = { kind: 'error' as const, reason: { code: 'WHITE_HERB_MULTIHIT' as const, message: 'x' } }
-/** 기준 기술 m의 랭크 전 P(약함) · 랭크 후 Q(셈) + 더 약한 다른 기술 */
+/** 기준 기술 m의 랭크 전 P(약함) · 랭크 후 Q(셈) + 더 약한 주력 아닌 다른 기술(P/Q 표 검사용) */
 function pq(p: ItemVariability, q: ItemVariability, pProbe: ItemState['probe'] = ok(0.2, 80), qProbe: ItemState['probe'] = ok(0.9, 120)) {
   const P = item('m', true, pProbe, p)
   const Q = item('m', false, qProbe, q)
-  const other = item('o', true, ok(0, 20), VAR)
+  const other = item('o', true, ok(0, 20), VAR, { main: false })
   return { P, Q, items: [Q, other, P] }
 }
-const pick = (items: readonly ItemState[], priorityRule = false) => resolveDefault(items, { priorityRule })
+const pick = (items: readonly ItemState[], priorityRule = false, variableFirst = true) => resolveDefault(items, { priorityRule, variableFirst })
 
 describe('resolveDefault: 랭크 전 P·후 Q 표(R4-3, 위에서부터 첫 일치)', () => {
   it('1. P 정상·Q 무효/계산 불가 → P', () => {
@@ -93,7 +93,7 @@ describe('resolveDefault: 랭크 전 P·후 Q 표(R4-3, 위에서부터 첫 일�
   })
   it('랭크 후 항목이 없으면 기준 기술의 랭크 전 항목', () => {
     const P = item('m', true, ok(0, 60), SURVIVE)
-    expect(pick([P, item('o', true, ok(0, 10), VAR)])).toMatchObject({ kind: 'ready', key: P.key, viaPriority: false, basis: P.key })
+    expect(pick([P, item('o', true, ok(0, 10), VAR, { main: false })])).toMatchObject({ kind: 'ready', key: P.key, viaPriority: false, basis: P.key })
   })
 })
 
@@ -170,7 +170,7 @@ describe('resolveDefault: 성묘 위력 항목(R15) — 성묘(100) = P, 성묘(
     const P = lr(faint(1), true, ok(0.3, 90), p, 1)
     const Q2 = lr(faint(2), false, ok(0.8, 130), q2, 2)
     const Q3 = lr(faint(3), false, ok(1, 170), q3, 3)
-    const out = [Q3, item('phantomforce', true, ok(0.1, 80), VAR), Q2, P]
+    const out = [Q3, item('phantomforce', true, ok(0.1, 80), VAR, { main: false }), Q2, P]
     if (rank !== undefined) out.push(lr(RANK, false, ok(0.9, 150), rank, 4))
     return { P, Q2, Q3, items: out }
   }
@@ -230,61 +230,94 @@ describe('compareItems: 목록 = 기술 채용률 순, 같은 기술 안은 강�
   })
 })
 
-describe('representativeMoves: 판정 타입마다 채용률 1위(R4-1, PRD AC38)', () => {
-  it('같은 타입은 채용률 높은 쪽 하나, 동률은 입력(기존 기술) 순 앞, 타입이 다르면 각자, 타입 없는 기술은 각자', () => {
-    const reps = representativeMoves([
-      { moveId: 'doubleedge', share: 0.3, moveType: 'Normal' },
-      { moveId: 'hypervoice', share: 0.9, moveType: 'Normal' },
-      { moveId: 'dragonclaw', share: 0.4, moveType: 'Dragon' },
-      { moveId: 'outrage', share: 0.4, moveType: 'Dragon' },
-      { moveId: 'unknownA', share: 0 },
-      { moveId: 'unknownB', share: 0 },
-    ])
-    expect(reps).toEqual(new Set(['hypervoice', 'dragonclaw', 'unknownA', 'unknownB']))
+describe('mainMoves: 방어 탭 주력 기술 = 선공기 제외 채용률 ≥ 20%(R4-1 재개정, PRD AC38)', () => {
+  const m = (moveId: string, share: number, priority = false) => ({ moveId, share, priority })
+  it('경계 0.20 포함·0.199 제외, 선공기는 채용률이 높아도 제외(고릴타 그래스슬라이더)', () => {
+    expect(mainMoves([m('grassyglide', 0.99, true), m('woodhammer', 0.87), m('a', 0.2), m('b', 0.199)], true)).toEqual(new Set(['woodhammer', 'a']))
+  })
+  it('20% 이상이 없으면 선공기 아닌 채용률 1위 하나(동률 입력 순 앞), 선공기뿐이면 채용률 1위', () => {
+    expect(mainMoves([m('p', 0.9, true), m('a', 0.1), m('b', 0.15), m('c', 0.15)], true)).toEqual(new Set(['b']))
+    expect(mainMoves([m('p', 0.3, true), m('q', 0.9, true)], true)).toEqual(new Set(['q']))
+    expect(mainMoves([], true)).toEqual(new Set())
+  })
+  it('목록 밖 타겟(채용률 없음): 선공기 아닌 지정 기술 전부, 선공기뿐이면 첫 기술', () => {
+    expect(mainMoves([m('p', 0, true), m('a', 0), m('b', 0)], false)).toEqual(new Set(['a', 'b']))
+    expect(mainMoves([m('p', 0, true), m('q', 0, true)], false)).toEqual(new Set(['p']))
   })
 })
 
-describe('resolveDefault: 기준 기술 = 판정 타입 대표 중 가장 센 것(R4-1 개정, PRD AC38)', () => {
-  /** 메가보만다 예: 노말 대표 하이퍼보이스(채용률 높음·약함), 채용률 낮은 강한 이판사판태클(대표 아님), 드래곤 대표 용성군 */
-  const rep = (moveId: string, probe: ItemState['probe'], share: number) => item(moveId, true, probe, VAR, { share })
-  const nonRep = (moveId: string, probe: ItemState['probe'], share: number) => item(moveId, true, probe, VAR, { share, representative: false })
-  it('채용률 낮은 강한 같은 타입 기술은 기준이 되지 않는다: 대표 하이퍼보이스가 기준', () => {
-    const hv = rep('hypervoice', ok(0.2, 80), 0.95)
-    const de = nonRep('doubleedge', ok(1, 160), 0.1)
-    expect(pick([de, hv])).toMatchObject({ kind: 'ready', key: hv.key, basis: hv.key, fallback: false })
+describe('resolveDefault: 기준 기술 = 주력 중 센 순 첫 변동 기술, 모두 고정이면 가장 센 것(R4-1 재개정, PRD AC38)', () => {
+  const main = (moveId: string, probe: ItemState['probe'], v: ItemVariability, share = 0.5) => item(moveId, true, probe, v, { share })
+  const side = (moveId: string, probe: ItemState['probe'], v: ItemVariability, share = 0.1) => item(moveId, true, probe, v, { share, main: false })
+  it('메가플라엣테 예: 파멸의빛(가장 셈) 고정 확정1타 → 문포스 고정 → 매지컬샤인 변동이면 매지컬샤인, 문포스가 변동이면 문포스', () => {
+    const lor = main('lightofruin', ok(1, 266), OHKO, 0.26)
+    const mb = main('moonblast', ok(1, 180), OHKO, 0.8)
+    const dg = main('dazzlinggleam', ok(0.7, 113), VAR, 0.94)
+    expect(pick([dg, mb, lor])).toMatchObject({ kind: 'ready', key: dg.key, basis: dg.key, fallback: false })
+    const mbVar = { ...mb, variability: VAR }
+    expect(pick([dg, mbVar, lor])).toMatchObject({ kind: 'ready', key: mbVar.key })
   })
-  it('서로 다른 타입 대표 중에서는 가장 센 것(1타 확률 → 최대 대미지 비율)이 기준', () => {
-    const hv = rep('hypervoice', ok(0.2, 80), 0.95)
-    const dm = rep('dracometeor', ok(0.2, 120), 0.4)
-    const de = nonRep('doubleedge', ok(1, 160), 0.1)
+  it('공격 탭(variableFirst 아님)은 변동 우선 없이 가장 센 주력, 주력이 하나면 변동 판정을 기다리지 않는다', () => {
+    const strong = main('a', ok(1, 200), OHKO)
+    const weakVar = main('b', ok(0.5, 110), VAR)
+    expect(pick([weakVar, strong], false, false)).toMatchObject({ kind: 'ready', key: strong.key })
+    expect(pick([weakVar, { ...strong, variability: { kind: 'pending' } }], false, false)).toMatchObject({ kind: 'ready', key: strong.key })
+    expect(pick([{ ...strong, variability: { kind: 'pending' } }, side('c', ok(0, 10), VAR)])).toMatchObject({ kind: 'ready', key: strong.key })
+  })
+  it('주력이 모두 고정이면 가장 센 주력, 채용률 20% 미만 강한 기술은 기준이 아니다(메가보만다 이판사판태클)', () => {
+    const hv = main('hypervoice', ok(0, 50), SURVIVE, 0.96)
+    const dm = main('dracometeor', ok(0.2, 150), MID, 0.64)
+    const de = side('doubleedge', ok(1, 200), VAR, 0.177)
     expect(pick([hv, de, dm])).toMatchObject({ kind: 'ready', key: dm.key, basis: dm.key })
   })
-  it('무효·계산 불가 대표는 빠지고 다음 대표 중 가장 센 것, 정상 대표가 없으면 목록(채용률 순) 첫 정상 항목(대체)', () => {
-    const immRep = rep('earthquake', immune, 0.9)
-    const weak = rep('rockslide', ok(0, 30), 0.5)
-    const de = nonRep('doubleedge', ok(1, 160), 0.1)
-    expect(pick([immRep, de, weak])).toMatchObject({ kind: 'ready', key: weak.key, fallback: false })
-    const errRep = { ...rep('m', error, 0.9), probe: error }
-    const a = nonRep('a', ok(1, 200), 0.2)
-    const b = nonRep('b', ok(0, 10), 0.6)
-    // 대체: 목록 첫 정상 항목 = 채용률 높은 b 기술(a보다 약해도)의 가장 센 항목(랭크 후 포함), 이후 단계(P/Q·선공기)는 건너뛴다
-    const bQ = item('b', false, ok(0.5, 90), VAR, { share: 0.6, representative: false })
-    expect(pick([a, errRep, b, bQ], true)).toMatchObject({ kind: 'ready', key: bQ.key, fallback: true, viaPriority: false })
+  it('랭크 후·성묘 위력 항목만 변동인 기술도 변동으로 본다: 랭크 전은 고정이어도 그 기술이 기준, P/Q 표로 Q', () => {
+    const strong = main('a', ok(0, 95), SURVIVE)
+    const lr = main('lastrespects', ok(0, 75), SURVIVE)
+    const lrQ = item('lastrespects', false, ok(1, 150), VAR, { share: 0.5 })
+    expect(pick([strong, lr, lrQ])).toMatchObject({ kind: 'ready', key: lrQ.key, basis: lr.key })
   })
-  it('대표 랭크 전 항목 단건 판정만 기다린다: 대표가 아닌 기술의 판정 전은 결정을 막지 않고, 정해진 값은 그 판정이 나와도 같다', () => {
-    const hv = rep('hypervoice', ok(0.2, 80), 0.95)
-    const pending = nonRep('doubleedge', { kind: 'pending' }, 0.1)
+  it('조기 확정: 앞 기술이 변동이면 뒤 기술 변동 판정을 기다리지 않고, 앞 기술 변동 판정 전이면 그 항목만 기다린다', () => {
+    const first = main('a', ok(0.5, 120), VAR)
+    const later = main('b', ok(0, 60), { kind: 'pending' })
+    expect(pick([later, first])).toMatchObject({ kind: 'ready', key: first.key })
+    const firstPending = { ...first, variability: { kind: 'pending' } as const }
+    expect(pick([later, firstPending])).toEqual({ kind: 'pending', need: [first.key] })
+    // 앞 기술 랭크 전이 고정이면 그 기술 랭크 후 항목의 변동 판정을 기다린다(뒤 기술은 아직 아님)
+    const fixedFirst = { ...first, variability: MID }
+    const firstQ = item('a', false, ok(0.9, 150), { kind: 'pending' }, { share: 0.5 })
+    expect(pick([later, fixedFirst, firstQ])).toEqual({ kind: 'pending', need: [firstQ.key] })
+    // 앞 기술이 모두 고정이면 다음 기술을 기다린다
+    expect(pick([later, fixedFirst])).toEqual({ kind: 'pending', need: [later.key] })
+    expect(pick([{ ...later, variability: VAR }, fixedFirst])).toMatchObject({ kind: 'ready', key: later.key })
+  })
+  it('무효·계산 불가 주력은 빠지고, 정상 주력이 없으면 목록(채용률 순) 첫 정상 항목(대체)', () => {
+    const immMain = main('earthquake', immune, SURVIVE, 0.9)
+    const weak = main('rockslide', ok(0, 30), MID, 0.5)
+    const de = side('doubleedge', ok(1, 160), VAR)
+    expect(pick([immMain, de, weak])).toMatchObject({ kind: 'ready', key: weak.key, fallback: false })
+    const errMain = { ...main('m', error, { kind: 'error', reason: error.reason }, 0.9), probe: error }
+    const a = side('a', ok(1, 200), VAR, 0.2)
+    const b = side('b', ok(0, 10), VAR, 0.6)
+    // 대체: 목록(채용률 순)에서 선공기 아닌 첫 정상 랭크 전 항목 = 채용률 높은 b(a보다 약해도, 랭크 후 bQ가 더 세도), 이후 단계(P/Q·선공기)는 건너뛴다
+    const bQ = item('b', false, ok(0.5, 90), VAR, { share: 0.6, main: false })
+    expect(pick([a, errMain, b, bQ], true)).toMatchObject({ kind: 'ready', key: b.key, fallback: true, viaPriority: false })
+    // 주력이 모두 무효여도 채용률 높은 선공기는 대체로 고르지 않는다(선공기는 주력이 아님)
+    const sp = item('suckerpunch', true, ok(1, 120), VAR, { share: 0.99, main: false, priority: true })
+    expect(pick([errMain, sp, a], true)).toMatchObject({ kind: 'ready', key: a.key, fallback: true })
+  })
+  it('주력 랭크 전 항목 단건 판정만 기다린다: 주력 아닌 기술의 판정 전은 결정을 막지 않고, 정해진 값은 그 판정이 나와도 같다', () => {
+    const hv = main('hypervoice', ok(0.2, 80), VAR, 0.95)
+    const pending = side('doubleedge', { kind: 'pending' }, { kind: 'pending' })
     expect(pick([hv, pending])).toMatchObject({ kind: 'ready', key: hv.key })
-    expect(pick([hv, { ...pending, probe: ok(1, 200) }])).toMatchObject({ kind: 'ready', key: hv.key })
+    expect(pick([hv, { ...pending, probe: ok(1, 200), variability: VAR }])).toMatchObject({ kind: 'ready', key: hv.key })
     expect(pick([{ ...hv, probe: { kind: 'pending' } }, { ...pending, probe: ok(1, 200) }])).toEqual({ kind: 'pending', need: [] })
     // 기준 기술의 랭크 후 항목 판정 전이면 기다린다
     const hvQ = item('hypervoice', false, { kind: 'pending' }, { kind: 'pending' }, { share: 0.95 })
     expect(pick([hv, hvQ])).toEqual({ kind: 'pending', need: [] })
   })
-  it('선공기 우선(R4-2)은 대표가 아니어도 그대로: 변동인 선공기가 기준, 선공기 판정 전이면 기다린다', () => {
-    const hv = rep('hypervoice', ok(0.2, 80), 0.95)
-    const es = nonRep('extremespeed', ok(0, 40), 0.05)
-    const pri = { ...es, priority: true }
+  it('선공기 우선(R4-2)은 주력이 아니어도 그대로: 변동인 선공기가 기준, 선공기 판정 전이면 기다린다', () => {
+    const hv = main('hypervoice', ok(0.2, 80), VAR, 0.95)
+    const pri = { ...side('extremespeed', ok(0, 40), VAR, 0.05), priority: true }
     expect(pick([hv, pri], true)).toMatchObject({ kind: 'ready', key: pri.key, viaPriority: true })
     expect(pick([hv, { ...pri, probe: { kind: 'pending' } }], true)).toEqual({ kind: 'pending', need: [] })
   })
@@ -415,23 +448,24 @@ describe('실데이터: 목록·기본 항목·직접 선택', () => {
   })
 })
 
-describe('실데이터: 채용률·판정 타입 대표·목록 순(R16·R4-1 개정, PRD AC38)', () => {
+describe('실데이터: 채용률·주력 기술·목록 순(R16·R4-1 재개정, PRD AC38)', () => {
   const { bo1 } = realData()
   const only = (id: string) => ({ topN: 30, selected: [id] })
   const groupOf = (v: ReturnType<typeof buildTabView>, id: string) => groupCards(v.cards.filter((c) => c.opponent.id === id && c.berry === undefined), v.tab)[0]
   const shares = (id: string) => bo1.entry(id)?.moves.shares ?? {}
 
-  it('방어 탭 메가망나뇽: 후보 채용률 = 그 상대 기술 사용률, 드래곤 대표는 채용률 1위 용의파동 — 더 센 용성군이 아니라 용의파동이 기준', () => {
+  it('방어 탭 메가망나뇽: 후보 채용률 = 그 상대 기술 사용률, 채용률 20% 미만 용성군·선공기 신속은 주력이 아님 — 더 센 용성군이 아니라 용의파동이 기준', () => {
     const input = cardInput({ mySet: EXAMPLE_SET, filters: only('dragonitemega') })
     const plan = planTab(input, 'defense')
     const s = shares('dragonitemega')
-    expect(s.dragonpulse).toBeGreaterThan(s.dracometeor)
+    expect(s.dragonpulse).toBeGreaterThanOrEqual(0.2)
+    expect(s.dracometeor).toBeLessThan(0.2)
     for (const card of plan.cards.filter((c) => c.opponent.id === 'dragonitemega'))
       for (const g of card.conditions)
         for (const c of g.candidates) {
           expect(c.share, c.moveId).toBe(s[c.moveId] ?? 0)
-          if (c.moveId === 'dragonpulse') expect(c.representative).toBe(true)
-          if (c.moveId === 'dracometeor') expect(c.representative).toBe(false)
+          if (c.moveId === 'dragonpulse') expect(c.main).toBe(true)
+          if (c.moveId === 'dracometeor' || c.moveId === 'extremespeed') expect(c.main, c.moveId).toBe(false)
         }
     const v = buildTabView(input, 'defense')
     const special = defaultOption(groupOf(v, 'dragonitemega'))
@@ -440,18 +474,40 @@ describe('실데이터: 채용률·판정 타입 대표·목록 순(R16·R4-1 �
     expect(max('dracometeor')).toBeGreaterThan(max('dragonpulse'))
   })
 
-  it('판정 타입은 바뀐 타입(R13): 타부자고 vs 메가리자몽Y 웨더볼(가뭄 → 불꽃)은 열풍과 같은 불꽃 타입이라 채용률 높은 열풍이 대표', () => {
+  it('예시 세트 방어 탭: 고릴타 그래스슬라이더(그래스메이커 → 선공기)는 주력 아님 → 우드해머, 메가보만다 이판사판태클(20% 미만) 주력 아님, 메가플라엣테는 파멸의빛·문포스 고정이면 변동인 매지컬샤인', () => {
+    const v = buildTabView(cardInput({ mySet: EXAMPLE_SET, filters: { topN: 30, selected: [] } }), 'defense')
+    const plan = planTab(cardInput({ mySet: EXAMPLE_SET, filters: { topN: 30, selected: [] } }), 'defense')
+    const cand = (id: string, m: string) => plan.cards.filter((c) => c.opponent.id === id).flatMap((c) => c.conditions.flatMap((g) => g.candidates)).find((c) => c.moveId === m)
+    expect(cand('rillaboom', 'grassyglide')).toMatchObject({ priority: true, main: false })
+    expect(cand('rillaboom', 'woodhammer')).toMatchObject({ priority: false, main: true })
+    expect(defaultOption(groupOf(v, 'rillaboom')).defaultItem?.key).toBe(itemKey('woodhammer', BASE_CONDITION_ID))
+    expect(cand('salamencemega', 'doubleedge')?.main).toBe(false)
+    const floette = defaultOption(groupOf(v, 'floettemega'))
+    const at = (m: string) => floette.items.find((i) => i.key === itemKey(m, BASE_CONDITION_ID))
+    expect([at('lightofruin')?.variable, at('moonblast')?.variable, at('dazzlinggleam')?.variable]).toEqual([false, false, true])
+    expect(floette.defaultItem?.key).toBe(itemKey('dazzlinggleam', BASE_CONDITION_ID))
+  })
+
+  it('채용률 20% 이상이면 같은 타입이어도 각자 주력(R13 판정 타입은 표시에만): 타부자고 vs 메가리자몽Y 열풍·웨더볼, 모두 고정인 배분은 더 센 웨더볼, 열풍이 변동인 배분은 열풍', () => {
     const gholdengo = bo1.entry('gholdengo')?.representative.set as PokemonSet
     const input = cardInput({ mySet: gholdengo, filters: only('charizardmegay') })
     const plan = planTab(input, 'defense')
     const cand = (m: string) => plan.cards.flatMap((c) => c.conditions.flatMap((g) => g.candidates)).find((c) => c.moveId === m)
-    expect(shares('charizardmegay').heatwave).toBeGreaterThan(shares('charizardmegay').weatherball)
-    expect(cand('heatwave')?.representative).toBe(true)
-    expect(cand('weatherball')?.representative).toBe(false)
+    expect(shares('charizardmegay').weatherball).toBeGreaterThanOrEqual(0.2)
+    expect(cand('heatwave')?.main).toBe(true)
+    expect(cand('weatherball')?.main).toBe(true)
     const v = buildTabView(input, 'defense')
     const g = groupOf(v, 'charizardmegay')
     expect(groupItems(g).find((x) => x.item.moveId === 'weatherball')?.item.moveType).toBe('Fire')
-    expect(defaultOption(g).defaultItem?.key).toBe(itemKey('heatwave', BASE_CONDITION_ID))
+    const seen = new Set<string>()
+    for (const c of g.options) {
+      const at = (m: string) => c.items.find((i) => i.key === itemKey(m, BASE_CONDITION_ID))
+      const expected = at('heatwave')?.variable === true && at('weatherball')?.variable !== true ? 'heatwave' : at('weatherball')?.variable !== undefined && at('heatwave')?.variable === false ? 'weatherball' : undefined
+      if (expected === undefined) continue
+      expect(c.defaultItem?.key, c.id).toBe(itemKey(expected, BASE_CONDITION_ID))
+      seen.add(expected)
+    }
+    expect(seen).toEqual(new Set(['heatwave', 'weatherball']))
   })
 
   it('공격 탭은 채용률을 쓰지 않는다(share 0 → 내 기술 칸 순서, 사용자 결정 2026-11-14), 메뉴 목록은 기술 채용률 순 · 같은 기술 안 강한 순 · 계산 불가/무효 맨 뒤', () => {

@@ -33,8 +33,7 @@ import { LAST_RESPECTS, LAST_RESPECTS_FAINTS, addedBundleKey, addedCardId, faint
 import { presetAssumption } from './presets'
 import { TAB_MEANS_OWNERS, ladderMeans, rankMoveAllowed, rankVariants, setMeansCandidates, type CardRefStats, type MeansCandidate } from './rank'
 import type { BoostStat } from './rankMeans'
-import { representativeMoves } from './items'
-import { judgedMoveType } from './moveType'
+import { mainMoves } from './items'
 import { natureVariants } from './natures'
 import { myDependsOn, relevantStats } from './relevance'
 import {
@@ -121,7 +120,8 @@ interface CardSeed {
 interface MoveMeta {
   shares: Readonly<Record<string, number>> | undefined
   order: ReadonlyMap<string, number>
-  representatives: ReadonlySet<string>
+  /** 주력 기술(MoveCandidate.main) */
+  mains: ReadonlySet<string>
 }
 
 interface Opponent {
@@ -372,39 +372,36 @@ class PlanBuilder {
 
   /**
    * priority = 공격측 필드를 넣은 우선도 > 0(fieldPriority: 그래스필드 그래스슬라이더, 스냅샷에 없는 기술은 false).
-   * attacker = 그 판정의 공격측 해결 세트. meta = 그 카드 상대의 채용률·대표 기술(moveMeta). added = 사용자가 추가한 상대 기술
+   * attacker = 그 판정의 공격측 해결 세트. meta = 그 카드 상대의 채용률·주력 기술(moveMeta). added = 사용자가 추가한 상대 기술
    */
   candidate(target: MoveCandidate['target'], id: string, moveId: string, attacker: ResolvedSet, meta: MoveMeta, added?: ReadonlySet<string>): MoveCandidate {
-    const priority =
+    const priority = this.isPriority(moveId, attacker)
+    const c: MoveCandidate = { target, id, moveId, priority, share: meta.shares?.[moveId] ?? 0, order: meta.order.get(moveId) ?? meta.order.size, main: meta.mains.has(moveId) }
+    if (added?.has(moveId) === true) c.added = true
+    return c
+  }
+
+  /** 공격측 필드를 넣은 우선도 > 0(fieldPriority: 그래스필드 그래스슬라이더). 스냅샷에 없는 기술은 false */
+  isPriority(moveId: string, attacker: ResolvedSet): boolean {
+    return (
       hasMove(this.game, moveId) &&
       fieldPriority(moveId, this.game.data.moves[moveId].priority, this.damageConditions(attacker.ability).terrain, {
         types: attacker.species.types,
         ability: attacker.ability,
         item: attacker.item,
       }) > 0
-    const c: MoveCandidate = { target, id, moveId, priority, share: meta.shares?.[moveId] ?? 0, order: meta.order.get(moveId) ?? meta.order.size, representative: meta.representatives.has(moveId) }
-    if (added?.has(moveId) === true) c.added = true
-    return c
+    )
   }
 
   /**
-   * 채용률(PRD R16)·판정 타입 대표 기술(R4-1). moveIds = 그 상대의 모든 분류 후보 기술(기존 순서), spec = 그 기술 랭크 전 판정의 세트·조건.
-   * 대표는 분류 카드를 가로질러 정한다(분류마다 따로 정하면 채용률 낮은 다른 분류 기술이 그 타입 대표가 된다).
-   * allRepresentative = 모든 기술이 대표(공격 탭: 내 기술 넷은 모두 내가 고른 것이라 채용률로 거르지 않고 가장 센 기술이 기준).
+   * 채용률(PRD R16)·주력 기술(R4-1). moveIds = 그 상대의 모든 분류 후보 기술(기존 순서). 주력은 분류 카드를 가로질러 정한다.
+   * attacker 없음 = 공격 탭(내 기술 전부가 주력). 있으면 방어 탭: 그 공격측 기준 선공기를 빼고 정한다(items.mainMoves).
    */
-  moveMeta(
-    moveIds: readonly string[],
-    shares: Readonly<Record<string, number>> | undefined,
-    spec: (moveId: string) => Parameters<typeof judgedMoveType>[2],
-    allRepresentative = false,
-  ): MoveMeta {
-    const moves = moveIds.map((moveId) => {
-      const m: { moveId: string; share: number; moveType?: string } = { moveId, share: shares?.[moveId] ?? 0 }
-      const type = judgedMoveType(this.game, moveId, spec(moveId))
-      if (type !== undefined) m.moveType = type
-      return m
-    })
-    return { shares, order: new Map(moveIds.map((id, i) => [id, i])), representatives: allRepresentative ? new Set(moveIds) : representativeMoves(moves) }
+  moveMeta(moveIds: readonly string[], shares: Readonly<Record<string, number>> | undefined, attacker?: ResolvedSet): MoveMeta {
+    const order = new Map(moveIds.map((id, i) => [id, i]))
+    if (attacker === undefined) return { shares, order, mains: new Set(moveIds) }
+    const moves = moveIds.map((moveId) => ({ moveId, share: shares?.[moveId] ?? 0, priority: this.isPriority(moveId, attacker) }))
+    return { shares, order, mains: mainMoves(moves, shares !== undefined) }
   }
 
   /** 후보가 없으면 조건을 두지 않는다. */
@@ -460,13 +457,8 @@ class PlanBuilder {
     const resolved = seed.resolved
     if (!resolved) return
     const oppSet = seed.assumption.set
-    const meta = this.moveMeta(
-      all.map((s) => s.moveId),
-      // 공격 탭은 채용률을 쓰지 않는다: 목록은 내 기술 칸 순서, 기준 기술은 내 기술 전부 중 가장 센 것(PRD R16, 사용자 결정 2026-11-14)
-      undefined,
-      (moveId) => ({ attacker: this.mySet, defender: oppSet, conditions: faintConditions(this.damageConditions(this.me.ability), moveId) }),
-      true,
-    )
+    // 공격 탭은 채용률을 쓰지 않는다: 목록은 내 기술 칸 순서, 기준 기술은 내 기술 전부 중 가장 센 것(PRD R16, 사용자 결정 2026-11-14)
+    const meta = this.moveMeta(all.map((s) => s.moveId), undefined)
     const inCategory = (slot: MoveSlot) => slot.refs?.defense === defenseStatOf(seed.category as Category)
     const slots = all.filter(inCategory)
     const base: MoveSlot[] = []
@@ -551,11 +543,7 @@ class PlanBuilder {
     const oppSet = seed.assumption.set
     card.speedEdge = this.speedEdge(oppSet, resolved.ability)
     const baseConditions = this.damageConditions(resolved.ability)
-    const meta = this.moveMeta(
-      [...all, ...errors].map((s) => s.moveId),
-      opp.entry?.moves.shares,
-      (moveId) => ({ attacker: oppSet, defender: this.mySet, conditions: faintConditions(baseConditions, moveId) }),
-    )
+    const meta = this.moveMeta([...all, ...errors].map((s) => s.moveId), opp.entry?.moves.shares, resolved)
     const def = defenseStatOf(seed.category as Category)
     const inCategory = (slot: MoveSlot) => slot.refs?.defense === def
     const slots = all.filter(inCategory)

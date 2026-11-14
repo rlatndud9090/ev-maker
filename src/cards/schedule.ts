@@ -134,9 +134,9 @@ export function probeKey(c: MoveCandidate): string {
   return c.target === 'fixed' ? taskKey({ kind: 'fixed', fixedId: c.id }) : taskKey({ kind: 'probe', target: c.target, id: c.id })
 }
 
-/** 카드의 기본 항목 결정(items.resolveDefault). 방어 탭은 내가 확실히 빠를 때(speedEdge) 선공기 우선 규칙을 쓴다 */
+/** 카드의 기본 항목 결정(items.resolveDefault). 방어 탭은 주력 중 변동 우선, 내가 확실히 빠를 때(speedEdge) 선공기 우선 규칙을 쓴다 */
 export function cardDefault(plan: TabPlan, card: CardSpec, results: ResultMap, refs: readonly CardItemRef[] = cardItems(plan, card)): DefaultResult {
-  return resolveDefault(itemStates(plan, card, refs, results), { priorityRule: plan.tab === 'defense' && card.speedEdge === true })
+  return resolveDefault(itemStates(plan, card, refs, results), { priorityRule: plan.tab === 'defense' && card.speedEdge === true, variableFirst: plan.tab === 'defense' })
 }
 
 /** 보이는 항목: 사용자가 고른 항목이 이 카드에 있으면 그것, 아니면 정해진 기본 항목 */

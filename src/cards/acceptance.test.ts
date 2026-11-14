@@ -185,10 +185,10 @@ interface OracleItem {
   cand: MoveCandidate
   basis?: RankBasis
   probe: CoreProbe
-  /** 기술 채용률·기존 기술 순서·판정 타입 대표(PRD R16·R4-1, 오라클이 입력에서 직접 계산) */
+  /** 기술 채용률·기존 기술 순서·주력 기술(PRD R16·R4-1, 오라클이 입력에서 직접 계산) */
   share: number
   moveOrder: number
-  representative: boolean
+  main: boolean
   condOrder: number
 }
 
@@ -273,10 +273,11 @@ function oracleListed(a: OracleItem, b: OracleItem): number {
 }
 
 /**
- * 기본 항목(PRD R4)의 독립 재구현: 기준 기술(판정 타입 대표 기술의 정상 랭크 전 항목 중 가장 센 것, 정상 대표가 없으면 목록 첫 정상 항목·없으면 첫 항목,
+ * 기본 항목(PRD R4)의 독립 재구현: 기준 기술(주력 기술의 정상 랭크 전 항목을 센 순으로 보아 그 기술 항목 중 변동이 있는 첫 기술, 모두 고정이면 가장 센 것,
+ * 정상 주력이 없으면 목록 첫 정상 항목·없으면 첫 항목,
  * 방어 탭 speedEdge면 랭크 전·후 중 변동인 선공기 우선) → 랭크 전 P·후 Q 표.
  */
-function oracleDefault(items: readonly OracleItem[], priorityRule: boolean, varOf: (i: OracleItem) => CoreVar): OracleItem {
+function oracleDefault(items: readonly OracleItem[], priorityRule: boolean, variableFirst: boolean, varOf: (i: OracleItem) => CoreVar): OracleItem {
   const sorted = [...items].sort(oracleStrength)
   const valid = (i: OracleItem) => i.probe.kind === 'ok'
   const variable = (i: OracleItem) => varOf(i).kind === 'variable'
@@ -291,14 +292,16 @@ function oracleDefault(items: readonly OracleItem[], priorityRule: boolean, varO
     const qv = varOf(q)
     return qv.kind === 'variable' || (qv.kind === 'fixed' && qv.cat === 'guaranteed-survive') ? q : p
   }
-  const reps = sorted.filter((i) => i.rankBefore && i.representative && valid(i))
-  if (reps.length === 0) {
+  const mains = sorted.filter((i) => i.rankBefore && i.main && valid(i))
+  if (mains.length === 0) {
     const listed = [...items].sort(oracleListed)
     return listed.find(valid) ?? listed[0]
   }
   const pre = sorted.filter((i) => i.rankBefore && valid(i))
   if (priorityRule) for (const p of pre) if (p.priority && [p, ...qsOf(p.moveId)].some(variable)) return pq(p.moveId)
-  return pq(reps[0].moveId)
+  // 변동 우선은 방어 탭만(공격 탭은 가장 센 주력)
+  const firstVariable = variableFirst ? mains.find((m) => items.some((i) => i.moveId === m.moveId && variable(i))) : undefined
+  return pq((firstVariable ?? mains[0]).moveId)
 }
 
 /** 오라클용 접지(PRD R12): 쇠구슬이면 접지, 아니면 비행 타입·부유·풍선이 아닐 때 */
@@ -316,38 +319,26 @@ function oraclePriority(plan: TabPlan, c: MoveCandidate): boolean {
 }
 
 const RANK_BEFORE_IDS = [JSON.stringify(['base']), JSON.stringify(['faint', 1])]
-const oracleSpecOf = (plan: TabPlan, c: MoveCandidate) => (c.target === 'filter' ? plan.filters[c.id] : c.target === 'fixed' ? plan.fixed[c.id] : plan.rows[c.id])
-const oracleAbility = (s: PokemonSet): string => {
-  try {
-    return validateSet(game, s, IGNORE_TOTAL).ability
-  } catch {
-    return s.ability
-  }
-}
 
 /**
- * 오라클 채용률·기존 기술 순서·대표 기술(PRD R16·R4-1). 채용률: 방어 탭 래더 상대 = 그 상대 사용률, 공격 탭 = 내 종(메가면 메가 항목, 없으면 원종),
- * 그 밖 0. 순서: 공격 탭 내 기술 칸 순, 방어 탭 래더 = 사용률 순(동률 id 순), 목록 밖 타겟 = 지정 순. 대표: 그 상대 모든 분류 카드의 랭크 전 기술을
- * 오라클 타입(공격측 계산 특성 스킨·날씨 유도)으로 묶어 채용률 1위(동률 순서 앞).
+ * 오라클 채용률·기존 기술 순서·주력 기술(PRD R16·R4-1). 채용률: 방어 탭 래더 상대 = 그 상대 사용률, 공격 탭 = 내 종(메가면 메가 항목, 없으면 원종),
+ * 그 밖 0. 순서: 공격 탭 내 기술 칸 순, 방어 탭 래더 = 사용률 순(동률 id 순), 목록 밖 타겟 = 지정 순. 주력: 그 상대 모든 분류 카드의 랭크 전 기술 중
+ * 공격 탭 전부, 방어 탭 래더 = 선공기(oraclePriority) 아닌 것 중 채용률 ≥ 20%(없으면 선공기 아닌 채용률 1위, 그것도 없으면 채용률 1위),
+ * 목록 밖 타겟 = 선공기 아닌 것 전부(없으면 첫 기술).
  */
-function oracleMoveMeta(plan: TabPlan, card: CardSpec): { share: (m: string) => number; order: (m: string) => number; reps: Set<string> } {
+function oracleMoveMeta(plan: TabPlan, card: CardSpec): { share: (m: string) => number; order: (m: string) => number; mains: Set<string> } {
   const input = inputOf.get(plan)
   if (input === undefined) throw new Error('run()으로 만든 계획이 아니다')
   let shares: Record<string, number> = {}
   // 공격 탭은 채용률 없음(내 기술 칸 순서, PRD R16)
   if (plan.tab !== 'attack' && card.opponent.source === 'ladder') shares = input.view.entry(card.opponent.id)?.moves.shares ?? {}
   const share = (m: string) => shares[m] ?? 0
-  const universe = new Map<string, string | undefined>()
+  const universe = new Map<string, boolean>()
   for (const c of plan.cards) {
     if (c.opponent.source !== card.opponent.source || c.opponent.id !== card.opponent.id) continue
     for (const g of c.conditions) {
       if (!RANK_BEFORE_IDS.includes(g.id)) continue
-      for (const cand of g.candidates) {
-        if (universe.has(cand.moveId)) continue
-        const move = game.data.moves[cand.moveId]
-        const spec = oracleSpecOf(plan, cand)
-        universe.set(cand.moveId, move === undefined ? undefined : oracleMoveType(cand.moveId, move.type, oracleAbility(spec.attacker), oracleAbility(spec.defender)))
-      }
+      for (const cand of g.candidates) if (!universe.has(cand.moveId)) universe.set(cand.moveId, oraclePriority(plan, cand))
     }
   }
   const custom = input.customTargets.find((t) => t.rosterId === card.opponent.id)
@@ -361,15 +352,15 @@ function oracleMoveMeta(plan: TabPlan, card: CardSpec): { share: (m: string) => 
     const i = listed.indexOf(m)
     return i < 0 ? listed.length : i
   }
-  // 공격 탭: 내 기술 전부가 대표(채용률로 거르지 않음, PRD R16)
-  if (plan.tab === 'attack') return { share, order, reps: new Set(universe.keys()) }
-  const best = new Map<string, string>()
-  for (const [m, type] of universe) {
-    const k = type ?? `?${m}`
-    const cur = best.get(k)
-    if (cur === undefined || share(m) > share(cur) || (share(m) === share(cur) && order(m) < order(cur))) best.set(k, m)
-  }
-  return { share, order, reps: new Set(best.values()) }
+  const all = [...universe.keys()].sort((a, b) => order(a) - order(b))
+  if (plan.tab === 'attack') return { share, order, mains: new Set(all) }
+  const plain = all.filter((m) => universe.get(m) === false)
+  if (card.opponent.source === 'custom') return { share, order, mains: new Set(plain.length > 0 ? plain : all.slice(0, 1)) }
+  const over = plain.filter((m) => share(m) >= 0.2)
+  if (over.length > 0) return { share, order, mains: new Set(over) }
+  const pool = plain.length > 0 ? plain : all
+  const top = pool.reduce<string | undefined>((best, m) => (best === undefined || share(m) > share(best) ? m : best), undefined)
+  return { share, order, mains: new Set(top === undefined ? [] : [top]) }
 }
 
 function oracleItems(plan: TabPlan, card: CardSpec): OracleItem[] {
@@ -386,7 +377,7 @@ function oracleItems(plan: TabPlan, card: CardSpec): OracleItem[] {
         probe: coreProbe(plan, c),
         share: meta.share(c.moveId),
         moveOrder: meta.order(c.moveId),
-        representative: meta.reps.has(c.moveId),
+        main: meta.mains.has(c.moveId),
         condOrder: gi,
       }
       if (basis !== undefined) it.basis = basis
@@ -433,7 +424,7 @@ function expectMatchesCore(plan: TabPlan, view: TabView): { items: number; cards
       }
       return v
     }
-    const def = plain ? undefined : oracleDefault(items, plan.tab === 'defense' && card.speedEdge === true, varOf)
+    const def = plain ? undefined : oracleDefault(items, plan.tab === 'defense' && card.speedEdge === true, plan.tab === 'defense', varOf)
     if (def !== undefined && card.berry !== undefined && !card.berry.triggers.includes(def.moveId)) {
       expect(viewCard, card.id).toBeUndefined()
       continue

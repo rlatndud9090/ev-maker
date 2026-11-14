@@ -1,4 +1,4 @@
-// 판정에서 실제 쓰는 기술 타입(PRD R13). 계획(대표 기술 선정)과 조립(라벨)이 같은 규칙을 쓴다.
+// 판정에서 실제 쓰는 기술 타입(PRD R13): 조립(라벨·화력 도구 보정)이 같은 규칙을 쓴다.
 import { WEATHER_NEGATING_ABILITIES, attackMoveType, validateSet, type BattleConditions, type PokemonSet } from '../core'
 import type { Snapshot } from '../data/schema'
 

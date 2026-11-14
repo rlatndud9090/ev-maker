@@ -121,7 +121,7 @@ function categoriesOf(group: CardGroup): CardView['category'][] {
   return [...new Set(group.options.map((o) => o.category))]
 }
 
-/** 분류 사이 비교: 방어 탭 선공기 우선으로 정해진 쪽 → 대표 기술로 정해진 쪽(fallback 아님) → 기준 기술 단건 판정이 센 쪽(1타 확률 → 최대 대미지 비율). 같으면 0 */
+/** 분류 사이 비교: 방어 탭 선공기 우선으로 정해진 쪽 → 주력 기술로 정해진 쪽(fallback 아님) → 기준 기술 단건 판정이 센 쪽(1타 확률 → 최대 대미지 비율). 같으면 0 */
 function compareDefaults(a: CardView, b: CardView): number {
   const da = a.defaultItem
   const db = b.defaultItem
