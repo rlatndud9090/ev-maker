@@ -1,7 +1,8 @@
 // 계획 + 행 작업 결과 → 탭 뷰. 판정을 다시 하지 않고 표시용 SP로 산술·조회만 한다. 비용 O(행 × 33).
-import { WEATHER_NEGATING_ABILITIES, attackMoveType, conditionMovePower, validateSet, type BattleConditions, type PokemonSet, type SpTable } from '../core'
+import { conditionMovePower, type SpTable } from '../core'
 import type { Snapshot, StatId } from '../data/schema'
 import { cardItems, compareItems, itemStates, type CardItemRef, type ItemState } from './items'
+import { judgedMoveType } from './moveType'
 import {
   cardDefault,
   cardExplore,
@@ -95,35 +96,6 @@ function nearestOf(boundaries: readonly BoundaryView[]): RowView['nearest'] {
     if (b.delta <= 0 && (nearest.down === undefined || b.delta > nearest.down.delta)) nearest.down = b
   }
   return nearest
-}
-
-// 계획의 세트 객체는 바뀌지 않으므로 세트별로 한 번만 해석한다.
-const calcAbilities = new WeakMap<PokemonSet, string>()
-
-/** 계산 특성(메가면 메가 폼 특성). 해석할 수 없으면 세트 특성 그대로 */
-function calcAbilityOf(game: Snapshot, set: PokemonSet): string {
-  const hit = calcAbilities.get(set)
-  if (hit !== undefined) return hit
-  let ability = set.ability
-  try {
-    ability = validateSet(game, set, { ignoreSpTotal: true }).ability
-  } catch {
-    // 계산 불가 세트: 세트 특성 그대로
-  }
-  calcAbilities.set(set, ability)
-  return ability
-}
-
-/**
- * 판정에서 실제 쓰는 기술 타입(PRD R13): 공격측 계산 특성(스킨 등)과 판정 조건의 날씨·필드(공격측 특성 유도, ADR 결정 7).
- * 양쪽 중 날씨 무효 특성이 있으면 날씨 없음(엔진 규칙). 스냅샷에 없는 기술이면 undefined.
- */
-export function judgedMoveType(game: Snapshot, moveId: string, spec: { attacker: PokemonSet; defender: PokemonSet; conditions: BattleConditions }): string | undefined {
-  if (!Object.prototype.hasOwnProperty.call(game.data.moves, moveId)) return undefined
-  const attacker = calcAbilityOf(game, spec.attacker)
-  const defender = calcAbilityOf(game, spec.defender)
-  const negated = WEATHER_NEGATING_ABILITIES.some((a) => a === attacker || a === defender)
-  return attackMoveType(moveId, game.data.moves[moveId].type, attacker, { weather: negated ? 'none' : spec.conditions.weather, terrain: spec.conditions.terrain })
 }
 
 type RowHead = Pick<RowView, 'id' | 'kind' | 'order' | 'moveId' | 'moveType' | 'power' | 'sweepStat' | 'refs' | 'basis'>
@@ -348,12 +320,12 @@ function cardError(card: CardSpec): ErrorReason {
   return card.error
 }
 
-/** 항목 상태 → 목록 항목(가장 세게 치는 순) */
+/** 항목 상태 → 목록 항목(채용률 순, compareItems) */
 function itemViews(plan: TabPlan, refs: readonly CardItemRef[], states: readonly ItemState[]): ItemView[] {
   const byKey = new Map(refs.map((r) => [r.key, r]))
   return [...states].sort(compareItems).map((st) => {
     const ref = byKey.get(st.key) as CardItemRef
-    const v: ItemView = { key: st.key, moveId: st.moveId, priority: st.priority, status: st.probe.kind }
+    const v: ItemView = { key: st.key, moveId: st.moveId, share: st.share, order: st.moveOrder, priority: st.priority, status: st.probe.kind }
     const c = ref.candidate
     const spec = c.target === 'row' ? plan.rows[c.id] : c.target === 'filter' ? plan.filters[c.id] : plan.fixed[c.id]
     const moveType = spec === undefined ? undefined : judgedMoveType(plan.game, st.moveId, spec)
@@ -523,6 +495,7 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
   if (pair !== undefined) view.pair = pair
   if (def.kind === 'ready') {
     const d: DefaultItemView = { key: def.key, viaPriority: def.viaPriority }
+    if (def.fallback) d.fallback = true
     const basis = states.find((st) => st.key === def.basis)
     if (basis?.probe.kind === 'ok') d.basisCell = basis.probe.cell
     view.defaultItem = d

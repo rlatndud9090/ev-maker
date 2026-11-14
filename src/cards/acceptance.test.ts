@@ -65,6 +65,8 @@ const IGNORE_TOTAL = { ignoreSpTotal: true, rollSteps: N }
 // 파일 전체가 같은 판정 캐시를 쓴다(캐시 경유 = 무캐시는 batch.test가 봉인).
 const cache = createLruCache(200_000)
 const memo = new Map<string, { plan: TabPlan; view: TabView }>()
+/** 오라클이 채용률·기술 순서를 입력에서 직접 읽도록 계획 → 입력 */
+const inputOf = new WeakMap<TabPlan, CardInput>()
 
 /** label은 입력 조합마다 유일해야 한다(같은 label이면 첫 결과를 재사용). */
 function run(label: string, input: CardInput, tab: Tab): { plan: TabPlan; view: TabView } {
@@ -73,6 +75,7 @@ function run(label: string, input: CardInput, tab: Tab): { plan: TabPlan; view: 
   if (!hit) {
     hit = { plan: planTab(input, tab), view: buildTabView(input, tab, cache) }
     memo.set(key, hit)
+    inputOf.set(hit.plan, input)
   }
   return hit
 }
@@ -182,7 +185,10 @@ interface OracleItem {
   cand: MoveCandidate
   basis?: RankBasis
   probe: CoreProbe
+  /** 기술 채용률·기존 기술 순서·판정 타입 대표(PRD R16·R4-1, 오라클이 입력에서 직접 계산) */
+  share: number
   moveOrder: number
+  representative: boolean
   condOrder: number
 }
 
@@ -246,21 +252,32 @@ function coreVar(plan: TabPlan, card: CardSpec, c: MoveCandidate): CoreVar {
   return vars[0]
 }
 
+/** 오라클 강한 순: 정상 → 계산 불가 → 무효, 1타 확률 → 최대 대미지 비율 → 같은 기술 랭크 전 → 기술·조건 순 */
+function oracleStrength(a: OracleItem, b: OracleItem): number {
+  const cls = (i: OracleItem) => (i.probe.kind === 'ok' ? 0 : i.probe.kind === 'error' ? 1 : 2)
+  if (cls(a) !== cls(b)) return cls(a) - cls(b)
+  if (a.probe.kind === 'ok' && b.probe.kind === 'ok') {
+    if (a.probe.p !== b.probe.p) return b.probe.p - a.probe.p
+    if (a.probe.max !== b.probe.max) return b.probe.max - a.probe.max
+  }
+  if (a.moveId === b.moveId && a.rankBefore !== b.rankBefore) return a.rankBefore ? -1 : 1
+  return a.moveOrder - b.moveOrder || a.condOrder - b.condOrder
+}
+
+/** 오라클 목록 순(PRD R16): 계산 불가 → 무효 맨 뒤, 그 밖 채용률 높은 순 → 기존 기술 순서, 같은 기술 안은 강한 순 */
+function oracleListed(a: OracleItem, b: OracleItem): number {
+  const tail = (i: OracleItem) => (i.probe.kind === 'error' ? 1 : i.probe.kind === 'immune' ? 2 : 0)
+  if (tail(a) !== tail(b)) return tail(a) - tail(b)
+  if (a.moveId !== b.moveId) return b.share - a.share || a.moveOrder - b.moveOrder
+  return oracleStrength(a, b)
+}
+
 /**
- * 기본 항목(PRD R4)의 독립 재구현: 가장 센 순 정렬(정상 → 계산 불가 → 무효, 1타 확률 → 최대 대미지 비율 → 같은 기술 랭크 전 → 기술·조건 순) →
- * 기준 기술(가장 센 정상 랭크 전 항목, 방어 탭 speedEdge면 랭크 전·후 중 변동인 선공기 우선) → 랭크 전 P·후 Q 표.
+ * 기본 항목(PRD R4)의 독립 재구현: 기준 기술(판정 타입 대표 기술의 정상 랭크 전 항목 중 가장 센 것, 정상 대표가 없으면 목록 첫 정상 항목·없으면 첫 항목,
+ * 방어 탭 speedEdge면 랭크 전·후 중 변동인 선공기 우선) → 랭크 전 P·후 Q 표.
  */
 function oracleDefault(items: readonly OracleItem[], priorityRule: boolean, varOf: (i: OracleItem) => CoreVar): OracleItem {
-  const cls = (i: OracleItem) => (i.probe.kind === 'ok' ? 0 : i.probe.kind === 'error' ? 1 : 2)
-  const sorted = [...items].sort((a, b) => {
-    if (cls(a) !== cls(b)) return cls(a) - cls(b)
-    if (a.probe.kind === 'ok' && b.probe.kind === 'ok') {
-      if (a.probe.p !== b.probe.p) return b.probe.p - a.probe.p
-      if (a.probe.max !== b.probe.max) return b.probe.max - a.probe.max
-    }
-    if (a.moveId === b.moveId && a.rankBefore !== b.rankBefore) return a.rankBefore ? -1 : 1
-    return a.moveOrder - b.moveOrder || a.condOrder - b.condOrder
-  })
+  const sorted = [...items].sort(oracleStrength)
   const valid = (i: OracleItem) => i.probe.kind === 'ok'
   const variable = (i: OracleItem) => varOf(i).kind === 'variable'
   const qsOf = (moveId: string) => sorted.filter((i) => i.moveId === moveId && !i.rankBefore && valid(i))
@@ -274,10 +291,14 @@ function oracleDefault(items: readonly OracleItem[], priorityRule: boolean, varO
     const qv = varOf(q)
     return qv.kind === 'variable' || (qv.kind === 'fixed' && qv.cat === 'guaranteed-survive') ? q : p
   }
+  const reps = sorted.filter((i) => i.rankBefore && i.representative && valid(i))
+  if (reps.length === 0) {
+    const listed = [...items].sort(oracleListed)
+    return listed.find(valid) ?? listed[0]
+  }
   const pre = sorted.filter((i) => i.rankBefore && valid(i))
-  if (pre.length === 0) return sorted[0]
   if (priorityRule) for (const p of pre) if (p.priority && [p, ...qsOf(p.moveId)].some(variable)) return pq(p.moveId)
-  return pq(pre[0].moveId)
+  return pq(reps[0].moveId)
 }
 
 /** 오라클용 접지(PRD R12): 쇠구슬이면 접지, 아니면 비행 타입·부유·풍선이 아닐 때 */
@@ -294,20 +315,78 @@ function oraclePriority(plan: TabPlan, c: MoveCandidate): boolean {
   return r.ability === 'grassysurge' && oracleGrounded(r.species.types, r.ability, r.item)
 }
 
+const RANK_BEFORE_IDS = [JSON.stringify(['base']), JSON.stringify(['faint', 1])]
+const oracleSpecOf = (plan: TabPlan, c: MoveCandidate) => (c.target === 'filter' ? plan.filters[c.id] : c.target === 'fixed' ? plan.fixed[c.id] : plan.rows[c.id])
+const oracleAbility = (s: PokemonSet): string => {
+  try {
+    return validateSet(game, s, IGNORE_TOTAL).ability
+  } catch {
+    return s.ability
+  }
+}
+
+/**
+ * 오라클 채용률·기존 기술 순서·대표 기술(PRD R16·R4-1). 채용률: 방어 탭 래더 상대 = 그 상대 사용률, 공격 탭 = 내 종(메가면 메가 항목, 없으면 원종),
+ * 그 밖 0. 순서: 공격 탭 내 기술 칸 순, 방어 탭 래더 = 사용률 순(동률 id 순), 목록 밖 타겟 = 지정 순. 대표: 그 상대 모든 분류 카드의 랭크 전 기술을
+ * 오라클 타입(공격측 계산 특성 스킨·날씨 유도)으로 묶어 채용률 1위(동률 순서 앞).
+ */
+function oracleMoveMeta(plan: TabPlan, card: CardSpec): { share: (m: string) => number; order: (m: string) => number; reps: Set<string> } {
+  const input = inputOf.get(plan)
+  if (input === undefined) throw new Error('run()으로 만든 계획이 아니다')
+  let shares: Record<string, number> = {}
+  // 공격 탭은 채용률 없음(내 기술 칸 순서, PRD R16)
+  if (plan.tab !== 'attack' && card.opponent.source === 'ladder') shares = input.view.entry(card.opponent.id)?.moves.shares ?? {}
+  const share = (m: string) => shares[m] ?? 0
+  const universe = new Map<string, string | undefined>()
+  for (const c of plan.cards) {
+    if (c.opponent.source !== card.opponent.source || c.opponent.id !== card.opponent.id) continue
+    for (const g of c.conditions) {
+      if (!RANK_BEFORE_IDS.includes(g.id)) continue
+      for (const cand of g.candidates) {
+        if (universe.has(cand.moveId)) continue
+        const move = game.data.moves[cand.moveId]
+        const spec = oracleSpecOf(plan, cand)
+        universe.set(cand.moveId, move === undefined ? undefined : oracleMoveType(cand.moveId, move.type, oracleAbility(spec.attacker), oracleAbility(spec.defender)))
+      }
+    }
+  }
+  const custom = input.customTargets.find((t) => t.rosterId === card.opponent.id)
+  const listed =
+    plan.tab === 'attack'
+      ? [...input.mySet.moves]
+      : card.opponent.source === 'custom' && custom !== undefined
+        ? [...custom.moves]
+        : [...universe.keys()].sort((a, b) => share(b) - share(a) || (a < b ? -1 : a > b ? 1 : 0))
+  const order = (m: string) => {
+    const i = listed.indexOf(m)
+    return i < 0 ? listed.length : i
+  }
+  // 공격 탭: 내 기술 전부가 대표(채용률로 거르지 않음, PRD R16)
+  if (plan.tab === 'attack') return { share, order, reps: new Set(universe.keys()) }
+  const best = new Map<string, string>()
+  for (const [m, type] of universe) {
+    const k = type ?? `?${m}`
+    const cur = best.get(k)
+    if (cur === undefined || share(m) > share(cur) || (share(m) === share(cur) && order(m) < order(cur))) best.set(k, m)
+  }
+  return { share, order, reps: new Set(best.values()) }
+}
+
 function oracleItems(plan: TabPlan, card: CardSpec): OracleItem[] {
-  const moveOrder = new Map<string, number>()
-  for (const g of card.conditions) for (const c of g.candidates) if (!moveOrder.has(c.moveId)) moveOrder.set(c.moveId, moveOrder.size)
+  const meta = oracleMoveMeta(plan, card)
   return card.conditions.flatMap((g, gi) =>
     g.candidates.map((c) => {
       const basis = c.target === 'filter' ? plan.filters[c.id].basis : c.target === 'row' && plan.rows[c.id].basis?.kind === 'rank' ? (plan.rows[c.id].basis as RankBasis) : undefined
       const it: OracleItem = {
         key: JSON.stringify([c.moveId, g.id]),
         moveId: c.moveId,
-        rankBefore: g.id === JSON.stringify(['base']),
+        rankBefore: RANK_BEFORE_IDS.includes(g.id),
         priority: oraclePriority(plan, c),
         cand: c,
         probe: coreProbe(plan, c),
-        moveOrder: moveOrder.get(c.moveId) as number,
+        share: meta.share(c.moveId),
+        moveOrder: meta.order(c.moveId),
+        representative: meta.reps.has(c.moveId),
         condOrder: gi,
       }
       if (basis !== undefined) it.basis = basis
@@ -584,7 +663,7 @@ describe('AC4 혼합 세트·사이코쇼크(F2)', () => {
     expect(psyshock.refs).toMatchObject({ category: 'Special', defense: 'def' })
   })
 
-  it('항목은 그 분류 카드의 기술만이고, 처음 보이는 배분은 분류별 기본 항목을 견줘 정한다: 짜랑고우거는 특수기 사이코키네시스가 무투자 확정1타라 특수 배분이 기본(PRD R4·R6)', () => {
+  it('항목은 그 분류 카드의 기술만이고, 처음 보이는 배분은 분류별 기본 항목을 견줘 정한다: 짜랑고우거는 특수기 사이코키네시스가 무투자 확정1타라 특수 배분이 기본(PRD R4·R6, 공격 탭은 내 기술 전부 중 가장 센 것 — R16), 목록은 내 기술 칸 순', () => {
     const { plan, view } = run('F2', top(F2.mySet), 'attack')
     const c = cardBySpread(plan, view, F2.crossDropped.opponent, 'physical')
     const base = c.spec.conditions.find((g) => g.id === JSON.stringify(['base']))
@@ -596,8 +675,11 @@ describe('AC4 혼합 세트·사이코쇼크(F2)', () => {
     expect(c.card).toBeDefined()
     const [group] = groupCards(view.cards.filter((v) => v.opponent.id === F2.crossDropped.opponent.id && v.berry === undefined), 'attack')
     expect(defaultOption(group).category).toBe('special')
-    expect(groupItems(group)[0].item.moveId).toBe('psychic')
-    expect(new Set(groupItems(group).map((g) => g.item.moveId))).toEqual(new Set(['psychic', 'psyshock', 'drainpunch']))
+    expect(defaultOption(group).defaultItem?.key).toBe(itemKey('psychic', BASE_CONDITION_ID))
+    const max = (m: string) => groupItems(group).find((g) => g.item.moveId === m)?.item.cell?.maxPercent ?? 0
+    expect(max('psychic')).toBeGreaterThan(max('psyshock'))
+    // 목록은 내 기술 칸 순(공격 탭은 채용률을 쓰지 않는다)
+    expect(groupItems(group).map((g) => g.item.moveId)).toEqual(['psyshock', 'psychic', 'drainpunch'])
   })
 
   it('분류마다 카드 = 그 분류 키(H·B / H·D)로 묶은 기준 이상 묶음 전부', () => {
@@ -667,8 +749,11 @@ function defenseCandidates(view: MetaView, e: MetaEntry, mySet: PokemonSet): str
 
 describe('AC5 방어 탭 극단 필터(F3)', () => {
   it('둘 다 확정견딤·둘 다 확정1타(낮은 극단 무보정, 높은 극단 상승 성격) → 변화 없음 1행(고정 판정 = 코어 두 극단)', () => {
-    const { plan, view } = run('example', top(EXAMPLE_SET), 'defense')
     for (const c of [F3.bothSurvive, F3.bothOhko]) {
+      // 파멸의빛은 같은 페어리 타입 대표(채용률 1위 매지컬샤인)가 아니라 기본 항목이 아니므로 직접 고른다(PRD R4-1 개정)
+      const input = only(EXAMPLE_SET, [c.opponent.id])
+      const plan = planTab(input, 'defense')
+      const view = buildTabView(input, 'defense', cache, new Map([[opponentKey({ source: 'ladder', id: c.opponent.id }), itemKey(c.move, BASE_CONDITION_ID)]]))
       const { spec, card } = cardBySpread(plan, view, c.opponent, game.data.moves[c.move].category === 'Physical' ? 'physical' : 'special')
       // H행·B/D행 쌍 대신 극단 필터 1행만(칸 없음, 변화 없음)
       expect(card?.rows.filter((r) => r.moveId === c.move && r.kind === 'base').map((r) => [r.noChange, r.cells.length])).toEqual([[true, 0]])
@@ -816,7 +901,7 @@ describe('AC6 변화 없음 행(목록에서 빼지 않는다)', () => {
     for (const c of view.cards) for (const r of c.rows) expect(r.fixedCell?.category, r.id).toBe(r.current.category)
   })
 
-  it('속임수 + 일반 기술: 속임수가 가장 세면 고정 판정 1행만, 아니면 속임수는 어디에도 없다', () => {
+  it('속임수 + 일반 기술: 공격 탭 타입 대표는 기술 칸 순서라(PRD R16) 앞 칸 속임수가 악 대표 — 속임수가 가장 세면 고정 판정 1행만, 아니면 속임수는 어디에도 없다', () => {
     const { plan, view } = run('foul-mixed', top(kingambitFoul(['foulplay', 'kowtowcleave']), { filters: { topN: 12, selected: [] } }), 'attack')
     expectMatchesCore(plan, view)
     const itemsOf = (id: string) => noChangeRows(view).filter((i) => i.cardId === id).map((i) => [i.kind, i.moveId])
@@ -824,6 +909,8 @@ describe('AC6 변화 없음 행(목록에서 빼지 않는다)', () => {
     const foul = cardBySpread(plan, view, { id: 'sneasler', spread: 'adamant:2/32/0/0/0/32' }, 'physical')
     expect(foul.card?.rows.map((r) => r.moveId)).toEqual(['foulplay'])
     expect(itemsOf(foul.spec.id)).toEqual([['sp-independent', 'foulplay']])
+    // 목록 = 기술 칸 순(속임수 → 도각참)
+    expect(foul.card?.items.map((i) => i.moveId)).toEqual(['foulplay', 'kowtowcleave'])
     const cleave = cardBySpread(plan, view, { id: 'farigiraf', spread: 'quiet:10/0/13/30/13/0' }, 'physical')
     expect(cleave.card?.rows.map((r) => r.moveId)).toEqual(['kowtowcleave'])
     expect(itemsOf(cleave.spec.id)).toEqual([])

@@ -33,6 +33,8 @@ import { LAST_RESPECTS, LAST_RESPECTS_FAINTS, addedBundleKey, addedCardId, faint
 import { presetAssumption } from './presets'
 import { TAB_MEANS_OWNERS, ladderMeans, rankMoveAllowed, rankVariants, setMeansCandidates, type CardRefStats, type MeansCandidate } from './rank'
 import type { BoostStat } from './rankMeans'
+import { representativeMoves } from './items'
+import { judgedMoveType } from './moveType'
 import { natureVariants } from './natures'
 import { myDependsOn, relevantStats } from './relevance'
 import {
@@ -114,6 +116,12 @@ interface CardSeed {
   assumption: Assumption
   resolved?: ResolvedSet
   error?: ErrorReason
+}
+
+interface MoveMeta {
+  shares: Readonly<Record<string, number>> | undefined
+  order: ReadonlyMap<string, number>
+  representatives: ReadonlySet<string>
 }
 
 interface Opponent {
@@ -364,9 +372,9 @@ class PlanBuilder {
 
   /**
    * priority = 공격측 필드를 넣은 우선도 > 0(fieldPriority: 그래스필드 그래스슬라이더, 스냅샷에 없는 기술은 false).
-   * attacker = 그 판정의 공격측 해결 세트. added = 사용자가 추가한 상대 기술
+   * attacker = 그 판정의 공격측 해결 세트. meta = 그 카드 상대의 채용률·대표 기술(moveMeta). added = 사용자가 추가한 상대 기술
    */
-  candidate(target: MoveCandidate['target'], id: string, moveId: string, attacker: ResolvedSet, added?: ReadonlySet<string>): MoveCandidate {
+  candidate(target: MoveCandidate['target'], id: string, moveId: string, attacker: ResolvedSet, meta: MoveMeta, added?: ReadonlySet<string>): MoveCandidate {
     const priority =
       hasMove(this.game, moveId) &&
       fieldPriority(moveId, this.game.data.moves[moveId].priority, this.damageConditions(attacker.ability).terrain, {
@@ -374,9 +382,29 @@ class PlanBuilder {
         ability: attacker.ability,
         item: attacker.item,
       }) > 0
-    const c: MoveCandidate = { target, id, moveId, priority }
+    const c: MoveCandidate = { target, id, moveId, priority, share: meta.shares?.[moveId] ?? 0, order: meta.order.get(moveId) ?? meta.order.size, representative: meta.representatives.has(moveId) }
     if (added?.has(moveId) === true) c.added = true
     return c
+  }
+
+  /**
+   * 채용률(PRD R16)·판정 타입 대표 기술(R4-1). moveIds = 그 상대의 모든 분류 후보 기술(기존 순서), spec = 그 기술 랭크 전 판정의 세트·조건.
+   * 대표는 분류 카드를 가로질러 정한다(분류마다 따로 정하면 채용률 낮은 다른 분류 기술이 그 타입 대표가 된다).
+   * allRepresentative = 모든 기술이 대표(공격 탭: 내 기술 넷은 모두 내가 고른 것이라 채용률로 거르지 않고 가장 센 기술이 기준).
+   */
+  moveMeta(
+    moveIds: readonly string[],
+    shares: Readonly<Record<string, number>> | undefined,
+    spec: (moveId: string) => Parameters<typeof judgedMoveType>[2],
+    allRepresentative = false,
+  ): MoveMeta {
+    const moves = moveIds.map((moveId) => {
+      const m: { moveId: string; share: number; moveType?: string } = { moveId, share: shares?.[moveId] ?? 0 }
+      const type = judgedMoveType(this.game, moveId, spec(moveId))
+      if (type !== undefined) m.moveType = type
+      return m
+    })
+    return { shares, order: new Map(moveIds.map((id, i) => [id, i])), representatives: allRepresentative ? new Set(moveIds) : representativeMoves(moves) }
   }
 
   /** 후보가 없으면 조건을 두지 않는다. */
@@ -432,6 +460,13 @@ class PlanBuilder {
     const resolved = seed.resolved
     if (!resolved) return
     const oppSet = seed.assumption.set
+    const meta = this.moveMeta(
+      all.map((s) => s.moveId),
+      // 공격 탭은 채용률을 쓰지 않는다: 목록은 내 기술 칸 순서, 기준 기술은 내 기술 전부 중 가장 센 것(PRD R16, 사용자 결정 2026-11-14)
+      undefined,
+      (moveId) => ({ attacker: this.mySet, defender: oppSet, conditions: faintConditions(this.damageConditions(this.me.ability), moveId) }),
+      true,
+    )
     const inCategory = (slot: MoveSlot) => slot.refs?.defense === defenseStatOf(seed.category as Category)
     const slots = all.filter(inCategory)
     const base: MoveSlot[] = []
@@ -467,7 +502,7 @@ class PlanBuilder {
       BASE_CONDITION,
       slots.filter((slot) => !isLastRespects(slot)).map((slot) => {
         const fixedId = fixedOf.get(slot.moveId)
-        return fixedId === undefined ? this.candidate('row', baseRows.get(slot.moveId) as string, slot.moveId, this.me) : this.candidate('fixed', fixedId, slot.moveId, this.me)
+        return fixedId === undefined ? this.candidate('row', baseRows.get(slot.moveId) as string, slot.moveId, this.me, meta) : this.candidate('fixed', fixedId, slot.moveId, this.me, meta)
       }),
     )
     const lastRespects = base.find(isLastRespects)
@@ -475,7 +510,7 @@ class PlanBuilder {
       for (const n of LAST_RESPECTS_FAINTS) {
         const conditions = faintConditions(this.damageConditions(this.me.ability), LAST_RESPECTS, n)
         const r = row(lastRespects, this.mySet, oppSet, { conditions }, ['faint', LAST_RESPECTS, String(n)])
-        this.addCondition(card, faintConditionId(n), [this.candidate('row', r.id, LAST_RESPECTS, this.me)])
+        this.addCondition(card, faintConditionId(n), [this.candidate('row', r.id, LAST_RESPECTS, this.me, meta)])
       }
     }
     if (base.length === 0) return
@@ -494,7 +529,7 @@ class PlanBuilder {
         const extra: Partial<RowSpec> = { kind: 'rank', basis: v.basis, conditions: faintConditions(this.damageConditions(this.me.ability), slot.moveId) }
         if (v.whiteHerbConsumed && isMultihit(this.game, slot.moveId)) extra.error = WHITE_HERB_MULTIHIT
         const r = row(slot, attacker, defender, extra, ['rank', slot.moveId, ...meansParts(v.basis)])
-        candidates.push(this.candidate('row', r.id, slot.moveId, this.me))
+        candidates.push(this.candidate('row', r.id, slot.moveId, this.me, meta))
       }
       this.addCondition(card, rankCondition(v.basis), candidates)
     }
@@ -516,6 +551,11 @@ class PlanBuilder {
     const oppSet = seed.assumption.set
     card.speedEdge = this.speedEdge(oppSet, resolved.ability)
     const baseConditions = this.damageConditions(resolved.ability)
+    const meta = this.moveMeta(
+      [...all, ...errors].map((s) => s.moveId),
+      opp.entry?.moves.shares,
+      (moveId) => ({ attacker: oppSet, defender: this.mySet, conditions: faintConditions(baseConditions, moveId) }),
+    )
     const def = defenseStatOf(seed.category as Category)
     const inCategory = (slot: MoveSlot) => slot.refs?.defense === def
     const slots = all.filter(inCategory)
@@ -545,7 +585,7 @@ class PlanBuilder {
           error,
         }
         if (basis) spec.basis = basis
-        return this.candidate('row', this.addRow(card, parts, spec).id, slot.moveId, resolved, added)
+        return this.candidate('row', this.addRow(card, parts, spec).id, slot.moveId, resolved, meta, added)
       }
       const natures = this.natures(def, 'damage', refs, ability)
       const f = this.addFilter(card, ['extreme', ...parts], {
@@ -576,7 +616,7 @@ class PlanBuilder {
         if (basis) spec.basis = basis
         this.addRow(card, [...parts, stat], spec)
       }
-      return this.candidate('filter', f.id, slot.moveId, resolved, added)
+      return this.candidate('filter', f.id, slot.moveId, resolved, meta, added)
     }
     const group = (id: string, attacker: PokemonSet, defender: PokemonSet, basis: RankBasis | undefined, herbConsumed: boolean) => {
       const candidates: MoveCandidate[] = []
@@ -604,7 +644,7 @@ class PlanBuilder {
             dependsOn: [],
             error: slot.error,
           })
-          candidates.push(this.candidate('row', r.id, slot.moveId, resolved, added))
+          candidates.push(this.candidate('row', r.id, slot.moveId, resolved, meta, added))
         }
       }
       this.addCondition(card, id, candidates)

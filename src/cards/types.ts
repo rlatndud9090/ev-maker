@@ -285,6 +285,12 @@ export interface MoveCandidate {
   moveId: string
   /** 우선도 > 0 기술(방어 탭 선공기 우선 규칙) */
   priority: boolean
+  /** 기술 채용률(PRD R16): 방어 탭 래더 상대 = 그 상대 기술 사용률, 공격 탭 = 내 종(메가면 메가 항목, 없으면 원종) 메타 기술 사용률. 통계에 없으면 0 */
+  share: number
+  /** 기존 기술 순서: 그 상대의 모든 분류 후보 기술 중 순번(공격 탭 내 기술 칸 순, 방어 탭 상대 후보 순·목록 밖 타겟 지정 순, 계산 불가 기술은 뒤) */
+  order: number
+  /** 그 상대의 모든 분류 후보 중 그 판정 타입에서 채용률 1위 기술(동률은 기존 기술 순서, PRD R4-1 대표 기술) */
+  representative: boolean
   /** 사용자가 추가한 상대 기술(방어 탭 래더 상대, CardInput.addedMoves) */
   added?: true
 }
@@ -572,7 +578,7 @@ export interface CardView {
   headline: Headline
   /** 보이는 항목 행 중 칸이 있는 ok·stale 변화 있는 행이 있음("변동 가능"). 대표 행과 따로 세어 드래그 중(updating)에도 유지된다 */
   variable: boolean
-  /** 이 카드의 기술 선택 항목(가장 세게 치는 순). 스피드 탭·error 카드는 빈 배열 */
+  /** 이 카드의 기술 선택 항목(기술 채용률 순, items.compareItems). 스피드 탭·error 카드는 빈 배열 */
   items: readonly ItemView[]
   /** 보이는 항목 키(기본 항목이 정해지기 전이고 사용자가 고르지 않았으면 없음) */
   shownItem?: string
@@ -592,6 +598,9 @@ export interface ItemView {
   /** items.itemKey(기술, 조건) — 같은 상대의 모든 카드에서 같다 */
   key: string
   moveId: string
+  /** 기술 채용률·기존 기술 순서(MoveCandidate.share·order). 분류를 합친 목록(groupItems) 정렬에 쓴다 */
+  share: number
+  order: number
   /** 그 항목 판정의 기술 타입(RowView.moveType과 같은 규칙) */
   moveType?: string
   /** RowView.power와 같은 규칙 */
@@ -614,6 +623,8 @@ export interface DefaultItemView {
   key: string
   /** 방어 탭 선공기 우선으로 정해짐 */
   viaPriority: boolean
+  /** 정상 대표 기술이 없어 목록 첫 정상 항목(없으면 첫 항목)으로 정해짐(PRD R4-1). 분류 사이 비교에서 대표로 정해진 쪽에 진다 */
+  fallback?: true
   /** 기준 기술 랭크 전 항목의 단건 판정 칸 */
   basisCell?: CompactCell
 }

@@ -199,8 +199,8 @@ describe('assembleTab: headline·k', () => {
   it('후보 카드는 보이는 항목(기본 = 가장 센 기술) 하나의 행만 낸다: 선공기·후보 밖 행은 따로 없고, 변화가 없으면 그 행이 대표, 변동 가능 아님', () => {
     const pr = plan({
       cards: [card({ id: 'A', rowIds: ['rank', 'pri', 'base'], conditions: [{ id: JSON.stringify(['base']), candidates: [
-        { target: 'row', id: 'pri', moveId: 'm-pri', priority: true },
-        { target: 'row', id: 'base', moveId: 'm-base', priority: false },
+        { target: 'row', id: 'pri', moveId: 'm-pri', priority: true, share: 0, order: 0, representative: true },
+        { target: 'row', id: 'base', moveId: 'm-base', priority: false, share: 0, order: 1, representative: true },
       ] }] })],
       rows: [
         row({ id: 'rank', cardId: 'A', order: 0, kind: 'rank', moveId: 'm-base', stat: 'atk' }),
@@ -222,9 +222,10 @@ describe('assembleTab: headline·k', () => {
     expect(c.headline).toEqual({ kind: 'row', rowId: 'base' })
     expect(c.variable).toBe(false)
     expect(c.shownItem).toBe(JSON.stringify(['m-base', JSON.stringify(['base'])]))
+    // 목록은 채용률 순(둘 다 0이면 기존 기술 순서), 기본 항목은 더 센 대표 기술(PRD R16·R4-1)
     expect(c.items.map((i) => [i.moveId, i.priority])).toEqual([
-      ['m-base', false],
       ['m-pri', true],
+      ['m-base', false],
     ])
     // 기본 조건 행이 아직 판정 전이면 updating(나중에 대표가 바뀔 수 있다)
     const early = new Map(probes)
@@ -572,7 +573,7 @@ describe('assembleTab: 방어 탭 내구 합계 띠(R10) — 드래그 중 현�
     id: 'D',
     rowIds: ['h', 'b'],
     filterIds: ['f'],
-    conditions: [{ id: JSON.stringify(['base']), candidates: [{ target: 'filter', id: 'f', moveId: 'tackle', priority: false }] }],
+    conditions: [{ id: JSON.stringify(['base']), candidates: [{ target: 'filter', id: 'f', moveId: 'tackle', priority: false, share: 0, order: 0, representative: true }] }],
   })
   const mk = (nature?: string) =>
     plan({

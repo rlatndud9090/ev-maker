@@ -121,12 +121,13 @@ function categoriesOf(group: CardGroup): CardView['category'][] {
   return [...new Set(group.options.map((o) => o.category))]
 }
 
-/** 분류 사이 비교: 방어 탭 선공기 우선으로 정해진 쪽 → 기준 기술 단건 판정이 센 쪽(1타 확률 → 최대 대미지 비율). 같으면 0 */
+/** 분류 사이 비교: 방어 탭 선공기 우선으로 정해진 쪽 → 대표 기술로 정해진 쪽(fallback 아님) → 기준 기술 단건 판정이 센 쪽(1타 확률 → 최대 대미지 비율). 같으면 0 */
 function compareDefaults(a: CardView, b: CardView): number {
   const da = a.defaultItem
   const db = b.defaultItem
   if (da === undefined || db === undefined) return da === undefined ? (db === undefined ? 0 : 1) : -1
   if (da.viaPriority !== db.viaPriority) return da.viaPriority ? -1 : 1
+  if ((da.fallback === true) !== (db.fallback === true)) return da.fallback === true ? 1 : -1
   const ca = da.basisCell
   const cb = db.basisCell
   if (ca === undefined || cb === undefined) return ca === undefined ? (cb === undefined ? 0 : 1) : -1
@@ -154,11 +155,12 @@ export interface GroupItem {
   card: CardView
 }
 
-const ITEM_STATUS_RANK: Readonly<Record<ItemView['status'], number>> = { ok: 0, pending: 1, error: 2, immune: 3 }
+/** 목록 꼬리(items.compareItems와 같은 규칙): 정상·판정 전 0, 계산 불가 1, 무효 2 */
+const ITEM_TAIL: Readonly<Record<ItemView['status'], number>> = { ok: 0, pending: 0, error: 1, immune: 2 }
 
 /**
- * 포켓몬 한 줄의 기술 선택 목록: 분류마다 분류 기본 배분의 항목을 모아 가장 세게 치는 순(정상 → 판정 전 → 계산 불가 → 무효,
- * 정상끼리 1타 확률 → 최대 대미지 비율, 같으면 분류 순·카드 안 순서)으로 낸다.
+ * 포켓몬 한 줄의 기술 선택 목록(PRD R16): 분류마다 분류 기본 배분의 항목을 모아 계산 불가 → 무효는 맨 뒤, 그 밖은 기술 채용률 높은 순 → 기존 기술 순서.
+ * 한 기술의 항목은 한 분류 카드에만 있으므로 같은 기술 안 순서(강한 순)는 그 카드 목록 순서 그대로다.
  */
 export function groupItems(group: CardGroup): GroupItem[] {
   const out: GroupItem[] = []
@@ -169,16 +171,13 @@ export function groupItems(group: CardGroup): GroupItem[] {
   return out
     .map((g, i) => ({ g, i }))
     .sort((a, b) => {
-      const sa = ITEM_STATUS_RANK[a.g.item.status]
-      const sb = ITEM_STATUS_RANK[b.g.item.status]
-      if (sa !== sb) return sa - sb
-      const ca = a.g.item.cell
-      const cb = b.g.item.cell
-      if (a.g.item.status === 'ok' && ca !== undefined && cb !== undefined) {
-        const p = (cb.ohkoChance ?? 0) - (ca.ohkoChance ?? 0)
-        if (p !== 0) return p
-        const m = (cb.maxPercent ?? 0) - (ca.maxPercent ?? 0)
-        if (m !== 0) return m
+      const x = a.g.item
+      const y = b.g.item
+      const t = ITEM_TAIL[x.status] - ITEM_TAIL[y.status]
+      if (t !== 0) return t
+      if (x.moveId !== y.moveId) {
+        if (x.share !== y.share) return y.share - x.share
+        if (x.order !== y.order) return x.order - y.order
       }
       return a.i - b.i
     })

@@ -23,7 +23,7 @@ export type ItemProbe =
 
 export type ItemVariability = { kind: 'pending' } | { kind: 'variable' } | { kind: 'fixed'; category: string } | { kind: 'error'; reason: ErrorReason }
 
-/** 카드 안 항목 하나(후보 하나). moveOrder = 기본 조건 후보 순서(공격 탭 기술 슬롯, 방어 탭 상대 사용률), conditionOrder = 조건 그룹 순서 */
+/** 카드 안 항목 하나(후보 하나). moveOrder = 기존 기술 순서(MoveCandidate.order), conditionOrder = 조건 그룹 순서 */
 export interface CardItemRef {
   key: string
   conditionId: string
@@ -45,17 +45,11 @@ function basisOf(plan: TabPlan, c: MoveCandidate): RankBasis | undefined {
 
 /** 카드의 항목(조건 순 → 후보 순). 같은 기술·같은 조건은 하나다 */
 export function cardItems(plan: TabPlan, card: CardSpec): CardItemRef[] {
-  const moveOrder = new Map<string, number>()
-  const order = (moveId: string) => {
-    if (!moveOrder.has(moveId)) moveOrder.set(moveId, moveOrder.size)
-    return moveOrder.get(moveId) as number
-  }
   const groups: readonly ConditionGroup[] = card.conditions
-  for (const g of groups) for (const c of g.candidates) order(c.moveId)
   const out: CardItemRef[] = []
   groups.forEach((g, gi) => {
     for (const c of g.candidates) {
-      const ref: CardItemRef = { key: itemKey(c.moveId, g.id), conditionId: g.id, candidate: c, rankBefore: g.id === BASE_CONDITION_ID || g.id === FAINT_BASE_ID, moveOrder: order(c.moveId), conditionOrder: gi }
+      const ref: CardItemRef = { key: itemKey(c.moveId, g.id), conditionId: g.id, candidate: c, rankBefore: g.id === BASE_CONDITION_ID || g.id === FAINT_BASE_ID, moveOrder: c.order, conditionOrder: gi }
       const basis = basisOf(plan, c)
       if (basis !== undefined) ref.basis = basis
       out.push(ref)
@@ -142,6 +136,10 @@ export interface ItemState {
   rankBefore: boolean
   /** 우선도 > 0 기술 */
   priority: boolean
+  /** 기술 채용률(MoveCandidate.share) */
+  share: number
+  /** 판정 타입 대표 기술(MoveCandidate.representative) */
+  representative: boolean
   probe: ItemProbe
   variability: ItemVariability
   moveOrder: number
@@ -150,11 +148,13 @@ export interface ItemState {
 
 const probeClass = (p: ItemProbe): number => (p.kind === 'ok' ? 0 : p.kind === 'pending' ? 1 : p.kind === 'error' ? 2 : 3)
 
+type StrengthKey = Pick<ItemState, 'probe' | 'moveId' | 'rankBefore' | 'moveOrder' | 'conditionOrder'>
+
 /**
- * 목록 정렬(가장 세게 치는 순): 정상 → 판정 전 → 계산 불가 → 무효. 정상끼리 현재 SP 1타 확률 → 최대 대미지 비율이 큰 순,
+ * 가장 세게 치는 순(기준 기술·Q 비교용): 정상 → 판정 전 → 계산 불가 → 무효. 정상끼리 현재 SP 1타 확률 → 최대 대미지 비율이 큰 순,
  * 같으면 같은 기술의 랭크 전이 먼저 → 기술 순서 → 조건 순서.
  */
-export function compareItems(a: Pick<ItemState, 'probe' | 'moveId' | 'rankBefore' | 'moveOrder' | 'conditionOrder'>, b: typeof a): number {
+export function compareStrength(a: StrengthKey, b: StrengthKey): number {
   const ca = probeClass(a.probe)
   const cb = probeClass(b.probe)
   if (ca !== cb) return ca - cb
@@ -171,11 +171,46 @@ export function compareItems(a: Pick<ItemState, 'probe' | 'moveId' | 'rankBefore
   return a.conditionOrder - b.conditionOrder
 }
 
+/** 목록 꼬리: 정상·판정 전 0, 계산 불가 1, 무효 2 */
+const tailClass = (p: ItemProbe): number => (p.kind === 'error' ? 1 : p.kind === 'immune' ? 2 : 0)
+
+/**
+ * 목록 정렬(PRD R16): 계산 불가 → 무효는 맨 뒤, 그 밖은 기술 채용률 높은 순 → 기존 기술 순서. 같은 기술 항목끼리는 강한 순(compareStrength,
+ * 판정 전은 같은 기술 안에서 정상 뒤).
+ */
+export function compareItems(a: StrengthKey & Pick<ItemState, 'share'>, b: typeof a): number {
+  const ta = tailClass(a.probe)
+  const tb = tailClass(b.probe)
+  if (ta !== tb) return ta - tb
+  if (a.moveId !== b.moveId) {
+    if (a.share !== b.share) return b.share - a.share
+    if (a.moveOrder !== b.moveOrder) return a.moveOrder - b.moveOrder
+  }
+  return compareStrength(a, b)
+}
+
+/**
+ * 판정 타입 대표 기술(PRD R4-1): 타입마다 채용률 1위(동률은 입력 순 = 기존 기술 순서). 입력은 그 상대의 모든 분류 후보 기술.
+ * moveType이 없는 기술(스냅샷에 없음 = 계산 불가)은 각자 대표다(기준 기술 후보에서는 계산 불가로 빠진다).
+ */
+export function representativeMoves(moves: readonly { moveId: string; share: number; moveType?: string }[]): Set<string> {
+  const best = new Map<string, { moveId: string; share: number }>()
+  for (const m of moves) {
+    const type = m.moveType ?? JSON.stringify(['untyped', m.moveId])
+    const cur = best.get(type)
+    if (cur === undefined || m.share > cur.share) best.set(type, m)
+  }
+  return new Set([...best.values()].map((m) => m.moveId))
+}
+
 export type DefaultResult =
   /** need = 결정에 필요한데 아직 변동 판정이 나오지 않은 항목 키(단건 판정이 남았으면 비어 있다) */
   | { kind: 'pending'; need: readonly string[] }
-  /** viaPriority = 방어 탭 선공기 우선으로 정해짐. basis = 기준 기술 랭크 전 항목(분류 사이 비교용) */
-  | { kind: 'ready'; key: string; viaPriority: boolean; basis: string }
+  /**
+   * viaPriority = 방어 탭 선공기 우선으로 정해짐. basis = 기준 기술 랭크 전 항목(분류 사이 비교용).
+   * fallback = 정상 대표 기술이 없어 목록 첫 정상 항목(없으면 첫 항목)으로 정해짐(이후 단계 건너뜀)
+   */
+  | { kind: 'ready'; key: string; viaPriority: boolean; basis: string; fallback: boolean }
 
 const GUARANTEED_OHKO = 'guaranteed-ohko'
 const GUARANTEED_SURVIVE = 'guaranteed-survive'
@@ -216,32 +251,43 @@ function pickPQ(sorted: readonly ItemState[], moveId: string): Step<ItemState> {
 }
 
 /**
- * 기본 항목(사용자가 고르지 않았을 때 보이는 항목):
- * 1. 기준 기술 = 정렬상 가장 센 랭크 전 항목의 기술(정상 항목이 없으면 정렬 첫 항목이 기본)
+ * 기본 항목(사용자가 고르지 않았을 때 보이는 항목, PRD R4):
+ * 1. 기준 기술 = 판정 타입 대표 기술들의 랭크 전 항목 중 가장 센 것의 기술. 정상 대표가 없으면 목록(compareItems) 첫 정상 항목, 없으면 첫 항목(이후 단계 건너뜀)
  * 2. 방어 탭에서 내가 확실히 빠르면(speedEdge) 랭크 전·후 중 하나라도 변동인 상대 선공기 중 가장 센 것을 기준 기술로
  * 3. 기준 기술의 랭크 전 P·후 Q를 비교(pickPQ)
+ * 단건 판정은 결정에 쓰는 항목만 기다린다: 대표 랭크 전 항목 → (선공기 우선이면 선공기 항목) → 기준 기술 항목, 대체 경로는 전부.
+ * 정해진 값은 나머지 항목 판정과 무관하다(깜박임 없음). 단건 판정은 모두 1단계 작업이다.
  */
 export function resolveDefault(items: readonly ItemState[], opts: { priorityRule: boolean }): DefaultResult {
-  if (items.length === 0) return { kind: 'pending', need: [] }
-  if (items.some((i) => i.probe.kind === 'pending')) return { kind: 'pending', need: [] }
-  const sorted = [...items].sort(compareItems)
-  const pre = sorted.filter((i) => i.rankBefore && valid(i))
-  if (pre.length === 0) return { kind: 'ready', key: sorted[0].key, viaPriority: false, basis: sorted[0].key }
+  const WAIT: DefaultResult = { kind: 'pending', need: [] }
+  const probing = (xs: readonly ItemState[]) => xs.some((i) => i.probe.kind === 'pending')
+  if (items.length === 0 || probing(items.filter((i) => i.rankBefore && i.representative))) return WAIT
+  const strong = [...items].sort(compareStrength)
+  const validReps = strong.filter((i) => i.rankBefore && i.representative && valid(i))
+  if (validReps.length === 0) {
+    if (probing(items)) return WAIT
+    const listed = [...items].sort(compareItems)
+    const first = listed.find(valid) ?? listed[0]
+    return { kind: 'ready', key: first.key, viaPriority: false, basis: first.key, fallback: true }
+  }
+  const ofMove = (moveId: string) => strong.filter((i) => i.moveId === moveId)
   if (opts.priorityRule) {
-    for (const p of pre) {
-      if (!p.priority) continue
-      const group = sorted.filter((i) => i.moveId === p.moveId && valid(i))
+    if (probing(items.filter((i) => i.priority))) return WAIT
+    for (const p of strong) {
+      if (!p.priority || !p.rankBefore || !valid(p)) continue
+      const group = ofMove(p.moveId).filter(valid)
       if (group.some((i) => i.variability.kind === 'variable')) {
-        const r = pickPQ(sorted, p.moveId)
-        return r.kind === 'need' ? { kind: 'pending', need: r.keys } : { kind: 'ready', key: r.value.key, viaPriority: true, basis: p.key }
+        const r = pickPQ(strong, p.moveId)
+        return r.kind === 'need' ? { kind: 'pending', need: r.keys } : { kind: 'ready', key: r.value.key, viaPriority: true, basis: p.key, fallback: false }
       }
       const waiting = group.filter((i) => i.variability.kind === 'pending').map((i) => i.key)
       if (waiting.length > 0) return { kind: 'pending', need: waiting }
     }
   }
-  const basis = pre[0]
-  const r = pickPQ(sorted, basis.moveId)
-  return r.kind === 'need' ? { kind: 'pending', need: r.keys } : { kind: 'ready', key: r.value.key, viaPriority: false, basis: basis.key }
+  const basis = validReps[0]
+  if (probing(ofMove(basis.moveId))) return WAIT
+  const r = pickPQ(strong, basis.moveId)
+  return r.kind === 'need' ? { kind: 'pending', need: r.keys } : { kind: 'ready', key: r.value.key, viaPriority: false, basis: basis.key, fallback: false }
 }
 
 /** 카드 항목의 상태를 결과에서 조회한다 */
@@ -251,6 +297,8 @@ export function itemStates(plan: TabPlan, card: CardSpec, refs: readonly CardIte
     moveId: r.candidate.moveId,
     rankBefore: r.rankBefore,
     priority: r.candidate.priority,
+    share: r.candidate.share,
+    representative: r.candidate.representative,
     probe: itemProbe(plan, r.candidate, results),
     variability: itemVariability(plan, card, r.candidate, results),
     moveOrder: r.moveOrder,

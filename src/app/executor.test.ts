@@ -76,6 +76,18 @@ function viewOf(s: TabViewState): TabView {
   return s.view
 }
 
+/**
+ * 실행기 최종 뷰 = batch 뷰(진행률 제외). 조각 경계에서 대기열을 다시 만들면 이미 변동으로 정해진 항목의 나머지 결정용 행(극단 필터 뒤 B/D 행 양 끝)을
+ * 건너뛸 수 있어 끝난 작업 수만 batch 이하로 달라질 수 있다(판정·표시는 같다).
+ */
+function expectSameAsBatch(s: TabViewState, input: CardInput, tab: Tab): void {
+  const got = viewOf(s)
+  const want = buildTabView(input, tab)
+  expect({ ...got, progress: null }).toEqual({ ...want, progress: null })
+  expect(got.progress.done).toBe(got.progress.total)
+  expect(got.progress.done).toBeLessThanOrEqual(want.progress.done)
+}
+
 async function runToEnd(m: ReturnType<typeof manualScheduler>, onStep?: (n: number) => void): Promise<number> {
   let n = 0
   while (await m.step()) onStep?.(++n)
@@ -256,7 +268,7 @@ describe('createExecutor', () => {
     for (const tab of TABS) {
       const s = executor.getSnapshot().tabs[tab]
       expect(s).toMatchObject({ generation: 2, superseded: false })
-      expect(viewOf(s)).toEqual(buildTabView(inputB, tab))
+      expectSameAsBatch(s, inputB, tab)
     }
   })
 
@@ -267,7 +279,7 @@ describe('createExecutor', () => {
     for (let i = 0; i < 6; i++) await m.step()
     executor.setInput(inputB, 2)
     await runToEnd(m)
-    for (const tab of TABS) expect(viewOf(executor.getSnapshot().tabs[tab])).toEqual(buildTabView(inputB, tab))
+    for (const tab of TABS) expectSameAsBatch(executor.getSnapshot().tabs[tab], inputB, tab)
   })
 
   it('같은 세대 setInput은 무시한다', async () => {

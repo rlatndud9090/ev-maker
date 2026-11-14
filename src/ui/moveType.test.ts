@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { MC, mkSet } from '../core/testing'
-import { judgedMoveType } from '../cards/assemble'
+import { judgedMoveType } from '../cards/moveType'
 import { calcAbilityOf, myMoveType } from './moveType'
 
 const megaGardevoir = mkSet({ species: 'gardevoir', ability: 'synchronize', item: 'gardevoirite', mega: true, moves: ['hypervoice'] })

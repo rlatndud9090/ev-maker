@@ -133,7 +133,7 @@ interface Props {
   game: Snapshot
   tab: Tab
   rollSteps: number
-  /** 포켓몬 한 줄의 항목(가장 세게 치는 순, groupItems) */
+  /** 포켓몬 한 줄의 항목(기술 채용률 순, 계산 불가·무효 맨 뒤, groupItems) */
   items: readonly GroupItem[]
   /** 지금 보이는 항목 키 */
   shown?: string

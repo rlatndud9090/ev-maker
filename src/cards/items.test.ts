@@ -5,7 +5,8 @@ import { EXAMPLE_SET } from './__fixtures__/acceptance'
 import { assembleTab } from './assemble'
 import { buildTabView } from './batch'
 import { computeRowTask } from './rowTask'
-import { BASE_CONDITION_ID, cardItems, compareItems, itemKey, resolveDefault, type ItemState, type ItemVariability } from './items'
+import { BASE_CONDITION_ID, cardItems, compareItems, compareStrength, itemKey, representativeMoves, resolveDefault, type ItemState, type ItemVariability } from './items'
+import { defaultOption, groupCards, groupItems } from './groups'
 import { outspeedsAtMax, planTab } from './plan'
 import { cardExplore, nextStage, opponentKey, pendingTasks, taskCardId, taskKey } from './schedule'
 import { cardInput, realData } from './testing'
@@ -23,7 +24,8 @@ const MID = fixed('mid-roll-ohko')
 let order = 0
 function item(moveId: string, rankBefore: boolean, probe: ItemState['probe'], variability: ItemVariability, patch: Partial<ItemState> = {}): ItemState {
   const conditionId = rankBefore ? BASE_CONDITION_ID : RANK
-  return { key: itemKey(moveId, conditionId), moveId, rankBefore, priority: false, probe, variability, moveOrder: order++, conditionOrder: rankBefore ? 0 : 1, ...patch }
+  // 기본은 모든 기술이 서로 다른 판정 타입의 대표(채용률 0): 대표 선정과 무관한 표·선공기 규칙 검사용
+  return { key: itemKey(moveId, conditionId), moveId, rankBefore, priority: false, share: 0, representative: true, probe, variability, moveOrder: order++, conditionOrder: rankBefore ? 0 : 1, ...patch }
 }
 const ok = (p: number, m: number) => ({ kind: 'ok' as const, cell: cell(p, m) })
 const immune = { kind: 'immune' as const, cell: { sp: 0, category: 'guaranteed-survive', immune: true as const } }
@@ -194,7 +196,7 @@ describe('resolveDefault: 성묘 위력 항목(R15) — 성묘(100) = P, 성묘(
   })
 })
 
-describe('compareItems: 가장 세게 치는 순(R3, PRD AC2)', () => {
+describe('compareStrength: 가장 세게 치는 순(기준 기술·Q 비교, R4)', () => {
   it('1타 확률 → 최대 대미지 비율 → 같은 기술 랭크 전 먼저 → 기술 순 / 계산 불가는 정상 뒤·무효 앞, 무효는 맨 뒤', () => {
     const a = item('a', true, ok(0.5, 100), VAR, { moveOrder: 0 })
     const b = item('b', true, ok(0.75, 90), VAR, { moveOrder: 1 })
@@ -202,13 +204,89 @@ describe('compareItems: 가장 세게 치는 순(R3, PRD AC2)', () => {
     const cRank = item('c', false, ok(0.5, 120), VAR, { moveOrder: 2 })
     const err = item('e', true, error, { kind: 'error', reason: error.reason }, { moveOrder: 3 })
     const imm = item('i', true, immune, SURVIVE, { moveOrder: 4 })
-    const sorted = [imm, err, a, cRank, b, c].sort(compareItems).map((i) => i.key)
+    const sorted = [imm, err, a, cRank, b, c].sort(compareStrength).map((i) => i.key)
     expect(sorted).toEqual([b.key, c.key, cRank.key, a.key, err.key, imm.key])
+  })
+})
+
+describe('compareItems: 목록 = 기술 채용률 순, 같은 기술 안은 강한 순, 계산 불가 → 무효 맨 뒤(R16, PRD AC38)', () => {
+  it('채용률 높은 기술이 더 약해도 앞, 같은 기술 항목은 강한 순(판정 전은 그 기술 안 뒤), 채용률 동률은 기존 기술 순서', () => {
+    const weakTop = item('top', true, ok(0, 30), VAR, { share: 0.9, moveOrder: 2 })
+    const topRank = item('top', false, ok(0.5, 90), VAR, { share: 0.9, moveOrder: 2 })
+    const topPending = { ...item('top', false, { kind: 'pending' }, { kind: 'pending' }, { share: 0.9, moveOrder: 2 }), key: itemKey('top', RANK2) }
+    const strongLow = item('low', true, ok(1, 200), VAR, { share: 0.1, moveOrder: 0 })
+    const tieA = item('tieA', true, ok(0, 10), VAR, { share: 0.5, moveOrder: 3 })
+    const tieB = item('tieB', true, ok(1, 150), VAR, { share: 0.5, moveOrder: 1 })
+    // 계산 불가·무효는 채용률과 무관하게 맨 뒤(계산 불가 → 무효)
+    const err = item('e', true, error, { kind: 'error', reason: error.reason }, { share: 1, moveOrder: 4 })
+    const imm = item('i', true, immune, SURVIVE, { share: 1, moveOrder: 5 })
+    const sorted = [imm, strongLow, err, tieA, weakTop, topPending, tieB, topRank].sort(compareItems).map((i) => i.key)
+    expect(sorted).toEqual([topRank.key, weakTop.key, topPending.key, tieB.key, tieA.key, strongLow.key, err.key, imm.key])
   })
   it('정상 항목이 하나도 없으면 정렬 첫 항목(계산 불가)이 기본', () => {
     const err = item('e', true, error, { kind: 'error', reason: error.reason })
     const imm = item('i', true, immune, SURVIVE)
-    expect(pick([imm, err])).toMatchObject({ kind: 'ready', key: err.key })
+    expect(pick([imm, err])).toMatchObject({ kind: 'ready', key: err.key, fallback: true })
+  })
+})
+
+describe('representativeMoves: 판정 타입마다 채용률 1위(R4-1, PRD AC38)', () => {
+  it('같은 타입은 채용률 높은 쪽 하나, 동률은 입력(기존 기술) 순 앞, 타입이 다르면 각자, 타입 없는 기술은 각자', () => {
+    const reps = representativeMoves([
+      { moveId: 'doubleedge', share: 0.3, moveType: 'Normal' },
+      { moveId: 'hypervoice', share: 0.9, moveType: 'Normal' },
+      { moveId: 'dragonclaw', share: 0.4, moveType: 'Dragon' },
+      { moveId: 'outrage', share: 0.4, moveType: 'Dragon' },
+      { moveId: 'unknownA', share: 0 },
+      { moveId: 'unknownB', share: 0 },
+    ])
+    expect(reps).toEqual(new Set(['hypervoice', 'dragonclaw', 'unknownA', 'unknownB']))
+  })
+})
+
+describe('resolveDefault: 기준 기술 = 판정 타입 대표 중 가장 센 것(R4-1 개정, PRD AC38)', () => {
+  /** 메가보만다 예: 노말 대표 하이퍼보이스(채용률 높음·약함), 채용률 낮은 강한 이판사판태클(대표 아님), 드래곤 대표 용성군 */
+  const rep = (moveId: string, probe: ItemState['probe'], share: number) => item(moveId, true, probe, VAR, { share })
+  const nonRep = (moveId: string, probe: ItemState['probe'], share: number) => item(moveId, true, probe, VAR, { share, representative: false })
+  it('채용률 낮은 강한 같은 타입 기술은 기준이 되지 않는다: 대표 하이퍼보이스가 기준', () => {
+    const hv = rep('hypervoice', ok(0.2, 80), 0.95)
+    const de = nonRep('doubleedge', ok(1, 160), 0.1)
+    expect(pick([de, hv])).toMatchObject({ kind: 'ready', key: hv.key, basis: hv.key, fallback: false })
+  })
+  it('서로 다른 타입 대표 중에서는 가장 센 것(1타 확률 → 최대 대미지 비율)이 기준', () => {
+    const hv = rep('hypervoice', ok(0.2, 80), 0.95)
+    const dm = rep('dracometeor', ok(0.2, 120), 0.4)
+    const de = nonRep('doubleedge', ok(1, 160), 0.1)
+    expect(pick([hv, de, dm])).toMatchObject({ kind: 'ready', key: dm.key, basis: dm.key })
+  })
+  it('무효·계산 불가 대표는 빠지고 다음 대표 중 가장 센 것, 정상 대표가 없으면 목록(채용률 순) 첫 정상 항목(대체)', () => {
+    const immRep = rep('earthquake', immune, 0.9)
+    const weak = rep('rockslide', ok(0, 30), 0.5)
+    const de = nonRep('doubleedge', ok(1, 160), 0.1)
+    expect(pick([immRep, de, weak])).toMatchObject({ kind: 'ready', key: weak.key, fallback: false })
+    const errRep = { ...rep('m', error, 0.9), probe: error }
+    const a = nonRep('a', ok(1, 200), 0.2)
+    const b = nonRep('b', ok(0, 10), 0.6)
+    // 대체: 목록 첫 정상 항목 = 채용률 높은 b 기술(a보다 약해도)의 가장 센 항목(랭크 후 포함), 이후 단계(P/Q·선공기)는 건너뛴다
+    const bQ = item('b', false, ok(0.5, 90), VAR, { share: 0.6, representative: false })
+    expect(pick([a, errRep, b, bQ], true)).toMatchObject({ kind: 'ready', key: bQ.key, fallback: true, viaPriority: false })
+  })
+  it('대표 랭크 전 항목 단건 판정만 기다린다: 대표가 아닌 기술의 판정 전은 결정을 막지 않고, 정해진 값은 그 판정이 나와도 같다', () => {
+    const hv = rep('hypervoice', ok(0.2, 80), 0.95)
+    const pending = nonRep('doubleedge', { kind: 'pending' }, 0.1)
+    expect(pick([hv, pending])).toMatchObject({ kind: 'ready', key: hv.key })
+    expect(pick([hv, { ...pending, probe: ok(1, 200) }])).toMatchObject({ kind: 'ready', key: hv.key })
+    expect(pick([{ ...hv, probe: { kind: 'pending' } }, { ...pending, probe: ok(1, 200) }])).toEqual({ kind: 'pending', need: [] })
+    // 기준 기술의 랭크 후 항목 판정 전이면 기다린다
+    const hvQ = item('hypervoice', false, { kind: 'pending' }, { kind: 'pending' }, { share: 0.95 })
+    expect(pick([hv, hvQ])).toEqual({ kind: 'pending', need: [] })
+  })
+  it('선공기 우선(R4-2)은 대표가 아니어도 그대로: 변동인 선공기가 기준, 선공기 판정 전이면 기다린다', () => {
+    const hv = rep('hypervoice', ok(0.2, 80), 0.95)
+    const es = nonRep('extremespeed', ok(0, 40), 0.05)
+    const pri = { ...es, priority: true }
+    expect(pick([hv, pri], true)).toMatchObject({ kind: 'ready', key: pri.key, viaPriority: true })
+    expect(pick([hv, { ...pri, probe: { kind: 'pending' } }], true)).toEqual({ kind: 'pending', need: [] })
   })
 })
 
@@ -334,6 +412,88 @@ describe('실데이터: 목록·기본 항목·직접 선택', () => {
     const card = v.cards.find((c) => c.opponent.id === 'kingambit' && c.category === 'physical')
     expect(card?.selected).toBe(false)
     expect(card?.shownItem).toBe(card?.defaultItem?.key)
+  })
+})
+
+describe('실데이터: 채용률·판정 타입 대표·목록 순(R16·R4-1 개정, PRD AC38)', () => {
+  const { bo1 } = realData()
+  const only = (id: string) => ({ topN: 30, selected: [id] })
+  const groupOf = (v: ReturnType<typeof buildTabView>, id: string) => groupCards(v.cards.filter((c) => c.opponent.id === id && c.berry === undefined), v.tab)[0]
+  const shares = (id: string) => bo1.entry(id)?.moves.shares ?? {}
+
+  it('방어 탭 메가망나뇽: 후보 채용률 = 그 상대 기술 사용률, 드래곤 대표는 채용률 1위 용의파동 — 더 센 용성군이 아니라 용의파동이 기준', () => {
+    const input = cardInput({ mySet: EXAMPLE_SET, filters: only('dragonitemega') })
+    const plan = planTab(input, 'defense')
+    const s = shares('dragonitemega')
+    expect(s.dragonpulse).toBeGreaterThan(s.dracometeor)
+    for (const card of plan.cards.filter((c) => c.opponent.id === 'dragonitemega'))
+      for (const g of card.conditions)
+        for (const c of g.candidates) {
+          expect(c.share, c.moveId).toBe(s[c.moveId] ?? 0)
+          if (c.moveId === 'dragonpulse') expect(c.representative).toBe(true)
+          if (c.moveId === 'dracometeor') expect(c.representative).toBe(false)
+        }
+    const v = buildTabView(input, 'defense')
+    const special = defaultOption(groupOf(v, 'dragonitemega'))
+    expect(special.defaultItem?.key).toBe(itemKey('dragonpulse', BASE_CONDITION_ID))
+    const max = (m: string) => special.items.find((i) => i.key === itemKey(m, BASE_CONDITION_ID))?.cell?.maxPercent ?? 0
+    expect(max('dracometeor')).toBeGreaterThan(max('dragonpulse'))
+  })
+
+  it('판정 타입은 바뀐 타입(R13): 타부자고 vs 메가리자몽Y 웨더볼(가뭄 → 불꽃)은 열풍과 같은 불꽃 타입이라 채용률 높은 열풍이 대표', () => {
+    const gholdengo = bo1.entry('gholdengo')?.representative.set as PokemonSet
+    const input = cardInput({ mySet: gholdengo, filters: only('charizardmegay') })
+    const plan = planTab(input, 'defense')
+    const cand = (m: string) => plan.cards.flatMap((c) => c.conditions.flatMap((g) => g.candidates)).find((c) => c.moveId === m)
+    expect(shares('charizardmegay').heatwave).toBeGreaterThan(shares('charizardmegay').weatherball)
+    expect(cand('heatwave')?.representative).toBe(true)
+    expect(cand('weatherball')?.representative).toBe(false)
+    const v = buildTabView(input, 'defense')
+    const g = groupOf(v, 'charizardmegay')
+    expect(groupItems(g).find((x) => x.item.moveId === 'weatherball')?.item.moveType).toBe('Fire')
+    expect(defaultOption(g).defaultItem?.key).toBe(itemKey('heatwave', BASE_CONDITION_ID))
+  })
+
+  it('공격 탭은 채용률을 쓰지 않는다(share 0 → 내 기술 칸 순서, 사용자 결정 2026-11-14), 메뉴 목록은 기술 채용률 순 · 같은 기술 안 강한 순 · 계산 불가/무효 맨 뒤', () => {
+    const mega = bo1.entry('floettemega')?.representative.set as PokemonSet
+    const plan = planTab(cardInput({ mySet: mega, filters: only('kingambit') }), 'attack')
+    const cands = plan.cards.flatMap((c) => c.conditions.flatMap((g) => g.candidates))
+    expect(cands.length).toBeGreaterThan(0)
+    for (const c of cands) expect(c.share, c.moveId).toBe(0)
+    const v = buildTabView(cardInput({ mySet: EXAMPLE_SET, filters: { topN: 30, selected: [] } }), 'defense')
+    let checked = 0
+    for (const g of groupCards(v.cards, 'defense')) {
+      const items = groupItems(g).map((x) => x.item)
+      const tail = (st: string) => (st === 'error' ? 1 : st === 'immune' ? 2 : 0)
+      for (let i = 1; i < items.length; i++) {
+        const [a, b] = [items[i - 1], items[i]]
+        expect(tail(a.status) <= tail(b.status), g.key).toBe(true)
+        if (tail(a.status) !== tail(b.status) || tail(a.status) !== 0) continue
+        if (a.moveId !== b.moveId) expect(a.share >= b.share, `${g.key} ${a.key} ${b.key}`).toBe(true)
+        else if (a.status === 'ok' && b.status === 'ok') {
+          const pa = a.cell?.ohkoChance ?? 0
+          const pb = b.cell?.ohkoChance ?? 0
+          expect(pa > pb || (pa === pb && (a.cell?.maxPercent ?? 0) >= (b.cell?.maxPercent ?? 0)), `${g.key} ${a.key} ${b.key}`).toBe(true)
+        }
+        checked++
+      }
+      // 같은 기술 항목은 이어진다
+      const seen: string[] = []
+      for (const it of items.filter((x) => tail(x.status) === 0)) if (seen[seen.length - 1] !== it.moveId) {
+        expect(seen, g.key).not.toContain(it.moveId)
+        seen.push(it.moveId)
+      }
+    }
+    expect(checked).toBeGreaterThan(30)
+  })
+
+  it('정상 대표가 없는 분류 카드(대체)는 대표로 정해진 분류 카드에 진다(분류 사이 비교)', () => {
+    const special = { defaultItem: { key: 's', viaPriority: false, fallback: true as const, basisCell: cell(1, 200) } }
+    const physical = { defaultItem: { key: 'p', viaPriority: false, basisCell: cell(0, 30) } }
+    const mk = (category: 'physical' | 'special', d: object, order: number) =>
+      ({ id: category, order, category, opponent: { id: 'x', source: 'ladder' }, bundle: { key: category, stats: [], share: 1, minority: false }, items: [], ...d }) as unknown as CardView
+    const g = groupCards([mk('special', special, 0), mk('physical', physical, 1)])[0]
+    expect(defaultOption(g).id).toBe('physical')
   })
 })
 

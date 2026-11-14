@@ -97,6 +97,11 @@ Status: draft
 | `items.test.ts`·`executor.test.ts` 메뉴 항목 변동 판정(`cardExplore`·`setMenuCards`) 신설, e2e `product-move-variable.spec.ts` 신설(항목별 변동 표시 없음을 검사하던 기존 테스트는 없음) | PRD R3(이전: 항목별 변동 표시 없음, 2026-11-13), AC36 |
 | `acceptance.test.ts` AC35 오라클 기술 수집 그룹 `['base']` → `['base']` + `['faint', 1]`(성묘 랭크 전 항목이 1기절 조건으로 옮겨 감, triggers 기대에 성묘가 다시 들어감) | PRD R15(이전: 성묘 = 기본 조건 항목 하나·위력 50), AC37 |
 | `damage.test.ts`·`items.test.ts`·`state.test.ts`·`acceptance.test.ts` AC37 신설, e2e `product-last-respects.spec.ts` 신설(성묘 위력 항목을 검사하던 기존 테스트는 없음) | PRD R15, AC37 |
+| `items.test.ts` `compareItems` 정렬 테스트 → `compareStrength`(강한 순, 기준 기술·Q 비교용)로 옮기고 `compareItems`는 채용률 순 테스트로 재작성, 표·선공기 테스트 헬퍼 `item()`에 `share: 0`·`representative: true` 기본값(모든 기술이 각자 타입 대표 = 이전 기준 기술 규칙과 같은 입력) | PRD R16(이전: 목록 = 가장 세게 치는 순, R3), R4-1(이전: 모든 랭크 전 항목 중 가장 센 것), AC38 |
+| `assemble.test.ts` 후보 카드 항목 순서 `[m-base, m-pri]` → `[m-pri, m-base]`(채용률 동률 → 기존 기술 순서), 후보 리터럴에 `share`·`order`·`representative` | PRD R16 |
+| `acceptance.test.ts` 오라클 `oracleDefault`·`oracleItems` 재작성(채용률·기술 순서·판정 타입 대표를 메타·내 세트에서 직접 계산, 성묘 1기절도 랭크 전), AC4·AC6은 공격 탭 규칙(채용률 없음·내 기술 전부가 대표, 사용자 결정 2026-11-14)으로 이전 기대(짜랑고우거 특수 기본·포푸니크 속임수 기본) 유지하고 목록 순서(기술 칸 순) 검사만 추가, AC5 파멸의빛 극단 필터 1행은 직접 고른 항목으로(공격 탭 기본 = 가장 센 기술) | PRD R4-1(이전: 모든 랭크 전 항목 중 가장 센 것), R16, AC38 |
+| `executor.test.ts` 세대 변경 두 테스트의 batch 비교에서 진행률(끝난 작업 수) 제외 — 조각 경계 대기열 재생성으로 이미 변동으로 정해진 항목의 나머지 결정용 B/D 행 양 끝을 건너뛰어 끝난 작업 수만 batch 이하(뷰·판정은 같음, 새 기본값(예시 세트 대쓰여너 기본이 웨이브태클 → 성묘 Q 결정)에서 드러남) | PRD R4-1 개정에 따른 기본 항목 변화(실행기 동작 변경 없음) |
+| `items.test.ts` 대표 선정·기준 기술·대체·실데이터(메가망나뇽 용의파동, 메가리자몽Y 웨더볼 → 불꽃 대표 열풍, 공격 탭 채용률 0(기술 칸 순), 목록 순 불변식, 분류 사이 대체 패배) 신설, e2e `product-move-order.spec.ts` 신설(메뉴 순서 = 메타 JSON 사용률 순) | PRD R16, R4-1, AC38 |
 
 ## 결정(빌드 중)
 
@@ -120,6 +125,9 @@ Status: draft
 
 - 2026-11-14 R15 성묘: 코어 `conditions.lastRespectsFainted`(0~5, 성묘만 위력 50×(1+n), 총대장 `attacker.alliesFainted`와 분리)·`conditionMovePower`, 조건 묶음 `['faint', 1|2|3]`(성묘는 기본 묶음에서 빠짐, 랭크 후는 1기절), 랭크 전 항목 = 기본 또는 `['faint', 1]` → P = 성묘(100), 150·200은 Q 후보. 라벨 "성묘(100)". 성능: 방어 처음 열기 35ms·1117ms, Long Task 0ms.
 - 후속(리뷰 LOW): 완전 동률 정렬에서 성묘가 원래 슬롯·사용률 순보다 뒤(moveOrder가 조건 묶음 순회 순). 총대장+성묘 동시 반영 없음(총대장 후속). 펼친 상세 판정 행 `data-condition`은 성묘 1·2·3기절 모두 "base"(위력은 라벨로만 구분).
+
+- 2026-11-14 R16·R4-1 개정: 방어 탭 목록 = 상대 기술 사용률 순(같은 기술 안 강한 순, 계산 불가·무효 맨 뒤), 기준 기술 = 판정 타입별 최고 채용률 기술(분류 가로질러) 중 가장 센 것(`representativeMoves`, `MoveCandidate.share·order·representative`, 판정 타입 `src/cards/moveType.ts`). 공격 탭은 채용률 없음 — 목록은 내 기술 칸 순, 기준은 내 기술 전부 중 가장 센 것(사용자 결정: "공격 탭에서는 내가 설정한 순서대로"). 실데이터 방어 탭 기본 변화(예시 세트): 고릴타 우드해머 → 그래스슬라이더, 두랄루돈·메가망나뇽·메가한카리아스Z 용성군 → 용의파동, 메가플라엣테 파멸의빛 → 매지컬샤인, 님피아 파괴광선 → 하이퍼보이스, 에스퍼판♀ 대지의파동 → 사이코키네시스, 메가눈여아 얼음숨결 → 눈보라, 메가갑주무사 덤벼들기 → +2 흡혈, 불카모스 벌레의야단법석 → 기가드레인, 대쓰여너 웨이브태클 → 성묘. 성능: 방어 처음 열기 완료 약 1.5초(예산 3초), Long Task 0ms.
+- 후속(리뷰): 타입 대표가 무효·계산 불가면 그 타입 전체가 기준 후보에서 빠진다(같은 타입 2위로 넘어가지 않음). 실행기·batch 진행률 차이(executor.test 진행률 비교 제외)는 별도 과제. 대체 경로 기본이 랭크 후 항목이 될 수 있음.
 
 ## 검증
 
