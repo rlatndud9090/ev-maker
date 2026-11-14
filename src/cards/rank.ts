@@ -17,12 +17,12 @@ const byMeans = (a: MeansRef, b: MeansRef): number =>
   byString(a.id, b.id) || byString(a.kind, b.kind)
 
 /**
- * 탭별로 랭크 행을 만드는 수단 주인(능동 수단만 있으므로 주인 = 랭크가 오르는 쪽).
- * 공격 탭 = 내 랭크업만(상대 철벽 등 방어 랭크업은 보지 않는다), 방어 탭 = 공격하는 상대의 랭크업 + 내 방어 랭크업, 스피드 탭 = 양쪽.
+ * 탭별로 랭크 조건을 만드는 수단 주인(능동 수단만 있으므로 주인 = 랭크가 오르는 쪽).
+ * 공격 탭 = 내 랭크업만(상대 철벽 등 방어 랭크업은 보지 않는다), 방어 탭 = 공격하는 상대의 랭크업만(내 방어 랭크업은 다루지 않는다), 스피드 탭 = 양쪽.
  */
 export const TAB_MEANS_OWNERS: Readonly<Record<Tab, readonly MeansCandidate['owner'][]>> = {
   attack: ['me'],
-  defense: ['opponent', 'me'],
+  defense: ['opponent'],
   speed: ['opponent', 'me'],
 }
 

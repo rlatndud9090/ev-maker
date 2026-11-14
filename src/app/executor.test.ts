@@ -76,6 +76,18 @@ function viewOf(s: TabViewState): TabView {
   return s.view
 }
 
+/**
+ * 실행기 최종 뷰 = batch 뷰(진행률 제외). 조각 경계에서 대기열을 다시 만들면 이미 변동으로 정해진 항목의 나머지 결정용 행(극단 필터 뒤 B/D 행 양 끝)을
+ * 건너뛸 수 있어 끝난 작업 수만 batch 이하로 달라질 수 있다(판정·표시는 같다).
+ */
+function expectSameAsBatch(s: TabViewState, input: CardInput, tab: Tab): void {
+  const got = viewOf(s)
+  const want = buildTabView(input, tab)
+  expect({ ...got, progress: null }).toEqual({ ...want, progress: null })
+  expect(got.progress.done).toBe(got.progress.total)
+  expect(got.progress.done).toBeLessThanOrEqual(want.progress.done)
+}
+
 async function runToEnd(m: ReturnType<typeof manualScheduler>, onStep?: (n: number) => void): Promise<number> {
   let n = 0
   while (await m.step()) onStep?.(++n)
@@ -256,7 +268,7 @@ describe('createExecutor', () => {
     for (const tab of TABS) {
       const s = executor.getSnapshot().tabs[tab]
       expect(s).toMatchObject({ generation: 2, superseded: false })
-      expect(viewOf(s)).toEqual(buildTabView(inputB, tab))
+      expectSameAsBatch(s, inputB, tab)
     }
   })
 
@@ -267,7 +279,7 @@ describe('createExecutor', () => {
     for (let i = 0; i < 6; i++) await m.step()
     executor.setInput(inputB, 2)
     await runToEnd(m)
-    for (const tab of TABS) expect(viewOf(executor.getSnapshot().tabs[tab])).toEqual(buildTabView(inputB, tab))
+    for (const tab of TABS) expectSameAsBatch(executor.getSnapshot().tabs[tab], inputB, tab)
   })
 
   it('같은 세대 setInput은 무시한다', async () => {
@@ -414,5 +426,55 @@ describe('createExecutor', () => {
     expect(listener).not.toHaveBeenCalled()
     executor.setInput(inputB, 2)
     expect(m.waiting()).toBe(0)
+  })
+
+  it('기술 선택 메뉴 수요(setMenuCards): 세대 불변, 연 카드의 항목 변동 판정 작업만 돌고, 완료·진행률·다른 카드는 그대로, 닫아도 결과는 남는다(PRD R3, AC36)', async () => {
+    const m = manualScheduler()
+    executor = createExecutor({ scheduler: m.scheduler, sliceMs: 5, now: tickingClock() })
+    const tab: Tab = 'defense'
+    executor.setActiveTab(tab)
+    executor.setInput(inputA, 1)
+    await runToEnd(m)
+    const before = viewOf(executor.getSnapshot().tabs[tab])
+    expect(before.complete).toBe(true)
+    const card = before.cards.find((c) => c.items.some((i) => i.status === 'ok' && i.variable === undefined))
+    expect(card, '변동 판정 전 항목이 있는 카드').toBeDefined()
+    const id = card!.id
+    const plan = planTab(inputA, tab)
+    const spy = vi.mocked(computeRowTask)
+    spy.mockClear()
+
+    executor.setMenuCards(tab, [id])
+    await runToEnd(m)
+    const snap = executor.getSnapshot()
+    expect(snap.generation).toBe(1)
+    expect(spy.mock.calls.length).toBeGreaterThan(0)
+    for (const [, task] of spy.mock.calls) expect(taskCardId(plan, task)).toBe(id)
+    const after = viewOf(snap.tabs[tab])
+    expect(after.complete).toBe(true)
+    expect(after.progress.done).toBe(after.progress.total)
+    const opened = after.cards.find((c) => c.id === id)!
+    for (const i of opened.items) if (i.status === 'ok') expect(typeof i.variable, i.key).toBe('boolean')
+    expect(opened.shownItem).toBe(card!.shownItem)
+    expect(opened.rows).toEqual(card!.rows)
+    expect(after.cards.filter((c) => c.id !== id)).toEqual(before.cards.filter((c) => c.id !== id))
+
+    // 닫으면(빈 목록) 더 계산하지 않고, 나온 변동 판정은 그대로 남는다. 같은 목록을 다시 알려도 계산이 없다
+    spy.mockClear()
+    executor.setMenuCards(tab, [])
+    await runToEnd(m)
+    executor.setMenuCards(tab, [id])
+    await runToEnd(m)
+    expect(spy).not.toHaveBeenCalled()
+    expect(viewOf(executor.getSnapshot().tabs[tab]).cards.find((c) => c.id === id)?.items).toEqual(opened.items)
+  })
+
+  it('메뉴를 열지 않으면 메뉴 작업이 없다: 최종 뷰가 buildTabView(수요 없음)와 같다', async () => {
+    const m = manualScheduler()
+    executor = createExecutor({ scheduler: m.scheduler, sliceMs: 5, now: tickingClock() })
+    executor.setInput(inputA, 1)
+    executor.setMenuCards('defense', [])
+    await runToEnd(m)
+    expect(viewOf(executor.getSnapshot().tabs.defense)).toEqual(buildTabView(inputA, 'defense'))
   })
 })

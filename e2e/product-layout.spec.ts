@@ -20,7 +20,7 @@ for (const width of [400, 1280]) {
       const card = cards(page).and(page.locator('[data-variable="true"]')).first()
       await card.locator('button[aria-expanded]').first().click()
       await expect(card.getByTestId('band-cell').first()).toBeVisible()
-      // 상세 오른쪽 열의 띠: 33칸이 오른쪽 열(판정 영역) 안에 다 들어오고(스크롤 상자 없음), 칸 안 글자 없음, 칸 사이 틈 1px 이상.
+      // 방어 탭 상세의 내구 합계 띠(R10): 65칸이 판정 영역 안에 다 들어오고(스크롤 상자 없음), 칸 안 글자 없음, 칸 사이 틈 1px 이상.
       await expect(card.locator('.band-scroll')).toHaveCount(0)
       const bands = await card.locator('.band').evaluateAll((els) =>
         els.map((el) => {
@@ -43,7 +43,7 @@ for (const width of [400, 1280]) {
       )
       expect(bands.length).toBeGreaterThan(0)
       for (const b of bands) {
-        expect({ ...b, width: undefined }).toEqual({ count: 33, inside: true, bandFits: true, scrollers: [], text: '', minGap: true, sameRow: true, width: undefined })
+        expect({ ...b, width: undefined }).toEqual({ count: 65, inside: true, bandFits: true, scrollers: [], text: '', minGap: true, sameRow: true, width: undefined })
         expect(b.width).toBeGreaterThan(2)
       }
       await page.getByRole('button', { name: '포켓몬 추가', exact: true }).click()
@@ -54,19 +54,19 @@ for (const width of [400, 1280]) {
       const leaks = await page.evaluate(() => [...document.querySelectorAll('.band')].filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1).length)
       expect(leaks).toBe(0)
       expect(await findOverlaps(page, CONTROLS)).toEqual([])
-      // 접힌 줄: 결과(배지 + 변동 가능)가 "외 n행"과 겹치지 않고, 이름(폼 꼬리 포함)은 1280px에서 한 줄.
+      // 접힌 줄: 기술 선택 버튼과 결과(배지 + 변동 가능)가 겹치지 않고, 이름(폼 꼬리 포함)은 1280px에서 한 줄.
       const lineIssues = await page.evaluate((wide) => {
         const out: string[] = []
         const lines = [...document.querySelectorAll('[data-testid="card"] .card-line')]
         for (const line of lines) {
           const name = line.querySelector('.card-name')!
           const res = line.querySelector('.card-result')?.getBoundingClientRect()
-          const more = line.querySelector('.card-more')?.getBoundingClientRect()
-          if (res && more && res.top < more.bottom && more.top < res.bottom && res.right > more.left + 0.5) out.push(`${name.textContent} 결과↔외 n행 ${res.right - more.left}`)
+          const pick = line.querySelector('[data-testid="move-pick"]')?.getBoundingClientRect()
+          if (res && pick && res.top < pick.bottom && pick.top < res.bottom && pick.right > res.left + 0.5 && res.right > pick.left + 0.5) out.push(`${name.textContent} 기술↔결과`)
           const lh = parseFloat(getComputedStyle(name).lineHeight) || 24
           if (wide && name.getBoundingClientRect().height > lh * 1.5) out.push(`${name.textContent} 이름 두 줄`)
         }
-        return { out, checked: lines.filter((l) => l.querySelector('.card-more')).length }
+        return { out, checked: lines.filter((l) => l.querySelector('[data-testid="move-pick"]')).length }
       }, width >= 1280)
       expect(lineIssues.checked).toBeGreaterThan(0)
       expect(lineIssues.out).toEqual([])
@@ -112,9 +112,9 @@ for (const width of [400, 1280]) {
       expect(leak).toBeNull()
     })
 
-    test(`${width}px: 배분 메뉴·상세 배분 목록이 화면 안에 들어오고, 좁으면 목록이 판정 행 위로 쌓여 자체 세로 스크롤`, async ({ page }) => {
+    test(`${width}px: 스피드 탭 배분 메뉴·상세 배분 목록이 화면 안에 들어오고, 좁으면 목록이 판정 행 위로 쌓여 자체 세로 스크롤`, async ({ page }) => {
       await openProduct(page)
-      await selectTab(page, '방어')
+      await selectTab(page, '스피드')
       await waitComplete(page)
       const row = cards(page).filter({ has: page.locator('button.bundle-btn') }).first()
       await row.locator('button[aria-expanded]').first().click()
@@ -232,6 +232,22 @@ for (const width of [400, 1280]) {
       }))
       expect(m.overflowY).toBe('auto')
       expect(m.scrollHeight).toBeGreaterThan(m.clientHeight)
+      // 카드 좌우는 스크롤 박스 안쪽에서 스크롤바 폭만큼 더 떨어진다(오버레이 스크롤바가 카드 오른쪽 끝을 덮지 않게, 사용자 피드백 2026-11-13)
+      const gap = await listScroll(page).evaluate((el) => {
+        const box = el.getBoundingClientRect()
+        const card = el.querySelector('[data-testid="card"]')!.getBoundingClientRect()
+        const inner = box.left + el.clientLeft + el.clientWidth
+        return { left: card.left - box.left - el.clientLeft, right: inner - card.right }
+      })
+      expect(gap.left).toBeGreaterThanOrEqual(16)
+      expect(gap.right).toBeGreaterThanOrEqual(16)
+      // 줄 오른쪽 끝 펼침 화살표: 펼친 줄은 위로(data-open), 접힌 줄은 아래로, 카드 오른쪽 끝에 붙는다
+      const chev = cards(page).first().getByTestId('card-chev')
+      await expect(chev).toHaveAttribute('data-open', 'true')
+      await expect(cards(page).nth(1).getByTestId('card-chev')).toHaveAttribute('data-open', 'false')
+      const edge = await cards(page).first().evaluate((c) => c.getBoundingClientRect().right - c.querySelector('[data-testid="card-chev"]')!.getBoundingClientRect().right)
+      expect(edge).toBeGreaterThan(0)
+      expect(edge).toBeLessThan(24)
       // 넓은 화면: 작업 영역(main)이 첫 화면에 꼭 맞는다(페이지 스크롤은 푸터에 닿을 때만).
       if (width >= 1280) expect(m.mainBottom).toBeLessThanOrEqual(m.viewport)
       else expect(m.boxHeight).toBeGreaterThanOrEqual(m.viewport * 0.6)
@@ -269,6 +285,30 @@ for (const width of [400, 1280]) {
     })
   })
 }
+
+test.describe('제품 화면 400px 방어 탭', () => {
+  test.use({ viewport: { width: 400, height: 900 } })
+
+  test('400px: 방어 탭 간단행 배분 드롭다운(직접 추가 폼 포함)이 화면 가로 안에 열리고 페이지 가로 스크롤이 없다', async ({ page }) => {
+    await openProduct(page)
+    await selectTab(page, '방어')
+    await waitComplete(page)
+    const row = cards(page).filter({ has: page.locator('button.bundle-btn') }).first()
+    await row.locator('button.bundle-btn').click()
+    const menu = row.getByRole('menu', { name: '노력치 배분', exact: true })
+    await expect(menu).toBeVisible()
+    const r = await menu.evaluate((el) => {
+      const b = el.getBoundingClientRect()
+      const form = el.querySelector('[data-testid="bundle-add"]')?.getBoundingClientRect()
+      return { left: b.left, right: b.right, formRight: form?.right ?? NaN, viewport: window.innerWidth }
+    })
+    expect(r.left).toBeGreaterThanOrEqual(0)
+    expect(r.right).toBeLessThanOrEqual(r.viewport)
+    expect(r.formRight).toBeLessThanOrEqual(r.right + 0.5)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
+    await expect(menu.getByRole('menuitemradio').first()).toBeInViewport()
+  })
+})
 
 test('넓은 모니터(1920px): 작업 영역·푸터 폭을 76rem 이하로 제한하고 가운데 정렬', async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1000 })

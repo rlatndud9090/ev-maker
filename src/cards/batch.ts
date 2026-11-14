@@ -5,13 +5,14 @@ import { computeRowTask } from './rowTask'
 import { nextStage, pendingTasks, taskKey } from './schedule'
 import type { CardInput, JudgementCache, RowTaskResult, Tab, TabView } from './types'
 
-export function buildTabView(input: CardInput, tab: Tab, cache?: JudgementCache): TabView {
+/** selections = 사용자 기술 선택(상대 키 opponentKey → 항목 키) */
+export function buildTabView(input: CardInput, tab: Tab, cache?: JudgementCache, selections: ReadonlyMap<string, string> = new Map()): TabView {
   const plan = planTab(input, tab)
   const results = new Map<string, RowTaskResult>()
   for (;;) {
-    const stage = nextStage(pendingTasks(plan, results))
+    const stage = nextStage(pendingTasks(plan, results, selections))
     if (stage.length === 0) break
     for (const task of stage) results.set(taskKey(task), computeRowTask(plan, task, cache))
   }
-  return assembleTab(plan, results)
+  return assembleTab(plan, results, plan.mySp, selections)
 }

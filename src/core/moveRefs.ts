@@ -18,6 +18,9 @@ export const CATEGORY_VARIES: readonly string[] = ['shellsidearm']
 /** 대미지가 사용자 HP 실수치로 정해지는 기술. 현재/최대 HP 비율 기술(분출·바둥바둥 등)은 앱이 만피로 계산해 HP SP와 무관하다(섭동 테스트가 지킨다). */
 export const ATTACKER_HP_MOVES: readonly string[] = ['finalgambit']
 
+/** 지닌 도구로 위력이 정해져 도구 없이는 실패하는 기술(내던지기). 상대 도구를 떼는 방어 탭 기본 줄(R14)에서 무효가 되므로 상대 후보·기술 추가에서 뺀다. */
+export const HELD_ITEM_POWER_MOVES: readonly string[] = ['fling']
+
 const uniq = (xs: StatId[]): StatId[] => [...new Set(xs)]
 
 /** 스냅샷 기술 id → 참조 능력치. 스냅샷에 없는 기술은 CoreError UNKNOWN_MOVE. */

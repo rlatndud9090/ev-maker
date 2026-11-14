@@ -1,5 +1,5 @@
-import { memo, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
-import { addedBundleCardId, defaultOption, isPinned, pinOf, type AddedBundle, type CardGroup, type CardView, type CustomTarget, type RowView, type Tab } from '../../cards'
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { addedBundleCardId, defaultOption, isPinned, pinOf, type AddedBundle, type CardGroup, type CardView, type CustomTarget, type GroupItem, type RowView, type Tab } from '../../cards'
 import type { Snapshot, StatId } from '../../data/schema'
 import { namesOf } from '../../ui/names'
 import { itemIconUrl } from '../../ui/images'
@@ -8,10 +8,12 @@ import { STAT_LABEL } from '../../ui/labels'
 import { koReason } from '../../ui/koErrors'
 import type { AppAction } from '../state'
 import { CustomEditor } from './CustomEditor'
-import { RowDetail } from './RowDetail'
+import { PairDetail, RowDetail } from './RowDetail'
 import { PokemonIcon } from './PokemonIcon'
-import { MoveLabel, PriorityTag, VariableTag } from './MoveLabel'
-import { itemKeyLabel, moveNoticeText } from './text'
+import { MoveLabel, VariableTag } from './MoveLabel'
+import { MoveMenu, type MoveAdding } from './MoveMenu'
+import { Caret } from './Caret'
+import { itemKeyLabel, moveNoticeText, rowTitle } from './text'
 
 interface Props {
   game: Snapshot
@@ -30,6 +32,14 @@ interface Props {
   dispatch: Dispatch<AppAction>
   /** 계산결과순일 때 이 행이 든 그룹 제목 id(행 토글 버튼 설명에 붙여 소속을 전한다) */
   groupLabelId?: string
+  /** 포켓몬 한 줄의 기술 선택 항목(공격·방어 탭, groupItems). 스피드 탭은 빈 배열 */
+  items: readonly GroupItem[]
+  /** 항목을 직접 고름(다른 분류 항목이면 그 분류 기본 배분으로 전환까지) */
+  onChooseItem: (group: CardGroup, card: CardView, item: GroupItem) => void
+  /** 직접 고름 해제(기본 항목으로) */
+  onResetItem: (group: CardGroup) => void
+  /** 기술 선택 목록을 연 줄의 항목 카드 id(분류 기본 배분들), 닫으면 빈 목록 */
+  onMenuCards: (cardIds: readonly string[]) => void
 }
 
 /** 카드 줄 배지의 기준 행: 대표 행. 대표로 세울 행이 없는 카드(no-change)는 범주가 있는 첫 행. */
@@ -165,12 +175,6 @@ function Headline({ game, tab, card, badge }: { game: Snapshot; tab: Tab; card: 
           </>
         )}
         <MoveLabel game={game} tab={tab} row={row} />
-        {row.keptAsPriority && (
-          <>
-            {' '}
-            <PriorityTag />
-          </>
-        )}
       </span>
     </span>
   )
@@ -190,15 +194,15 @@ function SpeciesName({ label }: { label: string }) {
 
 const stop = (e: MouseEvent) => e.stopPropagation()
 
-/** 반감열매 한국어 이름(스냅샷에 없으면 id) */
-const berryName = (game: Snapshot, item: string): string => game.data.items[item]?.name.ko ?? item
+/** 도구 한국어 이름(스냅샷에 없으면 id) */
+const itemName = (game: Snapshot, item: string): string => game.data.items[item]?.name.ko ?? item
 
 /**
- * 반감열매 행 이름 옆 배지: 도구 이미지(Champions 가방 스프라이트, 툴팁 "마코열매"). 이미지가 없으면 열매 이름에서 "열매"를 뗀 "(마코)".
- * 보이는 그림·글자는 스크린 리더에서 숨기고 "마코열매 지닌 경우"로 읽힌다. data-item-id는 도구 id.
+ * 도구 변형 행 이름 옆 배지: 도구 이미지(Champions 가방 스프라이트, 툴팁 = 도구 이름). 이미지가 없으면 열매 이름에서 "열매"를 뗀 "(마코)".
+ * 보이는 그림·글자는 스크린 리더에서 숨기고 "마코열매 지닌 경우"로 읽힌다(점유율은 적지 않는다, 사용자 결정 2026-11-14). data-item-id는 도구 id.
  */
-function BerryBadge({ game, item }: { game: Snapshot; item: string }) {
-  const name = berryName(game, item)
+function ItemVariantBadge({ game, item }: { game: Snapshot; item: string }) {
+  const name = itemName(game, item)
   const url = itemIconUrl(item)
   return (
     <span className={`berry-badge${url === undefined ? '' : ' berry-badge-img'}`} data-testid="berry-badge" data-item-id={item} title={url === undefined ? `${name} 지닌 경우` : name}>
@@ -295,7 +299,7 @@ function rememberFocusReturn(key: string) {
 type ActionProps = Pick<Props, 'tab' | 'group' | 'card' | 'onSelect' | 'dispatch'>
 
 /**
- * 배분 직접 추가·고정 토글(드롭다운·상세 목록 공용). 추가: 같은 키 배분이 이미 선택지면 그걸 고르고(관측 배분이면 고정한다), 아니면 상태에
+ * 배분 직접 추가·고정 토글(드롭다운·스피드 탭 상세 목록 공용). 추가: 같은 키 배분이 이미 선택지면 그걸 고르고(관측 배분이면 고정한다), 아니면 상태에
  * 추가(추가와 함께 고정)하고 그 카드를 미리 고른다(계산이 끝나면 맨 위에 보인다). 고정 토글: 관측 배분은 고정만 바꾸고(재계산 없음),
  * 직접 추가 배분의 고정 해제는 삭제다. 추가·삭제 뒤 재계산 중 포커스를 잃으면 그 행의 배분 버튼으로 돌려준다.
  */
@@ -438,9 +442,7 @@ function BundlePicker({ tab, group, card, rollSteps, onSelect, dispatch, spMax }
         <span className="card-bundle num" data-testid="card-bundle">
           <BundleLabel card={card} pinned={isPinned(group, card)} />
         </span>
-        <span className="bundle-caret" aria-hidden="true">
-          ▾
-        </span>
+        <Caret />
       </button>
       {open && (
         <div
@@ -521,7 +523,7 @@ interface ListProps extends PickerProps {
 }
 
 /**
- * 상세 왼쪽 열: 드롭다운과 같은 배분 목록을 세로로 고정(래더는 맨 위 직접 추가 폼, 항목마다 오른쪽 끝 핀).
+ * 스피드 탭 상세 왼쪽 열: 드롭다운과 같은 배분 목록을 세로로 고정(래더는 맨 위 직접 추가 폼, 항목마다 오른쪽 끝 핀).
  * 선택은 radiogroup(↑↓·←→ 이동 즉시 선택, Home/End). 핀은 선택 항목 것만 Tab 순서(radio 다음)에 들어오고, 고정 항목 radio에서
  * Delete·Backspace 키도 고정 해제다(직접 추가 배분은 삭제). 고정 항목은 다른 면 색.
  */
@@ -636,9 +638,59 @@ function BundleList({ tab, group, card, rollSteps, onSelect, dispatch, spMax, op
   )
 }
 
-export const CardItem = memo(function CardItem({ game, tab, group, card, rollSteps, expanded, onToggle, onSelect, target, dispatch, groupLabelId }: Props) {
+/** 간단행의 보이는 항목 기술 선택 버튼. 보이는 항목이 목록에 없으면 null */
+function ShownMove({
+  game,
+  tab,
+  group,
+  card,
+  rollSteps,
+  items,
+  onChooseItem,
+  onResetItem,
+  onMenuCards,
+  dispatch,
+  testId,
+}: Pick<Props, 'game' | 'tab' | 'group' | 'card' | 'rollSteps' | 'items' | 'onChooseItem' | 'onResetItem' | 'onMenuCards' | 'dispatch'> & { testId: string }) {
+  const menuSig = JSON.stringify([...new Set(items.map((g) => g.card.id))])
+  const onOpenChange = useCallback((open: boolean) => onMenuCards(open ? (JSON.parse(menuSig) as string[]) : []), [menuSig, onMenuCards])
+  const shown = items.find((g) => g.item.key === card.shownItem)
+  if (shown === undefined) return null
+  const row = { moveId: shown.item.moveId, moveType: shown.item.moveType, power: shown.item.power, basis: shown.item.basis, ...(card.rows[0]?.refs === undefined ? {} : { refs: card.rows[0].refs }) }
+  const opponentId = card.opponent.id
+  const adding: MoveAdding | undefined =
+    tab === 'defense' && card.opponent.source === 'ladder'
+      ? {
+          opponentId,
+          onAdd: (moveId) => dispatch({ type: 'add-move', opponentId, moveId }),
+          onRemove: (moveId) => dispatch({ type: 'remove-move', opponentId, moveId }),
+        }
+      : undefined
+  return (
+    <MoveMenu
+      game={game}
+      tab={tab}
+      rollSteps={rollSteps}
+      items={items}
+      shown={card.shownItem}
+      selected={card.selected}
+      onChoose={(item) => onChooseItem(group, card, item)}
+      onReset={() => onResetItem(group)}
+      label={`${rowTitle(game, { moveId: shown.item.moveId, power: shown.item.power }, false)} 기술 선택${card.selected ? ' (직접 고름)' : ''}`}
+      testId={testId}
+      adding={adding}
+      focusKey={JSON.stringify([tab, group.key, testId])}
+      onOpenChange={onOpenChange}
+    >
+      <MoveLabel game={game} tab={tab} row={row} trailing={<Caret />} />
+    </MoveMenu>
+  )
+}
+
+export const CardItem = memo(function CardItem({ game, tab, group, card, rollSteps, expanded, onToggle, onSelect, target, dispatch, groupLabelId, items, onChooseItem, onResetItem, onMenuCards }: Props) {
   const names = namesOf(game)
   const ladder = card.opponent.source === 'ladder'
+  const speed = tab === 'speed'
   const detailId = `card-detail-${encodeURIComponent(group.key)}`
   const multi = group.options.length > 1
   // 래더 행은 직접 추가 폼 때문에 배분이 하나여도 늘 고를 수 있는 배지다(관련 SP가 없으면 추가할 것이 없다).
@@ -670,12 +722,14 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
       data-group-key={group.key}
       data-opponent={card.opponent.id}
       data-berry={group.berry?.item}
+      data-power-item={tab === 'defense' ? group.berry?.item : undefined}
       data-category={card.category ?? 'none'}
       data-origin={ladder ? 'ladder' : 'custom'}
       data-rank={ladder ? card.opponent.rank : undefined}
       data-state={card.state}
       data-headline={card.headline.kind}
       data-variable={card.variable ? 'true' : 'false'}
+      data-items={items.length}
       data-user-added={isUser(card) ? 'true' : undefined}
       data-pinned={isPinned(group, card) ? 'true' : undefined}
     >
@@ -688,7 +742,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
             {group.berry !== undefined && (
               <>
                 {' '}
-                <BerryBadge game={game} item={group.berry.item} />
+                <ItemVariantBadge game={game} item={group.berry.item} />
               </>
             )}
           </span>
@@ -708,9 +762,13 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
           </span>
         )}
         <span className="card-headline" data-testid="card-headline" id={headlineId}>
-          <Headline game={game} tab={tab} card={card} badge={result !== undefined} />
+          {card.shownItem !== undefined && items.some((g) => g.item.key === card.shownItem) ? (
+            <ShownMove game={game} tab={tab} group={group} card={card} rollSteps={rollSteps} items={items} onChooseItem={onChooseItem} onResetItem={onResetItem} onMenuCards={onMenuCards} dispatch={dispatch} testId="move-pick" />
+          ) : (
+            <Headline game={game} tab={tab} card={card} badge={result !== undefined} />
+          )}
         </span>
-        {/* 왼쪽부터 포켓몬 → SP 배분 → 기술 → 결과(+변동 가능), 오른쪽 끝에는 "외 n행"만 */}
+        {/* 왼쪽부터 포켓몬 → SP 배분 → 기술 → 결과(+변동 가능) */}
         {(card.state === 'error' || resultBody !== null || card.variable) && (
           <span className="card-result">
             {card.state === 'error' && <span className="badge-error">계산 불가</span>}
@@ -718,11 +776,9 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
             {card.variable && <VariableTag id={variableId} />}
           </span>
         )}
-        {card.moreRows > 0 && (
-          <span className="card-more" data-testid="card-more">
-            외 {card.moreRows}행
-          </span>
-        )}
+        <span className="card-chev" data-testid="card-chev" data-open={expanded ? 'true' : 'false'} aria-hidden="true">
+          <Caret />
+        </span>
       </div>
       {card.notices.map((n) => (
         <p key={JSON.stringify([n.kind, n.owner, n.moveId])} className="card-notice" data-testid="card-notice">
@@ -731,32 +787,33 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
       ))}
       <div id={detailId} className="card-detail" hidden={!expanded}>
         {expanded && (
-          <div className="detail-grid">
-            <BundleList
-              tab={tab}
-              group={group}
-              card={card}
-              rollSteps={rollSteps}
-              onSelect={onSelect}
-              dispatch={dispatch}
-              spMax={spMax}
-              optionId={optionId}
-              unpinHintId={`${uid}-unpin-hint`}
-            />
-            {/* 오른쪽 영역 이름 = 선택 배분 항목(목록에 없으면 일반 이름) */}
+          // 공격·방어 탭 상세는 판정만(배분·기술 선택은 간단행 배지에서, R9). 스피드 탭은 왼쪽 배분 목록을 그대로 둔다.
+          <div className={`detail-grid${speed ? '' : ' single'}`}>
+            {speed && (
+              <BundleList
+                tab={tab}
+                group={group}
+                card={card}
+                rollSteps={rollSteps}
+                onSelect={onSelect}
+                dispatch={dispatch}
+                spMax={spMax}
+                optionId={optionId}
+                unpinHintId={`${uid}-unpin-hint`}
+              />
+            )}
+            {/* 판정 영역 이름 = 선택 배분 항목(스피드 탭 목록), 그 밖은 배분 문구 */}
             <div
               role="region"
               className="bundle-panel"
-              aria-labelledby={selectedIndex >= 0 ? optionId(selectedIndex) : undefined}
-              aria-label={selectedIndex >= 0 ? undefined : '선택한 노력치 배분의 판정'}
+              aria-labelledby={speed && selectedIndex >= 0 ? optionId(selectedIndex) : undefined}
+              aria-label={speed && selectedIndex >= 0 ? undefined : `${bundleAria(card, isPinned(group, card))} 판정`}
               data-testid="bundle-panel"
             >
               {card.state === 'error' && card.error && <p className="row-error">계산 불가: {koReason(game, card.error)}</p>}
               {card.rows.length > 0 && (
                 <ol className="rows">
-                  {card.rows.map((r) => (
-                    <RowDetail key={r.id} game={game} tab={tab} row={r} />
-                  ))}
+                  {card.pair !== undefined ? <PairDetail game={game} card={card} /> : card.rows.map((r) => <RowDetail key={r.id} game={game} tab={tab} row={r} />)}
                 </ol>
               )}
               {target !== undefined && <CustomEditor key={card.id} game={game} tab={tab} card={card} target={target} dispatch={dispatch} />}
@@ -775,6 +832,8 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
 function sameProps(a: Props, b: Props): boolean {
   if (a.game !== b.game || a.tab !== b.tab || a.card !== b.card || a.rollSteps !== b.rollSteps || a.expanded !== b.expanded) return false
   if (a.onToggle !== b.onToggle || a.onSelect !== b.onSelect || a.target !== b.target || a.dispatch !== b.dispatch || a.groupLabelId !== b.groupLabelId) return false
+  if (a.onChooseItem !== b.onChooseItem || a.onResetItem !== b.onResetItem || a.onMenuCards !== b.onMenuCards) return false
+  if (a.items.length !== b.items.length || !a.items.every((g, i) => g.item === b.items[i].item && g.card === b.items[i].card)) return false
   if (a.group === b.group) return true
   if (a.group.key !== b.group.key || a.group.opponent !== b.group.opponent || a.group.berry?.item !== b.group.berry?.item || a.group.options.length !== b.group.options.length)
     return false

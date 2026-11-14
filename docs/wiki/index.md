@@ -36,3 +36,4 @@ authoring_rules: 위키 구조·영역(area)/섹션(section) 작성 규칙은 �
 ### SP 구간 표
 
 - `2026-11-07` **SP 구간 판정 표 화면(메타 카드 리스트)** — [PRD](../raw/feature/sp-sweep-table/prd.md) · [ADR](../raw/feature/sp-sweep-table/adr.md) · [Notes](../raw/feature/sp-sweep-table/notes.md)
+- `2026-11-13` **공격·방어 탭 판정 행 기능 확장과 상세 화면 가시성 개편(상대 기술 표시·설정, 화력 도구 행)** — [PRD](../raw/feature/damage-tabs-row-revamp/prd.md) · [ADR](../raw/feature/damage-tabs-row-revamp/adr.md) · [Notes](../raw/feature/damage-tabs-row-revamp/notes.md)

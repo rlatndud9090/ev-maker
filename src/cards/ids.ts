@@ -4,6 +4,11 @@ import type { AddedBundle, Category, PinnedBundle, PresetIndex, Tab } from './ty
 
 type Part = string | number | null
 
+/** 성묘: 기본 조건 대신 쓰러진 아군 1·2·3(위력 100·150·200) 조건 항목만 둔다(위력 50 항목 없음). 랭크 후 항목은 1기절 기준 */
+export const LAST_RESPECTS = 'lastrespects'
+export const LAST_RESPECTS_FAINTS: readonly number[] = [1, 2, 3]
+export const faintConditionId = (fainted: number): string => JSON.stringify(['faint', fainted])
+
 export function cardId(parts: readonly Part[]): string {
   return JSON.stringify(parts)
 }

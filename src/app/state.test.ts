@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_CRITERIA, DEFAULT_ROLL_STEPS, DEFAULT_TOP_N, type AddedBundle, type PinnedBundle } from '../cards'
+import { BASE_CONDITION_ID, DEFAULT_CRITERIA, DEFAULT_ROLL_STEPS, DEFAULT_TOP_N, itemKey, type AddedBundle, type PinnedBundle } from '../cards'
 import type { StatId } from '../data/schema'
 import { realData } from '../cards/testing'
 import { toPokemonSet } from '../ui/setDraft'
 import { EXAMPLE_DRAFT } from './example'
 import { toCardInput } from './input'
-import { initialState, reducer, type AppAction, type AppState } from './state'
+import { initialState, reducer, type AppAction, type AppState, type MoveChoice } from './state'
 
 const start = (): AppState => initialState('m-c')
 const run = (state: AppState, ...actions: AppAction[]): AppState => actions.reduce(reducer, state)
@@ -22,6 +22,7 @@ describe('initialState', () => {
     expect(s.customTargets).toEqual([])
     expect(s.addedBundles).toEqual([])
     expect(s.pinnedBundles).toEqual([])
+    expect(s.addedMoves).toEqual([])
     expect(s.criteria.bundleShareMin).toBe(0.05)
     expect(s.rollSteps).toBe(14)
     expect(s.rollSteps).toBe(DEFAULT_ROLL_STEPS)
@@ -52,12 +53,20 @@ describe('reducer', () => {
     const s = start()
     const next = reducer(s, { type: 'set-criteria', criteria: { bundleShareMin: 0.1 } })
     expect(next.criteria).toEqual({ ...DEFAULT_CRITERIA, bundleShareMin: 0.1 })
-    expect(Object.keys(next.criteria).sort()).toEqual(['berryShareMin', 'bundleShareMin', 'rankShareMin', 'scarfShareMin'])
+    expect(Object.keys(next.criteria).sort()).toEqual(['berryShareMin', 'bundleShareMin', 'powerItemShareMin', 'rankShareMin', 'scarfShareMin'])
     expect(next.generation).toBe(1)
-    for (const criteria of [{ bundleShareMin: NaN }, { bundleShareMin: 1.01 }, { rankShareMin: 1.5 }, { scarfShareMin: -0.1 }, { berryShareMin: 2 }]) {
+    for (const criteria of [{ bundleShareMin: NaN }, { bundleShareMin: 1.01 }, { rankShareMin: 1.5 }, { scarfShareMin: -0.1 }, { berryShareMin: 2 }, { powerItemShareMin: -0.01 }, { powerItemShareMin: NaN }]) {
       expect(reducer(next, { type: 'set-criteria', criteria })).toBe(next)
     }
     expect(reducer(next, { type: 'set-criteria', criteria: { bundleShareMin: 0.1 } })).toBe(next)
+  })
+
+  it('화력 도구 최소(기본 5%)를 바꾸면 세대를 올린다(R14)', () => {
+    const s = start()
+    expect(s.criteria.powerItemShareMin).toBe(0.05)
+    const next = reducer(s, { type: 'set-criteria', criteria: { powerItemShareMin: 0.4 } })
+    expect(next.criteria).toEqual({ ...DEFAULT_CRITERIA, powerItemShareMin: 0.4 })
+    expect(next.generation).toBe(s.generation + 1)
   })
 
   it('고난수 기준은 1~15 정수 n 하나만 반영하고 세대를 올린다(같은 값·범위 밖·비정수는 그대로)', () => {
@@ -271,6 +280,72 @@ describe('reducer', () => {
   })
 })
 
+describe('상대 기술 추가·직접 선택 해제', () => {
+  const choice = (opponentId: string, key: string, tab: MoveChoice['tab'] = 'defense'): MoveChoice => ({ tab, source: 'ladder', opponentId, key })
+  const rankKey = (moveId: string) => itemKey(moveId, JSON.stringify(['rank', 'opponent', 'move', 'swordsdance']))
+  const addMove = (opponentId: string, moveId: string): AppAction => ({ type: 'add-move', opponentId, moveId })
+
+  it('add-move: 추가(세대 +1) + 그 기술 랭크 전 항목을 (방어 탭, 래더, 상대) 직접 선택으로 바꾼다', () => {
+    const s = run(start(), { type: 'choose-move', choice: choice('kingambit', itemKey('ironhead', BASE_CONDITION_ID)) }, { type: 'choose-move', choice: choice('kingambit', 'x', 'attack') })
+    const added = reducer(s, addMove('kingambit', 'thunderpunch'))
+    expect(added.addedMoves).toEqual([{ opponentId: 'kingambit', moveId: 'thunderpunch' }])
+    expect(added.generation).toBe(s.generation + 1)
+    expect(added.moveChoices).toEqual([choice('kingambit', 'x', 'attack'), choice('kingambit', itemKey('thunderpunch', BASE_CONDITION_ID))])
+  })
+
+  it('add-move 성묘: 직접 선택은 랭크 전 항목인 성묘(100) 조건 항목이다(위력 50 항목은 없다, PRD R15)', () => {
+    const added = reducer(start(), addMove('basculegion', 'lastrespects'))
+    expect(added.moveChoices).toEqual([choice('basculegion', itemKey('lastrespects', JSON.stringify(['faint', 1])))])
+  })
+
+  it('add-move: 같은 (상대, 기술)이 이미 있거나 빈 문자열이면 무시', () => {
+    const s = reducer(start(), addMove('kingambit', 'thunderpunch'))
+    expect(reducer(s, addMove('kingambit', 'thunderpunch'))).toBe(s)
+    expect(reducer(s, addMove('', 'thunderpunch'))).toBe(s)
+    expect(reducer(s, addMove('kingambit', ''))).toBe(s)
+    expect(reducer(s, addMove('garchomp', 'thunderpunch')).addedMoves).toHaveLength(2)
+  })
+
+  it('remove-move: 삭제(세대 +1), 그 기술 항목(랭크 후 포함)이 선택돼 있으면 해제, 다른 기술 선택은 유지', () => {
+    const s = run(start(), addMove('kingambit', 'thunderpunch'), addMove('kingambit', 'crunch'))
+    const removed = reducer(s, { type: 'remove-move', opponentId: 'kingambit', moveId: 'thunderpunch' })
+    expect(removed.addedMoves).toEqual([{ opponentId: 'kingambit', moveId: 'crunch' }])
+    expect(removed.generation).toBe(s.generation + 1)
+    expect(removed.moveChoices).toEqual([choice('kingambit', itemKey('crunch', BASE_CONDITION_ID))])
+    const rank = run(s, { type: 'choose-move', choice: choice('kingambit', rankKey('thunderpunch')) })
+    expect(reducer(rank, { type: 'remove-move', opponentId: 'kingambit', moveId: 'thunderpunch' }).moveChoices).toEqual([])
+    const kept = reducer(rank, { type: 'remove-move', opponentId: 'kingambit', moveId: 'crunch' })
+    expect(kept.moveChoices).toBe(rank.moveChoices)
+    expect(reducer(s, { type: 'remove-move', opponentId: 'kingambit', moveId: 'nope' })).toBe(s)
+  })
+
+  it('set-draft: SP·성격만 바뀌면 직접 선택 유지, 종·기술·도구·특성·메가가 바뀌면 전부 해제(추가 기술은 남는다)', () => {
+    const s = run(start(), addMove('kingambit', 'thunderpunch'), { type: 'choose-move', choice: choice('garchomp', 'y', 'attack') })
+    const sp = reducer(s, { type: 'set-draft', draft: { ...s.draft, sp: { ...s.draft.sp, hp: '10' }, nature: 'jolly', natureMinusAuto: true } })
+    expect(sp.generation).toBe(s.generation + 1)
+    expect(sp.moveChoices).toBe(s.moveChoices)
+    expect(reducer(s, { type: 'commit-sp', stat: 'def', value: 4 }).moveChoices).toBe(s.moveChoices)
+    for (const draft of [
+      { ...s.draft, item: 'choiceband' },
+      { ...s.draft, ability: 'sandveil' },
+      { ...s.draft, species: 'kingambit' },
+      { ...s.draft, moves: [...s.draft.moves].reverse() },
+      { ...s.draft, mega: !s.draft.mega },
+    ]) {
+      const next = reducer(s, { type: 'set-draft', draft })
+      expect(next.moveChoices).toEqual([])
+      expect(next.addedMoves).toEqual(s.addedMoves)
+      expect(next.generation).toBe(s.generation + 1)
+    }
+  })
+
+  it('toCardInput이 추가 기술을 넘긴다', () => {
+    const { game, bo1 } = realData()
+    const s = reducer(start(), addMove('kingambit', 'thunderpunch'))
+    expect(toCardInput(s, game, bo1).addedMoves).toEqual([{ opponentId: 'kingambit', moveId: 'thunderpunch' }])
+  })
+})
+
 describe('toCardInput', () => {
   it('초안을 보정 없이 세트로 풀고 상태 값을 그대로 넘긴다', () => {
     const { game, bo1 } = realData()
@@ -285,5 +360,53 @@ describe('toCardInput', () => {
     expect(input.rollSteps).toBe(14)
     const broken = reducer(s, { type: 'set-draft', draft: { ...s.draft, sp: { ...s.draft.sp, def: '' } } })
     expect(toCardInput(broken, game, bo1).mySet.sp.def).toBeNaN()
+  })
+})
+
+describe('종 교체(switch-species)', () => {
+  const sneasler = { ...EXAMPLE_DRAFT, species: '포푸니크', ability: 'unburden', item: '하얀허브', nature: 'adamant', moves: ['인파이트', '', '', ''] }
+  it('떠나는 종의 초안을 기억하고 처음 고른 종은 준 초안을 쓴다, 세대 +1·종 교체 세대 기록', () => {
+    const next = reducer(start(), { type: 'switch-species', from: 'garchomp', to: 'sneasler', draft: sneasler })
+    expect(next.draft).toEqual(sneasler)
+    expect(next.draftCache).toEqual({ garchomp: EXAMPLE_DRAFT })
+    expect(next.generation).toBe(1)
+    expect(next.speciesGeneration).toBe(1)
+  })
+
+  it('돌아오면 기억한 초안이 준 초안보다 우선한다(종 칸 글자만 새 입력)', () => {
+    const edited = { ...EXAMPLE_DRAFT, item: '구애스카프', sp: { ...EXAMPLE_DRAFT.sp, hp: '10' } }
+    const s = run(
+      start(),
+      { type: 'set-draft', draft: edited },
+      { type: 'switch-species', from: 'garchomp', to: 'sneasler', draft: sneasler },
+      { type: 'switch-species', from: 'sneasler', to: 'garchomp', draft: { ...sneasler, species: 'garchomp' } },
+    )
+    expect(s.draft).toEqual({ ...edited, species: 'garchomp' })
+    expect(s.draftCache.sneasler).toEqual(sneasler)
+    expect(s.speciesGeneration).toBe(s.generation)
+  })
+
+  it('종 기억·종 교체 세대는 계산 입력이 아니다, SP 변경은 종 교체 세대를 바꾸지 않는다', () => {
+    const { game, bo1 } = realData()
+    const s = reducer(start(), { type: 'switch-species', from: 'garchomp', to: 'sneasler', draft: sneasler })
+    const sp = reducer(s, { type: 'commit-sp', stat: 'hp', value: 5 })
+    expect(sp.generation).toBe(s.generation + 1)
+    expect(sp.speciesGeneration).toBe(s.speciesGeneration)
+    expect(toCardInput(s, game, bo1)).toEqual(toCardInput({ ...s, draftCache: {}, speciesGeneration: 0 }, game, bo1))
+  })
+
+  it('from === to면 set-draft와 같다(기억·종 교체 세대 그대로), from이 없으면 기억하지 않는다', () => {
+    const s = start()
+    const same = reducer(s, { type: 'switch-species', from: 'garchomp', to: 'garchomp', draft: { ...EXAMPLE_DRAFT, item: '' } })
+    expect(same.draftCache).toEqual({})
+    expect(same.speciesGeneration).toBe(0)
+    expect(same.draft.item).toBe('')
+    expect(reducer(s, { type: 'switch-species', from: undefined, to: 'sneasler', draft: sneasler }).draftCache).toEqual({})
+  })
+
+  it('직접 고른 기술 항목은 종이 바뀌면 풀린다', () => {
+    const choice: MoveChoice = { tab: 'attack', source: 'ladder', opponentId: 'incineroar', key: itemKey('earthquake', BASE_CONDITION_ID) }
+    const s = run(start(), { type: 'choose-move', choice }, { type: 'switch-species', from: 'garchomp', to: 'sneasler', draft: sneasler })
+    expect(s.moveChoices).toEqual([])
   })
 })

@@ -20,12 +20,15 @@ export interface DisplayCriteria {
   scarfShareMin: number
   /** 반감열매 점유율 기준(0~1, 이상이면 공격 탭에 그 열매를 지닌 별도 행) */
   berryShareMin: number
+  /** 화력 도구 점유율 기준(0~1, 이상이면 방어 탭에 그 도구를 지닌 별도 행) */
+  powerItemShareMin: number
 }
 export const DEFAULT_CRITERIA: Readonly<DisplayCriteria> = Object.freeze({
   bundleShareMin: 0.05,
   rankShareMin: 0.1,
   scarfShareMin: 0.1,
   berryShareMin: 0.05,
+  powerItemShareMin: 0.05,
 })
 
 export interface CardFilters {
@@ -78,6 +81,13 @@ export interface AddedBundle {
   sp: Readonly<Partial<Record<StatId, number>>>
 }
 
+/** 방어 탭 래더 상대 후보에 사용자가 더한 기술. 기본 후보 기준과 무관하게 후보다(스냅샷에 없거나 변화기면 무시) */
+export interface AddedMove {
+  /** 래더 메타 항목 id */
+  opponentId: string
+  moveId: string
+}
+
 /**
  * 사용자가 고정한 래더 상대 배분(목록 맨 위, 고정한 순서). key = 그 카드 묶음의 정규화 키(BundleSpec.key).
  * 직접 추가 배분도 추가와 함께 고정된다(키 = addedBundleKey). 고정은 계산 입력이 아니다(정렬·표시만 바꾼다).
@@ -106,6 +116,8 @@ export interface CardInput {
   customTargets: readonly CustomTarget[]
   /** 사용자 추가 배분(추가 순). 없으면 빈 배열 */
   addedBundles?: readonly AddedBundle[]
+  /** 사용자가 추가한 상대 기술(방어 탭 래더 상대 전용, 추가 순). 없으면 빈 배열 */
+  addedMoves?: readonly AddedMove[]
 }
 
 export interface ErrorReason {
@@ -228,21 +240,6 @@ export interface FixedSpec {
   conditions: BattleConditions
 }
 
-/**
- * 다른 분류 카드에 행이 있는 내 기술(공격 탭)·상대 기술(방어 탭)을 이 카드의 대표 세트·같은 조건으로 단건 판정하는 비교 전용 후보.
- * 가장 센 기술은 상대 한 마리의 기술 전부(분류를 가로질러)에서 고른다(사용자 피드백 2026-11-11). 이 후보가 고르면 이 카드의 행은 빠진다(선공기 제외).
- */
-export interface ProbeSpec {
-  id: string
-  cardId: string
-  moveId: string
-  /** judgeDamage 관점: 공격 탭 attacker(나 → 상대), 방어 탭 defender(상대 → 나) */
-  side: 'attacker' | 'defender'
-  attacker: PokemonSet
-  defender: PokemonSet
-  conditions: BattleConditions
-}
-
 export interface BundleStat {
   stat: StatId
   sp: number
@@ -277,29 +274,36 @@ export interface OpponentHeader {
 }
 
 /**
- * 카드 안 조건 하나(기본 상태·랭크 수단 행 조건)의 기술 후보. 현재 세트 단건 판정(probe, 고정 판정은 그 결과)으로
- * 1타 확률 → 최대 대미지 비율 → 후보 순서로 가장 센 기술 하나만 고르고, 선공기 행 조건을 채운 선공기는 함께 남긴다.
- * 무효·계산 불가 후보는 고르지 않는다(모든 후보가 무효면 첫 후보를 고른다 — 상대 행이 "무효"로 남게). 고른 후보에만 양 끝·스윕·변형·극단·쌍 작업이 생긴다.
+ * 카드 안 조건 하나(기본 상태·랭크 수단 조건)의 기술 후보 = 기술 선택 목록의 항목 하나(items.ts).
+ * 카드는 보이는 항목(사용자가 고른 것, 없으면 기본 항목) 하나의 행만 낸다. 기본 항목 결정에 필요한 항목과 보이는 항목에만 행 작업이 생긴다.
  */
 export interface MoveCandidate {
-  /** row = 공격 탭 스윕 행, filter = 방어 탭 극단 필터(H행·B/D행 쌍), fixed = 공격 탭 내 SP 무관 판정, probe = 다른 분류 기술의 비교 전용 판정(행 없음) */
-  target: 'row' | 'filter' | 'fixed' | 'probe'
-  /** rowId·filterId·fixedId·probeId */
+  /** row = 공격 탭 스윕 행(계획 단계 계산 불가 행 포함), filter = 방어 탭 극단 필터(H행·B/D행 쌍), fixed = 공격 탭 내 SP 무관 판정 */
+  target: 'row' | 'filter' | 'fixed'
+  /** rowId·filterId·fixedId */
   id: string
   moveId: string
-  /** 선공기 행 조건(keepsPriorityRow): 우선도 > 0이고 대상 약점이거나 사용자 자속·반감 아님. 가장 센 기술이 아니어도 행으로 남는다 */
+  /** 우선도 > 0 기술(방어 탭 선공기 우선 규칙) */
   priority: boolean
+  /** 기술 채용률(PRD R16): 방어 탭 래더 상대 = 그 상대 기술 사용률, 공격 탭 = 내 종(메가면 메가 항목, 없으면 원종) 메타 기술 사용률. 통계에 없으면 0 */
+  share: number
+  /** 기존 기술 순서: 그 상대의 모든 분류 후보 기술 중 순번(공격 탭 내 기술 칸 순, 방어 탭 상대 후보 순·목록 밖 타겟 지정 순, 계산 불가 기술은 뒤) */
+  order: number
+  /** 주력 기술(PRD R4-1): 공격 탭 내 기술 전부, 방어 탭 items.mainMoves(선공기 제외·채용률 하한, 분류 카드를 가로질러 정함) */
+  main: boolean
+  /** 사용자가 추가한 상대 기술(방어 탭 래더 상대, CardInput.addedMoves) */
+  added?: true
 }
 export interface ConditionGroup {
-  /** 카드 안 유일: JSON.stringify(['base']) 또는 ['rank', owner, means.kind, means.id] */
+  /** 카드 안 유일: JSON.stringify(['base']), ['faint', 1|2|3](성묘 위력 조건, ids.faintConditionId) 또는 ['rank', owner, means.kind, means.id] */
   id: string
   /** 기존 순서(공격 탭 내 기술 슬롯 순, 방어 탭 상대 기술 사용률 순). 동률이면 앞이 이긴다 */
   candidates: readonly MoveCandidate[]
 }
 
-/** 공격 탭 반감열매 변형: 상대가 이 열매를 지닌 가정(기본 카드는 상대 도구 없음). 화면에서 별도 행이다 */
+/** 상대 도구 변형: 공격 탭 반감열매·방어 탭 화력 도구를 지닌 가정(래더 기본 카드는 상대 도구 없음). 화면에서 별도 행이다 */
 export interface BerryVariant {
-  /** 반감열매 도구 id */
+  /** 도구 id(반감열매 또는 화력 도구) */
   item: string
   /** 그 도구의 분포 점유율 */
   share: number
@@ -321,13 +325,19 @@ export interface CardSpec {
   rowIds: readonly string[]
   filterIds: readonly string[]
   fixedIds: readonly string[]
-  /** 조건별 기술 후보(스피드 탭·error 카드는 빈 배열). 후보가 아닌 행(계획 단계 계산 불가)은 그대로 표시한다 */
+  /** 조건별 기술 후보 = 기술 선택 항목(스피드 탭·error 카드는 빈 배열) */
   conditions: readonly ConditionGroup[]
   /**
-   * 반감열매 변형 카드만. triggers = 이 카드 대표 세트에 그 열매가 발동하는 내 기술 id(berryActivates).
-   * 조립은 기본 조건의 가장 센 기술이 triggers에 없으면 이 카드를 보이지 않는다(열매가 판정에 관여하지 않는 행은 별도 행일 필요가 없다)
+   * 도구 변형 카드만(이름은 반감열매에서 왔고 방어 탭 화력 도구도 쓴다). triggers = 이 카드 대표 세트에서 그 도구가 관여하는 기술 id
+   * (공격 탭: 열매가 발동하는 내 기술, berryActivates. 방어 탭: 화력 도구가 보정을 주는 상대 기술, powerItemBoosts).
+   * 조립은 보이는 항목의 기술이 triggers에 없으면 이 카드를 보이지 않는다(도구가 판정에 관여하지 않으면 별도 행일 필요가 없다)
    */
   berry?: BerryVariant & { triggers: readonly string[] }
+  /**
+   * 방어 탭만: 상대 대표 세트를 스피드 SP 최대·스피드 상승 성격으로 바꾸고 구애스카프를 빼도(랭크·순풍 없이) 내 현재 스피드보다 엄격히 느림.
+   * 참이면 기본 항목에 선공기 우선 규칙을 쓴다(items.resolveDefault)
+   */
+  speedEdge?: boolean
 }
 
 export interface TabPlan {
@@ -348,8 +358,6 @@ export interface TabPlan {
   rows: Readonly<Record<string, RowSpec>>
   filters: Readonly<Record<string, ExtremeSpec>>
   fixed: Readonly<Record<string, FixedSpec>>
-  /** 비교 전용 후보(다른 분류 기술) */
-  probes: Readonly<Record<string, ProbeSpec>>
   /** 메타 목록 안에 있어 목록 밖 타겟으로 받지 않은 rosterId */
   customTargetConflicts: readonly string[]
   /** 내 기술의 계산하지 않음 안내(분류 가변·내 HP 의존, 탭 안내) */
@@ -359,8 +367,8 @@ export interface TabPlan {
 // ---------- 행 작업과 결과 ----------
 
 export type RowTask =
-  /** 후보 기술의 현재 세트(계획 시점 SP·성격) 단건 판정. 가장 센 기술 고르기 전용 */
-  | { kind: 'probe'; target: 'row' | 'filter' | 'probe'; id: string }
+  /** 후보 기술의 현재 세트(계획 시점 SP·성격) 단건 판정. 목록 배지·정렬·기본 항목 결정용 */
+  | { kind: 'probe'; target: 'row' | 'filter'; id: string }
   /** 현재 성격 0·최대 + 변형 범위 끝(neutral 0·plus 최대) */
   | { kind: 'ends'; rowId: string }
   | { kind: 'sweep'; rowId: string; stage: 2 | 3 }
@@ -455,6 +463,10 @@ export interface RowView {
   kind: RowKind
   order: number
   moveId?: string
+  /** 판정에서 실제 쓰는 기술 타입(공격측 특성·날씨·필드 반영, attackMoveType). 스냅샷에 없는 기술이면 없음 */
+  moveType?: string
+  /** 판정 조건이 덮어쓴 기술 위력(성묘 쓰러진 아군 수, conditionMovePower). 라벨에 "(위력)"으로 붙는다 */
+  power?: number
   sweepStat?: StatId
   /** 기술 분류와 참조가 다를 때 표기용(예: 사이코쇼크 → 상대 def) */
   refs?: MoveStatRefs
@@ -483,8 +495,6 @@ export interface RowView {
    * 그 밖은 변형 범위 끝·현재·변형 스윕 칸 중 최선이며 성격 변형 스윕이 다 나온 뒤에만 붙는다. 판정을 다시 하지 않고 이미 나온 칸에서 고른다.
    */
   best?: string
-  /** 가장 센 기술이 아니지만 선공기 행 조건을 채워 남은 행 */
-  keptAsPriority?: true
   /** 칸이 없는 내 SP 무관 판정 행(공격 탭 속임수)의 판정 칸(결과 배지용) */
   fixedCell?: CompactCell
 }
@@ -512,6 +522,34 @@ export interface TargetView {
   /** 상승 성격 최소. 닿지 않으면 null. 둘 중 하나 이상은 null이 아니다 */
   plus: TargetOption | null
 }
+/** 내구 합계 띠의 H·B/D 분배(defense = def 또는 spd SP) */
+export interface SumSplit {
+  hp: number
+  defense: number
+}
+/** 합계 띠 범례 한 줄: from~to 합계에서 label, 그 단계에 처음 닿는 최소 분배와 다른 성격 변형의 같은 단계 최소 분배(닿지 않으면 null) */
+export interface SumBandSpan {
+  from: number
+  to: number
+  label: RollTier
+  min: SumSplit
+  alt: SumSplit | null
+}
+/** 방어 탭 내구 합계 띠(sumBandOf). 칸 sum = 0~max, label = 그 합계를 최적 분배했을 때의 최선 판정(nature 변형 기준) */
+export interface SumBandView {
+  defenseStat: 'def' | 'spd'
+  nature: NatureVariant
+  /** 현재 성격이 무보정·상승 어느 변형도 아니어서(B/D 하락) 무보정 기준으로 칠함 */
+  fallback: boolean
+  /** fallback일 때 이유: minus = 현재 성격이 B/D 하락, other = 그 밖(스냅샷에 없는 성격 id 등) */
+  fallbackReason?: 'minus' | 'other'
+  /** 합계 최대(2 × 능력치당 최대) */
+  max: number
+  cells: readonly { sum: number; label: RollTier }[]
+  spans: readonly SumBandSpan[]
+  /** 표시용 현재 분배·합계, 현재 분배 실제 판정, 같은 합계 최적이 더 좋으면 그 분배 */
+  current: SumSplit & { sum: number; label?: RollTier; best?: { label: RollTier; split: SumSplit } }
+}
 export type Headline =
   | { kind: 'row'; rowId: string }
   | { kind: 'error'; reason: ErrorReason }
@@ -527,19 +565,68 @@ export interface CardView {
   opponent: OpponentHeader
   category: Category | null
   bundle: BundleSpec
-  /** 반감열매 변형 카드(별도 행)면 그 열매 */
+  /** 도구 변형 카드(별도 행: 공격 탭 반감열매·방어 탭 화력 도구)면 그 도구 */
   berry?: BerryVariant
-  /** 표시 행(조건별 가장 센 기술·선공기 행 조건을 채운 선공기·계산 불가, 변화 없음 행 포함), 카드 안 순서 */
+  /**
+   * 보이는 항목의 판정 행(공격 탭 1행, 방어 탭 H행·B/D행 쌍 또는 극단 필터 고정 1줄, 계산 불가·판정 전 포함). 스피드 탭은 카드의 모든 행
+   */
   rows: readonly RowView[]
   /**
-   * 대표 행: 변화 있는 행이 있으면 경계까지 SP 차이가 가장 작은 행, 없으면 기본 조건의 가장 센 기술 행(선공기 행 아님).
+   * 대표 행: 변화 있는 행이 있으면 경계까지 SP 차이가 가장 작은 행, 없으면 첫 ok 행.
    * 판정 전·갱신 대기·잠정 변화 없음(provisional) 행이 있고 변화 있는 ok 행이 없으면 updating.
    */
   headline: Headline
-  /** 이 카드에 칸이 있는 ok·stale 변화 있는 행이 있음("변동 가능"). 대표 행과 따로 세어 드래그 중(updating)에도 유지된다 */
+  /** 보이는 항목 행 중 칸이 있는 ok·stale 변화 있는 행이 있음("변동 가능"). 대표 행과 따로 세어 드래그 중(updating)에도 유지된다 */
   variable: boolean
-  /** 외 k행 = 표시 행 수 − 1(0이면 생략) */
-  moreRows: number
+  /** 이 카드의 기술 선택 항목(기술 채용률 순, items.compareItems). 스피드 탭·error 카드는 빈 배열 */
+  items: readonly ItemView[]
+  /** 보이는 항목 키(기본 항목이 정해지기 전이고 사용자가 고르지 않았으면 없음) */
+  shownItem?: string
+  /** 기본 항목(정해진 뒤) */
+  defaultItem?: DefaultItemView
+  /** 보이는 항목이 사용자가 직접 고른 것 */
+  selected: boolean
+  /**
+   * 방어 탭: 보이는 항목이 극단 필터를 통과한 쌍(rows = H 행·B/D 행)이면 있다. band = 내구 합계 띠(두 변형 쌍 결과가 나온 뒤에만),
+   * error = 쌍 결과 오류, 또는 행·변형 스윕 오류로 쌍 작업이 끝내 생기지 않음(band 없음)
+   */
+  pair?: { band?: SumBandView; error?: ErrorReason }
+}
+
+/** 기술 선택 목록의 항목 하나(그 카드 대표 세트 기준 현재 SP·성격 단건 판정) */
+export interface ItemView {
+  /** items.itemKey(기술, 조건) — 같은 상대의 모든 카드에서 같다 */
+  key: string
+  moveId: string
+  /** 기술 채용률·기존 기술 순서(MoveCandidate.share·order). 분류를 합친 목록(groupItems) 정렬에 쓴다 */
+  share: number
+  order: number
+  /** 그 항목 판정의 기술 타입(RowView.moveType과 같은 규칙) */
+  moveType?: string
+  /** RowView.power와 같은 규칙 */
+  power?: number
+  /** 랭크 후 항목이면 그 랭크 근거 */
+  basis?: RankBasis
+  /** 우선도 > 0 */
+  priority: boolean
+  /** 사용자가 추가한 상대 기술의 항목(랭크 후 항목 포함, 지우기 대상) */
+  added?: true
+  status: 'pending' | 'ok' | 'immune' | 'error'
+  cell?: CompactCell
+  error?: ErrorReason
+  /** 내 SP·성격 조정으로 판정이 바뀔 수 있음(변동 판정이 나온 뒤에만, 판정 전·계산 불가면 없다) */
+  variable?: boolean
+}
+
+/** 카드의 기본 항목과 분류 사이 비교 근거(같은 상대의 물리·특수 기본 카드 중 어느 분류를 먼저 보일지) */
+export interface DefaultItemView {
+  key: string
+  /** 방어 탭 선공기 우선으로 정해짐 */
+  viaPriority: boolean
+  /** 정상 주력 기술이 없어 목록 첫 정상 항목(없으면 첫 항목)으로 정해짐(PRD R4-1). 분류 사이 비교에서 대표로 정해진 쪽에 진다 */
+  fallback?: true
+  /** 기준 기술 랭크 전 항목의 단건 판정 칸 */
+  basisCell?: CompactCell
 }
 export interface TabView {
   tab: Tab

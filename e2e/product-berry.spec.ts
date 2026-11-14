@@ -13,9 +13,20 @@ async function chooseKingambit(page: Page) {
   await species.fill('대도각참')
   await species.press('Enter')
   await expect(species).toHaveValue('대도각참')
-  // 목록 안 종으로 바꾸면 기술 사용률 상위 4개(도각참·기습·아이언헤드·안다리걸기), 도구(생명의구슬)·SP(A32)는 그대로
+  // 처음 고른 종은 대표 세트(R11: 도각참·기습·아이언헤드·안다리걸기, 도구·SP·성격도). 이 시나리오는 예시 세트의 생명의구슬·
+  // 무보정·H2 A32 S32를 쓰므로 손으로 되돌린다.
   await expect(combo(mySet(page), '기술 1')).toHaveValue('도각참')
-  await expect(combo(mySet(page), '도구')).toHaveValue('생명의구슬')
+  const item = combo(mySet(page), '도구')
+  await item.fill('생명의구슬')
+  await item.press('Enter')
+  await expect(item).toHaveValue('생명의구슬')
+  const plus = mySet(page).locator('button.nat-btn.plus[aria-pressed="true"]')
+  if ((await plus.count()) > 0) await plus.click()
+  await expect(plus).toHaveCount(0)
+  const sp = { HP: '2', 공격: '32', 방어: '0', 특공: '0', 특방: '0', 스피드: '32' }
+  // 합계 상한을 넘지 않게 줄이는 칸부터
+  for (const stat of ['HP', '방어', '특공', '특방', '공격', '스피드'] as const) await mySet(page).getByRole('spinbutton', { name: `SP ${stat} 숫자`, exact: true }).fill(sp[stat])
+  for (const [stat, v] of Object.entries(sp)) await expect(mySet(page).getByRole('spinbutton', { name: `SP ${stat} 숫자`, exact: true })).toHaveValue(v)
   await waitComplete(page)
 }
 
@@ -89,11 +100,14 @@ test.describe('공격 탭 상대 도구: 기합의띠 없음 · 반감열매 별
     const berry = groupRow(page, COLBUR)
     await expect(berry).toHaveCount(1)
     // 열매 행 배분 고정 → 기본 행은 고정 아님
-    await berry.locator('.card-toggle').click()
-    const pin = berry.getByTestId('bundle-list').getByTestId('bundle-pin').first()
+    // (상세 배분 목록은 R9로 없어져 배지 메뉴의 핀으로 고정한다)
+    await berry.locator('button.bundle-btn').click()
+    const menu = berry.getByRole('menu', { name: '노력치 배분', exact: true })
+    const pin = menu.getByTestId('bundle-pin').first()
     await pin.click()
-    await expect(pin).toHaveAttribute('aria-pressed', 'true')
-    await expect(berry.getByTestId('bundle-list').locator('[data-pinned="true"]')).toHaveCount(1)
+    await expect(pin).toHaveAttribute('aria-checked', 'true')
+    await expect(menu.locator('[role="menuitemradio"][data-pinned="true"]')).toHaveCount(1)
+    await menu.press('Escape')
     await expect(groupRow(page, BASCULEGION).locator('[data-pinned="true"]')).toHaveCount(0)
     await expect(groupRow(page, BASCULEGION)).not.toHaveAttribute('data-pinned', 'true')
 
@@ -111,15 +125,15 @@ test.describe('공격 탭 상대 도구: 기합의띠 없음 · 반감열매 별
   })
 })
 
-test('통계 설정 줄: 1280에서 형식·기준 월·최소(%) 네 칸이 한 줄이다(반감열매 칸이 혼자 다음 줄로 내려가지 않는다)', async ({ page }) => {
+test('통계 설정 줄: 1280에서 형식·기준 월·최소(%) 다섯 칸이 한 줄이다(반감열매·화력 도구 칸이 혼자 다음 줄로 내려가지 않는다)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 })
   await openProduct(page)
   const stats = page.getByRole('group', { name: '통계 설정', exact: true })
   const controls = stats.locator('select, input')
-  await expect(controls).toHaveCount(6)
+  await expect(controls).toHaveCount(7)
   const bottoms = await controls.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().bottom)))
   expect(new Set(bottoms).size, JSON.stringify(bottoms)).toBe(1)
-  for (const name of ['SP 배분', '랭크업 기술', '구애스카프', '반감열매']) {
+  for (const name of ['SP 배분', '랭크업 기술', '구애스카프', '반감열매', '화력 도구']) {
     const box = await stats.getByRole('spinbutton', { name: `${name} 최소(%)`, exact: true }).boundingBox()
     expect(box?.width ?? 0, name).toBeLessThan(110)
   }

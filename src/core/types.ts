@@ -49,6 +49,8 @@ export interface BattleConditions {
   spreadTargets?: 1 | 2
   /** 가변 타수 기술의 타수 지정 */
   hits?: number
+  /** 성묘 위력용 쓰러진 아군 수(0~5, 기본 0 → 위력 50 × (1 + n)). 성묘 외 기술·총대장에는 쓰이지 않는다 */
+  lastRespectsFainted?: number
 }
 
 export type CoreErrorCode =

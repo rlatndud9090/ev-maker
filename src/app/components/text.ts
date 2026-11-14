@@ -86,9 +86,11 @@ export function moveRankParts(tab: Tab, row: Pick<RowView, 'basis'> & { refs?: R
 }
 
 /** 행 제목: "지진", "H · 인파이트", "스피드 비교" */
-export function rowTitle(game: Snapshot, row: Pick<RowView, 'moveId' | 'sweepStat'>, withStat = true): string {
+export function rowTitle(game: Snapshot, row: Pick<RowView, 'moveId' | 'sweepStat' | 'power'>, withStat = true): string {
   const names = namesOf(game)
-  const move = row.moveId === undefined ? '스피드 비교' : names.moves.label(row.moveId)
+  const name = row.moveId === undefined ? '스피드 비교' : names.moves.label(row.moveId)
+  // 판정 조건이 위력을 정한 항목(성묘): "성묘(100)"
+  const move = row.power === undefined ? name : `${name}(${row.power})`
   return row.sweepStat === undefined || !withStat ? move : `${STAT_SHORT[row.sweepStat]} · ${move}`
 }
 

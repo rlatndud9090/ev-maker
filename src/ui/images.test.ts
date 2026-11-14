@@ -17,6 +17,7 @@ import {
 } from '../../scripts/data/lib/images.mjs'
 import { PROJECT_ROOT, readProjectJson } from '../../scripts/data/lib/pipeline.mjs'
 import { RESIST_BERRIES } from '../cards/berries'
+import { POWER_ITEMS } from '../cards/powerItems'
 import { indexByFileId, itemIconUrl, pokemonIconUrl } from './images'
 
 const sha256 = (buf: Buffer) => createHash('sha256').update(buf).digest('hex')
@@ -201,8 +202,8 @@ describe('생성 매니페스트·번들 이미지', () => {
     for (const k of Object.keys(HAND_POKEAPI_IDS)) expect(pokemonManifest.entries[k]?.via, k).toBe('hand')
   })
 
-  it('도구 아이콘 대상 = 반감열매 18종, 전부 받았고 앱에서 해석된다', () => {
-    expect([...ITEM_ICON_IDS].sort()).toEqual(Object.keys(RESIST_BERRIES).sort())
+  it('도구 아이콘 대상 = 반감열매 18종 + 화력 도구 22종(R14), 전부 받았고 앱에서 해석된다', () => {
+    expect([...ITEM_ICON_IDS].sort()).toEqual([...Object.keys(RESIST_BERRIES), ...POWER_ITEMS].sort())
     expect(itemManifest.missing).toEqual([])
     expect(Object.keys(itemManifest.entries).sort()).toEqual(pngIds(ITEM_DIR))
     for (const id of ITEM_ICON_IDS) {

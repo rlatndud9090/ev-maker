@@ -280,9 +280,9 @@ export interface ExtremeCase {
 
 /**
  * 내 세트 = EXAMPLE_SET(방어측, 노력 = 무보정). 극단 필터 상승 변형은 B → 장난꾸러기(impish, +B −C), D → 신중(careful, +D −C).
- * 상대 묶음은 그 기술 참조 공격 능력치(성격 포함) 최대 묶음, 기술은 상대 공격기 상위 5 안.
+ * 상대 묶음은 그 기술 참조 공격 능력치(성격 포함) 최대 묶음, 기술은 상대 방어 탭 기본 후보(사용률 5%·나에게 1배 이상) 안.
  * "둘 다 저난수 1타"는 실데이터로 만들 수 없다: 1타 확률 ≤ 2/16이 두 극단 모두 성립하려면 H·B 0/0·무보정 → 32/32·상승의 대미지 감소가
- * 3% 미만이어야 하는데 실제 종족값에서는 15% 이상이다(상위 30 × 공격기 상위 5 × 보존 배분 전수 탐색 0건, __fixtures__/acceptance.test.ts).
+ * 3% 미만이어야 하는데 실제 종족값에서는 15% 이상이다(상위 30 × 당시 후보 규칙 공격기 상위 5 × 보존 배분 전수 탐색 0건, __fixtures__/acceptance.test.ts).
  * 그 분기는 손으로 만든 결과 맵(handPlan) 테스트로 고정한다.
  */
 export const F3 = {
@@ -406,7 +406,7 @@ export const F10 = {
 // ---------- F7 오류 격리(AC 12) ----------
 
 export const F7 = {
-  /** 방어 탭: 잠만보 땅가르기(상위 5 안) → 그 행만 ENGINE_UNSUPPORTED(field 'move') */
+  /** 방어 탭: 잠만보 땅가르기(기본 후보 안) → 그 행만 ENGINE_UNSUPPORTED(field 'move') */
   rowError: { opponent: 'snorlax', move: 'fissure', code: 'ENGINE_UNSUPPORTED', field: 'move' },
   /** 공격 탭: 따라큐 탈 → 그 상대 행 전부 ENGINE_UNSUPPORTED(field 'defender.ability'), 다른 상대는 정상 */
   opponentAbilityError: { opponent: 'mimikyu', code: 'ENGINE_UNSUPPORTED', field: 'defender.ability' },
@@ -549,7 +549,7 @@ export const F12 = {
     probe: { kowtowcleave: { ohko: 1, maxPercent: 123.2 }, suckerpunch: { ohko: 0.125, maxPercent: 102.8 } },
     immune: { opponent: { id: 'farigiraf', spread: 'quiet:10/0/13/30/13/0' }, move: 'suckerpunch' },
   },
-  /** 방어 탭: 상대 상위 5 후보 중 나에게 가장 센 기술(도각참)과 선공기(기습)만 */
+  /** 방어 탭: 상대 기본 후보 중 나에게 가장 센 기술(도각참)과 선공기(기습)만 */
   defense: {
     mySet: EXAMPLE_SET,
     opponent: { id: 'kingambit', spread: 'brave:32/32/0/0/2/0' },

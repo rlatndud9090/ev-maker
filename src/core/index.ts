@@ -25,7 +25,18 @@ export {
   type KoLabel,
   type KoSide,
 } from './bands'
-export { finalSpeed, compareSpeed, minSpToOutspeed, checkSpeedSupport } from './speed'
+export { WEATHER_NEGATING_ABILITIES, finalSpeed, compareSpeed, minSpToOutspeed, checkSpeedSupport } from './speed'
 export { sweep, sweepDamage, sweepSpeed, judgeDamage, judgeSpeed, type CellJudgement, type DamageCategoryOptions, type DamageSweepTarget } from './sweep'
-export { moveStatRefs } from './moveRefs'
-export { SPEED_DEPENDENT_MOVES, SPEED_DEPENDENT_ATTACKER_ABILITIES, attackEffectiveness, attackMoveType, engineMoveOverrides, typeEffectiveness } from './engine'
+export { HELD_ITEM_POWER_MOVES, moveStatRefs } from './moveRefs'
+export { DEFENDER_ABILITY_IGNORING, defenderAbilityFactor, effectivenessAgainst, type EffectivenessDefender } from './effectiveness'
+export {
+  SPEED_DEPENDENT_MOVES,
+  SPEED_DEPENDENT_ATTACKER_ABILITIES,
+  attackEffectiveness,
+  attackMoveType,
+  conditionMovePower,
+  engineMoveOverrides,
+  typeEffectiveness,
+  type MoveTypeField,
+} from './engine'
+export { abilityTerrain, abilityWeather, fieldPriority, isGrounded, psychicTerrainBlocks, withAttackerField, type GroundSide } from './fieldAbilities'

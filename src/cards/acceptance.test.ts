@@ -5,13 +5,13 @@ import {
   CoreError,
   CoreInputError,
   STAT_IDS,
+  attackEffectiveness,
+  attackMoveType,
   judgeDamage,
   judgeSpeed,
-  moveStatRefs,
   natureMultiplier,
   sweepDamage,
   sweepSpeed,
-  typeEffectiveness,
   validateSet,
   type BattleConditions,
   type PokemonSet,
@@ -21,7 +21,7 @@ import { createMetaLoader } from '../data/meta-loader'
 import type { MetaEntry, MetaIndex, MetaSnapshot } from '../data/meta-schema'
 import type { StatId } from '../data/schema'
 import { loadRegulationIndexSync } from '../data/testing'
-import { createMetaView, parseSpreadKey, type MetaView } from '../meta'
+import { createMetaView, parseSpreadKey, representativeAssumption, type MetaView } from '../meta'
 import {
   EXAMPLE_SET,
   F1,
@@ -43,12 +43,16 @@ import {
   type OpponentRef,
 } from './__fixtures__/acceptance'
 import { buildTabView } from './batch'
+import { defaultOption, groupCards, groupItems } from './groups'
+import { BASE_CONDITION_ID, itemKey } from './items'
+import { opponentKey } from './schedule'
+import { judgementKey } from './key'
 import { createLruCache } from './cache'
 import { presetKey } from './ids'
-import { defenseMoveIds, planTab } from './plan'
+import { planTab } from './plan'
 import { cardInput, realData, syntheticView } from './testing'
 import { DEFAULT_CRITERIA, TABS } from './types'
-import type { CardInput, CardSpec, CardView, OpponentHeader, RankBasis, RowKind, RowSpec, RowView, ScarfBasis, Tab, TabPlan, TabView } from './types'
+import type { CardInput, CardSpec, CardView, ExtremeSpec, MoveCandidate, OpponentHeader, RankBasis, RowKind, RowSpec, RowView, ScarfBasis, Tab, TabPlan, TabView } from './types'
 import { DEFAULT_ROLL_STEPS } from './types'
 /** 카드 입력과 같은 제품 판정 기준(cardInput 기본값). 코어 직접 호출 기대값도 이 기준으로 낸다 */
 const N = DEFAULT_ROLL_STEPS
@@ -61,6 +65,8 @@ const IGNORE_TOTAL = { ignoreSpTotal: true, rollSteps: N }
 // 파일 전체가 같은 판정 캐시를 쓴다(캐시 경유 = 무캐시는 batch.test가 봉인).
 const cache = createLruCache(200_000)
 const memo = new Map<string, { plan: TabPlan; view: TabView }>()
+/** 오라클이 채용률·기술 순서를 입력에서 직접 읽도록 계획 → 입력 */
+const inputOf = new WeakMap<TabPlan, CardInput>()
 
 /** label은 입력 조합마다 유일해야 한다(같은 label이면 첫 결과를 재사용). */
 function run(label: string, input: CardInput, tab: Tab): { plan: TabPlan; view: TabView } {
@@ -69,6 +75,7 @@ function run(label: string, input: CardInput, tab: Tab): { plan: TabPlan; view: 
   if (!hit) {
     hit = { plan: planTab(input, tab), view: buildTabView(input, tab, cache) }
     memo.set(key, hit)
+    inputOf.set(hit.plan, input)
   }
   return hit
 }
@@ -166,244 +173,333 @@ function withMyNature(plan: TabPlan, spec: RowSpec, nature: string): RowSpec {
   return plan.mySide === 'attacker' ? { ...spec, attacker: { ...spec.attacker, nature } } : { ...spec, defender: { ...spec.defender, nature } }
 }
 
-type CorePick = 'kept' | 'dropped' | 'error'
+type CoreProbe = { kind: 'ok'; p: number; max: number } | { kind: 'immune' } | { kind: 'error' }
+type CoreVar = { kind: 'variable' } | { kind: 'fixed'; cat: string } | { kind: 'error' }
 
-/**
- * 선공기 행 조건(사용자 피드백 2026-11-12)의 독립 재구현: 우선도 > 0이고, 특성으로 바뀐 기술 타입의 타입표(코어 typeEffectiveness)로 대상 약점(> 1)이거나
- * 사용자 자속(계산 폼 타입)이면서 1배 이상. 사용자 = 기술을 쓰는 쪽(attacker), 대상 = defender.
- */
-const ATE: Readonly<Record<string, string>> = { aerilate: 'Flying', galvanize: 'Electric', pixilate: 'Fairy', refrigerate: 'Ice', dragonize: 'Dragon' }
-function priorityRowWorthy(c: { moveId: string; user: PokemonSet; target: PokemonSet }): boolean {
-  const move = game.data.moves[c.moveId]
-  if (move.priority <= 0) return false
-  const user = validateSet(game, c.user)
-  // 엔진이 대미지 계산에서 바꾸는 기술 타입(스킨 특성·노말스킨, 이 레귤레이션의 선공기에 소리 기술은 없다)과 배짱·심안의 고스트 등배
-  const type = ATE[user.ability] !== undefined && move.type === 'Normal' ? ATE[user.ability] : user.ability === 'normalize' ? 'Normal' : move.type
-  const revealed = (user.ability === 'scrappy' || user.ability === 'mindseye') && (type === 'Normal' || type === 'Fighting')
-  const targetTypes = validateSet(game, c.target).species.types.filter((t) => !(revealed && t === 'Ghost'))
-  const eff = targetTypes.reduce((m, t) => m * typeEffectiveness(type, [t]), 1)
-  return eff > 1 || (user.species.types.includes(type) && eff >= 1)
+/** 오라클 항목: 계획 후보(기술 × 랭크 조건)를 코어로 직접 판정한 값 */
+interface OracleItem {
+  key: string
+  moveId: string
+  rankBefore: boolean
+  priority: boolean
+  cand: MoveCandidate
+  basis?: RankBasis
+  probe: CoreProbe
+  /** 기술 채용률·기존 기술 순서·주력 기술(PRD R16·R4-1, 오라클이 입력에서 직접 계산) */
+  share: number
+  moveOrder: number
+  main: boolean
+  condOrder: number
 }
 
-/** 후보 기술(행을 만들 수 있는 공격기): 분류 고정이고 공격측 HP에 의존하지 않는다. 스냅샷에 없으면 null */
-function candidateRefs(moveId: string, mine: boolean): ReturnType<typeof moveStatRefs> | null {
-  if (!Object.prototype.hasOwnProperty.call(game.data.moves, moveId)) return null
-  const refs = moveStatRefs(game, moveId)
-  if (!refs.offense || !refs.defense || refs.categoryVaries) return null
-  if (mine && refs.offense.owner === 'self' && refs.attackerStats.includes('hp')) return null
-  return refs
-}
-
-/**
- * 카드·조건(기본 / 랭크 수단 하나)마다 현재 세트 단건 판정을 코어로 직접 내 가장 센 기술(1타 확률 → 최대 대미지 비율 → 슬롯·사용률 순)과
- * 선공기만 남긴다. 후보는 분류를 가로지른 상대 한 마리의 기술 전부다(사용자 피드백 2026-11-11): 다른 분류 기술은 이 카드의 대표 세트·같은 조건 세트로
- * 판정하고, 그 기술이 고르면 이 카드의 행은 빠진다. 무효는 버리고 코어가 거부하면 error. 키 = 공격 탭 행·고정 id, 방어 탭 필터 id.
- */
-/** bestOut: 조건 그룹('base' 또는 랭크 수단 키) → 고른 가장 센 기술 id(무효뿐이면 첫 무효 후보) */
-function corePicks(plan: TabPlan, card: CardSpec, meta: MetaView, bestOut?: Map<string, string>): Map<string, CorePick> {
-  type Cand = { id: string; moveId: string; order: number; user: PokemonSet; target: PokemonSet; judge: () => ReturnType<typeof judgeDamage> }
-  type Sets = { side: 'attacker' | 'defender'; attacker: PokemonSet; defender: PokemonSet; conditions: RowSpec['conditions']; herb: boolean }
-  const groups = new Map<string, Cand[]>()
-  const sets = new Map<string, Sets>()
-  const add = (group: string | null, c: Cand) => groups.set(group ?? 'base', [...(groups.get(group ?? 'base') ?? []), c])
+function coreProbe(plan: TabPlan, c: MoveCandidate): CoreProbe {
   const opt = { rollSteps: N }
-  const defense = plan.tab === 'defense'
-  const entry = meta.entry(card.opponent.id)
-  const mySet = plan.rows[card.rowIds[0]]?.attacker ?? plan.fixed[card.fixedIds[0]]?.attacker
-  const allMoves = defense ? defenseMoveIds(game, entry as MetaEntry) : (mySet?.moves ?? [])
-  const orderOf = (moveId: string) => allMoves.indexOf(moveId)
-  const herbOf = (b: RankBasis | ScarfBasis | undefined) => b?.kind === 'rank' && b.reactions.includes('whiteherb')
-  card.filterIds.forEach((id) => {
-    const f = plan.filters[id]
-    sets.set(meansKey(f.basis) ?? 'base', { side: 'defender', attacker: f.attacker, defender: f.defender, conditions: f.conditions, herb: herbOf(f.basis) })
-    add(meansKey(f.basis), { id, moveId: f.moveId, order: orderOf(f.moveId), user: f.attacker, target: f.defender, judge: () => judgeDamage(game, 'defender', f.attacker, f.defender, f.moveId, f.conditions, undefined, opt) })
-  })
-  for (const rowId of card.rowIds) {
-    const r = plan.rows[rowId]
-    if (r.error || r.gate !== undefined || r.judge !== 'damage' || !r.sweep || !r.moveId) continue
-    const moveId = r.moveId
-    const side = r.sweep.side
-    sets.set(meansKey(r.basis) ?? 'base', { side, attacker: r.attacker, defender: r.defender, conditions: r.conditions, herb: herbOf(r.basis) })
-    add(meansKey(r.basis), { id: rowId, moveId, order: r.attacker.moves.indexOf(moveId), user: r.attacker, target: r.defender, judge: () => judgeDamage(game, side, r.attacker, r.defender, moveId, r.conditions, undefined, opt) })
-  }
-  for (const fixedId of card.fixedIds) {
-    const f = plan.fixed[fixedId]
-    if (!sets.has('base')) sets.set('base', { side: 'attacker', attacker: f.attacker, defender: f.defender, conditions: f.conditions, herb: false })
-    add(null, { id: fixedId, moveId: f.moveId, order: f.attacker.moves.indexOf(f.moveId), user: f.attacker, target: f.defender, judge: () => judgeDamage(game, 'attacker', f.attacker, f.defender, f.moveId, f.conditions, undefined, opt) })
-  }
-  // 다른 분류 기술(비교 전용). 랭크 조건에서는 상대 능력치 기술·하양허브 소비 뒤 연속기를 뺀다.
-  const myDefense = card.category === 'physical' ? 'def' : 'spd'
-  for (const [key, g] of sets) {
-    for (const moveId of allMoves) {
-      const refs = candidateRefs(moveId, !defense)
-      if (refs === null || refs.defense === myDefense) continue
-      if (key !== 'base' && (refs.offense?.owner === 'target' || (g.herb && game.data.moves[moveId].multihit !== undefined))) continue
-      add(key === 'base' ? null : key, {
-        id: JSON.stringify(['cross', key, moveId]),
-        moveId,
-        order: orderOf(moveId),
-        user: g.attacker,
-        target: g.defender,
-        judge: () => judgeDamage(game, g.side, g.attacker, g.defender, moveId, g.conditions, undefined, opt),
-      })
+  try {
+    let v
+    if (c.target === 'filter') {
+      const f = plan.filters[c.id]
+      v = judgeDamage(game, 'defender', f.attacker, f.defender, f.moveId, f.conditions, undefined, opt).value
+    } else if (c.target === 'fixed') {
+      const f = plan.fixed[c.id]
+      v = judgeDamage(game, 'attacker', f.attacker, f.defender, f.moveId, f.conditions, undefined, opt).value
+    } else {
+      const r = plan.rows[c.id]
+      if (r.error || !r.sweep || !r.moveId) return { kind: 'error' }
+      v = judgeDamage(game, r.sweep.side, r.attacker, r.defender, r.moveId, r.conditions, undefined, opt).value
     }
+    return v.kind === 'damage' ? { kind: 'ok', p: v.ohkoChance, max: v.maxPercent } : { kind: 'immune' }
+  } catch (e) {
+    if (e instanceof CoreError || e instanceof CoreInputError) return { kind: 'error' }
+    throw e
   }
-  const out = new Map<string, CorePick>()
-  for (const [groupKey, cands] of groups) {
-    const scored: { c: Cand; p: number; max: number }[] = []
-    let firstImmune: Cand | undefined
-    for (const c of [...cands].sort((a, b) => a.order - b.order)) {
-      try {
-        const v = c.judge().value
-        out.set(c.id, 'dropped')
-        if (v.kind === 'damage') scored.push({ c, p: v.ohkoChance, max: v.maxPercent })
-        else firstImmune ??= c
-      } catch (e) {
-        if (!(e instanceof CoreError || e instanceof CoreInputError)) throw e
-        out.set(c.id, 'error')
-      }
-    }
-    const best = scored.reduce<(typeof scored)[number] | undefined>((b, x) => (b === undefined || x.p > b.p || (x.p === b.p && x.max > b.max) ? x : b), undefined)
-    for (const x of scored) if (x === best || priorityRowWorthy(x.c)) out.set(x.c.id, 'kept')
-    // 모든 후보가 무효면(계산 불가 후보 없음) 첫 무효 후보(행이 "무효" 판정으로 남는다)
-    if (best === undefined && firstImmune !== undefined && cands.every((c) => out.get(c.id) !== 'error')) out.set(firstImmune.id, 'kept')
-    const bestMove = best?.c.moveId ?? (cands.every((c) => out.get(c.id) !== 'error') ? firstImmune?.moveId : undefined)
-    if (bestMove !== undefined) bestOut?.set(groupKey, bestMove)
+}
+
+/** 스윕 행: 현재·무보정·상승 성격 33칸 스윕(예산 밖 판정)의 범주가 모두 같으면 고정 */
+function coreRowVar(plan: TabPlan, spec: RowSpec): CoreVar {
+  const r = coreSweep(spec)
+  if (r === null || spec.natures === undefined) return { kind: 'error' }
+  const cats = categoriesOf(r)
+  const variants = [spec.natures.neutral, spec.natures.plus].map((n) => coreSweep(withMyNature(plan, spec, n)))
+  if (variants.some((v) => v === null)) return { kind: 'error' }
+  const all = [...cats, ...variants.flatMap((v) => categoriesOf(v as SweepResult<unknown>))]
+  return all.every((c) => c === cats[0]) ? { kind: 'fixed', cat: cats[0] } : { kind: 'variable' }
+}
+
+/** 극단 필터 = 내 H·(B|D) 함께 0·무보정 / 함께 최대·상승(예산 무시). 같으면 그 판정으로 고정 */
+function coreExtreme(f: ExtremeSpec): { low: string; high: string } | null {
+  const at = (v: number, nature: string) => {
+    const defender = withSp({ ...f.defender, nature }, { [f.stats[0]]: v, [f.stats[1]]: v })
+    return coreCategory(() => judgeDamage(game, 'defender', f.attacker, defender, f.moveId, f.conditions, undefined, IGNORE_TOTAL))
   }
-  return out
+  const low = at(0, f.natures.neutral)
+  const high = at(spMaxPerStat, f.natures.plus)
+  return low === null || high === null ? null : { low, high }
+}
+
+function coreVar(plan: TabPlan, card: CardSpec, c: MoveCandidate): CoreVar {
+  if (c.target === 'row') return coreRowVar(plan, plan.rows[c.id])
+  if (c.target === 'fixed') {
+    const f = plan.fixed[c.id]
+    const cat = coreCategory(() => judgeDamage(game, 'attacker', f.attacker, f.defender, f.moveId, f.conditions, undefined, { rollSteps: N }))
+    return cat === null ? { kind: 'error' } : { kind: 'fixed', cat }
+  }
+  const ex = coreExtreme(plan.filters[c.id])
+  if (ex === null) return { kind: 'error' }
+  if (ex.low === ex.high) return { kind: 'fixed', cat: ex.low }
+  const vars = card.rowIds.filter((id) => plan.rows[id].gate === c.id).map((id) => coreRowVar(plan, plan.rows[id]))
+  if (vars.some((v) => v.kind === 'variable')) return { kind: 'variable' }
+  if (vars.some((v) => v.kind === 'error')) return { kind: 'error' }
+  return vars[0]
+}
+
+/** 오라클 강한 순: 정상 → 계산 불가 → 무효, 1타 확률 → 최대 대미지 비율 → 같은 기술 랭크 전 → 기술·조건 순 */
+function oracleStrength(a: OracleItem, b: OracleItem): number {
+  const cls = (i: OracleItem) => (i.probe.kind === 'ok' ? 0 : i.probe.kind === 'error' ? 1 : 2)
+  if (cls(a) !== cls(b)) return cls(a) - cls(b)
+  if (a.probe.kind === 'ok' && b.probe.kind === 'ok') {
+    if (a.probe.p !== b.probe.p) return b.probe.p - a.probe.p
+    if (a.probe.max !== b.probe.max) return b.probe.max - a.probe.max
+  }
+  if (a.moveId === b.moveId && a.rankBefore !== b.rankBefore) return a.rankBefore ? -1 : 1
+  return a.moveOrder - b.moveOrder || a.condOrder - b.condOrder
+}
+
+/** 오라클 목록 순(PRD R16): 계산 불가 → 무효 맨 뒤, 그 밖 채용률 높은 순 → 기존 기술 순서, 같은 기술 안은 강한 순 */
+function oracleListed(a: OracleItem, b: OracleItem): number {
+  const tail = (i: OracleItem) => (i.probe.kind === 'error' ? 1 : i.probe.kind === 'immune' ? 2 : 0)
+  if (tail(a) !== tail(b)) return tail(a) - tail(b)
+  if (a.moveId !== b.moveId) return b.share - a.share || a.moveOrder - b.moveOrder
+  return oracleStrength(a, b)
 }
 
 /**
- * 계획의 래더 카드를 코어로 직접 판정해 표시 카드·변화 없음 행·표시 행 칸을 다시 만든다.
- * 행은 카드·조건당 가장 센 기술(+선공기 행 조건을 채운 선공기)만(corePicks), 고르지 않은 기술은 어디에도 없다.
- * 극단 필터 = 내 H·(B|D) 함께 0·무보정 / 함께 최대·상승(예산 무시), 행 = 현재·무보정·상승 성격 33칸 스윕(예산 밖 판정)의 합집합, 고정 = 단건 판정.
+ * 기본 항목(PRD R4)의 독립 재구현: 기준 기술(방어 탭은 주력 기술의 정상 랭크 전 항목 중 그 기술 항목에 변동이 있는 것들의 채용률 최고(동률 기존 기술 순서),
+ * 모두 고정이면 랭크 전 확정1타 고정인 것 중 가장 약한 것·없으면 가장 센 것, 공격 탭은 가장 센 것,
+ * 정상 주력이 없으면 목록 첫 정상 항목·없으면 첫 항목,
+ * 방어 탭 speedEdge면 랭크 전·후 중 변동인 선공기 우선) → 랭크 전 P·후 Q 표.
  */
-function expectMatchesCore(plan: TabPlan, view: TabView, meta: MetaView = bo1): { items: number; cards: number; allSame: number } {
+function oracleDefault(items: readonly OracleItem[], priorityRule: boolean, variableFirst: boolean, varOf: (i: OracleItem) => CoreVar): OracleItem {
+  const sorted = [...items].sort(oracleStrength)
+  const valid = (i: OracleItem) => i.probe.kind === 'ok'
+  const variable = (i: OracleItem) => varOf(i).kind === 'variable'
+  const qsOf = (moveId: string) => sorted.filter((i) => i.moveId === moveId && !i.rankBefore && valid(i))
+  const pq = (moveId: string): OracleItem => {
+    const p = sorted.find((i) => i.moveId === moveId && i.rankBefore) as OracleItem
+    const qs = qsOf(moveId)
+    const q = qs.find(variable) ?? qs[0]
+    if (!valid(p)) return q ?? p
+    const pv = varOf(p)
+    if (pv.kind !== 'fixed' || pv.cat === 'guaranteed-ohko' || q === undefined) return p
+    const qv = varOf(q)
+    return qv.kind === 'variable' || (qv.kind === 'fixed' && qv.cat === 'guaranteed-survive') ? q : p
+  }
+  const mains = sorted.filter((i) => i.rankBefore && i.main && valid(i))
+  if (mains.length === 0) {
+    const listed = [...items].sort(oracleListed)
+    return listed.find(valid) ?? listed[0]
+  }
+  const pre = sorted.filter((i) => i.rankBefore && valid(i))
+  if (priorityRule) for (const p of pre) if (p.priority && [p, ...qsOf(p.moveId)].some(variable)) return pq(p.moveId)
+  // 공격 탭은 가장 센 주력
+  if (!variableFirst) return pq(mains[0].moveId)
+  // 방어 탭(PRD R4-1): ① 변동 기술 모음 → 채용률 최고 ② 모두 고정 → 랭크 전 확정1타 고정 모음 → 최약 ③ 아니면 최강
+  const variables = mains.filter((m) => items.some((i) => i.moveId === m.moveId && variable(i)))
+  if (variables.length > 0) {
+    const topShare = Math.max(...variables.map((m) => m.share))
+    const tied = variables.filter((m) => m.share === topShare)
+    return pq(tied.reduce((a, b) => (b.moveOrder < a.moveOrder ? b : a)).moveId)
+  }
+  const ohkos = mains.filter((m) => {
+    const v = varOf(m)
+    return v.kind === 'fixed' && v.cat === 'guaranteed-ohko'
+  })
+  if (ohkos.length === 0) return pq(mains[0].moveId)
+  const hit = (i: OracleItem) => (i.probe.kind === 'ok' ? [i.probe.p, i.probe.max] : [0, 0])
+  const weakest = [...ohkos].sort((a, b) => hit(a)[0] - hit(b)[0] || hit(a)[1] - hit(b)[1] || a.moveOrder - b.moveOrder)[0]
+  return pq(weakest.moveId)
+}
+
+/** 오라클용 접지(PRD R12): 쇠구슬이면 접지, 아니면 비행 타입·부유·풍선이 아닐 때 */
+const oracleGrounded = (types: readonly string[], ability: string, item: string | undefined): boolean =>
+  item === 'ironball' || (!types.includes('Flying') && ability !== 'levitate' && item !== 'airballoon')
+
+/** 오라클용 선공기(PRD R12): 우선도 > 0, 또는 그래스메이커 공격측이 땅에 붙어 쓰는 그래스슬라이더 */
+function oraclePriority(plan: TabPlan, c: MoveCandidate): boolean {
+  if (!Object.prototype.hasOwnProperty.call(game.data.moves, c.moveId)) return false
+  if (game.data.moves[c.moveId].priority > 0) return true
+  if (c.moveId !== 'grassyglide') return false
+  const attacker = c.target === 'filter' ? plan.filters[c.id].attacker : c.target === 'fixed' ? plan.fixed[c.id].attacker : plan.rows[c.id].attacker
+  const r = validateSet(game, attacker, IGNORE_TOTAL)
+  return r.ability === 'grassysurge' && oracleGrounded(r.species.types, r.ability, r.item)
+}
+
+const RANK_BEFORE_IDS = [JSON.stringify(['base']), JSON.stringify(['faint', 1])]
+
+/**
+ * 오라클 채용률·기존 기술 순서·주력 기술(PRD R16·R4-1). 채용률: 방어 탭 래더 상대 = 그 상대 사용률, 공격 탭 = 내 종(메가면 메가 항목, 없으면 원종),
+ * 그 밖 0. 순서: 공격 탭 내 기술 칸 순, 방어 탭 래더 = 사용률 순(동률 id 순), 목록 밖 타겟 = 지정 순. 주력: 그 상대 모든 분류 카드의 랭크 전 기술 중
+ * 공격 탭 전부, 방어 탭 래더 = 선공기(oraclePriority) 아닌 것 중 채용률 ≥ 20%(없으면 선공기 아닌 채용률 1위, 그것도 없으면 채용률 1위),
+ * 목록 밖 타겟 = 선공기 아닌 것 전부(없으면 첫 기술).
+ */
+function oracleMoveMeta(plan: TabPlan, card: CardSpec): { share: (m: string) => number; order: (m: string) => number; mains: Set<string> } {
+  const input = inputOf.get(plan)
+  if (input === undefined) throw new Error('run()으로 만든 계획이 아니다')
+  let shares: Record<string, number> = {}
+  // 공격 탭은 채용률 없음(내 기술 칸 순서, PRD R16)
+  if (plan.tab !== 'attack' && card.opponent.source === 'ladder') shares = input.view.entry(card.opponent.id)?.moves.shares ?? {}
+  const share = (m: string) => shares[m] ?? 0
+  const universe = new Map<string, boolean>()
+  for (const c of plan.cards) {
+    if (c.opponent.source !== card.opponent.source || c.opponent.id !== card.opponent.id) continue
+    for (const g of c.conditions) {
+      if (!RANK_BEFORE_IDS.includes(g.id)) continue
+      for (const cand of g.candidates) if (!universe.has(cand.moveId)) universe.set(cand.moveId, oraclePriority(plan, cand))
+    }
+  }
+  const custom = input.customTargets.find((t) => t.rosterId === card.opponent.id)
+  const listed =
+    plan.tab === 'attack'
+      ? [...input.mySet.moves]
+      : card.opponent.source === 'custom' && custom !== undefined
+        ? [...custom.moves]
+        : [...universe.keys()].sort((a, b) => share(b) - share(a) || (a < b ? -1 : a > b ? 1 : 0))
+  const order = (m: string) => {
+    const i = listed.indexOf(m)
+    return i < 0 ? listed.length : i
+  }
+  const all = [...universe.keys()].sort((a, b) => order(a) - order(b))
+  if (plan.tab === 'attack') return { share, order, mains: new Set(all) }
+  const plain = all.filter((m) => universe.get(m) === false)
+  if (card.opponent.source === 'custom') return { share, order, mains: new Set(plain.length > 0 ? plain : all.slice(0, 1)) }
+  const over = plain.filter((m) => share(m) >= 0.2)
+  if (over.length > 0) return { share, order, mains: new Set(over) }
+  const pool = plain.length > 0 ? plain : all
+  const top = pool.reduce<string | undefined>((best, m) => (best === undefined || share(m) > share(best) ? m : best), undefined)
+  return { share, order, mains: new Set(top === undefined ? [] : [top]) }
+}
+
+function oracleItems(plan: TabPlan, card: CardSpec): OracleItem[] {
+  const meta = oracleMoveMeta(plan, card)
+  return card.conditions.flatMap((g, gi) =>
+    g.candidates.map((c) => {
+      const basis = c.target === 'filter' ? plan.filters[c.id].basis : c.target === 'row' && plan.rows[c.id].basis?.kind === 'rank' ? (plan.rows[c.id].basis as RankBasis) : undefined
+      const it: OracleItem = {
+        key: JSON.stringify([c.moveId, g.id]),
+        moveId: c.moveId,
+        rankBefore: RANK_BEFORE_IDS.includes(g.id),
+        priority: oraclePriority(plan, c),
+        cand: c,
+        probe: coreProbe(plan, c),
+        share: meta.share(c.moveId),
+        moveOrder: meta.order(c.moveId),
+        main: meta.mains.has(c.moveId),
+        condOrder: gi,
+      }
+      if (basis !== undefined) it.basis = basis
+      return it
+    }),
+  )
+}
+
+/**
+ * 계획의 래더 카드를 코어로 직접 판정해 보이는 항목(기본 항목, PRD R4)·표시 카드·변화 없음 행·표시 행 칸을 다시 만든다.
+ * 카드는 보이는 항목 하나의 행만 낸다(공격 탭 1행·고정 판정 1행, 방어 탭 극단 필터에 걸리면 1행, 통과하면 H 행·B/D 행).
+ * 반감열매 변형 카드는 기본 항목의 기술이 그 열매를 발동시킬 때만 보인다. 행 = 현재·무보정·상승 성격 33칸 스윕(예산 밖 판정)의 합집합.
+ */
+function expectMatchesCore(plan: TabPlan, view: TabView): { items: number; cards: number; allSame: number } {
   expect(plan.status).toEqual({ kind: 'ok' })
   expect(view.complete).toBe(true)
-  const items: string[] = []
   const shownLadder: string[] = []
-  const perCard: { id: string; group: string; shown: number; items: string[] }[] = []
   let emptyCards = 0
   let allSame = 0
+  let noChangeCount = 0
   for (const card of plan.cards) {
     if (card.opponent.source !== 'ladder') continue
+    const viewCard = view.cards.find((c) => c.id === card.id)
     if (card.state === 'error') {
       // 반감열매 변형의 해석 실패는 기본 카드가 같은 이유로 보이므로 보이지 않는다.
-      perCard.push({ id: card.id, group: JSON.stringify([card.opponent.source, card.opponent.id]), shown: card.berry === undefined ? 1 : 0, items: [] })
+      if (card.berry === undefined) shownLadder.push(card.id)
+      else expect(viewCard, card.id).toBeUndefined()
       continue
     }
-    const start = items.length
-    let shown = 0
-    const bestMoves = new Map<string, string>()
-    const picks = corePicks(plan, card, meta, bestMoves)
-    // 반감열매 변형: 기본 조건의 가장 센 기술(코어 재판정)에 열매가 발동하지 않으면 그 카드는 보이지 않는다.
-    if (card.berry !== undefined) {
-      const chosen = bestMoves.get('base')
-      if (chosen === undefined || !card.berry.triggers.includes(chosen)) {
-        perCard.push({ id: card.id, group: JSON.stringify([card.opponent.source, card.opponent.id, card.berry.item]), shown: 0, items: [] })
-        continue
-      }
-    }
-    const viewCard = view.cards.find((c) => c.id === card.id)
-    const gates = new Map<string, 'passed' | 'shown' | 'hidden'>()
-    for (const rowId of card.rowIds) {
-      const spec = plan.rows[rowId]
-      if (spec.error) {
-        shown++
-        continue
-      }
-      const pick = picks.get(spec.gate ?? rowId)
-      if (pick === 'dropped') {
-        expect(viewCard?.rows.find((x) => x.id === rowId), rowId).toBeUndefined()
-        continue
-      }
-      // 반감열매 변형 안에서도 조건별 가장 센 기술(선공기 포함)에 열매가 발동하지 않으면 그 행은 기본 카드와 같은 판정이라 뺀다.
-      if (card.berry !== undefined && pick === 'kept' && spec.moveId !== undefined && !card.berry.triggers.includes(spec.moveId)) {
-        expect(viewCard?.rows.find((x) => x.id === rowId), rowId).toBeUndefined()
-        continue
-      }
-      if (pick === 'error') {
-        if (spec.gate === undefined || !gates.has(spec.gate)) shown++
-        if (spec.gate !== undefined) gates.set(spec.gate, 'shown')
-        continue
-      }
-      if (spec.gate !== undefined) {
-        let g = gates.get(spec.gate)
-        if (g === undefined) {
-          const f = plan.filters[spec.gate]
-          const at = (v: number, nature: string) => {
-            const defender = withSp({ ...f.defender, nature }, { [f.stats[0]]: v, [f.stats[1]]: v })
-            return coreCategory(() => judgeDamage(game, 'defender', f.attacker, defender, f.moveId, f.conditions, undefined, IGNORE_TOTAL))
-          }
-          const low = at(0, f.natures.neutral)
-          const high = at(spMaxPerStat, f.natures.plus)
-          if (low === null || high === null) g = 'shown'
-          else if (low === high) {
-            g = 'hidden'
-            items.push(JSON.stringify([card.id, 'extreme-filter', f.moveId, null, low, meansKey(f.basis)]))
-          } else g = 'passed'
-          if (g === 'shown') shown++
-          gates.set(spec.gate, g)
-        }
-        if (g !== 'passed') continue
-      }
-      const r = coreSweep(spec)
-      if (r === null) {
-        shown++
-        continue
-      }
-      const cats = categoriesOf(r)
-      const natures = spec.natures
-      if (natures === undefined) throw new Error(`스윕 행 ${rowId}에 성격 변형이 없다`)
-      const variantCats = [natures.neutral, natures.plus].flatMap((n) => {
-        const v = coreSweep(withMyNature(plan, spec, n))
-        return v === null ? [] : categoriesOf(v)
-      })
-      if ([...cats, ...variantCats].every((c) => c === cats[0])) {
-        items.push(JSON.stringify([card.id, 'row', spec.moveId ?? null, spec.sweep?.stat ?? null, cats[0], meansKey(spec.basis)]))
-        continue
-      }
-      shown++
-      const row = view.cards.find((c) => c.id === card.id)?.rows.find((x) => x.id === rowId)
-      expect(row, rowId).toBeDefined()
-      expect(row?.cells.map((c) => c.category), rowId).toEqual(cats)
-      expect(row?.boundaries.map((b) => b.sp), rowId).toEqual(r.boundaries)
-    }
-    for (const fixedId of card.fixedIds) {
-      if (picks.get(fixedId) === 'dropped') continue
-      const f = plan.fixed[fixedId]
-      if (card.berry !== undefined && picks.get(fixedId) === 'kept' && !card.berry.triggers.includes(f.moveId)) continue
-      const c = coreCategory(() => judgeDamage(game, 'attacker', f.attacker, f.defender, f.moveId, f.conditions, undefined, { rollSteps: N }))
-      if (c === null) shown++
-      else items.push(JSON.stringify([card.id, 'sp-independent', f.moveId, null, c, null]))
-    }
-    perCard.push({ id: card.id, group: JSON.stringify([card.opponent.source, card.opponent.id]), shown, items: items.splice(start) })
-  }
-  // 판정 변화와 무관하게 행이 하나라도 남는 래더 카드는 보이고, 변화 없음 행(극단 필터 1건 = 1행)도 그 카드 rows에 있다(사용자 피드백 2026-11-12).
-  const actualOf = (cardId: string) =>
-    noChangeRows(view)
-      .filter((i) => i.cardId === cardId)
-      .map((i) => JSON.stringify([i.cardId, i.kind, i.moveId ?? null, i.sweepStat ?? null, i.fixed, meansKey(i.basis)]))
-  for (const c of perCard) {
-    const v = view.cards.find((x) => x.id === c.id)
-    if (c.shown + c.items.length === 0) {
-      expect(v, c.id).toBeUndefined()
+    const items = oracleItems(plan, card)
+    // 후보 없는 카드(스피드 탭)는 모든 행이 보인다.
+    const plain = card.conditions.length === 0
+    if (!plain && items.length === 0) {
+      expect(viewCard, card.id).toBeUndefined()
       emptyCards++
       continue
     }
-    shownLadder.push(c.id)
-    expect([...actualOf(c.id)].sort(), c.id).toEqual([...c.items].sort())
-    expect(v?.rows.length, c.id).toBe(c.shown + c.items.length)
-    if (c.shown === 0) {
-      // 모든 행이 변화 없음: 대표 행은 기본 조건 가장 센 기술 행이고 "변동 가능"이 아니다.
-      expect(v?.headline.kind, c.id).toBe('row')
-      expect(v?.variable, c.id).toBe(false)
+    const vars = new Map<string, CoreVar>()
+    const varOf = (i: OracleItem) => {
+      let v = vars.get(i.key)
+      if (v === undefined) {
+        v = coreVar(plan, card, i.cand)
+        vars.set(i.key, v)
+      }
+      return v
+    }
+    const def = plain ? undefined : oracleDefault(items, plan.tab === 'defense' && card.speedEdge === true, plan.tab === 'defense', varOf)
+    if (def !== undefined && card.berry !== undefined && !card.berry.triggers.includes(def.moveId)) {
+      expect(viewCard, card.id).toBeUndefined()
+      continue
+    }
+    shownLadder.push(card.id)
+    expect(viewCard, card.id).toBeDefined()
+    expect(viewCard?.shownItem, card.id).toBe(def?.key)
+    expect(viewCard?.selected, card.id).toBe(false)
+    // 보이는 항목의 행(예상): [행 id 또는 null(필터 1행), 변화 없음 범주 또는 null(변화 있음·오류), 오류]
+    const want: { kind: NoChangeRow['kind'] | 'changing' | 'error'; moveId?: string; sweepStat?: StatId; fixed?: string; basis: string | null; rowId?: string }[] = []
+    const sweepRow = (rowId: string) => {
+      const spec = plan.rows[rowId]
+      const moveId = spec.moveId
+      const basis = meansKey(spec.basis)
+      if (spec.error) return want.push({ kind: 'error', moveId, basis })
+      const v = coreRowVar(plan, spec)
+      if (v.kind === 'error') return want.push({ kind: 'error', moveId, basis })
+      if (v.kind === 'fixed') return want.push({ kind: 'row', moveId, sweepStat: spec.sweep?.stat, fixed: v.cat, basis })
+      want.push({ kind: 'changing', moveId, sweepStat: spec.sweep?.stat, basis, rowId })
+    }
+    if (def === undefined) for (const rowId of card.rowIds) sweepRow(rowId)
+    else if (def.probe.kind === 'error') want.push({ kind: 'error', moveId: def.moveId, basis: meansKey(def.basis) })
+    else if (def.cand.target === 'row') sweepRow(def.cand.id)
+    else if (def.cand.target === 'fixed') {
+      const v = varOf(def)
+      if (v.kind === 'fixed') want.push({ kind: 'sp-independent', moveId: def.moveId, fixed: v.cat, basis: null })
+      else want.push({ kind: 'error', moveId: def.moveId, basis: null })
+    } else {
+      const filterId = def.cand.id
+      const ex = coreExtreme(plan.filters[filterId])
+      if (ex === null) want.push({ kind: 'error', moveId: def.moveId, basis: meansKey(def.basis) })
+      else if (ex.low === ex.high) want.push({ kind: 'extreme-filter', moveId: def.moveId, fixed: ex.low, basis: meansKey(def.basis) })
+      else for (const rowId of card.rowIds) if (plan.rows[rowId].gate === filterId) sweepRow(rowId)
+    }
+    expect(viewCard?.rows.length, card.id).toBe(want.length)
+    const noChange = want.filter((w) => w.kind === 'row' || w.kind === 'extreme-filter' || w.kind === 'sp-independent')
+    const actual = noChangeRows(view).filter((i) => i.cardId === card.id)
+    expect(actual.map((i) => JSON.stringify([i.kind, i.moveId ?? null, i.sweepStat ?? null, i.fixed, meansKey(i.basis)])).sort(), card.id).toEqual(
+      noChange.map((w) => JSON.stringify([w.kind, w.moveId ?? null, w.sweepStat ?? null, w.fixed, w.basis])).sort(),
+    )
+    noChangeCount += noChange.length
+    for (const w of want) {
+      if (w.kind === 'error') expect(viewCard?.rows.some((r) => r.status === 'error' && r.moveId === w.moveId), card.id).toBe(true)
+      if (w.kind !== 'changing' || w.rowId === undefined) continue
+      const spec = plan.rows[w.rowId]
+      const r = coreSweep(spec) as SweepResult<unknown>
+      const row = viewCard?.rows.find((x) => x.id === w.rowId)
+      expect(row, w.rowId).toBeDefined()
+      expect(row?.cells.map((x) => x.category), w.rowId).toEqual(categoriesOf(r))
+      expect(row?.boundaries.map((b) => b.sp), w.rowId).toEqual(r.boundaries)
+    }
+    if (want.every((w) => w.kind !== 'changing' && w.kind !== 'error')) {
+      // 보이는 항목의 행이 모두 변화 없음: 대표 행은 그 행이고 "변동 가능"이 아니다.
+      expect(viewCard?.headline.kind, card.id).toBe('row')
+      expect(viewCard?.variable, card.id).toBe(false)
       allSame++
     }
   }
   expect(view.cards.filter((c) => c.opponent.source === 'ladder').map((c) => c.id)).toEqual(plan.cards.map((c) => c.id).filter((id) => shownLadder.includes(id)))
-  return { items: perCard.reduce((n, c) => n + c.items.length, 0), cards: emptyCards, allSame }
+  return { items: noChangeCount, cards: emptyCards, allSame }
 }
 
 // ---------- AC 1·F9 예시 세트 ----------
@@ -573,16 +669,23 @@ describe('AC4 혼합 세트·사이코쇼크(F2)', () => {
     expect(psyshock.refs).toMatchObject({ category: 'Special', defense: 'def' })
   })
 
-  it('가장 센 기술은 분류를 가로질러 고른다: 짜랑고우거 물리 카드는 특수기 사이코키네시스가 무투자 확정1타라 사이코쇼크 행이 없고 카드가 빠진다(사용자 피드백 2026-11-11)', () => {
+  it('항목은 그 분류 카드의 기술만이고, 처음 보이는 배분은 분류별 기본 항목을 견줘 정한다: 짜랑고우거는 특수기 사이코키네시스가 무투자 확정1타라 특수 배분이 기본(PRD R4·R6, 공격 탭은 내 기술 전부 중 가장 센 것 — R16), 목록은 내 기술 칸 순', () => {
     const { plan, view } = run('F2', top(F2.mySet), 'attack')
     const c = cardBySpread(plan, view, F2.crossDropped.opponent, 'physical')
     const base = c.spec.conditions.find((g) => g.id === JSON.stringify(['base']))
     expect(base?.candidates.map((x) => [x.moveId, x.target])).toEqual([
       ['psyshock', 'row'],
-      ['psychic', 'probe'],
       ['drainpunch', 'row'],
     ])
-    expect(c.card).toBeUndefined()
+    // 물리 카드도 보인다(이전: 다른 분류 기술이 가장 세면 이 카드는 빠졌다)
+    expect(c.card).toBeDefined()
+    const [group] = groupCards(view.cards.filter((v) => v.opponent.id === F2.crossDropped.opponent.id && v.berry === undefined), 'attack')
+    expect(defaultOption(group).category).toBe('special')
+    expect(defaultOption(group).defaultItem?.key).toBe(itemKey('psychic', BASE_CONDITION_ID))
+    const max = (m: string) => groupItems(group).find((g) => g.item.moveId === m)?.item.cell?.maxPercent ?? 0
+    expect(max('psychic')).toBeGreaterThan(max('psyshock'))
+    // 목록은 내 기술 칸 순(공격 탭은 채용률을 쓰지 않는다)
+    expect(groupItems(group).map((g) => g.item.moveId)).toEqual(['psyshock', 'psychic', 'drainpunch'])
   })
 
   it('분류마다 카드 = 그 분류 키(H·B / H·D)로 묶은 기준 이상 묶음 전부', () => {
@@ -599,19 +702,64 @@ describe('AC4 혼합 세트·사이코쇼크(F2)', () => {
 
 // ---------- AC 5 방어 극단 필터(F3) ----------
 
-/** 변화기를 뺀 점유율 상위 5(동률 id 순). */
-function topAttackMoves(e: MetaEntry): string[] {
-  return Object.entries(e.moves.shares)
-    .filter(([m]) => !game.data.moves[m] || game.data.moves[m].category !== 'Status')
+/** 오라클용 내 특성 보정(PRD R2 목록): 무효 0, 반감 0.5. 상대 틀깨기 계열이면 보지 않는다. */
+const ORACLE_IMMUNE: Record<string, (type: string, flags: readonly string[]) => boolean> = {
+  levitate: (t) => t === 'Ground',
+  eartheater: (t) => t === 'Ground',
+  waterabsorb: (t) => t === 'Water',
+  stormdrain: (t) => t === 'Water',
+  dryskin: (t) => t === 'Water',
+  voltabsorb: (t) => t === 'Electric',
+  lightningrod: (t) => t === 'Electric',
+  motordrive: (t) => t === 'Electric',
+  flashfire: (t) => t === 'Fire',
+  sapsipper: (t) => t === 'Grass',
+  soundproof: (_t, f) => f.includes('sound'),
+}
+const ORACLE_HALVED: Record<string, string[]> = { thickfat: ['Fire', 'Ice'], heatproof: ['Fire'], waterbubble: ['Fire'], purifyingsalt: ['Ghost'] }
+
+/** 오라클용 공격측 특성 → 웨더볼·대지의파동 타입(PRD R12). 구름보기·에어록이면 날씨 없음. 필드 쪽 공격측 접지는 보지 않는다. */
+const ORACLE_WEATHER_BALL: Record<string, string> = { drought: 'Fire', desolateland: 'Fire', orichalcumpulse: 'Fire', drizzle: 'Water', primordialsea: 'Water', sandstream: 'Rock', snowwarning: 'Ice' }
+const ORACLE_TERRAIN_PULSE: Record<string, string> = { electricsurge: 'Electric', hadronengine: 'Electric', psychicsurge: 'Psychic', grassysurge: 'Grass', mistysurge: 'Fairy' }
+function oracleMoveType(m: string, baseType: string, attackerAbility: string, defenderAbility: string): string {
+  const noWeather = ['cloudnine', 'airlock'].includes(attackerAbility) || ['cloudnine', 'airlock'].includes(defenderAbility)
+  // 메가솔라: 날씨와 무관하게 쾌청 취급(웨더볼 불꽃)
+  if (m === 'weatherball' && attackerAbility === 'megasol') return 'Fire'
+  if (m === 'weatherball') return (noWeather ? undefined : ORACLE_WEATHER_BALL[attackerAbility]) ?? baseType
+  if (m === 'terrainpulse') return ORACLE_TERRAIN_PULSE[attackerAbility] ?? baseType
+  return attackMoveType(m, baseType, attackerAbility)
+}
+
+/** 방어 탭 래더 상대 기본 후보(PRD R2): 변화기 제외 · 사용률 ≥ 5% · 나에게 1배 이상, 없으면 사용률 1위 하나(동률 id 순). */
+function defenseCandidates(view: MetaView, e: MetaEntry, mySet: PokemonSet): string[] {
+  const me = validateSet(game, mySet)
+  const oppSet = representativeAssumption(view, e.id).set
+  const opp = validateSet(game, oppSet).ability
+  const ranked = Object.entries(e.moves.shares)
+    // 내던지기는 도구 없는 기본 줄에서 실패해 후보가 아니다(PRD R14)
+    .filter(([m]) => m !== 'fling' && (!game.data.moves[m] || game.data.moves[m].category !== 'Status'))
     .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
-    .slice(0, 5)
-    .map(([m]) => m)
+  const factor = (m: string): number => {
+    const move = game.data.moves[m]
+    // 사이코메이커 공격측의 선공기는 땅에 붙은 나에게 무효
+    if (opp === 'psychicsurge' && move.priority > 0 && oracleGrounded(me.species.types, me.ability, me.item)) return 0
+    const type = oracleMoveType(m, move.type, opp, me.ability)
+    const eff = attackEffectiveness(type, me.species.types, opp, m)
+    if (['moldbreaker', 'turboblaze', 'teravolt'].includes(opp)) return eff
+    if (ORACLE_IMMUNE[me.ability]?.(type, move.flags)) return 0
+    return ORACLE_HALVED[me.ability]?.includes(type) ? eff / 2 : eff
+  }
+  const hit = ranked.filter(([m, share]) => share >= 0.05 && (!game.data.moves[m] || factor(m) >= 1)).map(([m]) => m)
+  return hit.length > 0 ? hit : ranked.slice(0, 1).map(([m]) => m)
 }
 
 describe('AC5 방어 탭 극단 필터(F3)', () => {
   it('둘 다 확정견딤·둘 다 확정1타(낮은 극단 무보정, 높은 극단 상승 성격) → 변화 없음 1행(고정 판정 = 코어 두 극단)', () => {
-    const { plan, view } = run('example', top(EXAMPLE_SET), 'defense')
     for (const c of [F3.bothSurvive, F3.bothOhko]) {
+      // 파멸의빛은 같은 페어리 타입 대표(채용률 1위 매지컬샤인)가 아니라 기본 항목이 아니므로 직접 고른다(PRD R4-1 개정)
+      const input = only(EXAMPLE_SET, [c.opponent.id])
+      const plan = planTab(input, 'defense')
+      const view = buildTabView(input, 'defense', cache, new Map([[opponentKey({ source: 'ladder', id: c.opponent.id }), itemKey(c.move, BASE_CONDITION_ID)]]))
       const { spec, card } = cardBySpread(plan, view, c.opponent, game.data.moves[c.move].category === 'Physical' ? 'physical' : 'special')
       // H행·B/D행 쌍 대신 극단 필터 1행만(칸 없음, 변화 없음)
       expect(card?.rows.filter((r) => r.moveId === c.move && r.kind === 'base').map((r) => [r.noChange, r.cells.length])).toEqual([[true, 0]])
@@ -627,21 +775,22 @@ describe('AC5 방어 탭 극단 필터(F3)', () => {
     }
   })
 
-  it('현재 성격 두 극단이 같아도 상승 성격 높은 극단이 다르면 통과해 H 행·D 행이 생긴다', () => {
+  it('현재 성격 두 극단이 같아도 상승 성격 높은 극단이 다르면 통과해 H 행·D 행이 생긴다(그 항목을 보일 때)', () => {
     const { plan, view } = run('example', top(EXAMPLE_SET), 'defense')
-    // F3.plusOnly(문포스)는 같은 카드의 파멸의빛이 더 세서 행이 없다(2026-11-11 가장 센 기술 하나)
+    // F3.plusOnly(문포스): 기본 조건 항목과 명상 랭크 후 항목이 모두 목록에 있다(파멸의빛은 동시채용 하한 미달이라 명상 조건이 없다)
     const weaker = cardBySpread(plan, view, F3.plusOnly.opponent, 'special')
-    // 기본 조건 행은 없다. 명상 조건은 파멸의빛이 동시채용 하한 미달이라 문포스가 가장 센 기술이 된다(아래, 2026-11-12)
-    expect(rowsFor(view, F3.plusOnly.opponent.id).some((r) => r.moveId === F3.plusOnly.move && r.kind === 'base')).toBe(false)
-    expect(weaker.card?.rows.some((r) => r.moveId === F3.plusOnly.move && r.kind === 'base') ?? false).toBe(false)
-    // 명상 조건은 문포스가 가장 센 기술이고 이 카드에서는 극단 필터 1행(변화 없음)이다
-    const calm = (weaker.card?.rows ?? []).filter((r) => r.kind === 'rank')
-    expect(calm.map((r) => [r.moveId, r.basis?.kind === 'rank' ? r.basis.means.id : null, r.sweepStat, r.noChange])).toEqual([
-      [F3.plusOnly.move, 'calmmind', undefined, true],
-    ])
+    const calm = JSON.stringify(['rank', 'opponent', 'move', 'calmmind'])
+    const keys = new Set(weaker.card?.items.map((i) => i.key))
+    expect(keys.has(itemKey(F3.plusOnly.move, BASE_CONDITION_ID))).toBe(true)
+    expect(keys.has(itemKey(F3.plusOnly.move, calm))).toBe(true)
+    expect(keys.has(itemKey('lightofruin', calm))).toBe(false)
     const c = F3.plusOnlyStrongest
-    const { spec, card } = cardBySpread(plan, view, c.opponent, 'special')
-    expect(noChangeRows(view).some((i) => i.cardId === spec.id && i.kind === 'extreme-filter' && i.moveId === c.move && i.rowKind === 'base')).toBe(false)
+    const sel = new Map([[opponentKey({ source: 'ladder', id: c.opponent.id }), itemKey(c.move, BASE_CONDITION_ID)]])
+    const chosen = buildTabView(only(EXAMPLE_SET, [c.opponent.id]), 'defense', cache, sel)
+    const { spec } = cardBySpread(plan, view, c.opponent, 'special')
+    const card = chosen.cards.find((x) => x.id === spec.id)
+    expect(card?.selected).toBe(true)
+    expect(noChangeRows(chosen).some((i) => i.cardId === spec.id && i.kind === 'extreme-filter' && i.moveId === c.move)).toBe(false)
     // 필터를 통과했으니 H 행·D 행이 각각 나온다(행마다 변화 있음 또는 변화 없음)
     const shown = (card?.rows ?? []).filter((r) => r.moveId === c.move && r.kind === 'base').map((r) => r.sweepStat)
     expect([...shown].sort()).toEqual(['hp', 'spd'])
@@ -691,16 +840,43 @@ describe('AC5 방어 탭 극단 필터(F3)', () => {
 
   // "둘 다 저난수 1타"의 실데이터 부재는 __fixtures__/acceptance.test.ts의 전수 탐색이, 분기 표시는 handPlan 조립 테스트가 봉인한다.
 
-  it('판정 행(변화 없음 행 포함)의 상대 기술은 변화기를 뺀 상위 5 안이다', () => {
-    const { view } = run('example', top(EXAMPLE_SET), 'defense')
+  it('래더 카드 항목·판정 행의 상대 기술은 기본 후보(변화기 제외·사용률 5% 이상·나에게 1배 이상, 없으면 1위) 안이고 기본 후보는 모두 항목이다', () => {
+    const { plan, view } = run('example', top(EXAMPLE_SET), 'defense')
     const used = view.cards.filter((c) => c.opponent.source === 'ladder').flatMap((c) => c.rows.map((r) => [c.opponent.id, r.moveId] as const))
     expect(used.length).toBeGreaterThan(0)
-    for (const [id, move] of used) expect(topAttackMoves(entryOf(bo1, id)), id).toContain(move)
+    for (const [id, move] of used) expect(defenseCandidates(bo1, entryOf(bo1, id), EXAMPLE_SET), id).toContain(move)
+    const ids = new Set(plan.cards.filter((c) => c.opponent.source === 'ladder').map((c) => c.opponent.id))
+    for (const id of ids) {
+      const items = new Set(plan.cards.filter((c) => c.opponent.id === id).flatMap((c) => c.conditions.flatMap((g) => g.candidates.map((x) => x.moveId))))
+      expect(items, id).toEqual(new Set(defenseCandidates(bo1, entryOf(bo1, id), EXAMPLE_SET)))
+    }
   })
 
   it('표시 카드·변화 없음 행·표시 행 칸 = 코어 재판정(극단 필터 1건 = 1행)', () => {
     const { plan, view } = run('example', top(EXAMPLE_SET), 'defense')
     expect(expectMatchesCore(plan, view).items).toBeGreaterThan(0)
+  })
+})
+
+// ---------- AC33 공격측 특성 날씨·필드(PRD R12) ----------
+
+/** 오라클: 공격측 계산 특성 → 날씨·필드(엔진 미처리 델타스트림은 없음) */
+const ORACLE_WEATHER: Record<string, string> = { drought: 'Sun', desolateland: 'Sun', orichalcumpulse: 'Sun', drizzle: 'Rain', primordialsea: 'Rain', sandstream: 'Sand', snowwarning: 'Snow' }
+const ORACLE_TERRAIN: Record<string, string> = { electricsurge: 'Electric', hadronengine: 'Electric', psychicsurge: 'Psychic', grassysurge: 'Grassy', mistysurge: 'Misty' }
+
+describe('AC33 공격측 특성 날씨·필드', () => {
+  it.each(['attack', 'defense'] as const)('%s 탭: 모든 대미지 판정 조건의 날씨·필드 = 공격측 계산 특성의 것(맞는 쪽 특성은 보지 않는다)', (tab) => {
+    const { plan } = run('example', top(EXAMPLE_SET), tab)
+    const specs = [...Object.values(plan.rows), ...Object.values(plan.filters), ...Object.values(plan.fixed)]
+    expect(specs.length).toBeGreaterThan(0)
+    let withField = 0
+    for (const spec of specs) {
+      const ability = validateSet(game, spec.attacker).ability
+      expect([spec.conditions.weather, spec.conditions.terrain]).toEqual([ORACLE_WEATHER[ability], ORACLE_TERRAIN[ability]])
+      if (ORACLE_WEATHER[ability] ?? ORACLE_TERRAIN[ability]) withField++
+    }
+    // 실데이터 상위 N에 가뭄(메가리자몽Y)·그래스메이커(고릴타) 상대가 있어 방어 탭엔 날씨·필드 판정이 있다
+    if (tab === 'defense') expect(withField).toBeGreaterThan(0)
   })
 })
 
@@ -731,7 +907,7 @@ describe('AC6 변화 없음 행(목록에서 빼지 않는다)', () => {
     for (const c of view.cards) for (const r of c.rows) expect(r.fixedCell?.category, r.id).toBe(r.current.category)
   })
 
-  it('속임수 + 일반 기술: 속임수가 가장 세면 고정 판정 1행만, 아니면 속임수는 어디에도 없다', () => {
+  it('속임수 + 일반 기술: 공격 탭 타입 대표는 기술 칸 순서라(PRD R16) 앞 칸 속임수가 악 대표 — 속임수가 가장 세면 고정 판정 1행만, 아니면 속임수는 어디에도 없다', () => {
     const { plan, view } = run('foul-mixed', top(kingambitFoul(['foulplay', 'kowtowcleave']), { filters: { topN: 12, selected: [] } }), 'attack')
     expectMatchesCore(plan, view)
     const itemsOf = (id: string) => noChangeRows(view).filter((i) => i.cardId === id).map((i) => [i.kind, i.moveId])
@@ -739,6 +915,8 @@ describe('AC6 변화 없음 행(목록에서 빼지 않는다)', () => {
     const foul = cardBySpread(plan, view, { id: 'sneasler', spread: 'adamant:2/32/0/0/0/32' }, 'physical')
     expect(foul.card?.rows.map((r) => r.moveId)).toEqual(['foulplay'])
     expect(itemsOf(foul.spec.id)).toEqual([['sp-independent', 'foulplay']])
+    // 목록 = 기술 칸 순(속임수 → 도각참)
+    expect(foul.card?.items.map((i) => i.moveId)).toEqual(['foulplay', 'kowtowcleave'])
     const cleave = cardBySpread(plan, view, { id: 'farigiraf', spread: 'quiet:10/0/13/30/13/0' }, 'physical')
     expect(cleave.card?.rows.map((r) => r.moveId)).toEqual(['kowtowcleave'])
     expect(itemsOf(cleave.spec.id)).toEqual([])
@@ -750,7 +928,7 @@ describe('AC6 변화 없음 행(목록에서 빼지 않는다)', () => {
     const custom = view.cards.filter((c) => c.opponent.source === 'custom')
     expect(custom).toHaveLength(3)
     expect(custom.flatMap((c) => c.rows).some((r) => r.noChange)).toBe(true)
-    for (const c of custom) expect(c.moreRows).toBe(Math.max(0, c.rows.length - 1))
+    for (const c of custom) expect(c.shownItem, c.id).toBe(c.defaultItem?.key)
   })
 })
 
@@ -928,7 +1106,7 @@ describe('AC11 목록 밖 타겟(F6·F10)', () => {
     }
   })
 
-  it('방어 탭: 계획은 분류마다 프리셋 3장이지만 가장 센 기술은 분류를 가로질러 고른다 — 하이드로펌프가 폴터가이스트보다 세 물리 카드는 빠지고 특수 카드만 하이드로펌프 행(사용자 피드백 2026-11-11)', () => {
+  it('방어 탭: 분류마다 프리셋 3장이 모두 보이고, 하이드로펌프가 폴터가이스트보다 세 처음 보이는 배분은 특수 프리셋 1(PRD R7 목록 밖 타겟)', () => {
     const { plan, view } = run('custom-rotom', top(EXAMPLE_SET, { customTargets: [target] }), 'defense')
     const planned = plan.cards.filter((c) => c.opponent.source === 'custom')
     expect(planned.map((c) => [c.category, c.bundle.presetIndex])).toEqual([
@@ -949,12 +1127,19 @@ describe('AC11 목록 밖 타겟(F6·F10)', () => {
       const [pp, pm] = score(F10.physical)
       expect(hp > pp || (hp === pp && hm > pm), c.id).toBe(true)
     }
-    const cards = customCards(view)
-    expect(cards.map((c) => [c.category, c.bundle.presetIndex])).toEqual([
+    const all = customCards(view)
+    expect(all.map((c) => [c.category, c.bundle.presetIndex])).toEqual([
+      ['physical', 0],
+      ['physical', 1],
+      ['physical', 2],
       ['special', 0],
       ['special', 1],
       ['special', 2],
     ])
+    const [group] = groupCards(all, 'defense')
+    expect([defaultOption(group).category, defaultOption(group).bundle.presetIndex]).toEqual(['special', 0])
+    for (const c of all.filter((x) => x.category === 'physical')) expect(c.rows.map((r) => r.moveId)).toEqual(expect.arrayContaining([F10.physical]))
+    const cards = all.filter((x) => x.category === 'special')
     for (const c of cards) {
       const moves = new Set(c.rows.map((r) => r.moveId))
       const want = c.category === 'physical' ? 'Physical' : 'Special'
@@ -1021,10 +1206,12 @@ describe('AC11a 셸암즈는 카드·행이 되지 않고 안내로만', () => {
     expect(view.cards.flatMap((c) => c.rows).some((r) => r.moveId === 'shellsidearm')).toBe(false)
   })
 
-  it('상대 셸암즈 → 그 상대 항목의 안내로 보이고 행·상위 5 자리를 차지하지 않는다', () => {
+  it('상대 셸암즈 → 그 상대 항목의 안내로 보이고 행·항목이 되지 않는다', () => {
     const synthetic = shellSideArmEntry(entryOf(bo1, 'farigiraf'))
     const view = syntheticView(game, bo1.meta, [...bo1.ranking, synthetic])
-    const { plan, view: tv } = run('F8-opp', only(EXAMPLE_SET, [F8.opponentShellSideArm], { view }), 'defense')
+    // 독(셸암즈)이 1배 이상이라 기본 후보에 드는 풀 타입 내 세트(예시 세트 한카리아스는 독 반감이라 후보가 아니다)
+    const grass: PokemonSet = { ...EXAMPLE_SET, species: 'rillaboom', ability: 'grassysurge', moves: ['grassyglide', 'woodhammer'] }
+    const { plan, view: tv } = run('F8-opp-grass', only(grass, [F8.opponentShellSideArm], { view }), 'defense')
     const cards = plan.cards.filter((c) => c.opponent.id === F8.opponentShellSideArm)
     expect(cards.length).toBeGreaterThan(0)
     for (const c of cards) {
@@ -1058,18 +1245,27 @@ describe('AC11a 내 목숨걸기는 공격 탭에서 계산하지 않고 안내�
 // ---------- AC 12 오류 격리(F7·F8) ----------
 
 describe('AC12 오류 격리', () => {
-  it('방어 탭 행 오류: 그 행만 계산 불가, 같은 카드의 다른 행은 정상', () => {
+  it('방어 탭 기술 오류: 그 항목만 계산 불가(목록에 표시), 고르면 그 행만 계산 불가, 같은 카드의 다른 항목은 정상', () => {
     const { plan, view } = run('F7-row', only(EXAMPLE_SET, [F7.rowError.opponent]), 'defense')
     expect(view.status).toEqual({ kind: 'ok' })
     const cards = view.cards.filter((c) => c.opponent.id === F7.rowError.opponent)
     expect(cards.length).toBeGreaterThan(0)
     for (const c of cards) {
-      const bad = c.rows.filter((r) => r.moveId === F7.rowError.move)
+      const bad = c.items.filter((i) => i.moveId === F7.rowError.move)
       expect(bad.length).toBeGreaterThan(0)
-      for (const r of bad) expect(r.error).toMatchObject({ code: F7.rowError.code, field: F7.rowError.field })
+      for (const i of bad) expect(i).toMatchObject({ status: 'error', error: { code: F7.rowError.code, field: F7.rowError.field } })
+      expect(c.items.some((i) => i.status === 'ok')).toBe(true)
       expect(c.state).toBe('ok')
     }
     expectMatchesCore(plan, view)
+    const sel = new Map([[opponentKey({ source: 'ladder', id: F7.rowError.opponent }), itemKey(F7.rowError.move, BASE_CONDITION_ID)]])
+    const chosen = buildTabView(only(EXAMPLE_SET, [F7.rowError.opponent]), 'defense', cache, sel)
+    const picked = chosen.cards.filter((c) => c.opponent.id === F7.rowError.opponent && c.selected)
+    expect(picked.length).toBeGreaterThan(0)
+    for (const c of picked) {
+      expect(c.rows.map((r) => r.status)).toEqual(['error'])
+      expect(c.rows[0].error).toMatchObject({ code: F7.rowError.code, field: F7.rowError.field })
+    }
   })
 
   it('공격 탭 상대 특성 오류: 그 상대 행 전부 계산 불가, 다른 상대는 정상', () => {
@@ -1139,15 +1335,25 @@ describe('AC12 오류 격리', () => {
     for (const r of base) expect(r.error).toBeUndefined()
   })
 
-  it('상대 하양허브 + 껍질깨기(합성): 방어 탭 그 랭크 행의 연속기만 계산 불가로 표시', () => {
+  it('상대 하양허브 + 껍질깨기: 방어 탭 래더 상대(합성)는 기본 줄 도구 없음(R14)이라 계산 불가 항목이 없고, 목록 밖 타겟(하양허브 프리셋)은 그 랭크 후 항목의 연속기만 계산 불가로 표시', () => {
     const w = F8.opponentWhiteHerb
     const view = syntheticView(game, bo1.meta, [...bo1.ranking, whiteHerbShellSmashEntry(entryOf(bo1, 'sneasler'))])
-    const { view: tv } = run('F8-wh-opp', only(EXAMPLE_SET, [w.opponent], { view }), 'defense')
-    const rows = tv.cards.filter((c) => c.opponent.id === w.opponent).flatMap((c) => c.rows)
-    const bad = rows.filter((r) => r.basis?.kind === 'rank' && r.basis.means.id === w.means && r.moveId === w.multihit)
+    const { plan, view: tv } = run('F8-wh-opp', only(EXAMPLE_SET, [w.opponent], { view }), 'defense')
+    const ladder = plan.cards.filter((c) => c.opponent.id === w.opponent && c.berry === undefined)
+    expect(ladder.length).toBeGreaterThan(0)
+    for (const c of ladder) expect(c.opponentSet.item, c.id).toBeUndefined()
+    const ladderItems = tv.cards.filter((c) => c.opponent.id === w.opponent).flatMap((c) => c.items)
+    expect(ladderItems.some((i) => i.basis?.means.id === w.means && i.moveId === w.multihit)).toBe(true)
+    expect(ladderItems.filter((i) => i.status === 'error')).toEqual([])
+
+    const edits = Object.fromEntries(([0, 1, 2] as const).map((p) => [presetKey('defense', 'physical', p), { item: 'whiteherb' }]))
+    const target = { rosterId: w.opponent, moves: [w.multihit, w.means], edits }
+    const { view: cv } = run('F8-wh-custom', only(EXAMPLE_SET, [bo1.ranking[0].id], { customTargets: [target] }), 'defense')
+    const items = cv.cards.filter((c) => c.opponent.source === 'custom').flatMap((c) => c.items)
+    const bad = items.filter((i) => i.basis?.means.id === w.means && i.moveId === w.multihit)
     expect(bad.length).toBeGreaterThan(0)
-    for (const r of bad) expect(r).toMatchObject({ status: 'error', error: { code: 'WHITE_HERB_MULTIHIT' } })
-    expect(rows.filter((r) => r.status === 'error').every((r) => r.moveId === w.multihit && r.basis?.kind === 'rank')).toBe(true)
+    for (const i of bad) expect(i).toMatchObject({ status: 'error', error: { code: 'WHITE_HERB_MULTIHIT' } })
+    expect(items.filter((i) => i.status === 'error').every((i) => i.moveId === w.multihit && i.basis !== undefined)).toBe(true)
   })
 })
 
@@ -1263,5 +1469,130 @@ describe('관여 능력치 S(F11): 스피드 의존 기술 행만 내 S에 의�
       expect(rows.length).toBeGreaterThan(0)
       for (const r of rows) expect(r.dependsOn.includes('spe'), label).toBe(depends)
     }
+  })
+})
+
+// ---------- AC35 방어 탭 상대 화력 도구 행(R14) ----------
+
+/** PRD R14 화력 도구 목록(구현 상수와 따로 적는다) */
+const ORACLE_POWER_ITEMS = [
+  'lifeorb',
+  'expertbelt',
+  'muscleband',
+  'wiseglasses',
+  'blackbelt',
+  'blackglasses',
+  'charcoal',
+  'dragonfang',
+  'fairyfeather',
+  'hardstone',
+  'magnet',
+  'metalcoat',
+  'miracleseed',
+  'mysticwater',
+  'nevermeltice',
+  'poisonbarb',
+  'sharpbeak',
+  'twistedspoon',
+  'silverpowder',
+  'silkscarf',
+  'spelltag',
+  'softsand',
+]
+
+describe('AC35 방어 탭 화력 도구 행: 기본 줄 도구 없음, 도구 줄 = 점유율 기준 이상 · 보정 여부는 코어 대미지 비교', () => {
+  it('예시 세트 상위 N: 기본 카드 도구(메가만 메가스톤), 도구 변형 = 기준 이상 화력 도구 중 코어 대미지가 실제로 커지는 기술이 있는 것, triggers = 그 기술들', () => {
+    const { plan } = run('example', top(EXAMPLE_SET), 'defense')
+    let variants = 0
+    let checkedMoves = 0
+    for (const id of new Set(plan.cards.filter((c) => c.opponent.source === 'ladder').map((c) => c.opponent.id))) {
+      const entry = entryOf(bo1, id)
+      const cards = plan.cards.filter((c) => c.opponent.id === id)
+      const base = cards.filter((c) => c.berry === undefined)
+      for (const c of base) expect(c.opponentSet.item, c.id).toBe(entry.mega === undefined ? undefined : entry.representative.set.item)
+      // 변형 카드는 그 상대 기본 카드들 뒤에만 온다
+      const firstVariant = cards.findIndex((c) => c.berry !== undefined)
+      if (firstVariant >= 0) expect(cards.slice(firstVariant).every((c) => c.berry !== undefined), id).toBe(true)
+      // 분류마다 첫 정상 관측 기본 카드의 세트로 기술마다 도구 유무 최대 대미지를 견준다
+      const setOf = new Map<string, PokemonSet>()
+      for (const c of base) {
+        if (c.state !== 'ok' || c.bundle.userAdded !== undefined) continue
+        // 성묘의 랭크 전 항목은 1기절 조건(R15)
+        for (const g of c.conditions.filter((x) => x.id === JSON.stringify(['base']) || x.id === JSON.stringify(['faint', 1])))
+          for (const cand of g.candidates) if (game.data.moves[cand.moveId] !== undefined && !setOf.has(cand.moveId)) setOf.set(cand.moveId, c.opponentSet)
+      }
+      const maxOf = (set: PokemonSet, move: string): number => {
+        const v = judgeDamage(game, 'defender', set, EXAMPLE_SET, move, undefined, undefined, { rollSteps: N }).value
+        return v.kind === 'damage' ? v.max : 0
+      }
+      const expected: { item: string; share: number; triggers: string[] }[] = []
+      if (entry.mega === undefined) {
+        for (const item of ORACLE_POWER_ITEMS) {
+          const share = entry.items.shares[item] ?? 0
+          if (share < DEFAULT_CRITERIA.powerItemShareMin) continue
+          const triggers = [...setOf].filter(([move, set]) => maxOf({ ...set, item }, move) > maxOf(set, move)).map(([move]) => move)
+          checkedMoves += setOf.size
+          if (triggers.length > 0) expected.push({ item, share, triggers })
+        }
+      }
+      const got = new Map<string, { item: string; share: number; triggers: string[] }>()
+      for (const c of cards) {
+        if (c.berry === undefined) continue
+        expect(c.opponentSet.item, c.id).toBe(c.berry.item)
+        for (const r of c.rowIds) expect(plan.rows[r].attacker.item, r).toBe(c.berry.item)
+        got.set(c.berry.item, { item: c.berry.item, share: c.berry.share, triggers: [...c.berry.triggers].sort() })
+      }
+      const norm = (xs: readonly { item: string; share: number; triggers: string[] }[]) =>
+        xs.map((x) => ({ ...x, triggers: [...x.triggers].sort() })).sort((a, b) => (a.item < b.item ? -1 : 1))
+      expect(norm([...got.values()]), id).toEqual(norm(expected))
+      variants += got.size
+    }
+    expect(variants).toBeGreaterThan(0)
+    expect(checkedMoves).toBeGreaterThan(0)
+  })
+})
+
+// ---------- AC37 성묘 위력 항목(R15) ----------
+
+describe('AC37 방어 탭 타부자고 vs 대쓰여너: 성묘(100)·(150)·(200), 위력 50 항목 없음, 기본 기준 기술 성묘 계열', () => {
+  const gholdengo = entryOf(bo1, 'gholdengo').representative.set
+  const faint = (n: number) => JSON.stringify(['faint', n])
+  const lr = (n: number) => itemKey('lastrespects', faint(n))
+
+  it('기본 카드마다 성묘 세 항목(위력 100·150·200)이 있고 기본 조건 성묘가 없으며, 기본 항목이 성묘 계열이다', () => {
+    const { plan, view } = run('ac37-gholdengo', only(gholdengo, ['basculegion']), 'defense')
+    const cards = view.cards.filter((c) => c.opponent.id === 'basculegion' && c.berry === undefined)
+    expect(cards.length).toBeGreaterThan(0)
+    for (const c of cards) {
+      const keys = c.items.map((i) => i.key)
+      expect(keys, c.id).toEqual(expect.arrayContaining([lr(1), lr(2), lr(3)]))
+      expect(keys, c.id).not.toContain(itemKey('lastrespects', BASE_CONDITION_ID))
+      expect([1, 2, 3].map((n) => c.items.find((i) => i.key === lr(n))?.power)).toEqual([100, 150, 200])
+      expect(JSON.parse(c.defaultItem?.key ?? '[]')[0], c.id).toBe('lastrespects')
+      // 성묘(100) 단건 판정이 고스트다이브보다 세다
+      const max = (key: string) => c.items.find((i) => i.key === key)?.cell?.maxPercent ?? 0
+      expect(max(lr(1)), c.id).toBeGreaterThan(max(itemKey('phantomforce', BASE_CONDITION_ID)))
+    }
+    // 계획의 성묘 극단 필터는 쓰러진 아군 수만 다른 조건이고 판정 캐시 키가 서로 다르다
+    const spec = plan.cards.find((c) => c.id === cards[0].id) as CardSpec
+    const filters = [1, 2, 3].map((n) => spec.conditions.find((g) => g.id === faint(n))?.candidates[0])
+    expect(filters.map((f) => f?.target)).toEqual(['filter', 'filter', 'filter'])
+    expect(filters.map((f) => plan.filters[f?.id as string].conditions.lastRespectsFainted)).toEqual([1, 2, 3])
+    const keys = filters.map((f) => judgementKey(plan, { kind: 'extreme', filterId: f?.id as string }))
+    expect(new Set(keys).size).toBe(3)
+  })
+
+  it('코어 직접 호출: 성묘 대미지는 1·2·3기절 순으로 커지고, 성묘(100)이 고스트다이브보다 세다', () => {
+    const opp = entryOf(bo1, 'basculegion').representative.set
+    const at = (move: string, c?: BattleConditions) => {
+      const v = judgeDamage(game, 'defender', opp, gholdengo, move, c, undefined, { rollSteps: N }).value
+      if (v.kind !== 'damage') throw new Error(`${move} 대미지 결과가 아니다`)
+      return v.max
+    }
+    const [p100, p150, p200] = [1, 2, 3].map((n) => at('lastrespects', { lastRespectsFainted: n }))
+    expect(at('lastrespects')).toBeLessThan(p100)
+    expect(p100).toBeLessThan(p150)
+    expect(p150).toBeLessThan(p200)
+    expect(p100).toBeGreaterThan(at('phantomforce'))
   })
 })

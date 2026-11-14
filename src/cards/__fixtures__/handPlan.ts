@@ -11,7 +11,6 @@ import type {
   ErrorReason,
   ExtremeSpec,
   FixedSpec,
-  ProbeSpec,
   MoveNotice,
   NatureVariant,
   NatureVariants,
@@ -131,7 +130,6 @@ export interface PlanOpts {
   rows?: RowSpec[]
   filters?: ExtremeSpec[]
   fixed?: FixedSpec[]
-  probes?: ProbeSpec[]
   mySp?: SpTable
   mySide?: 'attacker' | 'defender'
   notices?: readonly MoveNotice[]
@@ -155,7 +153,6 @@ export function plan(o: PlanOpts): TabPlan {
     rows: byId(o.rows),
     filters: byId(o.filters),
     fixed: byId(o.fixed),
-    probes: byId(o.probes),
     customTargetConflicts: [],
     notices: o.notices ?? [],
   }

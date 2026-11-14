@@ -95,18 +95,19 @@ test.describe('설정 영역 3줄', () => {
     const box = (await page.getByTestId('result-box').boundingBox())!
     expect(ys[2]).toBeLessThan(box.y)
 
-    // 1행: 형식 · 기준 월 · 최소 사용률 4종(SP 배분 · 랭크업 기술 · 구애스카프 · 반감열매) 순
+    // 1행: 형식 · 기준 월 · 최소 사용률 5종(SP 배분 · 랭크업 기술 · 구애스카프 · 반감열매 · 화력 도구) 순
     const statNames = await stats.locator('select, input').evaluateAll((els) => els.map((e) => (e as HTMLElement).getAttribute('aria-label') ?? e.closest('label')?.firstChild?.textContent?.trim()))
-    expect(statNames).toEqual(['형식', '기준 월', 'SP 배분 최소(%)', '랭크업 기술 최소(%)', '구애스카프 최소(%)', '반감열매 최소(%)'])
+    expect(statNames).toEqual(['형식', '기준 월', 'SP 배분 최소(%)', '랭크업 기술 최소(%)', '구애스카프 최소(%)', '반감열매 최소(%)', '화력 도구 최소(%)'])
     await expect(combo(stats, '형식')).toHaveValue('bo1')
     await expect(combo(stats, '기준 월')).toBeVisible()
     await expect(spin(stats, 'SP 배분 최소(%)')).toHaveValue('5')
     await expect(spin(stats, '랭크업 기술 최소(%)')).toHaveValue('10')
     await expect(spin(stats, '구애스카프 최소(%)')).toHaveValue('10')
     await expect(spin(stats, '반감열매 최소(%)')).toHaveValue('5')
+    await expect(spin(stats, '화력 도구 최소(%)')).toHaveValue('5')
     await expect(stats).toContainText('통계 설정')
     // 보이는 라벨이 그대로 접근 이름(WCAG 2.5.3), "사용률" 뜻은 설명으로
-    for (const name of ['SP 배분', '랭크업 기술', '구애스카프', '반감열매']) {
+    for (const name of ['SP 배분', '랭크업 기술', '구애스카프', '반감열매', '화력 도구']) {
       await expect(spin(stats, `${name} 최소(%)`)).toHaveAccessibleDescription(new RegExp(`^${name} 최소 사용률\\(%\\)`))
     }
 
@@ -164,12 +165,12 @@ test.describe('설정 영역 3줄', () => {
       await expect(field).toHaveValue('1')
       await waitComplete(page)
     }
-    // 랭크업 기술 기준을 낮추면(1%) 기준 10%보다 랭크 행이 늘거나 같다: 100%로 올리면 랭크 행이 사라진다.
+    // 랭크업 기술 기준을 낮추면(1%) 랭크 후 항목이 늘거나 같다: 100%로 올리면 랭크 후 항목이 사라져 기술 선택 항목 수가 준다.
     // 상대 랭크 수단은 방어·스피드 탭만 보므로(공격 탭은 내 능동 랭크업만, 2026-11-12) 방어 탭에서 센다.
     await selectTab(page, '방어')
     const rankRows = async () => {
       await waitComplete(page)
-      return cards(page).evaluateAll((els) => els.reduce((n, el) => n + Number(el.querySelector('[data-testid="card-more"]')?.textContent?.match(/\d+/)?.[0] ?? 0), 0))
+      return cards(page).evaluateAll((els) => els.reduce((n, el) => n + Number((el as HTMLElement).dataset.items ?? 0), 0))
     }
     const low = await rankRows()
     await spin(stats, '랭크업 기술 최소(%)').fill('100')

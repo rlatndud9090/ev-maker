@@ -1,0 +1,344 @@
+// 판정 행 기술 선택 항목: 항목 키·단건 판정 상태·변동 판정·정렬·기본 항목 결정. 판정은 하지 않는다(결과 조회만).
+import { filterState, neededVariants, probeKey, rowChanges, rowJudgements, taskKey } from './schedule'
+import { LAST_RESPECTS, faintConditionId } from './ids'
+import type { CardSpec, CompactCell, ConditionGroup, ErrorReason, MoveCandidate, RankBasis, ResultMap, TabPlan } from './types'
+
+/** 계획의 기본 조건 그룹 id(plan BASE_CONDITION과 같은 값) */
+export const BASE_CONDITION_ID = JSON.stringify(['base'])
+
+/** 성묘 위력 조건 중 랭크 전 항목(P 자리) = 1기절(위력 100). 2·3기절은 랭크 후 항목처럼 Q 후보다 */
+const FAINT_BASE_ID = faintConditionId(1)
+
+/** 그 기술의 랭크 전 항목 조건 id(성묘는 1기절, 그 밖은 기본 조건) */
+export const baseConditionOf = (moveId: string): string => (moveId === LAST_RESPECTS ? FAINT_BASE_ID : BASE_CONDITION_ID)
+
+/** 항목(기술 × 랭크 조건)의 안정 키. 카드(배분·분류) id를 담지 않아 같은 상대의 모든 카드에서 같다 */
+export const itemKey = (moveId: string, conditionId: string): string => JSON.stringify([moveId, conditionId])
+
+export type ItemProbe =
+  | { kind: 'pending' }
+  | { kind: 'ok'; cell: CompactCell }
+  | { kind: 'immune'; cell: CompactCell }
+  | { kind: 'error'; reason: ErrorReason }
+
+export type ItemVariability = { kind: 'pending' } | { kind: 'variable' } | { kind: 'fixed'; category: string } | { kind: 'error'; reason: ErrorReason }
+
+/** 카드 안 항목 하나(후보 하나). moveOrder = 기존 기술 순서(MoveCandidate.order), conditionOrder = 조건 그룹 순서 */
+export interface CardItemRef {
+  key: string
+  conditionId: string
+  candidate: MoveCandidate
+  rankBefore: boolean
+  basis?: RankBasis
+  moveOrder: number
+  conditionOrder: number
+}
+
+function basisOf(plan: TabPlan, c: MoveCandidate): RankBasis | undefined {
+  if (c.target === 'filter') return plan.filters[c.id].basis
+  if (c.target === 'row') {
+    const b = plan.rows[c.id].basis
+    return b?.kind === 'rank' ? b : undefined
+  }
+  return undefined
+}
+
+/** 카드의 항목(조건 순 → 후보 순). 같은 기술·같은 조건은 하나다 */
+export function cardItems(plan: TabPlan, card: CardSpec): CardItemRef[] {
+  const groups: readonly ConditionGroup[] = card.conditions
+  const out: CardItemRef[] = []
+  groups.forEach((g, gi) => {
+    for (const c of g.candidates) {
+      const ref: CardItemRef = { key: itemKey(c.moveId, g.id), conditionId: g.id, candidate: c, rankBefore: g.id === BASE_CONDITION_ID || g.id === FAINT_BASE_ID, moveOrder: c.order, conditionOrder: gi }
+      const basis = basisOf(plan, c)
+      if (basis !== undefined) ref.basis = basis
+      out.push(ref)
+    }
+  })
+  return out
+}
+
+/** 후보의 현재 세트 단건 판정 상태(고정 판정은 그 결과, 계획 단계 계산 불가 행은 그 오류) */
+export function itemProbe(plan: TabPlan, c: MoveCandidate, results: ResultMap): ItemProbe {
+  if (c.target === 'row') {
+    const error = plan.rows[c.id].error
+    if (error !== undefined) return { kind: 'error', reason: error }
+  }
+  const r = results.get(probeKey(c))
+  if (r === undefined) return { kind: 'pending' }
+  if (r.kind === 'error') return { kind: 'error', reason: r.reason }
+  const cell = r.kind === 'probe' || r.kind === 'fixed' ? r.cell : undefined
+  if (cell === undefined) throw new Error(`후보 ${c.id}의 단건 판정 결과 종류가 ${r.kind}다`)
+  return cell.immune === true ? { kind: 'immune', cell } : { kind: 'ok', cell }
+}
+
+/** 스윕 행 하나의 변동 판정: 변형 범위 양 끝이 다르면 바로 변동, 같으면 성격 변형 스윕까지 본다 */
+export function rowVariability(plan: TabPlan, results: ResultMap, rowId: string): ItemVariability {
+  const spec = plan.rows[rowId]
+  if (spec.error !== undefined) return { kind: 'error', reason: spec.error }
+  const ends = results.get(taskKey({ kind: 'ends', rowId }))
+  if (ends === undefined) return { kind: 'pending' }
+  if (ends.kind === 'error') return { kind: 'error', reason: ends.reason }
+  if (ends.kind !== 'ends') throw new Error(`행 ${rowId}의 양 끝 결과 종류가 ${ends.kind}다`)
+  if (ends.range.low.category !== ends.range.high.category) return { kind: 'variable' }
+  const j = rowJudgements(plan, results, rowId)
+  if (!j.variantsDone) return { kind: 'pending' }
+  // 현재 성격과 같은 변형은 현재 스윕을 쓴다(그 스윕이 아직 없거나 오류면 판정 전·불가).
+  if (spec.natures !== undefined && neededVariants(plan, spec).length < 2) {
+    const swept = results.get(taskKey({ kind: 'sweep', rowId, stage: 2 }))
+    if (swept === undefined) return { kind: 'pending' }
+    if (swept.kind === 'error') return { kind: 'error', reason: swept.reason }
+  }
+  if (j.variantError) {
+    for (const nature of neededVariants(plan, spec)) {
+      const r = results.get(taskKey({ kind: 'variant', rowId, nature }))
+      if (r?.kind === 'error') return { kind: 'error', reason: r.reason }
+    }
+  }
+  return rowChanges(ends, j) ? { kind: 'variable' } : { kind: 'fixed', category: ends.range.low.category }
+}
+
+/**
+ * 항목의 변동 판정. 방어 탭 필터 = 극단 필터를 통과하고 H 행 또는 B/D 행이 변동이면 변동, 걸리면 그 극단 판정으로 고정.
+ * 내 SP와 무관한 고정 판정(공격 탭 속임수)은 늘 고정.
+ */
+export function itemVariability(plan: TabPlan, card: CardSpec, c: MoveCandidate, results: ResultMap): ItemVariability {
+  if (c.target === 'row') return rowVariability(plan, results, c.id)
+  if (c.target === 'fixed') {
+    const r = results.get(taskKey({ kind: 'fixed', fixedId: c.id }))
+    if (r === undefined) return { kind: 'pending' }
+    if (r.kind === 'error') return { kind: 'error', reason: r.reason }
+    if (r.kind !== 'fixed') throw new Error(`고정 판정 ${c.id}의 결과 종류가 ${r.kind}다`)
+    return { kind: 'fixed', category: r.cell.category }
+  }
+  const f = filterState(results, c.id)
+  if (f.kind === 'pending') return { kind: 'pending' }
+  if (f.kind === 'error') return { kind: 'error', reason: f.result.reason }
+  if (f.kind === 'blocked') return { kind: 'fixed', category: f.result.low.category }
+  let pending = false
+  let fixed: string | undefined
+  for (const rowId of card.rowIds) {
+    if (plan.rows[rowId].gate !== c.id) continue
+    const v = rowVariability(plan, results, rowId)
+    if (v.kind === 'variable') return v
+    if (v.kind === 'error') return v
+    if (v.kind === 'pending') pending = true
+    else fixed ??= v.category
+  }
+  if (pending || fixed === undefined) return { kind: 'pending' }
+  return { kind: 'fixed', category: fixed }
+}
+
+/** 기본 항목 결정·정렬에 쓰는 항목 상태(판정 결과를 이미 조회한 값). 테스트는 이 값을 직접 넣는다 */
+export interface ItemState {
+  key: string
+  moveId: string
+  rankBefore: boolean
+  /** 우선도 > 0 기술 */
+  priority: boolean
+  /** 기술 채용률(MoveCandidate.share) */
+  share: number
+  /** 주력 기술(MoveCandidate.main) */
+  main: boolean
+  probe: ItemProbe
+  variability: ItemVariability
+  moveOrder: number
+  conditionOrder: number
+}
+
+const probeClass = (p: ItemProbe): number => (p.kind === 'ok' ? 0 : p.kind === 'pending' ? 1 : p.kind === 'error' ? 2 : 3)
+
+type StrengthKey = Pick<ItemState, 'probe' | 'moveId' | 'rankBefore' | 'moveOrder' | 'conditionOrder'>
+
+/**
+ * 가장 세게 치는 순(기준 기술·Q 비교용): 정상 → 판정 전 → 계산 불가 → 무효. 정상끼리 현재 SP 1타 확률 → 최대 대미지 비율이 큰 순,
+ * 같으면 같은 기술의 랭크 전이 먼저 → 기술 순서 → 조건 순서.
+ */
+export function compareStrength(a: StrengthKey, b: StrengthKey): number {
+  const ca = probeClass(a.probe)
+  const cb = probeClass(b.probe)
+  if (ca !== cb) return ca - cb
+  const hit = compareHit(a, b)
+  if (hit !== 0) return hit
+  if (a.moveId === b.moveId && a.rankBefore !== b.rankBefore) return a.rankBefore ? -1 : 1
+  if (a.moveOrder !== b.moveOrder) return a.moveOrder - b.moveOrder
+  return a.conditionOrder - b.conditionOrder
+}
+
+/** 정상 항목끼리 현재 SP 1타 확률 → 최대 대미지 비율이 큰 순(그 밖은 0) */
+function compareHit(a: StrengthKey, b: StrengthKey): number {
+  if (a.probe.kind !== 'ok' || b.probe.kind !== 'ok') return 0
+  const pa = a.probe.cell.ohkoChance ?? 0
+  const pb = b.probe.cell.ohkoChance ?? 0
+  if (pa !== pb) return pb - pa
+  return (b.probe.cell.maxPercent ?? 0) - (a.probe.cell.maxPercent ?? 0)
+}
+
+/** 목록 꼬리: 정상·판정 전 0, 계산 불가 1, 무효 2 */
+const tailClass = (p: ItemProbe): number => (p.kind === 'error' ? 1 : p.kind === 'immune' ? 2 : 0)
+
+/**
+ * 목록 정렬(PRD R16): 계산 불가 → 무효는 맨 뒤, 그 밖은 기술 채용률 높은 순 → 기존 기술 순서. 같은 기술 항목끼리는 강한 순(compareStrength,
+ * 판정 전은 같은 기술 안에서 정상 뒤).
+ */
+export function compareItems(a: StrengthKey & Pick<ItemState, 'share'>, b: typeof a): number {
+  const ta = tailClass(a.probe)
+  const tb = tailClass(b.probe)
+  if (ta !== tb) return ta - tb
+  if (a.moveId !== b.moveId) {
+    if (a.share !== b.share) return b.share - a.share
+    if (a.moveOrder !== b.moveOrder) return a.moveOrder - b.moveOrder
+  }
+  return compareStrength(a, b)
+}
+
+/** 주력 기술 채용률 하한(PRD R4-1, 경계 포함) */
+export const MAIN_SHARE_MIN = 0.2
+
+/**
+ * 방어 탭 주력 기술(PRD R4-1). 입력 = 그 상대의 모든 분류 후보 기술(기존 기술 순서), priority = 필드로 생긴 선공 포함.
+ * 래더 상대(ranked): 선공기 아닌 것 중 채용률 ≥ MAIN_SHARE_MIN, 없으면 선공기 아닌 채용률 1위 하나, 그것도 없으면 채용률 1위 하나(동률은 입력 순).
+ * 목록 밖 타겟: 선공기 아닌 것 전부, 없으면 첫 기술.
+ */
+export function mainMoves(moves: readonly { moveId: string; share: number; priority: boolean }[], ranked: boolean): Set<string> {
+  const plain = moves.filter((m) => !m.priority)
+  if (!ranked) return new Set((plain.length > 0 ? plain : moves.slice(0, 1)).map((m) => m.moveId))
+  const over = plain.filter((m) => m.share >= MAIN_SHARE_MIN)
+  if (over.length > 0) return new Set(over.map((m) => m.moveId))
+  const top = (plain.length > 0 ? plain : moves).reduce<(typeof moves)[number] | undefined>((best, m) => (best === undefined || m.share > best.share ? m : best), undefined)
+  return new Set(top === undefined ? [] : [top.moveId])
+}
+
+export type DefaultResult =
+  /** need = 결정에 필요한데 아직 변동 판정이 나오지 않은 항목 키(단건 판정이 남았으면 비어 있다) */
+  | { kind: 'pending'; need: readonly string[] }
+  /**
+   * viaPriority = 방어 탭 선공기 우선으로 정해짐. basis = 기준 기술 랭크 전 항목(분류 사이 비교용).
+   * fallback = 정상 주력 기술이 없어 목록 첫 정상 항목(없으면 첫 항목)으로 정해짐(이후 단계 건너뜀)
+   */
+  | { kind: 'ready'; key: string; viaPriority: boolean; basis: string; fallback: boolean }
+
+const GUARANTEED_OHKO = 'guaranteed-ohko'
+const GUARANTEED_SURVIVE = 'guaranteed-survive'
+const valid = (i: ItemState): boolean => i.probe.kind === 'ok'
+
+type Step<T> = { kind: 'need'; keys: string[] } | { kind: 'done'; value: T }
+
+/** 랭크 후 항목 Q: 변동인 것 중 가장 센 것, 없으면 가장 센 것(정상 항목만, 정렬된 입력). 변동 판정이 남았으면 need */
+function chooseQ(qs: readonly ItemState[]): Step<ItemState | undefined> {
+  const waiting = qs.filter((q) => q.variability.kind === 'pending').map((q) => q.key)
+  if (waiting.length > 0) return { kind: 'need', keys: waiting }
+  return { kind: 'done', value: qs.find((q) => q.variability.kind === 'variable') ?? qs[0] }
+}
+
+/** 기준 기술의 랭크 전 P·후 Q 비교(위에서부터 처음 맞는 줄) */
+function pickPQ(sorted: readonly ItemState[], moveId: string): Step<ItemState> {
+  const p = sorted.find((i) => i.moveId === moveId && i.rankBefore)
+  const qs = sorted.filter((i) => i.moveId === moveId && !i.rankBefore)
+  if (p === undefined) return { kind: 'done', value: qs[0] }
+  if (qs.length === 0) return { kind: 'done', value: p }
+  const validQs = qs.filter(valid)
+  if (!valid(p)) {
+    if (validQs.length === 0) return { kind: 'done', value: p }
+    const q = chooseQ(validQs)
+    return q.kind === 'need' ? q : { kind: 'done', value: q.value as ItemState }
+  }
+  const pv = p.variability
+  if (pv.kind === 'pending') return { kind: 'need', keys: [p.key] }
+  // 변동이면 Q와 무관하게 P. 확정1타 고정이면 랭크업 없이도 1타(랭크업은 판정 능력치를 올려 Q도 확정1타 고정이다).
+  if (pv.kind !== 'fixed' || pv.category === GUARANTEED_OHKO) return { kind: 'done', value: p }
+  if (validQs.length === 0) return { kind: 'done', value: p }
+  const q = chooseQ(validQs)
+  if (q.kind === 'need') return q
+  const qv = (q.value as ItemState).variability
+  if (qv.kind === 'variable') return { kind: 'done', value: q.value as ItemState }
+  if (qv.kind === 'fixed' && qv.category === GUARANTEED_SURVIVE) return { kind: 'done', value: q.value as ItemState }
+  return { kind: 'done', value: p }
+}
+
+/**
+ * 주력 기술 중 기준 기술(PRD R4-1, 사용자 결정 2026-11-15): 채용률 순(동률은 기존 기술 순서)으로 그 기술 항목 중 하나라도 변동인 첫 기술.
+ * 모두 고정(변동 판정 끝)이면 랭크 전 항목이 확정1타 고정인 기술 중 가장 약한 것(동률은 기존 기술 순서), 없으면 가장 센 것.
+ * 앞 기술의 변동 판정이 남았으면 그 항목만 기다린다(뒤 기술 판정과 무관하게 정해진다). mains = 채용률 순, strong = 강한 순.
+ */
+function pickMain(strong: readonly ItemState[], mains: readonly ItemState[]): Step<ItemState> {
+  // 주력이 하나면 변동 판정과 무관하게 그 기술이다
+  if (mains.length === 1) return { kind: 'done', value: mains[0] }
+  for (const m of mains) {
+    if (m.variability.kind === 'pending') return { kind: 'need', keys: [m.key] }
+    if (m.variability.kind === 'variable') return { kind: 'done', value: m }
+    // 무효·계산 불가 항목은 변동일 수 없어 기다리지 않는다
+    const rest = strong.filter((i) => i.moveId === m.moveId && i !== m && i.probe.kind !== 'immune' && i.probe.kind !== 'error')
+    if (rest.some((i) => i.variability.kind === 'variable')) return { kind: 'done', value: m }
+    const waiting = rest.filter((i) => i.variability.kind === 'pending').map((i) => i.key)
+    if (waiting.length > 0) return { kind: 'need', keys: waiting }
+  }
+  const ohko = mains.filter((m) => m.variability.kind === 'fixed' && m.variability.category === GUARANTEED_OHKO)
+  if (ohko.length === 0) return { kind: 'done', value: strong.find((i) => mains.includes(i)) as ItemState }
+  const weakest = ohko.reduce((w, m) => {
+    const d = compareHit(m, w)
+    return d > 0 || (d === 0 && m.moveOrder < w.moveOrder) ? m : w
+  })
+  return { kind: 'done', value: weakest }
+}
+
+/**
+ * 기본 항목(사용자가 고르지 않았을 때 보이는 항목, PRD R4):
+ * 1. 기준 기술 = 주력 기술 중 pickMain(variableFirst = 방어 탭), 아니면 가장 센 주력(공격 탭). 정상 주력 랭크 전 항목이 없으면 목록(compareItems) 첫 정상 항목, 없으면 첫 항목(이후 단계 건너뜀)
+ * 2. 방어 탭에서 내가 확실히 빠르면(speedEdge) 랭크 전·후 중 하나라도 변동인 상대 선공기 중 가장 센 것을 기준 기술로
+ * 3. 기준 기술의 랭크 전 P·후 Q를 비교(pickPQ)
+ * 단건 판정은 결정에 쓰는 항목만 기다린다: 주력 랭크 전 항목 → (선공기 우선이면 선공기 항목) → 기준 기술 항목, 대체 경로는 전부.
+ * 정해진 값은 나머지 항목 판정과 무관하다(깜박임 없음). 단건 판정은 모두 1단계 작업이다.
+ */
+export function resolveDefault(items: readonly ItemState[], opts: { priorityRule: boolean; variableFirst: boolean }): DefaultResult {
+  const WAIT: DefaultResult = { kind: 'pending', need: [] }
+  const probing = (xs: readonly ItemState[]) => xs.some((i) => i.probe.kind === 'pending')
+  if (items.length === 0 || probing(items.filter((i) => i.rankBefore && i.main))) return WAIT
+  const strong = [...items].sort(compareStrength)
+  const validMains = strong.filter((i) => i.rankBefore && i.main && valid(i))
+  if (validMains.length === 0) {
+    if (probing(items)) return WAIT
+    const listed = [...items].sort(compareItems)
+    // 선공기는 주력이 아니므로 대체에서도 선공기 아닌 정상 랭크 전 항목을 먼저 고른다(주력이 모두 무효인 상대)
+    const first = listed.find((i) => valid(i) && !i.priority && i.rankBefore) ?? listed.find(valid) ?? listed[0]
+    return { kind: 'ready', key: first.key, viaPriority: false, basis: first.key, fallback: true }
+  }
+  const ofMove = (moveId: string) => strong.filter((i) => i.moveId === moveId)
+  if (opts.priorityRule) {
+    if (probing(items.filter((i) => i.priority))) return WAIT
+    for (const p of strong) {
+      if (!p.priority || !p.rankBefore || !valid(p)) continue
+      const group = ofMove(p.moveId).filter(valid)
+      if (group.some((i) => i.variability.kind === 'variable')) {
+        const r = pickPQ(strong, p.moveId)
+        return r.kind === 'need' ? { kind: 'pending', need: r.keys } : { kind: 'ready', key: r.value.key, viaPriority: true, basis: p.key, fallback: false }
+      }
+      const waiting = group.filter((i) => i.variability.kind === 'pending').map((i) => i.key)
+      if (waiting.length > 0) return { kind: 'pending', need: waiting }
+    }
+  }
+  // 방어 탭은 채용률 순으로 변동 우선(같은 변동·고정끼리 채용률 높은 쪽), 공격 탭은 가장 센 기술
+  const byUsage = [...validMains].sort((a, b) => b.share - a.share || a.moveOrder - b.moveOrder)
+  const main: Step<ItemState> = opts.variableFirst ? pickMain(strong, byUsage) : { kind: 'done', value: validMains[0] }
+  if (main.kind === 'need') return { kind: 'pending', need: main.keys }
+  const basis = main.value
+  if (probing(ofMove(basis.moveId))) return WAIT
+  const r = pickPQ(strong, basis.moveId)
+  return r.kind === 'need' ? { kind: 'pending', need: r.keys } : { kind: 'ready', key: r.value.key, viaPriority: false, basis: basis.key, fallback: false }
+}
+
+/** 카드 항목의 상태를 결과에서 조회한다 */
+export function itemStates(plan: TabPlan, card: CardSpec, refs: readonly CardItemRef[], results: ResultMap): ItemState[] {
+  return refs.map((r) => ({
+    key: r.key,
+    moveId: r.candidate.moveId,
+    rankBefore: r.rankBefore,
+    priority: r.candidate.priority,
+    share: r.candidate.share,
+    main: r.candidate.main,
+    probe: itemProbe(plan, r.candidate, results),
+    variability: itemVariability(plan, card, r.candidate, results),
+    moveOrder: r.moveOrder,
+    conditionOrder: r.conditionOrder,
+  }))
+}

@@ -1,12 +1,12 @@
-import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type FocusEvent, type ReactNode, type Ref } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type FocusEvent, type ReactNode, type Ref } from 'react'
 import type { PokemonSet } from '../../core'
-import { chosenOption, groupCards, sortByResult, type CustomTarget, type PinnedBundle, type ResultBucket, type SortMode, type Tab } from '../../cards'
+import { chosenOption, groupCards, groupItems, sortByResult, type CardGroup, type CardView, type CustomTarget, type GroupItem, type PinnedBundle, type ResultBucket, type SortMode, type Tab } from '../../cards'
 import type { Snapshot } from '../../data/schema'
 import { namesOf } from '../../ui/names'
 import { categoryBadge, orderBadge, progressText } from '../../ui/format'
 import { josa, koReason } from '../../ui/koErrors'
 import type { TabViewState } from '../executor'
-import type { AppAction } from '../state'
+import type { AppAction, MoveChoice } from '../state'
 import { CardItem } from './CardItem'
 import { moveNoticeText } from './text'
 
@@ -23,6 +23,10 @@ interface Props {
   /** 고정한 래더 배분(고정한 순): 행의 배분 선택지 맨 위 */
   pinnedBundles: readonly PinnedBundle[]
   sortMode: SortMode
+  /** 직접 고른 기술 항목(모든 탭) */
+  moveChoices: readonly MoveChoice[]
+  /** 마지막으로 내 포켓몬 종을 바꾼 세대(AppState speciesGeneration): 이 세대 이상 뷰가 보이면 그 전에 펼친 카드를 접는다 */
+  speciesGeneration: number
   dispatch: Dispatch<AppAction>
   /** 진행 줄 오른쪽 "포켓몬 추가"(목록 밖 타겟 추가 패널 열기·닫기) */
   customOpen: boolean
@@ -35,6 +39,8 @@ interface Props {
    * 열 때 목록 스크롤을 맨 위로 돌려 패널이 고정된 진행 줄 바로 아래에 보이게 한다.
    */
   customPanel?: ReactNode
+  /** 기술 선택 목록을 연 줄의 항목 카드 id(닫으면 빈 목록). 계산 입력이 아니라 실행기 수요다 */
+  onMenuCards: (tab: Tab, cardIds: readonly string[]) => void
 }
 
 /** 계산결과순 그룹 이름(글자): 판정 그룹은 "<배지 문구>까지 가능" */
@@ -68,24 +74,46 @@ function SectionLabel({ id, tab, bucket, count }: { id: string; tab: Tab; bucket
   )
 }
 
-export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySet, customTargets, pinnedBundles, sortMode, dispatch, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel }: Props) {
+const NO_ITEMS: readonly GroupItem[] = []
+const NONE: ReadonlySet<string> = new Set()
+
+/** 펼친 카드(at = 펼침을 마지막으로 바꿀 때 보이던 뷰 세대) */
+interface Expanded {
+  at: number
+  ids: ReadonlySet<string>
+}
+
+/** 종 교체 세대 이상 뷰가 보이는데 펼침이 그 전 것이면 모두 접힌 것으로 본다(재계산 뒤 접기). */
+const expandedNow = (e: Expanded, shownGeneration: number, speciesGeneration: number): ReadonlySet<string> =>
+  shownGeneration >= speciesGeneration && e.at < speciesGeneration ? NONE : e.ids
+
+export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySet, customTargets, pinnedBundles, sortMode, moveChoices, speciesGeneration, dispatch, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel, onMenuCards }: Props) {
   const names = namesOf(game)
   // 펼침·배분 선택은 탭마다 따로(같은 포켓몬이라도 탭이 다르면 다른 행), 배분을 바꿔도 펼침이 유지되게 그룹 키로 둔다.
   const scoped = (groupKey: string) => JSON.stringify([tab, groupKey])
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
+  const shownGeneration = state.kind === 'idle' ? generation : state.generation
+  const [expandedState, setExpanded] = useState<Expanded>(() => ({ at: shownGeneration, ids: NONE }))
+  const expanded = expandedNow(expandedState, shownGeneration, speciesGeneration)
+  // 토글 콜백은 세대마다 바뀌지 않게(행 다시 그리기 방지) 세대를 ref로 읽는다.
+  const gens = useRef({ shown: shownGeneration, species: speciesGeneration })
+  useLayoutEffect(() => {
+    gens.current = { shown: shownGeneration, species: speciesGeneration }
+  }, [shownGeneration, speciesGeneration])
   const onToggle = useCallback(
     (groupKey: string) => {
       const id = JSON.stringify([tab, groupKey])
+      const { shown, species } = gens.current
       setExpanded((cur) => {
-        const next = new Set(cur)
+        const next = new Set(expandedNow(cur, shown, species))
         if (next.has(id)) next.delete(id)
         else next.add(id)
-        return next
+        // 종을 바꾼 뒤(새 뷰가 오기 전) 펼친 카드는 새 뷰가 와도 접지 않는다
+        return { at: Math.max(shown, species), ids: next }
       })
     },
     [tab],
   )
-  // 포켓몬마다 한 행: (탭, 그룹 키) → 고른 배분 카드 id. 없거나 사라졌으면 가장 사용률 높은 배분.
+  // (탭, 줄) → 고른 배분 카드 id. 도구 변형 줄(화력 도구·반감열매)은 도구를 가정해 배분을 따로 고르므로 기본 줄과 공유하지 않는다. 없거나 사라졌으면 그 줄 기본 배분.
   const [chosen, setChosen] = useState<ReadonlyMap<string, string>>(() => new Map())
   const onSelect = useCallback(
     (groupKey: string, cardId: string) => {
@@ -97,6 +125,24 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
 
   const view = state.kind === 'view' ? state.view : undefined
   const groups = useMemo(() => (view === undefined ? [] : groupCards(view.cards, tab, pinnedBundles)), [view, tab, pinnedBundles])
+  // 포켓몬 한 줄의 기술 선택 항목(분류마다 분류 기본 배분의 항목). 행은 항목을 원소 단위로 비교해 바뀐 줄만 다시 그린다(CardItem sameProps).
+  const itemsOf = useMemo(() => new Map(tab === 'speed' ? [] : groups.map((g) => [g.key, groupItems(g)] as const)), [groups, tab])
+  const onChooseItem = useCallback(
+    (group: CardGroup, card: CardView, item: GroupItem) => {
+      dispatch({ type: 'choose-move', choice: { tab, source: group.opponent.source, opponentId: group.opponent.id, key: item.item.key } })
+      // 다른 분류 항목이면 그 분류 기본 배분으로 바꾼다(그 항목은 그 배분에서 판정한다).
+      if (item.card.category !== card.category) {
+        const id = JSON.stringify([tab, group.key])
+        setChosen((cur) => new Map(cur).set(id, item.card.id))
+      }
+    },
+    [tab, dispatch],
+  )
+  const onMenu = useCallback((cardIds: readonly string[]) => onMenuCards(tab, cardIds), [tab, onMenuCards])
+  const onResetItem = useCallback(
+    (group: CardGroup) => dispatch({ type: 'reset-move', tab, source: group.opponent.source, opponentId: group.opponent.id }),
+    [tab, dispatch],
+  )
   // 행마다 보이는 배분 카드. 계산결과순은 그 카드로 그룹을 정한다(사용률 순은 그룹 하나·라벨 없음).
   const sections = useMemo(() => {
     const rows = groups.map((g) => ({ group: g, card: chosenOption(g, tab, chosen.get(JSON.stringify([tab, g.key]))) }))
@@ -161,6 +207,19 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
   }
 
   const superseded = state.kind === 'view' && (state.superseded || state.generation !== generation)
+  // 직접 고른 항목이 새 계획의 목록에서 사라지면(내 기술 교체·상대 상위 기술 변동·랭크 수단 자격 상실 등) 선택을 푼다.
+  // 1·2단계가 끝난 현재 세대 뷰에서, 그 상대 줄이 있고 어느 배분에도 그 항목이 없을 때만(계산 중 일시 상태로는 풀지 않는다).
+  const stage12Done = view !== undefined && !superseded && view.stage12Done
+  useEffect(() => {
+    if (!stage12Done || tab === 'speed') return
+    for (const c of moveChoices) {
+      if (c.tab !== tab) continue
+      const mine = groups.filter((g) => g.opponent.source === c.source && g.opponent.id === c.opponentId)
+      if (mine.length === 0) continue
+      if (mine.some((g) => g.options.some((o) => o.items.some((i) => i.key === c.key)))) continue
+      dispatch({ type: 'reset-move', tab, source: c.source, opponentId: c.opponentId })
+    }
+  }, [stage12Done, groups, moveChoices, tab, dispatch])
   const firstCard = view !== undefined && !superseded && (view.cards.length > 0 || view.stage12Done)
   const complete = view !== undefined && !superseded && view.complete
   // 더 계산하지 않는 종결 상태(치명 오류·내 세트 오류)는 busy가 아니다.
@@ -270,6 +329,10 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
                       target={c.opponent.source === 'custom' ? targetOf(c.opponent.id) : undefined}
                       dispatch={dispatch}
                       groupLabelId={sec.bucket === undefined ? undefined : labelId(sec.key)}
+                      items={itemsOf.get(g.key) ?? NO_ITEMS}
+                      onChooseItem={onChooseItem}
+                      onResetItem={onResetItem}
+                      onMenuCards={onMenu}
                     />
                   ))
                   if (sec.bucket === undefined) return items
