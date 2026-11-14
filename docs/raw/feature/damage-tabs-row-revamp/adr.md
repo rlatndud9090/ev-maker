@@ -1,8 +1,8 @@
 ---
 title: "공격·방어 탭 판정 행 기능 확장과 상세 화면 가시성 개편(상대 기술 표시·설정, 화력 도구 행)"
 date: "2026-11-13"
-status: pre-accepted
-approval: "user:2026-11-13:사전 승인"
+status: accepted
+approval: "user:2026-11-15:여기까지만 하고, 일단 /make-pr 한다음 바로 /merge-and-clean 하고 다음 피처로 넘길게"
 related_prd: "./prd.md"
 unit_type: feature
 branch: "feature/damage-tabs-row-revamp"

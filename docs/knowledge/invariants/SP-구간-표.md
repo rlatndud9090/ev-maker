@@ -18,3 +18,8 @@ area: SP 구간 표
 > area: SP 구간 표 · 출처: docs/raw/feature/sp-sweep-table/adr.md#결정-1, docs/raw/feature/sp-sweep-table/adr.md#결정-2 · 코드: `src/cards/rankMeans.ts:RANK_MEANS_EXCLUDED` · 봉인: `src/cards/rankMeans.test.ts` "확률 부가효과(문포스)·엔진 자체 상승(메테오빔)·순풍은 수단이 아니다"
 
 **위반 시:** 엔진(@smogon/calc)이 이미 C+1을 반영한 공격에 수단 랭크가 한 번 더 들어가 C+2로 이중 적용되어 랭크 행 판정이 과대평가된다.
+
+### INV-261115-attacker-field-only: 대미지 판정의 날씨·필드는 그 판정 공격측 해결 특성에서만 유도하고 맞는 쪽 특성은 보지 않는다
+> area: SP 구간 표 · 출처: docs/raw/feature/damage-tabs-row-revamp/adr.md#결정-7 · 코드: `src/core/fieldAbilities.ts:withAttackerField`, `src/cards/plan.ts:damageConditions` · 봉인: `src/core/fieldAbilities.test.ts`, `src/cards/plan.test.ts` (어흥염 vs 메가리자몽Y 양방향)
+
+**위반 시:** 맞는 쪽이 까는 날씨로 내 화력이 올라가 낙관 판정이 된다(내 어흥염 플레어드라이브가 상대 메가리자몽Y 가뭄의 쾌청으로 계산됨). 더블에서 실제 날씨는 정할 수 없으므로 공격측이 스스로 까는 날씨만 확실하다.

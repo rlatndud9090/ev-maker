@@ -1,9 +1,9 @@
 ---
 title: "공격·방어 탭 판정 행 기능 확장과 상세 화면 가시성 개편(상대 기술 표시·설정, 화력 도구 행)"
 date: "2026-11-13"
-stage: implementing
-prd_status: pre-approved
-adr_status: pre-accepted
+stage: approved
+prd_status: approved
+adr_status: accepted
 ---
 
 # 작업 단계 원장: 공격·방어 탭 판정 행 기능 확장과 상세 화면 가시성 개편(상대 기술 표시·설정, 화력 도구 행)
@@ -62,7 +62,11 @@ adr_status: pre-accepted
 - 2026-11-14 implementing: 사용자 결정 — R4-1 재개정: 방어 탭 기준 기술 = 선공기 제외 채용률 ≥ 20% 주력 기술 중 센 순 첫 변동 기술(모두 고정이면 최강), 타입별 대표 폐기, AC38 갱신
 - 2026-11-14 implementing: 사용자 결정 — 주력 기술 중 같은 변동·고정끼리는 채용률 높은 쪽(센 순 → 채용률 순)
 - 2026-11-15 implementing: 사용자 결정 — 주력 기술 기준 재정비: 변동 있으면 채용률 최고, 모두 고정이면 확정1타 고정 중 가장 약한 것(우선), 없으면 가장 센 것
+- 2026-11-15 approved: 사용자 명시 최종 승인 (harness:approve --final)
 ## 승인 이벤트
+
+- APPROVAL prd 2026-11-15 make-pr :: 여기까지만 하고, 일단 /make-pr 한다음 바로 /merge-and-clean 하고 다음 피처로 넘길게 나머지 작업들은
+- APPROVAL adr 2026-11-15 make-pr :: 여기까지만 하고, 일단 /make-pr 한다음 바로 /merge-and-clean 하고 다음 피처로 넘길게 나머지 작업들은
 
 <!-- 이 블록은 `npm run harness:approve`만 기록한다. 사용자의 명시 승인 발화가
      verbatim으로 남는다. 두 종류: `PREAPPROVAL`(사전 승인 — 빌드 진입 게이트)과
@@ -72,3 +76,7 @@ adr_status: pre-accepted
 
 - PREAPPROVAL prd 2026-11-13 harness:approve :: 사전 승인
 - PREAPPROVAL adr 2026-11-13 harness:approve :: 사전 승인
+
+## 지식 기록
+
+- KNOWLEDGE 2026-11-15 invariants=INV-261115-attacker-field-only gotchas=G-261115-engine-no-last-respects via=make-pr
