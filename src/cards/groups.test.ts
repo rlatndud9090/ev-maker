@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { addedBundleCardId } from './ids'
-import { chosenOption, defaultOption, groupCards, groupKey, isPinned, pinOf, selectionKey, sharedChoiceMissing } from './groups'
+import { chosenOption, defaultOption, groupCards, isPinned, pinOf } from './groups'
 import type { CardView, PinnedBundle, PresetIndex } from './types'
 
 let seq = 0
@@ -209,92 +209,5 @@ describe('groupCards: 고정 배분', () => {
     expect(g.pinned).toEqual(['lo', 'u0', 'u1'])
     // 탭을 안 주면 고정 목록은 쓰지 않는다(직접 추가만 앞)
     expect(ids(groupCards([hi, u1, lo, u0])[0].options)).toEqual(['u0', 'u1', 'hi', 'lo'])
-  })
-})
-
-describe('배분 선택 공유: 같은 상대의 기본 줄·도구 변형 줄(PRD R14, 반감열매 변형과 같은 규칙)', () => {
-  // 실제 카드 id 규칙: [탭, 출처, 상대, 분류, 묶음 키] + 변형 ['berry', 도구] / 사용자 추가 ['user'(, 도구)]
-  const real = (o: { tab?: 'attack' | 'defense'; opp: string; key: string; share?: number; category?: 'physical' | 'special'; item?: string; added?: number }): CardView => {
-    const c = view({ opp: o.opp, share: o.share })
-    const category = o.category ?? 'physical'
-    const base = [o.tab ?? 'defense', 'ladder', o.opp, category, o.key]
-    const tail = o.added !== undefined ? ['user', ...(o.item === undefined ? [] : [o.item])] : o.item === undefined ? [] : ['berry', o.item]
-    const card: CardView = { ...c, id: JSON.stringify([...base, ...tail]), category, bundle: { ...c.bundle, key: o.key, share: o.added === undefined ? o.share : undefined, userAdded: o.added } }
-    if (o.item !== undefined) card.berry = { item: o.item, share: 0.3 }
-    return card
-  }
-  const sel = (g: { key: string }) => selectionKey(g.key)
-
-  it('기본 줄과 변형 줄의 선택 키가 같고, 다른 상대·출처와는 다르다', () => {
-    const groups = groupCards([real({ opp: 'x', key: 'a' }), real({ opp: 'x', key: 'a', item: 'lifeorb' }), real({ opp: 'y', key: 'a' })], 'defense')
-    expect(groups).toHaveLength(3)
-    expect(sel(groups[0])).toBe(sel(groups[1]))
-    expect(sel(groups[0])).not.toBe(sel(groups[2]))
-    expect(selectionKey(groupKey({ source: 'custom', id: 'x' }))).not.toBe(sel(groups[0]))
-  })
-
-  it('기본 줄에서 고른 배분이 변형 줄에서는 같은 분류·묶음의 도구 카드로, 반대 방향도 같다. 변형 줄에 없는 배분이면 그 줄 기본값이고 화면에서는 숨긴다', () => {
-    const cards = [
-      real({ opp: 'x', key: 'hi', share: 0.5 }),
-      real({ opp: 'x', key: 'lo', share: 0.1 }),
-      real({ opp: 'x', key: 'sp', share: 0.2, category: 'special' }),
-      real({ opp: 'x', key: 'hi', share: 0.5, item: 'lifeorb' }),
-      real({ opp: 'x', key: 'lo', share: 0.1, item: 'lifeorb' }),
-    ]
-    const [base, orb] = groupCards(cards, 'defense')
-    const lo = base.options.find((o) => o.bundle.key === 'lo')!
-    expect(chosenOption(orb, 'defense', lo.id).id).toBe(JSON.stringify(['defense', 'ladder', 'x', 'physical', 'lo', 'berry', 'lifeorb']))
-    const orbHi = orb.options.find((o) => o.bundle.key === 'hi')!
-    expect(chosenOption(base, 'defense', orbHi.id).id).toBe(JSON.stringify(['defense', 'ladder', 'x', 'physical', 'hi']))
-    // 다른 분류로 전환(특수 배분): 변형 줄에 특수 배분이 없으면 그 줄 기본값
-    const sp = base.options.find((o) => o.category === 'special')!
-    expect(chosenOption(base, 'defense', sp.id).id).toBe(sp.id)
-    expect(chosenOption(orb, 'defense', sp.id).id).toBe(defaultOption(orb).id)
-    // 대응 카드가 없는 변형 줄은 다른 배분을 보이지 않고 숨긴다(sharedChoiceMissing). 기본 줄·대응이 있는 변형 줄·선택 없음은 숨기지 않는다
-    expect(sharedChoiceMissing(orb, 'defense', sp.id)).toBe(true)
-    expect(sharedChoiceMissing(orb, 'defense', lo.id)).toBe(false)
-    expect(sharedChoiceMissing(base, 'defense', orbHi.id)).toBe(false)
-    expect(sharedChoiceMissing(orb, 'defense', undefined)).toBe(false)
-  })
-
-  it('공격 탭 반감열매 줄끼리·기본 줄과도 같은 배분을 따른다', () => {
-    const cards = [
-      real({ tab: 'attack', opp: 'x', key: 'a', share: 0.5 }),
-      real({ tab: 'attack', opp: 'x', key: 'b', share: 0.1 }),
-      real({ tab: 'attack', opp: 'x', key: 'a', share: 0.5, item: 'occaberry' }),
-      real({ tab: 'attack', opp: 'x', key: 'b', share: 0.1, item: 'occaberry' }),
-      real({ tab: 'attack', opp: 'x', key: 'a', share: 0.5, item: 'passhoberry' }),
-      real({ tab: 'attack', opp: 'x', key: 'b', share: 0.1, item: 'passhoberry' }),
-    ]
-    const [base, occa, passho] = groupCards(cards, 'attack')
-    const b = occa.options.find((o) => o.bundle.key === 'b')!
-    for (const g of [base, passho]) {
-      expect(chosenOption(g, 'attack', b.id).bundle.key).toBe('b')
-      expect(chosenOption(g, 'attack', b.id).berry?.item).toBe(g.berry?.item)
-    }
-  })
-
-  it('직접 추가 배분(아직 카드가 없는 id 포함)과 고정 배분도 같은 규칙', () => {
-    const stats = [{ stat: 'hp' as const, sp: 32 }]
-    const added = { tab: 'defense' as const, opponentId: 'x', category: 'physical' as const }
-    const userBase = addedBundleCardId(added, stats)
-    const userKey = (JSON.parse(userBase) as string[])[4]
-    const lo = real({ opp: 'x', key: 'lo', share: 0.1 })
-    const orbLo = real({ opp: 'x', key: 'lo', share: 0.1, item: 'lifeorb' })
-    const cards = [
-      real({ opp: 'x', key: 'hi', share: 0.5 }),
-      lo,
-      real({ opp: 'x', key: userKey, added: 0 }),
-      real({ opp: 'x', key: 'hi', share: 0.5, item: 'lifeorb' }),
-      orbLo,
-      real({ opp: 'x', key: userKey, added: 0, item: 'lifeorb' }),
-    ]
-    const [base, orb] = groupCards(cards, 'defense', [pinOf('defense', lo)])
-    expect(chosenOption(orb, 'defense', userBase).id).toBe(addedBundleCardId(added, stats, 'lifeorb'))
-    expect(chosenOption(base, 'defense', addedBundleCardId(added, stats, 'lifeorb')).id).toBe(userBase)
-    // 기본 줄에서 고정한 관측 배분을 고르면 변형 줄도 그 묶음(변형 줄 고정 여부와 무관)
-    expect(base.pinned).toContain(lo.id)
-    expect(orb.pinned).not.toContain(orbLo.id)
-    expect(chosenOption(orb, 'defense', lo.id).id).toBe(orbLo.id)
   })
 })

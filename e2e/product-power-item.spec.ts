@@ -75,7 +75,7 @@ test('방어 탭: 대도각참 기본 행 뒤에 생명의구슬 행(표지), �
   await expect(groupRow(page, LIFE_ORB)).toHaveCount(1)
 })
 
-test('방어 탭: 대도각참 기본 행에서 배분을 바꾸면 생명의구슬 행도 같은 배분이 된다(선택 공유)', async ({ page }) => {
+test('방어 탭: 대도각참 기본 행에서 배분을 바꿔도 생명의구슬 행 배분은 그대로다(도구를 가정한 배분은 따로, 사용자 결정 2026-11-14)', async ({ page }) => {
   await openProduct(page)
   await selectTab(page, '방어')
   await waitComplete(page)
@@ -91,7 +91,5 @@ test('방어 탭: 대도각참 기본 행에서 배분을 바꾸면 생명의구
   // 지금 배분이 아닌 첫 선택지
   await options.and(page.locator('[aria-checked="false"]')).first().click()
   await expect(label(base)).not.toHaveText(before)
-  const after = ((await label(base).textContent()) ?? '').trim()
-  await expect(label(orb)).toHaveText(after)
-  await expect(orb).toHaveAttribute('data-category', (await base.getAttribute('data-category')) ?? '')
+  await expect(label(orb)).toHaveText(before)
 })

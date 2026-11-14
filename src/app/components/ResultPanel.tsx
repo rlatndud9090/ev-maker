@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type FocusEvent, type ReactNode, type Ref } from 'react'
 import type { PokemonSet } from '../../core'
-import { chosenOption, groupCards, groupItems, selectionKey, sharedChoiceMissing, sortByResult, type CardGroup, type CardView, type CustomTarget, type GroupItem, type PinnedBundle, type ResultBucket, type SortMode, type Tab } from '../../cards'
+import { chosenOption, groupCards, groupItems, sortByResult, type CardGroup, type CardView, type CustomTarget, type GroupItem, type PinnedBundle, type ResultBucket, type SortMode, type Tab } from '../../cards'
 import type { Snapshot } from '../../data/schema'
 import { namesOf } from '../../ui/names'
 import { categoryBadge, orderBadge, progressText } from '../../ui/format'
@@ -111,11 +111,11 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
     },
     [tab],
   )
-  // (탭, 상대) → 고른 배분 카드 id. 같은 상대의 기본 줄·도구 변형 줄이 공유한다(chosenOption이 줄마다 옮겨 찾는다). 없거나 사라졌으면 그 줄 기본 배분.
+  // (탭, 줄) → 고른 배분 카드 id. 도구 변형 줄(화력 도구·반감열매)은 도구를 가정해 배분을 따로 고르므로 기본 줄과 공유하지 않는다. 없거나 사라졌으면 그 줄 기본 배분.
   const [chosen, setChosen] = useState<ReadonlyMap<string, string>>(() => new Map())
   const onSelect = useCallback(
     (groupKey: string, cardId: string) => {
-      const id = JSON.stringify([tab, selectionKey(groupKey)])
+      const id = JSON.stringify([tab, groupKey])
       setChosen((cur) => (cur.get(id) === cardId ? cur : new Map(cur).set(id, cardId)))
     },
     [tab],
@@ -130,7 +130,7 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
       dispatch({ type: 'choose-move', choice: { tab, source: group.opponent.source, opponentId: group.opponent.id, key: item.item.key } })
       // 다른 분류 항목이면 그 분류 기본 배분으로 바꾼다(그 항목은 그 배분에서 판정한다).
       if (item.card.category !== card.category) {
-        const id = JSON.stringify([tab, selectionKey(group.key)])
+        const id = JSON.stringify([tab, group.key])
         setChosen((cur) => new Map(cur).set(id, item.card.id))
       }
     },
@@ -142,10 +142,7 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
   )
   // 행마다 보이는 배분 카드. 계산결과순은 그 카드로 그룹을 정한다(사용률 순은 그룹 하나·라벨 없음).
   const sections = useMemo(() => {
-    const rows = groups.flatMap((g) => {
-      const pick = chosen.get(JSON.stringify([tab, selectionKey(g.key)]))
-      return sharedChoiceMissing(g, tab, pick) ? [] : [{ group: g, card: chosenOption(g, tab, pick) }]
-    })
+    const rows = groups.map((g) => ({ group: g, card: chosenOption(g, tab, chosen.get(JSON.stringify([tab, g.key]))) }))
     if (sortMode === 'usage') return [{ key: 'all', bucket: undefined, items: rows }]
     return sortByResult(rows, tab, (r) => r.card)
   }, [groups, tab, chosen, sortMode])

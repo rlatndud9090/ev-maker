@@ -1,4 +1,4 @@
-import { addedCardId, addedBundleKey, samePin, variantCardId } from './ids'
+import { addedCardId, addedBundleKey, samePin } from './ids'
 import type { BerryVariant, CardView, ItemView, OpponentHeader, PinnedBundle, Tab } from './types'
 
 /** 화면 한 행: 같은 상대 포켓몬(출처+id)·같은 반감열매 변형의 카드들을 배분 선택지로 묶은 것. */
@@ -17,8 +17,6 @@ export interface CardGroup {
 export const groupKey = (opponent: OpponentHeader, berry?: string): string =>
   JSON.stringify(berry === undefined ? [opponent.source, opponent.id] : [opponent.source, opponent.id, berry])
 
-/** 배분 선택을 공유하는 키: 같은 상대(출처+id)의 기본 줄·도구 변형 줄(반감열매·화력 도구)은 같은 배분을 보인다(PRD R14) */
-export const selectionKey = (key: string): string => JSON.stringify((JSON.parse(key) as unknown[]).slice(0, 2))
 
 /** 화면 배분 카드 → 그 카드의 고정 항목(래더만 고정할 수 있다). 반감열매 행 고정은 그 열매를 담아 기본 행 고정과 따로다 */
 export function pinOf(tab: Tab, card: CardView): PinnedBundle {
@@ -188,7 +186,7 @@ export function groupItems(group: CardGroup): GroupItem[] {
 }
 
 /**
- * 선택 id를 그룹의 선택지로 푼다. 같은 상대의 다른 줄(기본·도구 변형)에서 고른 id는 이 줄의 같은 분류·묶음 카드 id로 옮겨 찾는다(variantCardId). 사용자 추가 카드 id가 선택지에 없으면(계획이 같은 키의 관측 묶음으로 합쳐
+ * 선택 id를 그룹의 선택지로 푼다. 사용자 추가 카드 id가 선택지에 없으면(계획이 같은 키의 관측 묶음으로 합쳐
  * 사용자 카드를 만들지 않은 경우 — 관측 묶음이 나중에 나타나거나 기준을 낮춘 경우) 같은 능력치·SP의 무보정 관측 묶음을 고르고,
  * 그것도 없으면 기본 선택지로 돌아간다.
  */
@@ -197,23 +195,14 @@ export function chosenOption(group: CardGroup, tab: Tab, chosen: string | undefi
   return matchedOption(group, tab, chosen) ?? defaultOption(group)
 }
 
-/**
- * 도구 변형 줄(group.berry)이 같은 상대에서 공유 중인 배분 선택(chosen)의 대응 카드를 갖지 못하면 참: 그 줄은 다른 배분을 보이지 않고 숨는다
- * (도구 유무만 다른 비교라는 기대와 어긋나므로). 기본 줄과 선택이 없는 경우는 거짓.
- */
-export function sharedChoiceMissing(group: CardGroup, tab: Tab, chosen: string | undefined): boolean {
-  return chosen !== undefined && group.berry !== undefined && matchedOption(group, tab, chosen) === undefined
-}
-
 function matchedOption(group: CardGroup, tab: Tab, chosen: string): CardView | undefined {
-  const id = variantCardId(chosen, group.berry?.item)
-  const hit = group.options.find((o) => o.id === id)
+  const hit = group.options.find((o) => o.id === chosen)
   if (hit !== undefined) return hit
   return group.options.find(
     (o) =>
       o.opponent.source === 'ladder' &&
       o.bundle.userAdded === undefined &&
       o.bundle.stats.every((s) => s.nature === 'neutral') &&
-      addedCardId(tab, o.opponent.id, o.category, addedBundleKey(o.bundle.stats), o.berry?.item) === id,
+      addedCardId(tab, o.opponent.id, o.category, addedBundleKey(o.bundle.stats), o.berry?.item) === chosen,
   )
 }
