@@ -254,8 +254,8 @@ function pickPQ(sorted: readonly ItemState[], moveId: string): Step<ItemState> {
 }
 
 /**
- * 주력 기술 중 기준 기술: 랭크 전 항목 센 순으로 그 기술 항목 중 하나라도 변동인 첫 기술, 모두 고정(변동 판정 끝)이면 가장 센 것.
- * 앞 기술의 변동 판정이 남았으면 그 항목만 기다린다(뒤 기술 판정과 무관하게 정해진다). 입력은 정상 주력 랭크 전 항목(센 순).
+ * 주력 기술 중 기준 기술: 채용률 순(동률은 기존 기술 순서)으로 그 기술 항목 중 하나라도 변동인 첫 기술, 모두 고정(변동 판정 끝)이면 채용률 1위.
+ * 같은 변동·고정끼리는 채용률이 높은 쪽(사용자 결정 2026-11-14). 앞 기술의 변동 판정이 남았으면 그 항목만 기다린다(뒤 기술 판정과 무관하게 정해진다).
  */
 function pickMain(strong: readonly ItemState[], mains: readonly ItemState[]): Step<ItemState> {
   // 주력이 하나면 변동 판정과 무관하게 그 기술이다
@@ -307,7 +307,9 @@ export function resolveDefault(items: readonly ItemState[], opts: { priorityRule
       if (waiting.length > 0) return { kind: 'pending', need: waiting }
     }
   }
-  const main: Step<ItemState> = opts.variableFirst ? pickMain(strong, validMains) : { kind: 'done', value: validMains[0] }
+  // 방어 탭은 채용률 순으로 변동 우선(같은 변동·고정끼리 채용률 높은 쪽), 공격 탭은 가장 센 기술
+  const byUsage = [...validMains].sort((a, b) => b.share - a.share || a.moveOrder - b.moveOrder)
+  const main: Step<ItemState> = opts.variableFirst ? pickMain(strong, byUsage) : { kind: 'done', value: validMains[0] }
   if (main.kind === 'need') return { kind: 'pending', need: main.keys }
   const basis = main.value
   if (probing(ofMove(basis.moveId))) return WAIT

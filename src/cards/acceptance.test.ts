@@ -273,7 +273,7 @@ function oracleListed(a: OracleItem, b: OracleItem): number {
 }
 
 /**
- * 기본 항목(PRD R4)의 독립 재구현: 기준 기술(주력 기술의 정상 랭크 전 항목을 센 순으로 보아 그 기술 항목 중 변동이 있는 첫 기술, 모두 고정이면 가장 센 것,
+ * 기본 항목(PRD R4)의 독립 재구현: 기준 기술(방어 탭은 주력 기술의 정상 랭크 전 항목을 채용률 순(동률 기존 기술 순서)으로 보아 그 기술 항목 중 변동이 있는 첫 기술, 모두 고정이면 채용률 1위, 공격 탭은 가장 센 것,
  * 정상 주력이 없으면 목록 첫 정상 항목·없으면 첫 항목,
  * 방어 탭 speedEdge면 랭크 전·후 중 변동인 선공기 우선) → 랭크 전 P·후 Q 표.
  */
@@ -299,9 +299,11 @@ function oracleDefault(items: readonly OracleItem[], priorityRule: boolean, vari
   }
   const pre = sorted.filter((i) => i.rankBefore && valid(i))
   if (priorityRule) for (const p of pre) if (p.priority && [p, ...qsOf(p.moveId)].some(variable)) return pq(p.moveId)
-  // 변동 우선은 방어 탭만(공격 탭은 가장 센 주력)
-  const firstVariable = variableFirst ? mains.find((m) => items.some((i) => i.moveId === m.moveId && variable(i))) : undefined
-  return pq((firstVariable ?? mains[0]).moveId)
+  // 공격 탭은 가장 센 주력
+  if (!variableFirst) return pq(mains[0].moveId)
+  const byUsage = [...mains].sort((a, b) => b.share - a.share || a.moveOrder - b.moveOrder)
+  const firstVariable = byUsage.find((m) => items.some((i) => i.moveId === m.moveId && variable(i)))
+  return pq((firstVariable ?? byUsage[0]).moveId)
 }
 
 /** 오라클용 접지(PRD R12): 쇠구슬이면 접지, 아니면 비행 타입·부유·풍선이 아닐 때 */

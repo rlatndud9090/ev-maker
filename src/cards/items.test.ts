@@ -246,16 +246,26 @@ describe('mainMoves: 방어 탭 주력 기술 = 선공기 제외 채용률 ≥ 2
   })
 })
 
-describe('resolveDefault: 기준 기술 = 주력 중 센 순 첫 변동 기술, 모두 고정이면 가장 센 것(R4-1 재개정, PRD AC38)', () => {
+describe('resolveDefault: 기준 기술 = 주력 중 변동 기술의 채용률 1위, 모두 고정이면 채용률 1위(R4-1 재개정, PRD AC38)', () => {
   const main = (moveId: string, probe: ItemState['probe'], v: ItemVariability, share = 0.5) => item(moveId, true, probe, v, { share })
   const side = (moveId: string, probe: ItemState['probe'], v: ItemVariability, share = 0.1) => item(moveId, true, probe, v, { share, main: false })
-  it('메가플라엣테 예: 파멸의빛(가장 셈) 고정 확정1타 → 문포스 고정 → 매지컬샤인 변동이면 매지컬샤인, 문포스가 변동이면 문포스', () => {
-    const lor = main('lightofruin', ok(1, 266), OHKO, 0.26)
-    const mb = main('moonblast', ok(1, 180), OHKO, 0.8)
-    const dg = main('dazzlinggleam', ok(0.7, 113), VAR, 0.94)
+  it('메가플라엣테 예(매지컬샤인 93.7%·문포스 79.8%·파멸의빛 26.4%): 변동인 기술 중 채용률 최고 — 센 순과 무관', () => {
+    const lor = main('lightofruin', ok(1, 266), OHKO, 0.264)
+    const mb = main('moonblast', ok(1, 180), OHKO, 0.798)
+    const dg = main('dazzlinggleam', ok(0.7, 113), VAR, 0.937)
     expect(pick([dg, mb, lor])).toMatchObject({ kind: 'ready', key: dg.key, basis: dg.key, fallback: false })
+    // 같은 변동끼리는 채용률 높은 쪽(더 센 문포스가 변동이어도 매지컬샤인)
     const mbVar = { ...mb, variability: VAR }
-    expect(pick([dg, mbVar, lor])).toMatchObject({ kind: 'ready', key: mbVar.key })
+    expect(pick([dg, mbVar, lor])).toMatchObject({ kind: 'ready', key: dg.key })
+    // 매지컬샤인이 고정이면 변동인 것 중 채용률 다음인 문포스, 그것도 고정이면 변동인 파멸의빛
+    const dgFixed = { ...dg, variability: SURVIVE }
+    expect(pick([dgFixed, mbVar, lor])).toMatchObject({ kind: 'ready', key: mb.key })
+    expect(pick([dgFixed, mb, { ...lor, variability: VAR }])).toMatchObject({ kind: 'ready', key: lor.key })
+  })
+  it('채용률 동률이면 기존 기술 순서(moveOrder)가 앞선 것', () => {
+    const a = main('a', ok(0, 40), VAR, 0.5)
+    const b = main('b', ok(1, 200), VAR, 0.5)
+    expect(pick([b, a])).toMatchObject({ kind: 'ready', key: a.key })
   })
   it('공격 탭(variableFirst 아님)은 변동 우선 없이 가장 센 주력, 주력이 하나면 변동 판정을 기다리지 않는다', () => {
     const strong = main('a', ok(1, 200), OHKO)
@@ -264,11 +274,23 @@ describe('resolveDefault: 기준 기술 = 주력 중 센 순 첫 변동 기술, 
     expect(pick([weakVar, { ...strong, variability: { kind: 'pending' } }], false, false)).toMatchObject({ kind: 'ready', key: strong.key })
     expect(pick([{ ...strong, variability: { kind: 'pending' } }, side('c', ok(0, 10), VAR)])).toMatchObject({ kind: 'ready', key: strong.key })
   })
-  it('주력이 모두 고정이면 가장 센 주력, 채용률 20% 미만 강한 기술은 기준이 아니다(메가보만다 이판사판태클)', () => {
+  it('주력이 모두 고정이면 채용률 1위 주력(가장 센 것 아님), 채용률 20% 미만 강한 기술은 기준이 아니다(메가보만다 이판사판태클)', () => {
     const hv = main('hypervoice', ok(0, 50), SURVIVE, 0.96)
     const dm = main('dracometeor', ok(0.2, 150), MID, 0.64)
     const de = side('doubleedge', ok(1, 200), VAR, 0.177)
-    expect(pick([hv, de, dm])).toMatchObject({ kind: 'ready', key: dm.key, basis: dm.key })
+    expect(pick([hv, de, dm])).toMatchObject({ kind: 'ready', key: hv.key, basis: hv.key })
+  })
+  it('메가눈여아 예: 주력이 모두 고정이면 급소 확정으로 더 센 얼음숨결(37.7%)보다 채용률 99.9% 눈보라', () => {
+    const fb = main('frostbreath', ok(1, 242), OHKO, 0.377)
+    const bz = main('blizzard', ok(1, 216), OHKO, 0.999)
+    const sb = main('shadowball', ok(0, 53), SURVIVE, 0.993)
+    expect(pick([fb, bz, sb])).toMatchObject({ kind: 'ready', key: bz.key, basis: bz.key })
+  })
+  it('조기 확정은 채용률 순: 채용률 1위가 변동이면 더 센 기술 판정을 기다리지 않고, 1위 판정 전이면 1위만 기다린다', () => {
+    const top = main('top', ok(0, 40), VAR, 0.9)
+    const strongPending = main('strong', ok(1, 200), { kind: 'pending' }, 0.3)
+    expect(pick([strongPending, top])).toMatchObject({ kind: 'ready', key: top.key })
+    expect(pick([strongPending, { ...top, variability: { kind: 'pending' } }])).toEqual({ kind: 'pending', need: [top.key] })
   })
   it('랭크 후·성묘 위력 항목만 변동인 기술도 변동으로 본다: 랭크 전은 고정이어도 그 기술이 기준, P/Q 표로 Q', () => {
     const strong = main('a', ok(0, 95), SURVIVE)
@@ -474,7 +496,7 @@ describe('실데이터: 채용률·주력 기술·목록 순(R16·R4-1 재개정
     expect(max('dracometeor')).toBeGreaterThan(max('dragonpulse'))
   })
 
-  it('예시 세트 방어 탭: 고릴타 그래스슬라이더(그래스메이커 → 선공기)는 주력 아님 → 우드해머, 메가보만다 이판사판태클(20% 미만) 주력 아님, 메가플라엣테는 파멸의빛·문포스 고정이면 변동인 매지컬샤인', () => {
+  it('예시 세트 방어 탭: 고릴타 그래스슬라이더(그래스메이커 → 선공기)는 주력 아님 → 우드해머, 메가보만다 이판사판태클(20% 미만) 주력 아님 → 모두 고정이면 채용률 1위 하이퍼보이스, 메가플라엣테는 채용률 1위 매지컬샤인이 변동이면 더 센 기술 판정 없이 매지컬샤인', () => {
     const v = buildTabView(cardInput({ mySet: EXAMPLE_SET, filters: { topN: 30, selected: [] } }), 'defense')
     const plan = planTab(cardInput({ mySet: EXAMPLE_SET, filters: { topN: 30, selected: [] } }), 'defense')
     const cand = (id: string, m: string) => plan.cards.filter((c) => c.opponent.id === id).flatMap((c) => c.conditions.flatMap((g) => g.candidates)).find((c) => c.moveId === m)
@@ -482,13 +504,44 @@ describe('실데이터: 채용률·주력 기술·목록 순(R16·R4-1 재개정
     expect(cand('rillaboom', 'woodhammer')).toMatchObject({ priority: false, main: true })
     expect(defaultOption(groupOf(v, 'rillaboom')).defaultItem?.key).toBe(itemKey('woodhammer', BASE_CONDITION_ID))
     expect(cand('salamencemega', 'doubleedge')?.main).toBe(false)
+    const s = shares('salamencemega')
+    expect(s.hypervoice).toBeGreaterThan(s.dracometeor)
+    let allFixed = 0
+    for (const c of v.cards.filter((x) => x.opponent.id === 'salamencemega' && x.category === 'special')) {
+      const sAt = (m: string) => c.items.find((i) => i.key === itemKey(m, BASE_CONDITION_ID))
+      if (sAt('hypervoice')?.variable !== false || sAt('dracometeor')?.variable !== false) continue
+      // 더 센 용성군이 아니라 채용률 1위 하이퍼보이스
+      expect(sAt('dracometeor')?.cell?.maxPercent ?? 0, c.id).toBeGreaterThan(sAt('hypervoice')?.cell?.maxPercent ?? 0)
+      expect(c.defaultItem?.key, c.id).toBe(itemKey('hypervoice', BASE_CONDITION_ID))
+      allFixed++
+    }
+    expect(allFixed).toBeGreaterThan(0)
+    const f = shares('floettemega')
+    expect(f.dazzlinggleam).toBeGreaterThan(f.moonblast)
+    expect(f.moonblast).toBeGreaterThan(f.lightofruin)
     const floette = defaultOption(groupOf(v, 'floettemega'))
     const at = (m: string) => floette.items.find((i) => i.key === itemKey(m, BASE_CONDITION_ID))
-    expect([at('lightofruin')?.variable, at('moonblast')?.variable, at('dazzlinggleam')?.variable]).toEqual([false, false, true])
+    // 채용률 1위가 변동이면 뒤 기술 변동 판정을 하지 않는다(조기 확정)
+    expect([at('lightofruin')?.variable, at('moonblast')?.variable, at('dazzlinggleam')?.variable]).toEqual([undefined, undefined, true])
     expect(floette.defaultItem?.key).toBe(itemKey('dazzlinggleam', BASE_CONDITION_ID))
   })
 
-  it('채용률 20% 이상이면 같은 타입이어도 각자 주력(R13 판정 타입은 표시에만): 타부자고 vs 메가리자몽Y 열풍·웨더볼, 모두 고정인 배분은 더 센 웨더볼, 열풍이 변동인 배분은 열풍', () => {
+  it('예시 세트(한카리아스) 방어 탭 메가눈여아: 주력이 모두 고정이면 급소 확정으로 더 센 얼음숨결이 아니라 채용률 99.9% 눈보라가 기준', () => {
+    const s = shares('froslassmega')
+    expect(s.blizzard).toBeGreaterThan(0.99)
+    expect(s.frostbreath).toBeGreaterThanOrEqual(0.2)
+    const v = buildTabView(cardInput({ mySet: EXAMPLE_SET, filters: only('froslassmega') }), 'defense')
+    const cards = v.cards.filter((c) => c.opponent.id === 'froslassmega' && c.category === 'special')
+    expect(cards.length).toBeGreaterThan(0)
+    for (const c of cards) {
+      const at = (m: string) => c.items.find((i) => i.key === itemKey(m, BASE_CONDITION_ID))
+      expect([at('blizzard')?.variable, at('frostbreath')?.variable], c.id).toEqual([false, false])
+      expect(at('frostbreath')?.cell?.maxPercent ?? 0, c.id).toBeGreaterThan(at('blizzard')?.cell?.maxPercent ?? 0)
+      expect(c.defaultItem?.key, c.id).toBe(itemKey('blizzard', BASE_CONDITION_ID))
+    }
+  })
+
+  it('채용률 20% 이상이면 같은 타입이어도 각자 주력(R13 판정 타입은 표시에만): 타부자고 vs 메가리자몽Y 열풍·웨더볼, 하나만 변동이면 그것, 같이 고정·변동이면 채용률 높은 쪽', () => {
     const gholdengo = bo1.entry('gholdengo')?.representative.set as PokemonSet
     const input = cardInput({ mySet: gholdengo, filters: only('charizardmegay') })
     const plan = planTab(input, 'defense')
@@ -502,12 +555,19 @@ describe('실데이터: 채용률·주력 기술·목록 순(R16·R4-1 재개정
     const seen = new Set<string>()
     for (const c of g.options) {
       const at = (m: string) => c.items.find((i) => i.key === itemKey(m, BASE_CONDITION_ID))
-      const expected = at('heatwave')?.variable === true && at('weatherball')?.variable !== true ? 'heatwave' : at('weatherball')?.variable !== undefined && at('heatwave')?.variable === false ? 'weatherball' : undefined
+      const hw = at('heatwave')?.variable
+      const wb = at('weatherball')?.variable
+      const higher = shares('charizardmegay').heatwave >= shares('charizardmegay').weatherball ? 'heatwave' : 'weatherball'
+      const lower = higher === 'heatwave' ? 'weatherball' : 'heatwave'
+      const hv = higher === 'heatwave' ? hw : wb
+      const lv = higher === 'heatwave' ? wb : hw
+      // 채용률 높은 쪽이 변동이면 낮은 쪽 판정과 무관, 높은 쪽 고정·낮은 쪽 변동이면 낮은 쪽, 둘 다 고정이면 높은 쪽
+      const expected = hv === true ? higher : hv === false && lv === true ? lower : hv === false && lv === false ? higher : undefined
       if (expected === undefined) continue
       expect(c.defaultItem?.key, c.id).toBe(itemKey(expected, BASE_CONDITION_ID))
       seen.add(expected)
     }
-    expect(seen).toEqual(new Set(['heatwave', 'weatherball']))
+    expect(seen.size).toBeGreaterThan(0)
   })
 
   it('공격 탭은 채용률을 쓰지 않는다(share 0 → 내 기술 칸 순서, 사용자 결정 2026-11-14), 메뉴 목록은 기술 채용률 순 · 같은 기술 안 강한 순 · 계산 불가/무효 맨 뒤', () => {
