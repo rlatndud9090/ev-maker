@@ -16,6 +16,7 @@ export {
   rowJudgements,
   rowChanges,
   cardDefault,
+  cardExplore,
   shownItemKey,
   opponentKey,
   probeKey,

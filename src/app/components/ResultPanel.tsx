@@ -39,6 +39,8 @@ interface Props {
    * 열 때 목록 스크롤을 맨 위로 돌려 패널이 고정된 진행 줄 바로 아래에 보이게 한다.
    */
   customPanel?: ReactNode
+  /** 기술 선택 목록을 연 줄의 항목 카드 id(닫으면 빈 목록). 계산 입력이 아니라 실행기 수요다 */
+  onMenuCards: (tab: Tab, cardIds: readonly string[]) => void
 }
 
 /** 계산결과순 그룹 이름(글자): 판정 그룹은 "<배지 문구>까지 가능" */
@@ -85,7 +87,7 @@ interface Expanded {
 const expandedNow = (e: Expanded, shownGeneration: number, speciesGeneration: number): ReadonlySet<string> =>
   shownGeneration >= speciesGeneration && e.at < speciesGeneration ? NONE : e.ids
 
-export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySet, customTargets, pinnedBundles, sortMode, moveChoices, speciesGeneration, dispatch, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel }: Props) {
+export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySet, customTargets, pinnedBundles, sortMode, moveChoices, speciesGeneration, dispatch, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel, onMenuCards }: Props) {
   const names = namesOf(game)
   // 펼침·배분 선택은 탭마다 따로(같은 포켓몬이라도 탭이 다르면 다른 행), 배분을 바꿔도 펼침이 유지되게 그룹 키로 둔다.
   const scoped = (groupKey: string) => JSON.stringify([tab, groupKey])
@@ -136,6 +138,7 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
     },
     [tab, dispatch],
   )
+  const onMenu = useCallback((cardIds: readonly string[]) => onMenuCards(tab, cardIds), [tab, onMenuCards])
   const onResetItem = useCallback(
     (group: CardGroup) => dispatch({ type: 'reset-move', tab, source: group.opponent.source, opponentId: group.opponent.id }),
     [tab, dispatch],
@@ -329,6 +332,7 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
                       items={itemsOf.get(g.key) ?? NO_ITEMS}
                       onChooseItem={onChooseItem}
                       onResetItem={onResetItem}
+                      onMenuCards={onMenu}
                     />
                   ))
                   if (sec.bucket === undefined) return items

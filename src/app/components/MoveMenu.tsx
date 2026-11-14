@@ -6,7 +6,7 @@ import { koBadge } from '../../ui/format'
 import { namesOf } from '../../ui/names'
 import { addableMoves, searchIndexOf } from '../../ui/search'
 import { Combobox } from './Combobox'
-import { MoveLabel } from './MoveLabel'
+import { MoveLabel, VariableTag } from './MoveLabel'
 import { meansLabel, moveRankParts } from './text'
 
 
@@ -35,8 +35,11 @@ function duplicateLabels(game: Snapshot, tab: Tab, items: readonly GroupItem[]):
   return new Set(items.filter(({ item }) => item.basis !== undefined && (seen.get(sig(item)) ?? 0) > 1).map(({ item }) => item.key))
 }
 
-/** 항목 내용: [기술 라벨][수단(같은 기술 라벨이 겹칠 때만)] … [현재 판정 배지] */
-export function ItemContent({ game, tab, item, rollSteps, showMeans }: { game: Snapshot; tab: Tab; item: ItemView; rollSteps: number; showMeans: boolean }) {
+/**
+ * 항목 내용: [기술 라벨][수단(같은 기술 라벨이 겹칠 때만)] … [현재 판정 배지][변동(변동 판정이 나온 변동 항목만)].
+ * 목록에 변동 항목이 하나라도 있으면 나머지 항목에 같은 폭 빈 칸을 둬 결과 배지 오른쪽 끝이 세로로 맞는다(배분 목록과 같다).
+ */
+function ItemContent({ game, tab, item, rollSteps, showMeans, reserveVariable }: { game: Snapshot; tab: Tab; item: ItemView; rollSteps: number; showMeans: boolean; reserveVariable: boolean }) {
   const badge = item.status === 'ok' || item.status === 'immune' ? koBadge(tab === 'defense' ? 'defense' : 'attack', item.cell, rollSteps) : undefined
   return (
     <>
@@ -53,6 +56,15 @@ export function ItemContent({ game, tab, item, rollSteps, showMeans }: { game: S
         )}
         {item.status === 'error' && <span className="badge-error">계산 불가</span>}
         {item.status === 'pending' && <span className="hint">판정 중</span>}
+        {item.variable === true ? (
+          <VariableTag compact testId="variable-mark" />
+        ) : (
+          reserveVariable && (
+            <span className="variable-tag compact variable-slot" aria-hidden="true">
+              변동
+            </span>
+          )
+        )}
       </span>
     </>
   )
@@ -138,12 +150,14 @@ interface Props {
   adding?: MoveAdding
   /** 재계산 뒤 포커스를 돌려줄 버튼 키(탭·포켓몬 줄·위치마다 고유) */
   focusKey: string
+  /** 목록이 열리고 닫힐 때(열린 동안 그 줄 항목의 변동 판정을 먼저 계산하게 알린다) */
+  onOpenChange?: (open: boolean) => void
 }
 
 const stop = (e: MouseEvent) => e.stopPropagation()
 
 /** 기술 배지: 누르면 기술 선택 드롭다운(배분 메뉴와 같은 조작). 배지를 눌러도 카드는 펼쳐지거나 접히지 않는다 */
-export function MoveMenu({ game, tab, rollSteps, items, shown, selected, onChoose, onReset, children, label, testId, adding, focusKey }: Props) {
+export function MoveMenu({ game, tab, rollSteps, items, shown, selected, onChoose, onReset, children, label, testId, adding, focusKey, onOpenChange }: Props) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLSpanElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
@@ -167,6 +181,12 @@ export function MoveMenu({ game, tab, rollSteps, items, shown, selected, onChoos
     const active = document.activeElement
     if (focusReturn === focusKey && (active === null || active === document.body)) btnRef.current?.focus()
   }, [focusKey])
+
+  useEffect(() => {
+    if (!open || onOpenChange === undefined) return
+    onOpenChange(true)
+    return () => onOpenChange(false)
+  }, [open, onOpenChange])
 
   useLayoutEffect(() => {
     if (!open) return
@@ -229,6 +249,7 @@ export function MoveMenu({ game, tab, rollSteps, items, shown, selected, onChoos
 
   // 계산 불가·무효 항목 앞에 구분선(정렬상 맨 뒤 묶음의 첫 항목)
   const firstRanked = items.findIndex(ranked)
+  const reserveVariable = items.some((g) => g.item.variable === true)
   return (
     <span className="move-pick" ref={wrapRef} onClick={stop}>
       <button
@@ -278,12 +299,13 @@ export function MoveMenu({ game, tab, rollSteps, items, shown, selected, onChoos
                   data-move={g.item.moveId}
                   data-status={g.item.status}
                   data-category={g.card.category ?? 'none'}
+                  data-variable={g.item.variable === undefined ? undefined : String(g.item.variable)}
                   onClick={() => {
                     onChoose(g)
                     close()
                   }}
                 >
-                  <ItemContent game={game} tab={tab} item={g.item} rollSteps={rollSteps} showMeans={dup.has(g.item.key)} />
+                  <ItemContent game={game} tab={tab} item={g.item} rollSteps={rollSteps} showMeans={dup.has(g.item.key)} reserveVariable={reserveVariable} />
                 </button>
                 {removable &&
                   (g.item.added === true ? (

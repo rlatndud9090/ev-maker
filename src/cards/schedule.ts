@@ -145,6 +145,19 @@ export function shownItemKey(refs: readonly CardItemRef[], def: DefaultResult, s
   return def.kind === 'ready' ? def.key : undefined
 }
 
+/** 결정용 행: 변동이 정해질 만큼만(양 끝이 다르면 끝, 같으면 성격 변형과 현재와 같은 변형 대신 쓰는 현재 스윕) */
+function decideRowTasks(plan: TabPlan, results: ResultMap, rowId: string, early: (t: RowTask) => void, late: (t: RowTask) => void): void {
+  const spec = plan.rows[rowId]
+  if (spec.error !== undefined || spec.sweep === undefined) return
+  if (spec.gate !== undefined && filterState(results, spec.gate).kind !== 'passed') return
+  const ends = results.get(taskKey({ kind: 'ends', rowId }))
+  if (ends === undefined) return early({ kind: 'ends', rowId })
+  if (ends.kind !== 'ends' || ends.range.low.category !== ends.range.high.category) return
+  const needed = neededVariants(plan, spec)
+  for (const nature of needed) late({ kind: 'variant', rowId, nature })
+  if (spec.natures !== undefined && needed.length < 2) late({ kind: 'sweep', rowId, stage: 2 })
+}
+
 /**
  * 한 카드의 남은 작업. error 카드는 작업이 없다. 후보가 없는 카드(스피드 탭)는 모든 행이 대상이다.
  * 후보 카드: 모든 후보 단건 판정(1단계) → 기본 항목 결정에 필요한 항목의 변동 판정(극단 필터·양 끝 1단계, 현재·변형 스윕 2단계) →
@@ -174,18 +187,7 @@ export function cardPending(plan: TabPlan, card: CardSpec, results: ResultMap, s
     if (rowChanges(ends, { variantsDone: false })) stage2.push({ kind: 'sweep', rowId, stage: 2 })
     else stage3.push({ kind: 'sweep', rowId, stage: 3 })
   }
-  /** 결정용 행: 변동이 정해질 만큼만(양 끝이 다르면 끝, 같으면 성격 변형과 현재와 같은 변형 대신 쓰는 현재 스윕) */
-  const decideRow = (rowId: string) => {
-    const spec = plan.rows[rowId]
-    if (spec.error !== undefined || spec.sweep === undefined) return
-    if (spec.gate !== undefined && filterState(results, spec.gate).kind !== 'passed') return
-    const ends = results.get(taskKey({ kind: 'ends', rowId }))
-    if (ends === undefined) return push(stage1, { kind: 'ends', rowId })
-    if (ends.kind !== 'ends' || ends.range.low.category !== ends.range.high.category) return
-    const needed = neededVariants(plan, spec)
-    for (const nature of needed) push(stage2, { kind: 'variant', rowId, nature })
-    if (spec.natures !== undefined && needed.length < 2) push(stage2, { kind: 'sweep', rowId, stage: 2 })
-  }
+  const decideRow = (rowId: string) => decideRowTasks(plan, results, rowId, (t) => push(stage1, t), (t) => push(stage2, t))
   const gatedRows = (filterId: string) => card.rowIds.filter((id) => plan.rows[id].gate === filterId)
   const pairs = (filterId: string) => {
     const missing = NATURE_VARIANTS.filter((nature) => !results.has(taskKey({ kind: 'pair', filterId, nature })))
@@ -227,6 +229,36 @@ export function cardPending(plan: TabPlan, card: CardSpec, results: ResultMap, s
     if (isShown) pairs(c.id)
   }
   return { stage1, stage2, stage3, stage4, stage5 }
+}
+
+/**
+ * 기술 선택 메뉴를 연 카드의 모든 항목 변동 판정 작업(단건 판정 → 극단 필터·양 끝 → 성격 변형·현재 스윕). 기본 항목 결정·보이는 항목과 겹치는
+ * 작업도 낼 수 있다(결과가 있으면 실행기가 건너뛴다). error·후보 없는 카드는 없다. 판정 입력이 아니라 계산 순서만 정한다.
+ */
+export function cardExplore(plan: TabPlan, card: CardSpec, results: ResultMap): PendingTasks {
+  const stage1: RowTask[] = []
+  const stage2: RowTask[] = []
+  const out: PendingTasks = { stage1, stage2, stage3: [], stage4: [], stage5: [] }
+  if (card.state === 'error' || card.conditions.length === 0) return out
+  const push = (stage: RowTask[]) => (task: RowTask) => {
+    if (!results.has(taskKey(task))) stage.push(task)
+  }
+  for (const r of cardItems(plan, card)) {
+    const c = r.candidate
+    if (c.target === 'fixed') {
+      push(stage1)({ kind: 'fixed', fixedId: c.id })
+      continue
+    }
+    if (c.target === 'row') {
+      if (plan.rows[c.id].error === undefined) push(stage1)({ kind: 'probe', target: 'row', id: c.id })
+      decideRowTasks(plan, results, c.id, push(stage1), push(stage2))
+      continue
+    }
+    push(stage1)({ kind: 'probe', target: 'filter', id: c.id })
+    push(stage1)({ kind: 'extreme', filterId: c.id })
+    for (const rowId of card.rowIds) if (plan.rows[rowId].gate === c.id) decideRowTasks(plan, results, rowId, push(stage1), push(stage2))
+  }
+  return out
 }
 
 /** 작업이 속한 카드 id(그 결과가 바뀌면 그 카드만 다시 조립하면 된다). */

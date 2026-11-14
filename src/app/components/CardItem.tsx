@@ -1,4 +1,4 @@
-import { memo, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { addedBundleCardId, defaultOption, isPinned, pinOf, type AddedBundle, type CardGroup, type CardView, type CustomTarget, type GroupItem, type RowView, type Tab } from '../../cards'
 import type { Snapshot, StatId } from '../../data/schema'
 import { namesOf } from '../../ui/names'
@@ -38,6 +38,8 @@ interface Props {
   onChooseItem: (group: CardGroup, card: CardView, item: GroupItem) => void
   /** 직접 고름 해제(기본 항목으로) */
   onResetItem: (group: CardGroup) => void
+  /** 기술 선택 목록을 연 줄의 항목 카드 id(분류 기본 배분들), 닫으면 빈 목록 */
+  onMenuCards: (cardIds: readonly string[]) => void
 }
 
 /** 카드 줄 배지의 기준 행: 대표 행. 대표로 세울 행이 없는 카드(no-change)는 범주가 있는 첫 행. */
@@ -197,9 +199,9 @@ const itemName = (game: Snapshot, item: string): string => game.data.items[item]
 
 /**
  * 도구 변형 행 이름 옆 배지: 도구 이미지(Champions 가방 스프라이트, 툴팁 = 도구 이름). 이미지가 없으면 열매 이름에서 "열매"를 뗀 "(마코)".
- * 보이는 그림·글자는 스크린 리더에서 숨기고 "마코열매 지닌 경우"로 읽힌다(share를 주면 "(사용률 34.4%)"를 덧붙인다). data-item-id는 도구 id.
+ * 보이는 그림·글자는 스크린 리더에서 숨기고 "마코열매 지닌 경우"로 읽힌다(점유율은 적지 않는다, 사용자 결정 2026-11-14). data-item-id는 도구 id.
  */
-function ItemVariantBadge({ game, item, share }: { game: Snapshot; item: string; share?: number }) {
+function ItemVariantBadge({ game, item }: { game: Snapshot; item: string }) {
   const name = itemName(game, item)
   const url = itemIconUrl(item)
   return (
@@ -209,9 +211,7 @@ function ItemVariantBadge({ game, item, share }: { game: Snapshot; item: string;
       ) : (
         <img className="item-icon" src={url} alt="" width={22} height={22} loading="lazy" decoding="async" draggable={false} data-item-icon={item} />
       )}
-      <span className="sr-only">
-        {name} 지닌 경우{share === undefined ? '' : ` (사용률 ${shareText(share)})`}
-      </span>
+      <span className="sr-only">{name} 지닌 경우</span>
     </span>
   )
 }
@@ -639,7 +639,21 @@ function BundleList({ tab, group, card, rollSteps, onSelect, dispatch, spMax, op
 }
 
 /** 간단행의 보이는 항목 기술 선택 버튼. 보이는 항목이 목록에 없으면 null */
-function ShownMove({ game, tab, group, card, rollSteps, items, onChooseItem, onResetItem, dispatch, testId }: Pick<Props, 'game' | 'tab' | 'group' | 'card' | 'rollSteps' | 'items' | 'onChooseItem' | 'onResetItem' | 'dispatch'> & { testId: string }) {
+function ShownMove({
+  game,
+  tab,
+  group,
+  card,
+  rollSteps,
+  items,
+  onChooseItem,
+  onResetItem,
+  onMenuCards,
+  dispatch,
+  testId,
+}: Pick<Props, 'game' | 'tab' | 'group' | 'card' | 'rollSteps' | 'items' | 'onChooseItem' | 'onResetItem' | 'onMenuCards' | 'dispatch'> & { testId: string }) {
+  const menuSig = JSON.stringify([...new Set(items.map((g) => g.card.id))])
+  const onOpenChange = useCallback((open: boolean) => onMenuCards(open ? (JSON.parse(menuSig) as string[]) : []), [menuSig, onMenuCards])
   const shown = items.find((g) => g.item.key === card.shownItem)
   if (shown === undefined) return null
   const row = { moveId: shown.item.moveId, moveType: shown.item.moveType, basis: shown.item.basis, ...(card.rows[0]?.refs === undefined ? {} : { refs: card.rows[0].refs }) }
@@ -666,13 +680,14 @@ function ShownMove({ game, tab, group, card, rollSteps, items, onChooseItem, onR
       testId={testId}
       adding={adding}
       focusKey={JSON.stringify([tab, group.key, testId])}
+      onOpenChange={onOpenChange}
     >
       <MoveLabel game={game} tab={tab} row={row} trailing={<Caret />} />
     </MoveMenu>
   )
 }
 
-export const CardItem = memo(function CardItem({ game, tab, group, card, rollSteps, expanded, onToggle, onSelect, target, dispatch, groupLabelId, items, onChooseItem, onResetItem }: Props) {
+export const CardItem = memo(function CardItem({ game, tab, group, card, rollSteps, expanded, onToggle, onSelect, target, dispatch, groupLabelId, items, onChooseItem, onResetItem, onMenuCards }: Props) {
   const names = namesOf(game)
   const ladder = card.opponent.source === 'ladder'
   const speed = tab === 'speed'
@@ -727,7 +742,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
             {group.berry !== undefined && (
               <>
                 {' '}
-                <ItemVariantBadge game={game} item={group.berry.item} share={tab === 'defense' ? group.berry.share : undefined} />
+                <ItemVariantBadge game={game} item={group.berry.item} />
               </>
             )}
           </span>
@@ -736,11 +751,11 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
               <span className="custom-tag">출처: 사용자 지정</span>
             </span>
           )}
-          {/* 방어 탭 화력 도구 행: 이름 아래 줄에 "생명의구슬 34.4%"(이름 칸 한 줄 유지, 읽기는 배지 숨김 글자) */}
+          {/* 방어 탭 화력 도구 행: 이름 아래 줄에 도구 이름(점유율은 적지 않는다, 이름 칸 한 줄 유지, 읽기는 배지 숨김 글자) */}
           {tab === 'defense' && group.berry !== undefined && (
             <span className="card-meta" aria-hidden="true">
               <span className="item-variant-label" data-testid="item-variant-label">
-                {itemName(game, group.berry.item)} {shareText(group.berry.share)}
+                {itemName(game, group.berry.item)}
               </span>
             </span>
           )}
@@ -756,7 +771,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
         )}
         <span className="card-headline" data-testid="card-headline" id={headlineId}>
           {card.shownItem !== undefined && items.some((g) => g.item.key === card.shownItem) ? (
-            <ShownMove game={game} tab={tab} group={group} card={card} rollSteps={rollSteps} items={items} onChooseItem={onChooseItem} onResetItem={onResetItem} dispatch={dispatch} testId="move-pick" />
+            <ShownMove game={game} tab={tab} group={group} card={card} rollSteps={rollSteps} items={items} onChooseItem={onChooseItem} onResetItem={onResetItem} onMenuCards={onMenuCards} dispatch={dispatch} testId="move-pick" />
           ) : (
             <Headline game={game} tab={tab} card={card} badge={result !== undefined} />
           )}
@@ -825,7 +840,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
 function sameProps(a: Props, b: Props): boolean {
   if (a.game !== b.game || a.tab !== b.tab || a.card !== b.card || a.rollSteps !== b.rollSteps || a.expanded !== b.expanded) return false
   if (a.onToggle !== b.onToggle || a.onSelect !== b.onSelect || a.target !== b.target || a.dispatch !== b.dispatch || a.groupLabelId !== b.groupLabelId) return false
-  if (a.onChooseItem !== b.onChooseItem || a.onResetItem !== b.onResetItem) return false
+  if (a.onChooseItem !== b.onChooseItem || a.onResetItem !== b.onResetItem || a.onMenuCards !== b.onMenuCards) return false
   if (a.items.length !== b.items.length || !a.items.every((g, i) => g.item === b.items[i].item && g.card === b.items[i].card)) return false
   if (a.group === b.group) return true
   if (a.group.key !== b.group.key || a.group.opponent !== b.group.opponent || a.group.berry?.item !== b.group.berry?.item || a.group.options.length !== b.group.options.length)

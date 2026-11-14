@@ -601,6 +601,8 @@ export interface ItemView {
   status: 'pending' | 'ok' | 'immune' | 'error'
   cell?: CompactCell
   error?: ErrorReason
+  /** 내 SP·성격 조정으로 판정이 바뀔 수 있음(변동 판정이 나온 뒤에만, 판정 전·계산 불가면 없다) */
+  variable?: boolean
 }
 
 /** 카드의 기본 항목과 분류 사이 비교 근거(같은 상대의 물리·특수 기본 카드 중 어느 분류를 먼저 보일지) */

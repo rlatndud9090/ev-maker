@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { TABS, type ErrorReason, type MetaSourceView } from '../cards'
+import { TABS, type ErrorReason, type MetaSourceView, type Tab } from '../cards'
 import type { SpTable } from '../core'
 import type { RegulationIndex, Snapshot } from '../data/schema'
 import type { MetaIndex, MetaSnapshot } from '../data/meta-schema'
@@ -160,6 +160,8 @@ function Workspace({ boot }: { boot: Boot }) {
   }, [executor, state.moveChoices])
 
   const onDisplaySp = useCallback((sp: SpTable | null) => executor.setDisplaySp(sp), [executor])
+  // 기술 선택 목록을 연 줄의 항목 변동 판정도 계산 입력이 아니라 수요다.
+  const onMenuCards = useCallback((t: Tab, cardIds: readonly string[]) => executor.setMenuCards(t, cardIds), [executor])
 
   const reasons = useMemo(() => {
     const out: ErrorReason[] = []
@@ -225,6 +227,7 @@ function Workspace({ boot }: { boot: Boot }) {
             sortMode={state.sortMode}
             moveChoices={state.moveChoices}
             speciesGeneration={state.speciesGeneration}
+            onMenuCards={onMenuCards}
             dispatch={dispatch}
             customOpen={customOpen}
             onToggleCustom={() => (customOpen ? closeCustom() : setCustomOpen(true))}

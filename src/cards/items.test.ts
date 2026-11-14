@@ -2,12 +2,14 @@
 import { describe, expect, it } from 'vitest'
 import { compareSpeed, type PokemonSet, type SpTable } from '../core'
 import { EXAMPLE_SET } from './__fixtures__/acceptance'
+import { assembleTab } from './assemble'
 import { buildTabView } from './batch'
+import { computeRowTask } from './rowTask'
 import { BASE_CONDITION_ID, compareItems, itemKey, resolveDefault, type ItemState, type ItemVariability } from './items'
-import { outspeedsAtMax } from './plan'
-import { opponentKey } from './schedule'
+import { outspeedsAtMax, planTab } from './plan'
+import { cardExplore, nextStage, opponentKey, pendingTasks, taskCardId, taskKey } from './schedule'
 import { cardInput, realData } from './testing'
-import type { CompactCell } from './types'
+import type { CardInput, CardSpec, CardView, CompactCell, RowTaskResult, Tab, TabPlan } from './types'
 
 const RANK = JSON.stringify(['rank', 'opponent', 'move', 'swordsdance'])
 const RANK2 = JSON.stringify(['rank', 'opponent', 'move', 'dragondance'])
@@ -261,5 +263,75 @@ describe('실데이터: 목록·기본 항목·직접 선택', () => {
     const card = v.cards.find((c) => c.opponent.id === 'kingambit' && c.category === 'physical')
     expect(card?.selected).toBe(false)
     expect(card?.shownItem).toBe(card?.defaultItem?.key)
+  })
+})
+
+describe('기술 선택 메뉴 항목의 변동 판정(PRD R3 변동 배지, AC36)', () => {
+  const only = (id: string) => ({ topN: 30, selected: [id] })
+  /** 실행기 수요 없이(기본 항목 결정 집합만) 끝까지 계산한 계획·결과 */
+  function settled(input: CardInput, tab: Tab) {
+    const plan = planTab(input, tab)
+    const results = new Map<string, RowTaskResult>()
+    for (;;) {
+      const stage = nextStage(pendingTasks(plan, results))
+      if (stage.length === 0) return { plan, results }
+      for (const t of stage) results.set(taskKey(t), computeRowTask(plan, t))
+    }
+  }
+  /** 연 카드의 메뉴 작업을 끝까지 계산한다(그 카드 작업만, 반환 = 계산한 작업 수) */
+  function explore(plan: TabPlan, results: Map<string, RowTaskResult>, cardId: string): number {
+    const card = plan.cards.find((c) => c.id === cardId) as CardSpec
+    let n = 0
+    for (;;) {
+      const stage = nextStage(cardExplore(plan, card, results))
+      if (stage.length === 0) return n
+      for (const t of stage) {
+        expect(taskCardId(plan, t)).toBe(cardId)
+        results.set(taskKey(t), computeRowTask(plan, t))
+        n++
+      }
+    }
+  }
+  const withoutVariable = (c: CardView) =>
+    ({
+      ...c,
+      items: c.items.map((i) => {
+        const rest = { ...i }
+        delete rest.variable
+        return rest
+      }),
+    })
+
+  it('방어 탭 대도각참: 기본 결정만으로는 변동 판정이 없는 항목이 있고, 메뉴 작업을 돌리면 그 카드 모든 정상 항목이 변동/고정으로 정해진다(보이는 항목·기본 항목·행은 그대로)', () => {
+    const { plan, results } = settled(cardInput({ mySet: EXAMPLE_SET, filters: only('kingambit') }), 'defense')
+    const before = assembleTab(plan, results)
+    const card = before.cards.find((c) => c.opponent.id === 'kingambit' && c.category === 'physical' && c.berry === undefined) as CardView
+    expect(card).toBeDefined()
+    expect(card.items.some((i) => i.status === 'ok' && i.variable === undefined)).toBe(true)
+    // 이미 정해진 보이는 항목은 카드 "변동 가능"과 같다
+    expect(card.items.find((i) => i.key === card.shownItem)?.variable).toBe(card.variable)
+    const others = before.cards.filter((c) => c.id !== card.id)
+
+    expect(explore(plan, results, card.id)).toBeGreaterThan(0)
+    const after = assembleTab(plan, results)
+    const opened = after.cards.find((c) => c.id === card.id) as CardView
+    for (const i of opened.items) {
+      if (i.status === 'ok' || i.status === 'immune') expect(typeof i.variable, i.key).toBe('boolean')
+      else expect(i.variable, i.key).toBeUndefined()
+    }
+    expect(opened.items.filter((i) => i.variable === true).length).toBeGreaterThan(0)
+    expect(opened.items.filter((i) => i.variable === false).length).toBeGreaterThan(0)
+    expect(withoutVariable(opened)).toEqual(withoutVariable(card))
+    // 메뉴를 열지 않은 카드는 그대로다
+    expect(after.cards.filter((c) => c.id !== card.id)).toEqual(others)
+    // 다 계산한 뒤에는 남은 메뉴 작업이 없고, 기본 남은 작업(pendingTasks)도 새로 생기지 않는다
+    expect(nextStage(cardExplore(plan, plan.cards.find((c) => c.id === card.id) as CardSpec, results))).toEqual([])
+    expect(nextStage(pendingTasks(plan, results))).toEqual([])
+  })
+
+  it('후보 없는 카드(스피드 탭)는 메뉴 작업이 없다', () => {
+    const plan = planTab(cardInput({ mySet: EXAMPLE_SET, filters: only('kingambit') }), 'speed')
+    expect(plan.cards.length).toBeGreaterThan(0)
+    for (const c of plan.cards) expect(cardExplore(plan, c, new Map())).toEqual({ stage1: [], stage2: [], stage3: [], stage4: [], stage5: [] })
   })
 })

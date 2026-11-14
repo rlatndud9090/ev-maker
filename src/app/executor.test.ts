@@ -415,4 +415,54 @@ describe('createExecutor', () => {
     executor.setInput(inputB, 2)
     expect(m.waiting()).toBe(0)
   })
+
+  it('기술 선택 메뉴 수요(setMenuCards): 세대 불변, 연 카드의 항목 변동 판정 작업만 돌고, 완료·진행률·다른 카드는 그대로, 닫아도 결과는 남는다(PRD R3, AC36)', async () => {
+    const m = manualScheduler()
+    executor = createExecutor({ scheduler: m.scheduler, sliceMs: 5, now: tickingClock() })
+    const tab: Tab = 'defense'
+    executor.setActiveTab(tab)
+    executor.setInput(inputA, 1)
+    await runToEnd(m)
+    const before = viewOf(executor.getSnapshot().tabs[tab])
+    expect(before.complete).toBe(true)
+    const card = before.cards.find((c) => c.items.some((i) => i.status === 'ok' && i.variable === undefined))
+    expect(card, '변동 판정 전 항목이 있는 카드').toBeDefined()
+    const id = card!.id
+    const plan = planTab(inputA, tab)
+    const spy = vi.mocked(computeRowTask)
+    spy.mockClear()
+
+    executor.setMenuCards(tab, [id])
+    await runToEnd(m)
+    const snap = executor.getSnapshot()
+    expect(snap.generation).toBe(1)
+    expect(spy.mock.calls.length).toBeGreaterThan(0)
+    for (const [, task] of spy.mock.calls) expect(taskCardId(plan, task)).toBe(id)
+    const after = viewOf(snap.tabs[tab])
+    expect(after.complete).toBe(true)
+    expect(after.progress.done).toBe(after.progress.total)
+    const opened = after.cards.find((c) => c.id === id)!
+    for (const i of opened.items) if (i.status === 'ok') expect(typeof i.variable, i.key).toBe('boolean')
+    expect(opened.shownItem).toBe(card!.shownItem)
+    expect(opened.rows).toEqual(card!.rows)
+    expect(after.cards.filter((c) => c.id !== id)).toEqual(before.cards.filter((c) => c.id !== id))
+
+    // 닫으면(빈 목록) 더 계산하지 않고, 나온 변동 판정은 그대로 남는다. 같은 목록을 다시 알려도 계산이 없다
+    spy.mockClear()
+    executor.setMenuCards(tab, [])
+    await runToEnd(m)
+    executor.setMenuCards(tab, [id])
+    await runToEnd(m)
+    expect(spy).not.toHaveBeenCalled()
+    expect(viewOf(executor.getSnapshot().tabs[tab]).cards.find((c) => c.id === id)?.items).toEqual(opened.items)
+  })
+
+  it('메뉴를 열지 않으면 메뉴 작업이 없다: 최종 뷰가 buildTabView(수요 없음)와 같다', async () => {
+    const m = manualScheduler()
+    executor = createExecutor({ scheduler: m.scheduler, sliceMs: 5, now: tickingClock() })
+    executor.setInput(inputA, 1)
+    executor.setMenuCards('defense', [])
+    await runToEnd(m)
+    expect(viewOf(executor.getSnapshot().tabs.defense)).toEqual(buildTabView(inputA, 'defense'))
+  })
 })

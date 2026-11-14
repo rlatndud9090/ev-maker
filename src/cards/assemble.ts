@@ -4,6 +4,7 @@ import type { Snapshot, StatId } from '../data/schema'
 import { cardItems, compareItems, itemStates, type CardItemRef, type ItemState } from './items'
 import {
   cardDefault,
+  cardExplore,
   cardPending,
   filterState,
   neededVariants,
@@ -359,6 +360,8 @@ function itemViews(plan: TabPlan, refs: readonly CardItemRef[], states: readonly
     if (ref.candidate.added === true) v.added = true
     if (st.probe.kind === 'ok' || st.probe.kind === 'immune') v.cell = st.probe.cell
     if (st.probe.kind === 'error') v.error = st.probe.reason
+    if (st.variability.kind === 'variable') v.variable = true
+    else if (st.variability.kind === 'fixed') v.variable = false
     return v
   })
 }
@@ -558,6 +561,8 @@ function cardDone(plan: TabPlan, card: CardSpec, results: ResultMap): number {
 /** 카드별 조립 캐시 항목. 카드 결과가 바뀌면(invalidate) 통째로 버린다. */
 interface CardMemo {
   pending: PendingTasks
+  /** 기술 선택 메뉴를 열었을 때의 항목 변동 판정 작업(cardExplore, 처음 요청할 때 만든다) */
+  explore?: PendingTasks
   done: number
   /** 그 표시용 SP로 조립한 카드(SP가 바뀌면 다시) */
   build?: CardBuild
@@ -573,6 +578,8 @@ export interface TabAssembler {
   setSelections(selections: ReadonlyMap<string, string>): boolean
   /** pendingTasks(plan, results)와 같은 값(카드 순 → 행 순). only가 있으면 그 카드들만 */
   pending(results: ResultMap, only?: (cardId: string) => boolean): PendingTasks
+  /** 그 카드들의 모든 항목 변동 판정 작업(cardExplore, 카드 순 → 행 순) */
+  explore(results: ResultMap, cardIds: ReadonlySet<string>): PendingTasks
   assemble(results: ResultMap, displaySp?: SpTable): TabView
 }
 
@@ -613,6 +620,16 @@ export function createTabAssembler(plan: TabPlan, initialSelections: ReadonlyMap
         if (only !== undefined && !only(card.id)) continue
         const p = entry(card, results).pending
         for (const k of STAGE_KEYS) for (const t of p[k]) out[k].push(t)
+      }
+      return out
+    },
+    explore(results, cardIds) {
+      const out = { stage1: [] as RowTask[], stage2: [] as RowTask[], stage3: [] as RowTask[], stage4: [] as RowTask[], stage5: [] as RowTask[] }
+      for (const card of plan.cards) {
+        if (!cardIds.has(card.id)) continue
+        const m = entry(card, results)
+        m.explore ??= cardExplore(plan, card, results)
+        for (const k of STAGE_KEYS) for (const t of m.explore[k]) out[k].push(t)
       }
       return out
     },
