@@ -273,7 +273,8 @@ function oracleListed(a: OracleItem, b: OracleItem): number {
 }
 
 /**
- * 기본 항목(PRD R4)의 독립 재구현: 기준 기술(방어 탭은 주력 기술의 정상 랭크 전 항목을 채용률 순(동률 기존 기술 순서)으로 보아 그 기술 항목 중 변동이 있는 첫 기술, 모두 고정이면 채용률 1위, 공격 탭은 가장 센 것,
+ * 기본 항목(PRD R4)의 독립 재구현: 기준 기술(방어 탭은 주력 기술의 정상 랭크 전 항목 중 그 기술 항목에 변동이 있는 것들의 채용률 최고(동률 기존 기술 순서),
+ * 모두 고정이면 랭크 전 확정1타 고정인 것 중 가장 약한 것·없으면 가장 센 것, 공격 탭은 가장 센 것,
  * 정상 주력이 없으면 목록 첫 정상 항목·없으면 첫 항목,
  * 방어 탭 speedEdge면 랭크 전·후 중 변동인 선공기 우선) → 랭크 전 P·후 Q 표.
  */
@@ -301,9 +302,21 @@ function oracleDefault(items: readonly OracleItem[], priorityRule: boolean, vari
   if (priorityRule) for (const p of pre) if (p.priority && [p, ...qsOf(p.moveId)].some(variable)) return pq(p.moveId)
   // 공격 탭은 가장 센 주력
   if (!variableFirst) return pq(mains[0].moveId)
-  const byUsage = [...mains].sort((a, b) => b.share - a.share || a.moveOrder - b.moveOrder)
-  const firstVariable = byUsage.find((m) => items.some((i) => i.moveId === m.moveId && variable(i)))
-  return pq((firstVariable ?? byUsage[0]).moveId)
+  // 방어 탭(PRD R4-1): ① 변동 기술 모음 → 채용률 최고 ② 모두 고정 → 랭크 전 확정1타 고정 모음 → 최약 ③ 아니면 최강
+  const variables = mains.filter((m) => items.some((i) => i.moveId === m.moveId && variable(i)))
+  if (variables.length > 0) {
+    const topShare = Math.max(...variables.map((m) => m.share))
+    const tied = variables.filter((m) => m.share === topShare)
+    return pq(tied.reduce((a, b) => (b.moveOrder < a.moveOrder ? b : a)).moveId)
+  }
+  const ohkos = mains.filter((m) => {
+    const v = varOf(m)
+    return v.kind === 'fixed' && v.cat === 'guaranteed-ohko'
+  })
+  if (ohkos.length === 0) return pq(mains[0].moveId)
+  const hit = (i: OracleItem) => (i.probe.kind === 'ok' ? [i.probe.p, i.probe.max] : [0, 0])
+  const weakest = [...ohkos].sort((a, b) => hit(a)[0] - hit(b)[0] || hit(a)[1] - hit(b)[1] || a.moveOrder - b.moveOrder)[0]
+  return pq(weakest.moveId)
 }
 
 /** 오라클용 접지(PRD R12): 쇠구슬이면 접지, 아니면 비행 타입·부유·풍선이 아닐 때 */

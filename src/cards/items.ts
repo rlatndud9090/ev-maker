@@ -158,17 +158,20 @@ export function compareStrength(a: StrengthKey, b: StrengthKey): number {
   const ca = probeClass(a.probe)
   const cb = probeClass(b.probe)
   if (ca !== cb) return ca - cb
-  if (a.probe.kind === 'ok' && b.probe.kind === 'ok') {
-    const pa = a.probe.cell.ohkoChance ?? 0
-    const pb = b.probe.cell.ohkoChance ?? 0
-    if (pa !== pb) return pb - pa
-    const ma = a.probe.cell.maxPercent ?? 0
-    const mb = b.probe.cell.maxPercent ?? 0
-    if (ma !== mb) return mb - ma
-  }
+  const hit = compareHit(a, b)
+  if (hit !== 0) return hit
   if (a.moveId === b.moveId && a.rankBefore !== b.rankBefore) return a.rankBefore ? -1 : 1
   if (a.moveOrder !== b.moveOrder) return a.moveOrder - b.moveOrder
   return a.conditionOrder - b.conditionOrder
+}
+
+/** 정상 항목끼리 현재 SP 1타 확률 → 최대 대미지 비율이 큰 순(그 밖은 0) */
+function compareHit(a: StrengthKey, b: StrengthKey): number {
+  if (a.probe.kind !== 'ok' || b.probe.kind !== 'ok') return 0
+  const pa = a.probe.cell.ohkoChance ?? 0
+  const pb = b.probe.cell.ohkoChance ?? 0
+  if (pa !== pb) return pb - pa
+  return (b.probe.cell.maxPercent ?? 0) - (a.probe.cell.maxPercent ?? 0)
 }
 
 /** 목록 꼬리: 정상·판정 전 0, 계산 불가 1, 무효 2 */
@@ -254,8 +257,9 @@ function pickPQ(sorted: readonly ItemState[], moveId: string): Step<ItemState> {
 }
 
 /**
- * 주력 기술 중 기준 기술: 채용률 순(동률은 기존 기술 순서)으로 그 기술 항목 중 하나라도 변동인 첫 기술, 모두 고정(변동 판정 끝)이면 채용률 1위.
- * 같은 변동·고정끼리는 채용률이 높은 쪽(사용자 결정 2026-11-14). 앞 기술의 변동 판정이 남았으면 그 항목만 기다린다(뒤 기술 판정과 무관하게 정해진다).
+ * 주력 기술 중 기준 기술(PRD R4-1, 사용자 결정 2026-11-15): 채용률 순(동률은 기존 기술 순서)으로 그 기술 항목 중 하나라도 변동인 첫 기술.
+ * 모두 고정(변동 판정 끝)이면 랭크 전 항목이 확정1타 고정인 기술 중 가장 약한 것(동률은 기존 기술 순서), 없으면 가장 센 것.
+ * 앞 기술의 변동 판정이 남았으면 그 항목만 기다린다(뒤 기술 판정과 무관하게 정해진다). mains = 채용률 순, strong = 강한 순.
  */
 function pickMain(strong: readonly ItemState[], mains: readonly ItemState[]): Step<ItemState> {
   // 주력이 하나면 변동 판정과 무관하게 그 기술이다
@@ -269,7 +273,13 @@ function pickMain(strong: readonly ItemState[], mains: readonly ItemState[]): St
     const waiting = rest.filter((i) => i.variability.kind === 'pending').map((i) => i.key)
     if (waiting.length > 0) return { kind: 'need', keys: waiting }
   }
-  return { kind: 'done', value: mains[0] }
+  const ohko = mains.filter((m) => m.variability.kind === 'fixed' && m.variability.category === GUARANTEED_OHKO)
+  if (ohko.length === 0) return { kind: 'done', value: strong.find((i) => mains.includes(i)) as ItemState }
+  const weakest = ohko.reduce((w, m) => {
+    const d = compareHit(m, w)
+    return d > 0 || (d === 0 && m.moveOrder < w.moveOrder) ? m : w
+  })
+  return { kind: 'done', value: weakest }
 }
 
 /**

@@ -246,7 +246,7 @@ describe('mainMoves: 방어 탭 주력 기술 = 선공기 제외 채용률 ≥ 2
   })
 })
 
-describe('resolveDefault: 기준 기술 = 주력 중 변동 기술의 채용률 1위, 모두 고정이면 채용률 1위(R4-1 재개정, PRD AC38)', () => {
+describe('resolveDefault: 기준 기술 = 주력 중 변동 기술의 채용률 1위, 모두 고정이면 확정1타 중 최약·없으면 최강(R4-1 재정비, PRD AC38)', () => {
   const main = (moveId: string, probe: ItemState['probe'], v: ItemVariability, share = 0.5) => item(moveId, true, probe, v, { share })
   const side = (moveId: string, probe: ItemState['probe'], v: ItemVariability, share = 0.1) => item(moveId, true, probe, v, { share, main: false })
   it('메가플라엣테 예(매지컬샤인 93.7%·문포스 79.8%·파멸의빛 26.4%): 변동인 기술 중 채용률 최고 — 센 순과 무관', () => {
@@ -274,17 +274,41 @@ describe('resolveDefault: 기준 기술 = 주력 중 변동 기술의 채용률 
     expect(pick([weakVar, { ...strong, variability: { kind: 'pending' } }], false, false)).toMatchObject({ kind: 'ready', key: strong.key })
     expect(pick([{ ...strong, variability: { kind: 'pending' } }, side('c', ok(0, 10), VAR)])).toMatchObject({ kind: 'ready', key: strong.key })
   })
-  it('주력이 모두 고정이면 채용률 1위 주력(가장 센 것 아님), 채용률 20% 미만 강한 기술은 기준이 아니다(메가보만다 이판사판태클)', () => {
-    const hv = main('hypervoice', ok(0, 50), SURVIVE, 0.96)
-    const dm = main('dracometeor', ok(0.2, 150), MID, 0.64)
-    const de = side('doubleedge', ok(1, 200), VAR, 0.177)
-    expect(pick([hv, de, dm])).toMatchObject({ kind: 'ready', key: hv.key, basis: hv.key })
+  it('① 변동 기술이 있으면 그중 채용률 최고: 더 약해도, 더 센 고정 기술보다 앞선다', () => {
+    const weakVar = main('a', ok(0, 30), VAR, 0.3)
+    const strongVar = main('b', ok(0.8, 140), VAR, 0.25)
+    const strongFixed = main('c', ok(1, 220), OHKO, 0.9)
+    expect(pick([strongFixed, strongVar, weakVar])).toMatchObject({ kind: 'ready', key: weakVar.key, basis: weakVar.key })
   })
-  it('메가눈여아 예: 주력이 모두 고정이면 급소 확정으로 더 센 얼음숨결(37.7%)보다 채용률 99.9% 눈보라', () => {
+  it('② 모두 확정1타 고정이면 가장 약한 것(채용률과 무관), 1타 확률 동률이면 최대 대미지가 작은 것', () => {
+    const a = main('a', ok(1, 260), OHKO, 0.9)
+    const b = main('b', ok(1, 130), OHKO, 0.3)
+    const c = main('c', ok(1, 180), OHKO, 0.6)
+    expect(pick([a, b, c])).toMatchObject({ kind: 'ready', key: b.key, basis: b.key })
+  })
+  it('② 확정1타 고정 중 세기 동률이면 기존 기술 순서가 앞선 것', () => {
+    const a = main('a', ok(1, 150), OHKO, 0.3)
+    const b = main('b', ok(1, 150), OHKO, 0.9)
+    expect(pick([b, a])).toMatchObject({ kind: 'ready', key: a.key })
+  })
+  it('③ 모두 확정견딤 고정이면 가장 센 것(채용률 1위 아님): 메가보만다 하이퍼보이스 96% vs 용성군 64%, 20% 미만 이판사판태클은 기준 아님', () => {
+    const hv = main('hypervoice', ok(0, 50), SURVIVE, 0.96)
+    const dm = main('dracometeor', ok(0, 80), SURVIVE, 0.64)
+    const de = side('doubleedge', ok(1, 200), VAR, 0.177)
+    expect(pick([hv, de, dm])).toMatchObject({ kind: 'ready', key: dm.key, basis: dm.key })
+  })
+  it('④ 확정1타·확정견딤 고정이 섞이면 확정1타 중 가장 약한 것(더 센 확정1타·채용률 높은 확정견딤보다)', () => {
     const fb = main('frostbreath', ok(1, 242), OHKO, 0.377)
     const bz = main('blizzard', ok(1, 216), OHKO, 0.999)
     const sb = main('shadowball', ok(0, 53), SURVIVE, 0.993)
     expect(pick([fb, bz, sb])).toMatchObject({ kind: 'ready', key: bz.key, basis: bz.key })
+  })
+  it('확정1타가 아닌 고정(난수 1타·확정견딤)뿐이면 가장 센 것, 확정1타 판단은 랭크 전 항목 기준(랭크 후만 확정1타는 해당 없음)', () => {
+    const mid = main('a', ok(0.5, 110), MID, 0.9)
+    const strong = main('b', ok(0.8, 130), MID, 0.3)
+    const sv = main('c', ok(0, 70), SURVIVE, 0.6)
+    const svQ = item('c', false, ok(1, 140), OHKO, { share: 0.6 })
+    expect(pick([mid, strong, sv, svQ])).toMatchObject({ kind: 'ready', key: strong.key, basis: strong.key })
   })
   it('조기 확정은 채용률 순: 채용률 1위가 변동이면 더 센 기술 판정을 기다리지 않고, 1위 판정 전이면 1위만 기다린다', () => {
     const top = main('top', ok(0, 40), VAR, 0.9)
@@ -496,7 +520,7 @@ describe('실데이터: 채용률·주력 기술·목록 순(R16·R4-1 재개정
     expect(max('dracometeor')).toBeGreaterThan(max('dragonpulse'))
   })
 
-  it('예시 세트 방어 탭: 고릴타 그래스슬라이더(그래스메이커 → 선공기)는 주력 아님 → 우드해머, 메가보만다 이판사판태클(20% 미만) 주력 아님 → 모두 고정이면 채용률 1위 하이퍼보이스, 메가플라엣테는 채용률 1위 매지컬샤인이 변동이면 더 센 기술 판정 없이 매지컬샤인', () => {
+  it('예시 세트 방어 탭: 고릴타 그래스슬라이더(그래스메이커 → 선공기)는 주력 아님 → 우드해머, 메가보만다 이판사판태클(20% 미만) 주력 아님 → 모두 고정이면 확정1타 용성군(채용률 1위 확정견딤 하이퍼보이스 아님), 메가플라엣테는 채용률 1위 매지컬샤인이 변동이면 더 센 기술 판정 없이 매지컬샤인', () => {
     const v = buildTabView(cardInput({ mySet: EXAMPLE_SET, filters: { topN: 30, selected: [] } }), 'defense')
     const plan = planTab(cardInput({ mySet: EXAMPLE_SET, filters: { topN: 30, selected: [] } }), 'defense')
     const cand = (id: string, m: string) => plan.cards.filter((c) => c.opponent.id === id).flatMap((c) => c.conditions.flatMap((g) => g.candidates)).find((c) => c.moveId === m)
@@ -510,9 +534,9 @@ describe('실데이터: 채용률·주력 기술·목록 순(R16·R4-1 재개정
     for (const c of v.cards.filter((x) => x.opponent.id === 'salamencemega' && x.category === 'special')) {
       const sAt = (m: string) => c.items.find((i) => i.key === itemKey(m, BASE_CONDITION_ID))
       if (sAt('hypervoice')?.variable !== false || sAt('dracometeor')?.variable !== false) continue
-      // 더 센 용성군이 아니라 채용률 1위 하이퍼보이스
-      expect(sAt('dracometeor')?.cell?.maxPercent ?? 0, c.id).toBeGreaterThan(sAt('hypervoice')?.cell?.maxPercent ?? 0)
-      expect(c.defaultItem?.key, c.id).toBe(itemKey('hypervoice', BASE_CONDITION_ID))
+      // 채용률 1위 하이퍼보이스가 아니라 확정1타 고정인 용성군(확정1타 우선)
+      expect([sAt('hypervoice')?.cell?.category, sAt('dracometeor')?.cell?.category], c.id).toEqual(['guaranteed-survive', 'guaranteed-ohko'])
+      expect(c.defaultItem?.key, c.id).toBe(itemKey('dracometeor', BASE_CONDITION_ID))
       allFixed++
     }
     expect(allFixed).toBeGreaterThan(0)
@@ -526,7 +550,7 @@ describe('실데이터: 채용률·주력 기술·목록 순(R16·R4-1 재개정
     expect(floette.defaultItem?.key).toBe(itemKey('dazzlinggleam', BASE_CONDITION_ID))
   })
 
-  it('예시 세트(한카리아스) 방어 탭 메가눈여아: 주력이 모두 고정이면 급소 확정으로 더 센 얼음숨결이 아니라 채용률 99.9% 눈보라가 기준', () => {
+  it('예시 세트(한카리아스) 방어 탭 메가눈여아: 주력이 모두 고정이면 확정1타 눈보라·얼음숨결 중 가장 약한 눈보라(급소 확정 얼음숨결이 더 셈), 확정견딤 섀도볼은 아님', () => {
     const s = shares('froslassmega')
     expect(s.blizzard).toBeGreaterThan(0.99)
     expect(s.frostbreath).toBeGreaterThanOrEqual(0.2)
@@ -535,13 +559,34 @@ describe('실데이터: 채용률·주력 기술·목록 순(R16·R4-1 재개정
     expect(cards.length).toBeGreaterThan(0)
     for (const c of cards) {
       const at = (m: string) => c.items.find((i) => i.key === itemKey(m, BASE_CONDITION_ID))
-      expect([at('blizzard')?.variable, at('frostbreath')?.variable], c.id).toEqual([false, false])
+      expect([at('blizzard')?.variable, at('frostbreath')?.variable, at('shadowball')?.variable], c.id).toEqual([false, false, false])
+      expect([at('blizzard')?.cell?.category, at('frostbreath')?.cell?.category, at('shadowball')?.cell?.category], c.id).toEqual(['guaranteed-ohko', 'guaranteed-ohko', 'guaranteed-survive'])
       expect(at('frostbreath')?.cell?.maxPercent ?? 0, c.id).toBeGreaterThan(at('blizzard')?.cell?.maxPercent ?? 0)
       expect(c.defaultItem?.key, c.id).toBe(itemKey('blizzard', BASE_CONDITION_ID))
     }
   })
 
-  it('채용률 20% 이상이면 같은 타입이어도 각자 주력(R13 판정 타입은 표시에만): 타부자고 vs 메가리자몽Y 열풍·웨더볼, 하나만 변동이면 그것, 같이 고정·변동이면 채용률 높은 쪽', () => {
+  it('예시 세트(한카리아스) 방어 탭 펠리퍼·불카모스·메가리자몽Y: 주력이 모두 확정견딤 고정이면 채용률 1위가 아니라 가장 센 것', () => {
+    const v = buildTabView(cardInput({ mySet: EXAMPLE_SET, filters: { topN: 30, selected: [] } }), 'defense')
+    const cases: [string, string, string][] = [
+      ['pelipper', 'hurricane', 'weatherball'],
+      ['volcarona', 'strugglebug', 'gigadrain'],
+      ['charizardmegay', 'solarbeam', 'dragonpulse'],
+    ]
+    for (const [id, top, strong] of cases) {
+      expect(shares(id)[top], id).toBeGreaterThan(shares(id)[strong])
+      const cards = v.cards.filter((c) => c.opponent.id === id && c.category === 'special' && c.berry === undefined)
+      expect(cards.length, id).toBeGreaterThan(0)
+      for (const c of cards) {
+        const at = (m: string) => c.items.find((i) => i.key === itemKey(m, BASE_CONDITION_ID))
+        expect([at(top)?.variable, at(strong)?.variable, at(top)?.cell?.category, at(strong)?.cell?.category], c.id).toEqual([false, false, 'guaranteed-survive', 'guaranteed-survive'])
+        expect(at(strong)?.cell?.maxPercent ?? 0, c.id).toBeGreaterThan(at(top)?.cell?.maxPercent ?? 0)
+        expect(c.defaultItem?.key, c.id).toBe(itemKey(strong, BASE_CONDITION_ID))
+      }
+    }
+  })
+
+  it('채용률 20% 이상이면 같은 타입이어도 각자 주력(R13 판정 타입은 표시에만): 타부자고 vs 메가리자몽Y 열풍·웨더볼, 하나만 변동이면 그것, 둘 다 변동이면 채용률 높은 쪽, 둘 다 고정이면 확정1타 중 약한 쪽·없으면 센 쪽', () => {
     const gholdengo = bo1.entry('gholdengo')?.representative.set as PokemonSet
     const input = cardInput({ mySet: gholdengo, filters: only('charizardmegay') })
     const plan = planTab(input, 'defense')
@@ -561,8 +606,11 @@ describe('실데이터: 채용률·주력 기술·목록 순(R16·R4-1 재개정
       const lower = higher === 'heatwave' ? 'weatherball' : 'heatwave'
       const hv = higher === 'heatwave' ? hw : wb
       const lv = higher === 'heatwave' ? wb : hw
-      // 채용률 높은 쪽이 변동이면 낮은 쪽 판정과 무관, 높은 쪽 고정·낮은 쪽 변동이면 낮은 쪽, 둘 다 고정이면 높은 쪽
-      const expected = hv === true ? higher : hv === false && lv === true ? lower : hv === false && lv === false ? higher : undefined
+      // 채용률 높은 쪽이 변동이면 낮은 쪽 판정과 무관, 높은 쪽 고정·낮은 쪽 변동이면 낮은 쪽, 둘 다 고정이면 확정1타 중 약한 쪽·없으면 센 쪽
+      const max = (m: string) => at(m)?.cell?.maxPercent ?? 0
+      const ohko = ['heatwave', 'weatherball'].filter((m) => at(m)?.cell?.category === 'guaranteed-ohko')
+      const bothFixed = ohko.length > 0 ? ohko.reduce((a, b) => (max(b) < max(a) ? b : a)) : max('heatwave') >= max('weatherball') ? 'heatwave' : 'weatherball'
+      const expected = hv === true ? higher : hv === false && lv === true ? lower : hv === false && lv === false ? bothFixed : undefined
       if (expected === undefined) continue
       expect(c.defaultItem?.key, c.id).toBe(itemKey(expected, BASE_CONDITION_ID))
       seen.add(expected)
