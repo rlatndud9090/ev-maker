@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { cards, openProduct, selectTab, tabPanel, waitComplete } from './helpers'
 
-// 방어 탭 상대 화력 도구 행(PRD R14, AC35): 기본 행은 상대 도구 없음, 점유율 기준 이상 화력 도구마다 "대도각참 [아이콘] 생명의구슬" 별도 행(점유율 표기 없음).
+// 방어 탭 상대 화력 도구 행(PRD R14, AC35): 기본 행은 상대 도구 없음, 점유율 기준 이상 화력 도구마다 "대도각참 [아이콘]" 별도 행(점유율·도구 이름 표기 없음, 아이콘 툴팁·읽기 이름에만 도구 이름).
 
 const groupRow = (page: Page, key: readonly string[]) => cards(page).and(page.locator(`[data-group-key='${JSON.stringify(key)}']`))
 const KINGAMBIT = ['ladder', 'kingambit'] as const
@@ -42,9 +42,11 @@ test('방어 탭: 대도각참 기본 행 뒤에 생명의구슬 행(표지), �
   const badge = orb.getByTestId('berry-badge')
   await expect(badge).toHaveAttribute('data-item-id', 'lifeorb')
   await expect(badge.locator('img[data-item-icon="lifeorb"]')).toHaveCount(1)
-  // 점유율은 적지 않는다(사용자 결정 2026-11-14, AC36): 표지는 도구 아이콘·이름만, 접근 가능한 이름도 "생명의구슬 지닌 경우"까지
-  await expect(orb.getByTestId('item-variant-label')).toHaveText(/^생명의구슬$/)
-  await expect(base.getByTestId('item-variant-label')).toHaveCount(0)
+  // 표지는 이름 옆 도구 아이콘뿐(점유율·도구 이름 줄 없음 — 줄 높이를 다른 행과 같게, 사용자 결정 2026-11-14). 접근 가능한 이름은 "생명의구슬 지닌 경우"까지
+  await expect(orb.getByTestId('berry-badge').locator('img[data-item-icon="lifeorb"]')).toHaveCount(1)
+  await expect(orb.locator('.card-meta')).toHaveCount(0)
+  const height = async (row: typeof base) => (await row.locator('.card-line').boundingBox())!.height
+  expect(Math.abs((await height(orb)) - (await height(base)))).toBeLessThanOrEqual(1)
   await expect(orb.locator('.card-toggle')).toHaveAccessibleName(/^대도각참.*생명의구슬 지닌 경우/)
   await expect(orb.locator('.card-toggle')).not.toHaveAccessibleName(/%|사용률/)
   // 사용률 순: 원래 행 바로 뒤(도구 행끼리는 점유율 순)

@@ -751,14 +751,6 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
               <span className="custom-tag">출처: 사용자 지정</span>
             </span>
           )}
-          {/* 방어 탭 화력 도구 행: 이름 아래 줄에 도구 이름(점유율은 적지 않는다, 이름 칸 한 줄 유지, 읽기는 배지 숨김 글자) */}
-          {tab === 'defense' && group.berry !== undefined && (
-            <span className="card-meta" aria-hidden="true">
-              <span className="item-variant-label" data-testid="item-variant-label">
-                {itemName(game, group.berry.item)}
-              </span>
-            </span>
-          )}
         </button>
         {multi || addable ? (
           <BundlePicker tab={tab} group={group} card={card} rollSteps={rollSteps} onSelect={onSelect} dispatch={dispatch} spMax={spMax} />
