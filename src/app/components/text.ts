@@ -1,31 +1,17 @@
 // 탭 뷰의 id 값 → 화면 문구(이름 색인 사용). 판정은 하지 않는다.
 import type { BoostTable, MoveStatRefs } from '../../core'
-import type { MetaSourceView, MoveNotice, RankBasis, RowView, ScarfBasis, Tab } from '../../cards'
+import type { MetaSourceView, MoveNotice, RowView, Tab } from '../../cards'
 import type { MatchType } from '../../data/meta-schema'
 import type { Snapshot } from '../../data/schema'
-import { NO_ITEM } from '../../data/meta-schema'
 import { namesOf } from '../../ui/names'
-import { STAT_SHORT, rankText, refsNote, shareText } from '../../ui/format'
+import { STAT_SHORT, rankText, refsNote } from '../../ui/format'
+import type { MonWithItemProps } from './MonWithItem'
 
 export const TAB_LABEL: Record<Tab, string> = { attack: '공격', defense: '방어', speed: '스피드' }
-
-export const ROW_KIND_LABEL: Record<RowView['kind'], string> = { base: '기본', rank: '랭크', scarf: '스카프', 'non-scarf': '스카프 아님' }
 
 export function meansLabel(game: Snapshot, means: { kind: 'ability' | 'move'; id: string }): string {
   const names = namesOf(game)
   return means.kind === 'ability' ? names.abilities.label(means.id) : names.moves.label(means.id)
-}
-
-/** 반응 id는 특성 또는 도구 */
-export function reactionLabel(game: Snapshot, id: string): string {
-  const d = game.data
-  const names = namesOf(game)
-  if (Object.prototype.hasOwnProperty.call(d.abilities, id)) return names.abilities.label(id)
-  return names.items.label(id)
-}
-
-export function itemKeyLabel(game: Snapshot, item: string): string {
-  return item === NO_ITEM ? '도구 없음' : namesOf(game).items.label(item)
 }
 
 const boostsText = (who: string, b: BoostTable): string =>
@@ -33,18 +19,6 @@ const boostsText = (who: string, b: BoostTable): string =>
     .filter(([, v]) => v !== undefined && v !== 0)
     .map(([s, v]) => `${who} ${STAT_SHORT[s as keyof typeof STAT_SHORT]}${(v as number) > 0 ? '+' : '−'}${Math.abs(v as number)}`)
     .join(' ')
-
-/** 랭크·스카프 행 근거: "상대 위협 31.2% · 내 A−1 · 반응: 오기" */
-export function basisText(game: Snapshot, basis: RankBasis | ScarfBasis): string {
-  if (basis.kind !== 'rank') return `${itemKeyLabel(game, basis.item)} ${shareText(basis.share)}`
-  const owner = basis.owner === 'me' ? '내' : '상대'
-  const share = basis.share !== undefined ? ` ${shareText(basis.share)}` : basis.owner === 'opponent' ? ' (사용자 지정)' : ''
-  const parts = [`${owner} ${meansLabel(game, basis.means)}${share}`]
-  const boosts = [boostsText('내', basis.myBoosts), boostsText('상대', basis.opponentBoosts)].filter((t) => t !== '').join(' ')
-  if (boosts !== '') parts.push(boosts)
-  if (basis.reactions.length > 0) parts.push(`반응: ${basis.reactions.map((r) => reactionLabel(game, r)).join('·')}`)
-  return parts.join(' · ')
-}
 
 /**
  * 기술 라벨의 랭크: 기술 사용자의 공격 능력치 랭크는 부호만(own "+2"), 그 밖의 랭크는 rest "내 B+2 상대 S−1".
@@ -113,4 +87,18 @@ export const MATCH_LABEL: Record<MatchType, string> = { bo1: 'Bo1', bo3: 'Bo3' }
 
 export function sourceText(s: MetaSourceView): string {
   return `${MATCH_LABEL[s.match]} · ${s.month} · 컷 ${s.cutoff} · ${s.format}`
+}
+
+export type CardItemOverlay = NonNullable<MonWithItemProps['item']>
+
+const itemName = (game: Snapshot, item: string): string => game.data.items[item]?.name.ko ?? item
+
+/**
+ * 카드 줄이 계산에 가정한 지닌 도구(R13): 도구 변형 줄은 그 도구(variant), 메가 폼 기본 줄은 그 메가스톤(mega), 그 밖은 없음.
+ * 공격·방어 래더 기본 줄은 상대 도구를 지우므로 겹침이 없다.
+ */
+export function cardItemOf(game: Snapshot, opponentId: string, variantItem: string | undefined): CardItemOverlay | undefined {
+  if (variantItem !== undefined) return { id: variantItem, name: itemName(game, variantItem), role: 'variant' }
+  const mega = game.data.megas.find((m) => m.forme === opponentId)
+  return mega === undefined ? undefined : { id: mega.stone, name: itemName(game, mega.stone), role: 'mega' }
 }

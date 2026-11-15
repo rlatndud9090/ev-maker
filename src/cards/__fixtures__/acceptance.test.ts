@@ -5,12 +5,9 @@ import {
   CoreInputError,
   checkSpeedSupport,
   judgeDamage,
-  judgeSpeed,
   moveStatRefs,
   sweepDamage,
-  sweepSpeed,
   validateSet,
-  type BattleConditions,
   type PokemonSet,
   type SweepResult,
 } from '../../core'
@@ -26,7 +23,6 @@ import {
   F12,
   F2,
   F3,
-  F4,
   F5,
   F6,
   F7,
@@ -100,10 +96,6 @@ describe('F9 예시 세트', () => {
     expect(boundariesOf(r)).toEqual(F9.attack.boundaries)
   })
 
-  it('스피드 탭: 대쓰여너 최대 S 묶음 대표에 대해 0~32 안에서 바뀐다', () => {
-    const r = sweepSpeed(game, EXAMPLE_SET, opponentSet(bo1, F9.speed.opponent), undefined, OVER)
-    expect(boundariesOf(r)).toEqual(F9.speed.boundaries)
-  })
 })
 
 describe('F1 공격 탭 고정 입력', () => {
@@ -262,48 +254,6 @@ describe('F3 방어 탭 극단 필터', () => {
     const b = sweepDamage(game, { side: 'defender', stat: 'def' }, attacker, F3.mySet, F3.passing.move, undefined, undefined, OVER)
     expect(boundariesOf(h)).toEqual(F3.passing.hpBoundaries)
     expect(boundariesOf(b)).toEqual(F3.passing.defBoundaries)
-  })
-})
-
-describe('F4 스피드 탭', () => {
-  const tailwind = (side: 'attacker' | 'defender'): BattleConditions => ({ [side]: { tailwind: true } })
-
-  it('스카프 ≥ 10%·대표 도구 스카프 아님 → 스카프를 씌우면 전 칸 후공', () => {
-    const e = entry(F4.scarf.opponent.id)
-    expect(e.items.shares.choicescarf).toBe(F4.scarf.scarfShare)
-    expect(F4.scarf.scarfShare).toBeGreaterThanOrEqual(0.1)
-    const opp = opponentSet(bo1, F4.scarf.opponent)
-    expect(opp.item).toBe(F4.scarf.item)
-    const r = sweepSpeed(game, F4.mySet, { ...opp, item: 'choicescarf' }, undefined, OVER)
-    expect(new Set(r.cells.map((c) => c.kind === 'ok' && c.category))).toEqual(new Set([F4.scarf.scarfOrder]))
-  })
-
-  it('스카프 < 10% 상대의 기본 행 경계', () => {
-    expect(entry(F4.noScarf.opponent.id).items.shares.choicescarf).toBe(F4.noScarf.scarfShare)
-    expect(F4.noScarf.scarfShare).toBeLessThan(0.1)
-    const r = sweepSpeed(game, F4.mySet, opponentSet(bo1, F4.noScarf.opponent), undefined, OVER)
-    expect(boundariesOf(r)).toEqual(F4.noScarf.boundaries)
-  })
-
-  it('대표 도구 스카프 → 스카프를 뺀 최다 도구로 바꾼 행은 판정이 바뀐다', () => {
-    const e = entry(F4.nonScarf.opponent.id)
-    const opp = opponentSet(bo1, F4.nonScarf.opponent)
-    expect(opp.item).toBe('choicescarf')
-    const [top] = Object.entries(e.items.shares).filter(([k]) => k !== 'choicescarf').sort((a, b) => b[1] - a[1])
-    expect(top[0]).toBe(F4.nonScarf.item)
-    const base = sweepSpeed(game, F4.mySet, opp, undefined, OVER)
-    expect(new Set(base.cells.map((c) => c.kind === 'ok' && c.category))).toEqual(new Set([F4.nonScarf.baseOrder]))
-    const alt = sweepSpeed(game, F4.mySet, { ...opp, item: F4.nonScarf.item }, undefined, OVER)
-    expect(boundariesOf(alt)).toEqual(F4.nonScarf.boundaries)
-  })
-
-  it('내 순풍·상대 순풍으로 현재 판정이 바뀐다', () => {
-    const mine = opponentSet(bo1, F4.myTailwind.opponent)
-    expect(judgeSpeed(game, F4.mySet, mine).category).toBe(F4.myTailwind.off)
-    expect(judgeSpeed(game, F4.mySet, mine, tailwind('attacker')).category).toBe(F4.myTailwind.on)
-    const theirs = opponentSet(bo1, F4.opponentTailwind.opponent)
-    expect(judgeSpeed(game, F4.mySet, theirs).category).toBe(F4.opponentTailwind.off)
-    expect(judgeSpeed(game, F4.mySet, theirs, tailwind('defender')).category).toBe(F4.opponentTailwind.on)
   })
 })
 

@@ -48,6 +48,14 @@
       "uploadedAt": "2026-04-08T04:35:08Z",
       "width": 48
     },
+    "choicescarf": {
+      "file": "Bag_Choice_Scarf_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "a091110f879ee09ae1b6a536f198b19e69dfe697",
+      "sha256": "68c53759b7971583544b3531d546a08288642eb5246987313d0a12feab7ee760",
+      "uploadedAt": "2026-04-08T05:27:06Z",
+      "width": 48
+    },
     "chopleberry": {
       "file": "Bag_Chople_Berry_Champs_Sprite.png",
       "height": 48,
@@ -72,12 +80,28 @@
       "uploadedAt": "2026-04-08T04:34:20Z",
       "width": 48
     },
+    "damprock": {
+      "file": "Bag_Damp_Rock_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "cf781bb773d4ede5240744a58c0d91810df0d82f",
+      "sha256": "5b0c7943a788f1780bb390aef08abf5b3fe230aac3f60a97ab4db457759cf8e0",
+      "uploadedAt": "2026-06-17T18:17:00Z",
+      "width": 48
+    },
     "dragonfang": {
       "file": "Bag_Dragon_Fang_Champs_Sprite.png",
       "height": 48,
       "sha1": "a78aced00cb5b2d86f93971c85b35936d13f9d8e",
       "sha256": "e932a07f238989ddf5146a12215c03ad51c52d91da5d7e72a87c0d2a21ac3e3e",
       "uploadedAt": "2026-04-08T05:25:22Z",
+      "width": 48
+    },
+    "electricseed": {
+      "file": "Bag_Electric_Seed_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "fc4924fafcc2f0587e2a7a926624bc1f57c7b0d9",
+      "sha256": "987a87fb50811a46cd1c72b376e78db4e1d418d52c6c80f14312d0c617d2859c",
+      "uploadedAt": "2026-09-09T06:16:37Z",
       "width": 48
     },
     "expertbelt": {
@@ -96,6 +120,22 @@
       "uploadedAt": "2026-04-08T05:27:40Z",
       "width": 48
     },
+    "focussash": {
+      "file": "Bag_Focus_Sash_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "834f924b56bba3f9adf1101146cde5aadeebf93a",
+      "sha256": "6b0ac08ec95300ada483cd78cbc7fe63057742bd9f19534a1615f48d5aab9012",
+      "uploadedAt": "2026-04-08T05:26:38Z",
+      "width": 48
+    },
+    "grassyseed": {
+      "file": "Bag_Grassy_Seed_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "f72014518fb5bebef48949f46f98430b5b1ce5a9",
+      "sha256": "fc14bb8ed8ebf66ba1d34480c05d6b190df482d264c20a6ba89536bf8d90701d",
+      "uploadedAt": "2026-09-09T06:18:21Z",
+      "width": 48
+    },
     "habanberry": {
       "file": "Bag_Haban_Berry_Champs_Sprite.png",
       "height": 48,
@@ -110,6 +150,14 @@
       "sha1": "6cf4ec1387ca05b9167e776a0ca4d4089ba5a51d",
       "sha256": "1ceda3f4cb6a41009dbe79bc9df3133a0c87df1789f82596cfb544f154484c41",
       "uploadedAt": "2026-04-08T05:20:11Z",
+      "width": 48
+    },
+    "ironball": {
+      "file": "Bag_Iron_Ball_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "47c4b5cb684d86dd77082fccac38b95a040b3557",
+      "sha256": "6ccefeb31694f51c6da0544c7fcbdf2f8d2fbfff3ec4754ee843e8a340bac41c",
+      "uploadedAt": "2026-06-17T18:18:03Z",
       "width": 48
     },
     "kasibberry": {
@@ -128,12 +176,28 @@
       "uploadedAt": "2026-04-08T04:30:55Z",
       "width": 48
     },
+    "leftovers": {
+      "file": "Bag_Leftovers_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "bdd51f0a5bf66f880b675b16217b1ccc9b8c5ce4",
+      "sha256": "e0cc9c5c2e3b4fc9aa0d7e794c986c9430aa9d4dd4aa50772ad354b3314001d9",
+      "uploadedAt": "2026-04-08T05:18:59Z",
+      "width": 48
+    },
     "lifeorb": {
       "file": "Bag_Life_Orb_Champs_Sprite.png",
       "height": 48,
       "sha1": "8452a42a3f675438d5feab4e7d62be52e280e16b",
       "sha256": "3c6ae69eaca6ef2e004f775e3349b4409e18121033834389a16ccc536df9c5fb",
       "uploadedAt": "2026-06-17T18:18:15Z",
+      "width": 48
+    },
+    "lightclay": {
+      "file": "Bag_Light_Clay_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "c9e7ba611e895ef3fffe5e897b18b3b0ee58f983",
+      "sha256": "762139d4c2e8f4d476953ba71a89065b17347d2c6ecddf3cdf7d5a9fab3c6aaa",
+      "uploadedAt": "2026-06-17T18:18:28Z",
       "width": 48
     },
     "magnet": {
@@ -216,12 +280,28 @@
       "uploadedAt": "2026-04-08T05:22:48Z",
       "width": 48
     },
+    "psychicseed": {
+      "file": "Bag_Psychic_Seed_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "e67cfff65b92d9263b9bc526580cb17cdfeefd64",
+      "sha256": "f9badefe77916a34333b85f2725159c9ef76991129cdfb2f85cffab8ba5094aa",
+      "uploadedAt": "2026-09-09T06:18:57Z",
+      "width": 48
+    },
     "rindoberry": {
       "file": "Bag_Rindo_Berry_Champs_Sprite.png",
       "height": 48,
       "sha1": "c28a356eb9905ab283052ee6b802719d36c9624e",
       "sha256": "a15e7c9af1980d9d7a2b415a706531db5f1f49a1251fdcdc6e94e5c44cad43ea",
       "uploadedAt": "2026-04-08T04:29:17Z",
+      "width": 48
+    },
+    "rockyhelmet": {
+      "file": "Bag_Rocky_Helmet_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "79224d52cbf8c5575cd3bf0c56477c86823c6f36",
+      "sha256": "23df9b6913ba95ea940c5d7999c3209710a1579fccd849725407ed43cbf5469d",
+      "uploadedAt": "2026-09-09T06:18:51Z",
       "width": 48
     },
     "roseliberry": {
@@ -264,6 +344,14 @@
       "uploadedAt": "2026-04-08T05:17:23Z",
       "width": 48
     },
+    "sitrusberry": {
+      "file": "Bag_Sitrus_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "431c97caedf5c3dfb3bbd1ee02f40674c0d032bb",
+      "sha256": "dbd9ff05ec19337f3c8642d7be3bdb0b7eca6df45f34b7b854f4f4a33b86e9cf",
+      "uploadedAt": "2026-04-08T04:27:01Z",
+      "width": 48
+    },
     "softsand": {
       "file": "Bag_Soft_Sand_Champs_Sprite.png",
       "height": 48,
@@ -302,6 +390,22 @@
       "sha1": "725e36350d8a709682f75b0be613e4ec20495f6b",
       "sha256": "ca6a3c188e6644d05367a4147fb17a26122da2b08004daacae655dbd612d29d5",
       "uploadedAt": "2026-04-08T04:28:55Z",
+      "width": 48
+    },
+    "whiteherb": {
+      "file": "Bag_White_Herb_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "462d621c26513504c085987ed90c5605192dbe13",
+      "sha256": "ec1cea796670a6a654756143cb5883432d651f5a5ffc1d6e9b5dd9df4a348496",
+      "uploadedAt": "2026-04-08T05:15:52Z",
+      "width": 48
+    },
+    "widelens": {
+      "file": "Bag_Wide_Lens_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "8c0f08f960dea664bc57776c8d151dc278548eed",
+      "sha256": "e9d6dd00add615b5c1e7152104830a5ea1668f5a2ca3c5d2662325e0c476b9c8",
+      "uploadedAt": "2026-06-17T18:19:34Z",
       "width": 48
     },
     "wiseglasses": {

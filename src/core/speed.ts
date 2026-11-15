@@ -1,23 +1,29 @@
 // 스피드 엔진(자체 구현). 엔진 비공개 getFinalSpeed와 같은 4096 체인·반올림이되, 999 상한은 두지 않는다. 트릭룸은 다루지 않는다.
 import type { Snapshot } from '../data/schema'
-import type { BattleConditions, EvalOptions, OutspeedResult, PokemonSet, SpeedOrder, SpeedResult, Terrain, Weather } from './types'
+import type { BattleConditions, EvalOptions, OutspeedResult, PokemonSet, SpeedFieldCondition, SpeedOrder, SpeedRejection, SpeedResult, Terrain, Weather } from './types'
 import { normalizeConditions, type NormalizedConditions } from './conditions'
 import { CoreInputError, isPlainObject } from './errors'
 import { remainingBudget, validateSet, type ResolvedSet } from './set'
 import { natureMultiplier, statValue } from './stats'
 
-/** 조건(날씨·필드)이 맞을 때 ×2인 특성 */
-const CONDITIONAL_DOUBLE_ABILITY: Record<string, (weather: Weather, terrain: Terrain) => boolean> = {
-  swiftswim: (w) => w === 'Rain',
-  chlorophyll: (w) => w === 'Sun',
-  sandrush: (w) => w === 'Sand',
-  slushrush: (w) => w === 'Snow',
-  surgesurfer: (_, t) => t === 'Electric',
+/** 조건(날씨·필드)이 맞을 때 스피드 ×2인 특성 */
+export const SPEED_FIELD_ABILITIES: Readonly<Record<string, SpeedFieldCondition>> = {
+  swiftswim: { kind: 'weather', weather: 'Rain' },
+  chlorophyll: { kind: 'weather', weather: 'Sun' },
+  sandrush: { kind: 'weather', weather: 'Sand' },
+  slushrush: { kind: 'weather', weather: 'Snow' },
+  surgesurfer: { kind: 'terrain', terrain: 'Electric' },
+}
+
+function fieldDoubles(ability: string, weather: Weather, terrain: Terrain): boolean {
+  if (!Object.hasOwn(SPEED_FIELD_ABILITIES, ability)) return false
+  const f = SPEED_FIELD_ABILITIES[ability]
+  return f.kind === 'weather' ? f.weather === weather : f.terrain === terrain
 }
 const QUICK_FEET = 'quickfeet'
 const ITEM_MOD: Record<string, number> = { choicescarf: 6144, ironball: 2048 }
 /** 지닌 도구 효과를 무효화하는 특성 */
-const ITEM_NEGATING_ABILITIES = ['klutz']
+export const ITEM_NEGATING_ABILITIES: readonly string[] = ['klutz']
 /** 필드의 날씨 효과를 무효화하는 특성 */
 export const WEATHER_NEGATING_ABILITIES: readonly string[] = ['cloudnine', 'airlock']
 /** 게임에서 스피드를 바꾸지만 이 모듈이 구현하지 않은 보정. 조용히 무시하지 않고 거부한다. */
@@ -49,18 +55,14 @@ export function withEffectiveWeather(c: NormalizedConditions, ...sets: ResolvedS
 
 /** 앱 최종 스피드. c는 유효 날씨(withEffectiveWeather)를 적용한 조건이어야 한다. 대미지 래퍼도 엔진 스피드 대조에 이 값을 쓴다. */
 export function speedOf(r: ResolvedSet, c: NormalizedConditions, side: 'attacker' | 'defender'): number {
-  if (UNSUPPORTED_SPEED_ABILITIES.includes(r.ability)) {
-    throw new CoreInputError('ability', `${r.ability}의 스피드 보정은 지원하지 않는다`)
-  }
-  if (r.item !== undefined && UNSUPPORTED_SPEED_ITEMS.includes(r.item)) {
-    throw new CoreInputError('item', `${r.item}의 스피드 보정은 지원하지 않는다`)
-  }
+  const unsupported = unsupportedRejection(r)
+  if (unsupported !== null) throw rejectionError(unsupported)
   let speed = boostedStat(r.stats.spe, r.boosts.spe)
   // 순서: 순풍 → 특성 → 도구(엔진 getFinalSpeed와 같은 체인 순서)
   const mods: number[] = []
   if (c[side].tailwind) mods.push(8192)
   const quickFeet = r.ability === QUICK_FEET && r.status !== 'none'
-  if (CONDITIONAL_DOUBLE_ABILITY[r.ability]?.(c.weather, c.terrain)) mods.push(8192)
+  if (fieldDoubles(r.ability, c.weather, c.terrain)) mods.push(8192)
   else if (quickFeet) mods.push(6144)
   if (r.item !== undefined && ITEM_MOD[r.item] !== undefined && !ITEM_NEGATING_ABILITIES.includes(r.ability)) mods.push(ITEM_MOD[r.item])
   speed = pokeRound((speed * chainMods(mods)) / 4096)
@@ -68,15 +70,29 @@ export function speedOf(r: ResolvedSet, c: NormalizedConditions, side: 'attacker
   return speed
 }
 
+function unsupportedRejection(r: ResolvedSet): SpeedRejection | null {
+  if (UNSUPPORTED_SPEED_ABILITIES.includes(r.ability)) return { kind: 'unsupported', field: 'ability', id: r.ability }
+  if (r.item !== undefined && UNSUPPORTED_SPEED_ITEMS.includes(r.item)) return { kind: 'unsupported', field: 'item', id: r.item }
+  return null
+}
+
+function orderRejection(r: ResolvedSet): SpeedRejection | null {
+  if (ORDER_ABILITIES.includes(r.ability)) return { kind: 'order', field: 'ability', id: r.ability }
+  if (r.item !== undefined && ORDER_ITEMS.includes(r.item)) return { kind: 'order', field: 'item', id: r.item }
+  return null
+}
+
 /** prefix가 있으면 오류 field를 `${prefix}.ability`처럼 붙인다. */
+function rejectionError(rej: SpeedRejection, prefix?: string): CoreInputError {
+  const field = prefix === undefined ? rej.field : `${prefix}.${rej.field}`
+  return rej.kind === 'unsupported'
+    ? new CoreInputError(field, `${rej.id}의 스피드 보정은 지원하지 않는다`)
+    : new CoreInputError(field, `${rej.id}은 스피드와 별개로 행동 순서를 바꾸므로 순서 비교를 지원하지 않는다`)
+}
+
 function assertOrderBySpeed(r: ResolvedSet, prefix?: string): void {
-  const field = (k: string) => (prefix === undefined ? k : `${prefix}.${k}`)
-  if (ORDER_ABILITIES.includes(r.ability)) {
-    throw new CoreInputError(field('ability'), `${r.ability}은 스피드와 별개로 행동 순서를 바꾸므로 순서 비교를 지원하지 않는다`)
-  }
-  if (r.item !== undefined && ORDER_ITEMS.includes(r.item)) {
-    throw new CoreInputError(field('item'), `${r.item}은 스피드와 별개로 행동 순서를 바꾸므로 순서 비교를 지원하지 않는다`)
-  }
+  const rej = orderRejection(r)
+  if (rej !== null) throw rejectionError(rej, prefix)
 }
 
 /**
@@ -127,13 +143,18 @@ export function compareSpeed(
 }
 
 /**
- * 한 세트가 스피드 비교에 쓰일 수 있는지. 세트 오류는 CoreError, 미구현 스피드 보정·행동 순서 특성/도구는
- * CoreInputError(field 'ability' | 'item')로 던진다.
+ * 한 세트가 스피드 비교에 쓰일 수 없는 원인. 지원하면 null. 세트 자체 오류는 CoreError로 던진다.
+ * 미구현 보정(unsupported)을 순서 변경(order)보다, 같은 종류 안에서는 특성을 도구보다 먼저 본다.
  */
-export function checkSpeedSupport(snapshot: Snapshot, set: PokemonSet, options?: EvalOptions): void {
+export function speedSupport(snapshot: Snapshot, set: PokemonSet, options?: EvalOptions): SpeedRejection | null {
   const r = validateSet(snapshot, set, options)
-  speedOf(r, withEffectiveWeather(normalizeConditions(undefined), r), 'attacker')
-  assertOrderBySpeed(r)
+  return unsupportedRejection(r) ?? orderRejection(r)
+}
+
+/** speedSupport의 거부를 CoreInputError(field 'ability' | 'item')로 던진다. */
+export function checkSpeedSupport(snapshot: Snapshot, set: PokemonSet, options?: EvalOptions): void {
+  const rej = speedSupport(snapshot, set, options)
+  if (rej !== null) throw rejectionError(rej)
 }
 
 /**

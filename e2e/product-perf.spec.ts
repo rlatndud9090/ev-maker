@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { TAB_ID, dragSlider, mySet, resultTab, tabPanel, waitComplete, type ProductTab } from './helpers'
 
-// PRD 비기능 "반응성"(AC17): 세 탭 × (a) 처음 열기 · (b) 주 능력치 SP 슬라이더 ±4 놓기, 시나리오마다 10회.
+// 반응성: 공격·방어 탭(실행기 계산)과 스피드 차트(동기 배지 모델) 각각 (a) 처음 열기 · (b) 주 능력치 SP 슬라이더 ±4 놓기, 시나리오마다 10회.
 const RUNS = 10
 const FIRST_CARD_MEDIAN_LIMIT_MS = 500
 const COMPLETE_MEDIAN_LIMIT_MS = 3000
@@ -10,6 +10,10 @@ const COMPUTE_START_MARK = 'cards:compute-start'
 
 /** 예시 세트(src/app/example.ts) 기준 주 능력치: 공격 탭은 첫 기술 지진이 참조하는 A, 방어 H, 스피드 S. */
 const MAIN_STAT: Record<ProductTab, string> = { 공격: 'SP 공격', 방어: 'SP HP', 스피드: 'SP 스피드' }
+
+/** src/app/perf.ts의 스피드 차트 표식 이름(detail.generation) */
+const SPEED_FIRST_MARK = 'speed-chart:first'
+const SPEED_COMPLETE_MARK = 'speed-chart:complete'
 
 interface PanelEvent {
   t: number
@@ -151,8 +155,18 @@ const median = (xs: number[]) => {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2
 }
 
+/** +4가 상한·합계(잔여)를 넘으면 −4(0 아래로는 못 내려 0에서 멈춘다). */
+async function sliderTarget(page: Page, name: ProductTab) {
+  const slider = mySet(page).getByRole('slider', { name: MAIN_STAT[name], exact: true })
+  const from = Number(await slider.inputValue())
+  const remaining = Number(await mySet(page).getByTestId('sp-remaining').textContent())
+  const max = Number(await slider.getAttribute('max'))
+  const to = from + 4 <= Math.min(max, from + remaining) ? from + 4 : Math.max(0, from - 4)
+  return { slider, from, to }
+}
+
 /** 한 번 로드해 (a) 그 탭 처음 열기, 그 탭 완료 뒤 (b) 주 능력치 슬라이더 놓기를 잰다. */
-async function measureOnce(page: Page, name: ProductTab): Promise<{ open: Run; slide: Run }> {
+async function measureOnce(page: Page, name: DamageTabName): Promise<{ open: Run; slide: Run }> {
   const tab = TAB_ID[name]
   await page.goto('/')
   await expect(tabPanel(page)).toHaveAttribute('data-tab', tab, { timeout: 15_000 })
@@ -163,12 +177,7 @@ async function measureOnce(page: Page, name: ProductTab): Promise<{ open: Run; s
   const open = summarize(raw1, tab, openStart, -1)
   const genBefore = Number(await tabPanel(page).getAttribute('data-generation'))
 
-  const slider = mySet(page).getByRole('slider', { name: MAIN_STAT[name], exact: true })
-  const from = Number(await slider.inputValue())
-  const remaining = Number(await mySet(page).getByTestId('sp-remaining').textContent())
-  const max = Number(await slider.getAttribute('max'))
-  // +4가 상한·합계(잔여)를 넘으면 −4(0 아래로는 못 내려 0에서 멈춘다).
-  const to = from + 4 <= Math.min(max, from + remaining) ? from + 4 : Math.max(0, from - 4)
+  const { slider, from, to } = await sliderTarget(page, name)
   expect(await dragSlider(page, slider, to)).toBe(to)
   const ups = await page.evaluate(() => window.__probe.pointerup)
   const upAt = ups[ups.length - 1]
@@ -181,7 +190,9 @@ async function measureOnce(page: Page, name: ProductTab): Promise<{ open: Run; s
 const fmt = (n: number) => n.toFixed(0)
 const list = (runs: Run[], f: (r: Run) => number) => runs.map((r) => fmt(f(r))).join(',')
 
-for (const name of ['공격', '방어', '스피드'] as const) {
+type DamageTabName = Exclude<ProductTab, '스피드'>
+
+for (const name of ['공격', '방어'] as const) {
   test(`반응성 ${name} 탭: 처음 열기·주 능력치 슬라이더 놓기 각 ${RUNS}회`, async ({ page, browser }) => {
     test.setTimeout(240_000)
     await page.addInitScript(installProbe, name === '공격' ? null : name)
@@ -223,6 +234,127 @@ for (const name of ['공격', '방어', '스피드'] as const) {
     }
   })
 }
+
+interface SpeedMark {
+  name: string
+  start: number
+  generation: number
+}
+
+async function speedMarks(page: Page): Promise<SpeedMark[]> {
+  return page.evaluate(
+    (names) =>
+      names.flatMap((name) =>
+        performance.getEntriesByName(name, 'mark').map((m) => ({ name, start: m.startTime, generation: Number((m as PerformanceMark).detail?.generation) })),
+      ),
+    [SPEED_FIRST_MARK, SPEED_COMPLETE_MARK],
+  )
+}
+
+/**
+ * start 뒤 첫 "첫 표시" 표식과 같은 세대의 "완료" 표식. generationAfter가 있으면 그보다 큰 세대만 본다
+ * (표식의 세대 값이 숫자가 아니면 세대 조건 없이 시각만 본다).
+ */
+function speedEvents(marks: SpeedMark[], start: number, generationAfter: number | null) {
+  const newer = (m: SpeedMark) => generationAfter === null || Number.isNaN(m.generation) || m.generation > generationAfter
+  const first = marks.filter((m) => m.name === SPEED_FIRST_MARK && m.start >= start && newer(m)).sort((a, b) => a.start - b.start)[0]
+  if (!first) return null
+  const done = marks
+    .filter((m) => m.name === SPEED_COMPLETE_MARK && m.start >= first.start && (Number.isNaN(first.generation) || m.generation === first.generation))
+    .sort((a, b) => a.start - b.start)[0]
+  return done ? { first, done } : null
+}
+
+/** start(입력 시각) → 표식. Long Task는 start ~ 완료 표식 구간과 겹친 것 */
+async function speedRun(page: Page, start: number, generationAfter: number | null): Promise<Run> {
+  await expect
+    .poll(async () => speedEvents(await speedMarks(page), start, generationAfter) !== null, { message: '스피드 차트 표식(첫 표시·완료)이 나오지 않았다', timeout: 15_000 })
+    .toBe(true)
+  const ev = speedEvents(await speedMarks(page), start, generationAfter)!
+  const longTasks = await page.evaluate(() => window.__probe.longTasks)
+  const inWindow = longTasks.filter((lt) => lt.start < ev.done.start && lt.start + lt.duration > start)
+  return {
+    firstMs: ev.first.start - start,
+    completeMs: ev.done.start - start,
+    computeLongTaskMs: Math.max(0, ...inWindow.map((lt) => lt.duration)),
+    bootstrapLongTaskMs: 0,
+    bootstrapStage: '—',
+  }
+}
+
+const lastPointerUp = async (page: Page) => {
+  const ups = await page.evaluate(() => window.__probe.pointerup)
+  return ups[ups.length - 1]
+}
+
+const speedBadges = (page: Page) => page.getByTestId('speed-badge')
+const speedChip = (page: Page, filter: string) => page.locator(`[data-testid="speed-head"] [data-filter="${filter}"]`)
+const SPEED_FILTERS = ['rank', 'scarf', 'tailwind', 'field'] as const
+
+/**
+ * 한 번 로드해 스피드 차트 (a) 처음 열기(조건 필터 기본값), (b) 조건 필터를 전부 켠 뒤 공격 탭을 거쳐 다시 열기(차트를 다시 만든다),
+ * (c) 전부 켠 상태에서 S SP 슬라이더 놓기를 잰다. 필터는 새로고침하면 기본값으로 돌아가 처음 열기는 기본값으로만 잴 수 있다.
+ */
+async function measureSpeedOnce(page: Page) {
+  await page.goto('/')
+  await expect.poll(() => page.evaluate(() => window.__probe.clickedAt), { timeout: 15_000 }).not.toBeNull()
+  const open = await speedRun(page, (await page.evaluate(() => window.__probe.clickedAt))!, null)
+  await expect(speedBadges(page).first()).toBeVisible()
+  const defaultBadges = await speedBadges(page).count()
+
+  for (const f of SPEED_FILTERS) {
+    if ((await speedChip(page, f).getAttribute('aria-pressed')) !== 'true') await speedChip(page, f).click()
+    await expect(speedChip(page, f)).toHaveAttribute('aria-pressed', 'true')
+  }
+  await resultTab(page, '공격').click()
+  await expect(tabPanel(page)).toHaveAttribute('data-tab', 'attack')
+  await waitComplete(page)
+  await resultTab(page, '스피드').click()
+  const reopen = await speedRun(page, await lastPointerUp(page), null)
+  for (const f of SPEED_FILTERS) await expect(speedChip(page, f)).toHaveAttribute('aria-pressed', 'true')
+  const allBadges = await speedBadges(page).count()
+
+  const genBefore = Math.max(-1, ...(await speedMarks(page)).map((m) => m.generation).filter((g) => !Number.isNaN(g)))
+  const { slider, from, to } = await sliderTarget(page, '스피드')
+  expect(await dragSlider(page, slider, to)).toBe(to)
+  const slide = await speedRun(page, await lastPointerUp(page), genBefore)
+  return { open, reopen, slide: { ...slide, slider: { from, to } }, defaultBadges, allBadges }
+}
+
+test(`반응성 스피드 차트: 처음 열기·조건 필터 전부 켜고 다시 열기·S SP 슬라이더 놓기 각 ${RUNS}회`, async ({ page, browser }) => {
+  test.setTimeout(300_000)
+  await page.addInitScript(installProbe, '스피드')
+  const opens: Run[] = []
+  const reopens: Run[] = []
+  const slides: Run[] = []
+  const counts: string[] = []
+  for (let i = 0; i < RUNS; i++) {
+    const r = await measureSpeedOnce(page)
+    opens.push(r.open)
+    reopens.push(r.reopen)
+    slides.push(r.slide)
+    counts.push(`${r.defaultBadges}/${r.allBadges}`)
+  }
+  const line = (label: string, runs: Run[], extra = '') =>
+    `${label}: 첫 표시 중앙값 ${fmt(median(runs.map((r) => r.firstMs)))}ms [${list(runs, (r) => r.firstMs)}]` +
+    ` · 완료 중앙값 ${fmt(median(runs.map((r) => r.completeMs)))}ms [${list(runs, (r) => r.completeMs)}]` +
+    ` · 구간 Long Task 최대 ${fmt(Math.max(...runs.map((r) => r.computeLongTaskMs)))}ms [${list(runs, (r) => r.computeLongTaskMs)}]` +
+    extra
+  const lines = [
+    line('스피드 차트 처음 열기(조건 필터 기본값)', opens, ` · 배지 수(기본값/전부 켬) [${counts.join(',')}]`),
+    line('스피드 차트 다시 열기(조건 필터 전부 켬)', reopens),
+    line('스피드 차트 S 슬라이더 놓기(조건 필터 전부 켬)', slides, ` · SP ${slides[0].slider!.from}→${slides[0].slider!.to}`),
+  ]
+  for (const l of lines) {
+    console.log(`[product-perf] chromium ${browser.version()} ${l}`)
+    test.info().annotations.push({ type: 'perf', description: l })
+  }
+  for (const runs of [opens, reopens, slides]) {
+    expect.soft(median(runs.map((r) => r.firstMs))).toBeLessThanOrEqual(FIRST_CARD_MEDIAN_LIMIT_MS)
+    expect.soft(median(runs.map((r) => r.completeMs))).toBeLessThanOrEqual(COMPLETE_MEDIAN_LIMIT_MS)
+    expect.soft(Math.max(...runs.map((r) => r.computeLongTaskMs))).toBeLessThanOrEqual(LONG_TASK_LIMIT_MS)
+  }
+})
 
 interface InputProbe {
   clicks: { delay: number; start: number }[]

@@ -49,7 +49,7 @@ import type {
   TargetView,
 } from './types'
 
-const KIND_RANK: Readonly<Record<RowKind, number>> = { base: 0, rank: 1, scarf: 2, 'non-scarf': 2 }
+const KIND_RANK: Readonly<Record<RowKind, number>> = { base: 0, rank: 1 }
 const STAT_KEYS: readonly StatId[] = ['hp', 'atk', 'def', 'spa', 'spd', 'spe']
 const STAGE_KEYS = ['stage1', 'stage2', 'stage3', 'stage4', 'stage5'] as const
 
@@ -123,7 +123,7 @@ function bareRow(ctx: Ctx, head: RowHead, status: RowView['status'], extra: { er
   return row
 }
 
-const sideOf = (ctx: Ctx, spec: RowSpec): JudgementSide => (spec.judge === 'speed' ? 'speed' : ctx.plan.mySide === 'attacker' ? 'attack' : 'defense')
+const sideOf = (ctx: Ctx): JudgementSide => (ctx.plan.mySide === 'attacker' ? 'attack' : 'defense')
 
 /**
  * 방어 탭(필터가 있는 행)은 성격 변형별 쌍 결과, 그 밖은 그 행의 성격 변형별 33칸에서 목표를 낸다.
@@ -131,7 +131,7 @@ const sideOf = (ctx: Ctx, spec: RowSpec): JudgementSide => (spec.judge === 'spee
  */
 function targetOf(ctx: Ctx, spec: RowSpec, stat: StatId, j: RowJudgements, at: CellView | undefined): TargetView | undefined {
   const { plan } = ctx
-  const side = sideOf(ctx, spec)
+  const side = sideOf(ctx)
   const label = at === undefined ? undefined : cellLabel(side, at)
   if (label === undefined || spec.natures === undefined || !j.variantsDone || j.variantError) return undefined
   const plusStat = spec.natures.stat
@@ -235,7 +235,7 @@ function bestOf(side: JudgementSide, cells: readonly Pick<CompactCell, 'category
  * 그 밖 = 변형 범위 끝·현재 성격 양 끝·현재·변형 스윕 칸 중 최선(변형 스윕이 남았으면 아직 없음, 변형 오류면 나온 칸으로).
  */
 function bestReachable(ctx: Ctx, spec: RowSpec, ends: Extract<RowTaskResult, { kind: 'ends' }>, j: RowJudgements): string | undefined {
-  const side = sideOf(ctx, spec)
+  const side = sideOf(ctx)
   if (spec.gate !== undefined) {
     const f = filterState(ctx.results, spec.gate)
     return f.kind === 'passed' ? bestOf(side, [f.result.high, f.result.low]) : undefined
@@ -455,7 +455,7 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
   const fixedOrder = card.rowIds.reduce((m, id) => Math.max(m, plan.rows[id].order + 1), 0)
   const settled = pending.stage1.length === 0 && pending.stage2.length === 0
 
-  // 후보가 없는 카드(스피드 탭): 모든 행.
+  // 후보가 없는 카드: 모든 행.
   if (card.conditions.length === 0) {
     for (const rowId of card.rowIds) pushRow(rowId)
     card.fixedIds.forEach((id, i) => pushFixed(id, fixedOrder + i))

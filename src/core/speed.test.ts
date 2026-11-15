@@ -3,7 +3,23 @@ import { Field, Generations } from '@smogon/calc'
 // 엔진 비공개 스피드 함수는 대조 테스트에서만 쓴다(ADR 결정 4).
 import { checkAirLock, checkItem, getFinalSpeed } from '@smogon/calc/dist/mechanics/util'
 import { MC, cloneSnapshot, goldenCase, goldenSet, mkSet } from './testing'
-import { CoreInputError, calcDamage, compareSpeed, finalSpeed, minSpToOutspeed, sweepSpeed, validateSet, type BattleConditions, type PokemonSet } from './index'
+import {
+  CoreError,
+  CoreInputError,
+  ITEM_NEGATING_ABILITIES,
+  SPEED_FIELD_ABILITIES,
+  calcDamage,
+  checkSpeedSupport,
+  compareSpeed,
+  finalSpeed,
+  minSpToOutspeed,
+  speedSupport,
+  sweepSpeed,
+  validateSet,
+  type BattleConditions,
+  type PokemonSet,
+} from './index'
+import type { Snapshot } from '../data/schema'
 import { buildEnginePokemon } from './engine'
 import { normalizeConditions } from './conditions'
 
@@ -300,5 +316,121 @@ describe('도구·날씨를 무효화하는 특성(서투름·날씨부정)', ()
     expect(MC.data.species.golurk.abilities).toContain('klutz')
     const golurk = mkSet({ species: 'golurk', ability: 'klutz', item: 'choicescarf', moves: ['gyroball'] })
     expect(calcDamage(MC, golurk, lopunny, 'gyroball').kind).toBe('damage')
+  })
+})
+
+describe('스피드 거부 원인(speedSupport)', () => {
+  const UNSUPPORTED_ABILITIES = ['slowstart', 'protosynthesis', 'quarkdrive']
+  const UNSUPPORTED_ITEMS = ['machobrace', 'poweranklet', 'powerband', 'powerbelt', 'powerbracer', 'powerlens', 'powerweight', 'quickpowder']
+  const ORDER_ABILITIES = ['stall', 'quickdraw', 'myceliummight']
+  const ORDER_ITEMS = ['quickclaw', 'laggingtail', 'fullincense', 'custapberry']
+
+  /** 스냅샷에 없는 id는 합성으로 넣고 한각(garchomp)이 모든 특성을 가질 수 있게 한다 */
+  function synthetic(): Snapshot {
+    const snap = cloneSnapshot(MC)
+    for (const id of [...UNSUPPORTED_ABILITIES, ...ORDER_ABILITIES]) {
+      snap.data.abilities[id] ??= { id, name: { en: id, ko: id, koSource: 'pokeapi' } }
+      if (!snap.data.species.garchomp.abilities.includes(id)) snap.data.species.garchomp.abilities.push(id)
+    }
+    for (const id of [...UNSUPPORTED_ITEMS, ...ORDER_ITEMS]) snap.data.items[id] ??= { id, name: { en: id, ko: id, koSource: 'pokeapi' } }
+    return snap
+  }
+  const snap = synthetic()
+  const base = (patch: Partial<PokemonSet> = {}): PokemonSet => ({ ...mkSet({ species: 'garchomp', ability: 'roughskin' }, snap), ...patch })
+
+  it('지원 세트는 null(구애스카프·검은철구·쓱쓱 포함)', () => {
+    expect(speedSupport(snap, base())).toBeNull()
+    expect(speedSupport(snap, base({ item: 'choicescarf' }))).toBeNull()
+    expect(speedSupport(snap, base({ item: 'ironball' }))).toBeNull()
+    expect(speedSupport(MC, mkSet({ species: 'beartic', ability: 'swiftswim' }))).toBeNull()
+  })
+
+  it.each(UNSUPPORTED_ABILITIES)('계산 거부 특성 %s', (id) => {
+    expect(speedSupport(snap, base({ ability: id }))).toEqual({ kind: 'unsupported', field: 'ability', id })
+  })
+  it.each(UNSUPPORTED_ITEMS)('계산 거부 도구 %s', (id) => {
+    expect(speedSupport(snap, base({ item: id }))).toEqual({ kind: 'unsupported', field: 'item', id })
+  })
+  it.each(ORDER_ABILITIES)('순서 변경 특성 %s', (id) => {
+    expect(speedSupport(snap, base({ ability: id }))).toEqual({ kind: 'order', field: 'ability', id })
+  })
+  it.each(ORDER_ITEMS)('순서 변경 도구 %s', (id) => {
+    expect(speedSupport(snap, base({ item: id }))).toEqual({ kind: 'order', field: 'item', id })
+  })
+
+  it('원인이 겹치면 계산 거부를 순서 변경보다, 특성을 도구보다 먼저 돌려준다', () => {
+    expect(speedSupport(snap, base({ ability: 'stall', item: 'machobrace' }))).toEqual({ kind: 'unsupported', field: 'item', id: 'machobrace' })
+    expect(speedSupport(snap, base({ ability: 'slowstart', item: 'machobrace' }))).toEqual({ kind: 'unsupported', field: 'ability', id: 'slowstart' })
+    expect(speedSupport(snap, base({ ability: 'stall', item: 'quickclaw' }))).toEqual({ kind: 'order', field: 'ability', id: 'stall' })
+  })
+
+  it('세트 자체 오류는 거부 원인이 아니라 CoreError로 던진다', () => {
+    expect(() => speedSupport(snap, base({ ability: 'levitate' }))).toThrow(CoreError)
+  })
+
+  it('checkSpeedSupport는 같은 원인을 CoreInputError(field)로 던지고, 지원 세트는 통과한다', () => {
+    const cases: [Partial<PokemonSet>, string][] = [
+      [{ ability: 'quarkdrive' }, 'ability'],
+      [{ item: 'powerlens' }, 'item'],
+      [{ ability: 'myceliummight' }, 'ability'],
+      [{ item: 'custapberry' }, 'item'],
+    ]
+    for (const [patch, field] of cases) {
+      const set = base(patch)
+      expect(() => checkSpeedSupport(snap, set)).toThrow(CoreInputError)
+      try {
+        checkSpeedSupport(snap, set)
+      } catch (e) {
+        expect((e as CoreInputError).field).toBe(field)
+      }
+    }
+    expect(() => checkSpeedSupport(snap, base({ item: 'choicescarf' }))).not.toThrow()
+  })
+
+  it('계산 거부는 finalSpeed에서도, 순서 변경은 compareSpeed에서만 던진다', () => {
+    expect(() => finalSpeed(snap, base({ item: 'poweranklet' }))).toThrow(CoreInputError)
+    expect(() => finalSpeed(snap, base({ item: 'laggingtail' }))).not.toThrow()
+    expect(() => compareSpeed(snap, base(), base({ item: 'laggingtail' }))).toThrow(CoreInputError)
+  })
+})
+
+describe('날씨·필드 ×2 특성 표(SPEED_FIELD_ABILITIES)', () => {
+  it('5항목이 각 날씨·필드와 짝지어지고 스냅샷 특성 id와 맞는다', () => {
+    expect(SPEED_FIELD_ABILITIES).toEqual({
+      swiftswim: { kind: 'weather', weather: 'Rain' },
+      chlorophyll: { kind: 'weather', weather: 'Sun' },
+      sandrush: { kind: 'weather', weather: 'Sand' },
+      slushrush: { kind: 'weather', weather: 'Snow' },
+      surgesurfer: { kind: 'terrain', terrain: 'Electric' },
+    })
+    for (const id of [...Object.keys(SPEED_FIELD_ABILITIES), ...ITEM_NEGATING_ABILITIES]) expect(MC.data.abilities[id]).toBeDefined()
+    expect(ITEM_NEGATING_ABILITIES).toEqual(['klutz'])
+  })
+
+  it('서핑테일은 일렉트릭필드에서만 2배다', () => {
+    const raichu = mkSet({ species: 'raichualola', ability: 'surgesurfer', sp: { spe: 10 } })
+    const b = finalSpeed(MC, raichu)
+    for (const t of ['Electric', 'Grassy', 'Psychic', 'Misty'] as const) {
+      expect(finalSpeed(MC, raichu, { terrain: t })).toBe(t === 'Electric' ? b * 2 : b)
+    }
+    expect(finalSpeed(MC, raichu, { weather: 'Rain' })).toBe(b)
+  })
+
+  it('표 밖 특성은 날씨가 맞아도 ×2가 없다', () => {
+    const set = mkSet({ species: 'beartic', ability: 'swiftswim' })
+    const plain = { ...set, ability: MC.data.species.beartic.abilities.find((a) => a !== 'swiftswim')! }
+    expect(finalSpeed(MC, plain, { weather: 'Rain' })).toBe(finalSpeed(MC, plain))
+  })
+
+  it('상대 단독 finalSpeed(set, { weather })는 자기 특성만 보고 유효 날씨를 정한다', () => {
+    const beartic = mkSet({ species: 'beartic', ability: 'swiftswim' })
+    const altaria = mkSet({ species: 'altaria', ability: 'cloudnine' })
+    const rain: BattleConditions = { weather: 'Rain' }
+    // 단독 계산은 날씨부정 상대를 모르므로 쓱쓱이 발동한다. 양측 비교에서만 무효가 된다.
+    expect(finalSpeed(MC, beartic, rain)).toBe(140)
+    expect(finalSpeed(MC, beartic, rain, 'defender')).toBe(140)
+    expect(compareSpeed(MC, beartic, altaria, rain).attackerSpeed).toBe(70)
+    // 자기 특성이 날씨부정이면 단독 계산에서도 날씨가 없다
+    expect(finalSpeed(MC, altaria, rain)).toBe(finalSpeed(MC, altaria))
   })
 })

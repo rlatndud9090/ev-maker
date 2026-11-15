@@ -37,13 +37,12 @@ export function syntheticView(game: Snapshot, base: MetaSnapshot, entries: MetaE
   return createMetaView({ ...base, entries: ranked }, game)
 }
 
-/** 기본값: 실데이터 Bo1·DEFAULT_ROLL_STEPS·DEFAULT_CRITERIA·상위 DEFAULT_TOP_N·선택 없음·순풍 off·커스텀 없음. */
+/** 기본값: 실데이터 Bo1·DEFAULT_ROLL_STEPS·DEFAULT_CRITERIA·상위 DEFAULT_TOP_N·선택 없음·커스텀 없음. */
 export function cardInput(partial: Partial<CardInput> & { mySet: PokemonSet }): CardInput {
   const { game, bo1 } = realData()
   return {
     game,
     view: bo1,
-    conditions: { myTailwind: false, opponentTailwind: false },
     rollSteps: DEFAULT_ROLL_STEPS,
     criteria: { ...DEFAULT_CRITERIA },
     filters: { topN: DEFAULT_TOP_N, selected: [] },

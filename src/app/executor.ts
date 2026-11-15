@@ -1,6 +1,6 @@
-// 세 탭의 행 작업을 시간 조각으로 나눠 계산하고 탭 뷰를 외부 저장소로 내는 실행기(React 없음).
-import { TABS, computeRowTask, createLruCache, createTabAssembler, opponentKey, planTab, primaryCardIds, taskCardId, taskKey } from '../cards'
-import type { CardInput, JudgementCache, PendingTasks, RowTask, RowTaskResult, Tab, TabAssembler, TabPlan, TabView } from '../cards'
+// 공격·방어 탭의 행 작업을 시간 조각으로 나눠 계산하고 탭 뷰를 외부 저장소로 내는 실행기(React 없음). 스피드 탭은 계산하지 않는다.
+import { DAMAGE_TABS, TABS, computeRowTask, createLruCache, createTabAssembler, isDamageTab, opponentKey, planTab, primaryCardIds, taskCardId, taskKey } from '../cards'
+import type { CardInput, DamageTab, JudgementCache, PendingTasks, RowTask, RowTaskResult, Tab, TabAssembler, TabPlan, TabView } from '../cards'
 import type { SpTable } from '../core'
 import type { Scheduler } from './scheduler'
 
@@ -13,6 +13,7 @@ export type TabViewState =
 export interface ExecutorSnapshot {
   generation: number
   activeTab: Tab
+  /** speed는 늘 idle(스피드 차트는 실행기 밖에서 계산한다) */
   tabs: Readonly<Record<Tab, TabViewState>>
 }
 
@@ -20,21 +21,21 @@ export interface Executor {
   subscribe(listener: () => void): () => void
   /** 바뀔 때만 새 객체 */
   getSnapshot(): ExecutorSnapshot
-  /** 세대가 바뀌면 진행 중 작업 결과를 버리고 세 탭을 다시 계획한다. 같은 세대면 무시.
+  /** 세대가 바뀌면 진행 중 작업 결과를 버리고 공격·방어 탭을 다시 계획한다. 같은 세대면 무시.
    *  새 세대는 표시용 SP를 비운다(이전 세대 뷰는 다시 조립하지 않고 그대로 둔다) */
   setInput(input: CardInput, generation: number): void
   /** 우선순위만 바꾼다(재계획 없음) */
   setActiveTab(tab: Tab): void
-  /** 드래그 표시용 SP. 활성 탭만 다시 조립(행 작업 없음). null이면 계획 시점 SP */
+  /** 드래그 표시용 SP. 활성 탭(공격·방어)만 다시 조립(행 작업 없음). null이면 계획 시점 SP */
   setDisplaySp(sp: SpTable | null): void
   /**
    * 사용자 기술 선택(상대 키 → 항목 키). 계산 입력이 아니다: 세대를 바꾸지 않고, 선택이 바뀐 상대의 카드만 다시 조립하며
-   * 그 항목의 행 작업을 맨 앞 층(수요)에 넣는다. 세대가 바뀌어도 유지된다
+   * 그 항목의 행 작업을 맨 앞 층(수요)에 넣는다. 세대가 바뀌어도 유지된다. speed면 무시
    */
   setSelections(tab: Tab, selections: ReadonlyMap<string, string>): void
   /**
    * 기술 선택 메뉴를 연 카드 id(그 줄 분류 기본 배분 카드들, 닫으면 빈 목록). 계산 입력이 아니다: 세대를 바꾸지 않고
-   * 그 카드 모든 항목의 변동 판정 작업을 사용자 선택 바로 다음 층(수요)에 넣는다. 완료 판정에는 세지 않고(진행률 숫자는 메뉴 결과만큼 늘 수 있다), 나온 결과는 그 세대 동안 남는다
+   * 그 카드 모든 항목의 변동 판정 작업을 사용자 선택 바로 다음 층(수요)에 넣는다. 완료 판정에는 세지 않고(진행률 숫자는 메뉴 결과만큼 늘 수 있다), 나온 결과는 그 세대 동안 남는다. speed면 무시
    */
   setMenuCards(tab: Tab, cardIds: readonly string[]): void
   dispose(): void
@@ -96,11 +97,11 @@ interface Run {
   input: CardInput
   generation: number
   marked: boolean
-  tabs: Record<Tab, TabRun>
+  tabs: Record<DamageTab, TabRun>
 }
 
-type Unit = { tab: Tab; kind: 'plan' } | { tab: Tab; kind: 'task'; task: RowTask }
-type Slot = readonly [Tab, Stage, Tier]
+type Unit = { tab: DamageTab; kind: 'plan' } | { tab: DamageTab; kind: 'task'; task: RowTask }
+type Slot = readonly [DamageTab, Stage, Tier]
 
 const EMPTY_QUEUE: PendingTasks = { stage1: [], stage2: [], stage3: [], stage4: [], stage5: [] }
 const IDLE: TabViewState = { kind: 'idle' }
@@ -123,14 +124,16 @@ function newTabRun(): TabRun {
 }
 
 /**
- * 활성 탭 수요(사용자가 고른 기술의 카드, 모든 단계 → 메뉴를 연 카드의 항목 변동 판정) → 활성 탭 1·2단계(먼저 계산할 카드 → 나머지 묶음) → 나머지 탭(TABS 순) 수요·1·2단계 →
+ * 활성 탭 수요(사용자가 고른 기술의 카드, 모든 단계 → 메뉴를 연 카드의 항목 변동 판정) → 활성 탭 1·2단계(먼저 계산할 카드 → 나머지 묶음) → 나머지 탭(DAMAGE_TABS 순) 수요·1·2단계 →
  * 활성 탭 3·4·5단계(확인 스윕·성격 변형·쌍) → 나머지 탭 3·4·5단계. 3·4·5단계도 단계마다 먼저 계산할 카드가 앞선다.
+ * 활성 탭이 speed면 공격·방어 탭 모두 나머지 탭이다.
  */
 function priority(active: Tab): readonly Slot[] {
-  const others = TABS.filter((t) => t !== active)
-  const early = (t: Tab): Slot[] => [...STAGES.map((s): Slot => [t, s, 0]), [t, 0, 1], [t, 1, 1], [t, 0, 2], [t, 1, 2], [t, 0, 3], [t, 1, 3]]
-  const late = (t: Tab): Slot[] => ([2, 3, 4] as const).flatMap((s) => ([2, 3] as const).map((tier): Slot => [t, s, tier]))
-  return [...early(active), ...others.flatMap(early), ...late(active), ...others.flatMap(late)]
+  const first = DAMAGE_TABS.filter((t) => t === active)
+  const others = DAMAGE_TABS.filter((t) => t !== active)
+  const early = (t: DamageTab): Slot[] => [...STAGES.map((s): Slot => [t, s, 0]), [t, 0, 1], [t, 1, 1], [t, 0, 2], [t, 1, 2], [t, 0, 3], [t, 1, 3]]
+  const late = (t: DamageTab): Slot[] => ([2, 3, 4] as const).flatMap((s) => ([2, 3] as const).map((tier): Slot => [t, s, tier]))
+  return [...first.flatMap(early), ...others.flatMap(early), ...first.flatMap(late), ...others.flatMap(late)]
 }
 
 function refresh(t: TabRun): void {
@@ -193,8 +196,8 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
   let current: Run | null = null
   let regulation: string | null = null
   let displaySp: SpTable | null = null
-  const selections: Record<Tab, ReadonlyMap<string, string>> = { attack: new Map(), defense: new Map(), speed: new Map() }
-  const menus: Record<Tab, ReadonlySet<string>> = { attack: new Set(), defense: new Set(), speed: new Set() }
+  const selections: Record<DamageTab, ReadonlyMap<string, string>> = { attack: new Map(), defense: new Map() }
+  const menus: Record<DamageTab, ReadonlySet<string>> = { attack: new Set(), defense: new Set() }
   let running = false
   let disposed = false
 
@@ -204,25 +207,25 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
     for (const l of [...listeners]) l()
   }
 
-  function setTabState(tab: Tab, state: TabViewState): void {
+  function setTabState(tab: DamageTab, state: TabViewState): void {
     snapshot = { ...snapshot, tabs: { ...snapshot.tabs, [tab]: state } }
   }
 
-  function fail(run: Run, tab: Tab, e: unknown, log = true): void {
+  function fail(run: Run, tab: DamageTab, e: unknown, log = true): void {
     if (log) console.error(e)
     run.tabs[tab].fatal = true
     setTabState(tab, { kind: 'fatal', message: messageOf(e), generation: run.generation })
   }
 
   /** 이전 세대 뷰는 새 세대의 첫 카드 사건(카드가 생기거나 1·2단계 완료) 전까지 남긴다. */
-  function publish(run: Run, tab: Tab, view: TabView): void {
+  function publish(run: Run, tab: DamageTab, view: TabView): void {
     const prev = snapshot.tabs[tab]
     const first = view.cards.length > 0 || view.stage12Done
     if (prev.kind === 'view' && prev.superseded && !first) return
     setTabState(tab, { kind: 'view', view, generation: run.generation, superseded: false })
   }
 
-  function assemble(run: Run, tab: Tab, sp: SpTable | null): void {
+  function assemble(run: Run, tab: DamageTab, sp: SpTable | null): void {
     const t = run.tabs[tab]
     if (t.plan === null || t.assembler === null || t.fatal) return
     try {
@@ -237,7 +240,7 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
   /** 활성 탭은 바뀌었으면 조립, 다른 탭은 1·2단계 완료·전체 완료 전환 때만. 남은 일이 있으면 true. */
   function assembleAll(run: Run): boolean {
     let more = false
-    for (const tab of TABS) {
+    for (const tab of DAMAGE_TABS) {
       const t = run.tabs[tab]
       if (t.fatal) continue
       if (t.plan === null) {
@@ -332,7 +335,7 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
       console.error(e)
       const run = current
       if (run !== null && !disposed) {
-        for (const tab of TABS) {
+        for (const tab of DAMAGE_TABS) {
           const t = run.tabs[tab]
           if (!t.fatal && !(t.assembled?.complete ?? false)) fail(run, tab, e, false)
         }
@@ -353,6 +356,7 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
     const run = current
     if (run === null) return
     const tab = snapshot.activeTab
+    if (!isDamageTab(tab)) return
     const a = run.tabs[tab].assembled
     if (a !== null && a.version === run.tabs[tab].version && a.sp === displaySp) return
     assemble(run, tab, displaySp)
@@ -375,9 +379,9 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
       if (regulation !== null && regulation !== reg) cache.clear()
       regulation = reg
       displaySp = null
-      current = { input, generation, marked: false, tabs: { attack: newTabRun(), defense: newTabRun(), speed: newTabRun() } }
+      current = { input, generation, marked: false, tabs: { attack: newTabRun(), defense: newTabRun() } }
       const tabs = { ...snapshot.tabs }
-      for (const tab of TABS) {
+      for (const tab of DAMAGE_TABS) {
         const s = tabs[tab]
         tabs[tab] = s.kind === 'view' ? (s.superseded ? s : { ...s, superseded: true }) : IDLE
       }
@@ -398,7 +402,7 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
       emit()
     },
     setSelections(tab, next) {
-      if (disposed) return
+      if (disposed || !isDamageTab(tab)) return
       selections[tab] = next
       const t = current?.tabs[tab]
       if (current === null || t === undefined || t.assembler === null || t.fatal) return
@@ -412,7 +416,7 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
       ensureLoop()
     },
     setMenuCards(tab, cardIds) {
-      if (disposed) return
+      if (disposed || !isDamageTab(tab)) return
       const next = new Set(cardIds)
       const prev = menus[tab]
       if (next.size === prev.size && [...next].every((id) => prev.has(id))) return

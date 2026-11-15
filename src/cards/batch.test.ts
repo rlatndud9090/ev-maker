@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CoreError, CoreInputError, STAT_IDS, judgeDamage, judgeSpeed, sweepDamage } from '../core'
+import { CoreError, CoreInputError, STAT_IDS, judgeDamage, sweepDamage } from '../core'
 import type { PokemonSet } from '../core'
 import type { StatId } from '../data/schema'
 import { assembleTab } from './assemble'
@@ -11,7 +11,7 @@ import { relevantStats } from './relevance'
 import { computeRowTask } from './rowTask'
 import { nextStage, pendingTasks, taskKey } from './schedule'
 import { cardInput, realData } from './testing'
-import { TABS } from './types'
+import { DAMAGE_TABS } from './types'
 import type { CardInput, RowSpec, RowTask, RowTaskResult, TabPlan } from './types'
 import { DEFAULT_ROLL_STEPS } from './types'
 /** 카드 입력과 같은 제품 고난수 기준(cardInput 기본값). 코어 직접 호출 기대값도 이 기준의 5단 판정으로 낸다 */
@@ -48,7 +48,7 @@ function runAll(plan: TabPlan, results: Map<string, RowTaskResult>): void {
 }
 
 describe('buildTabView: 실제 데이터', () => {
-  it.each(TABS)('%s: 두 번 같고, 캐시 경유(냉·온) = 무캐시', (tab) => {
+  it.each(DAMAGE_TABS)('%s: 두 번 같고, 캐시 경유(냉·온) = 무캐시', (tab) => {
     for (const input of inputs) {
       const plain = buildTabView(input, tab)
       expect(plain.status).toEqual({ kind: 'ok' })
@@ -60,9 +60,9 @@ describe('buildTabView: 실제 데이터', () => {
       expect(cache.size).toBeGreaterThan(0)
       expect(buildTabView(input, tab, cache)).toEqual(plain)
     }
-  })
+  }, 30_000)
 
-  it.each(TABS)('%s: 점진 조립(1단계 일부 → 나머지)의 최종 뷰 = 일괄, 진행은 단조 증가', (tab) => {
+  it.each(DAMAGE_TABS)('%s: 점진 조립(1단계 일부 → 나머지)의 최종 뷰 = 일괄, 진행은 단조 증가', (tab) => {
     const input = inputs[0]
     const plan = planTab(input, tab)
     const results = new Map<string, RowTaskResult>()
@@ -152,15 +152,6 @@ describe('고난수 기준(rollSteps): 계산 전체에 전달되고 캐시 키�
     expect(c.hits).toBe(c.gets)
   })
 
-  it('스피드 판정은 기준을 읽지 않아 키가 같고 전부 캐시 적중한다', () => {
-    const c = countingCache()
-    const speed = buildTabView(base, 'speed', c)
-    c.gets = c.hits = 0
-    expect(buildTabView(loose, 'speed', c).cards).toEqual(speed.cards)
-    expect(c.gets).toBeGreaterThan(0)
-    expect(c.hits).toBe(c.gets)
-  })
-
   it('무효 기준은 계획 단계에서 코어 입력 오류', () => {
     for (const rollSteps of [0, 16, 2.5, NaN]) expect(() => planTab({ ...base, rollSteps }, 'attack')).toThrow(CoreInputError)
   })
@@ -172,15 +163,11 @@ describe('관여 능력치 속성: 키에서 뺀 능력치를 바꿔도 단건 �
   const IGNORE = { ignoreSpTotal: true }
 
   function judged(spec: RowSpec, a: PokemonSet, d: PokemonSet): unknown {
-    if (spec.judge === 'speed') {
-      const j = judgeSpeed(game, a, d, spec.conditions, IGNORE)
-      return [j.category, j.value.attackerSpeed, j.value.defenderSpeed]
-    }
     const j = judgeDamage(game, spec.sweep!.side, a, d, spec.moveId!, spec.conditions, undefined, { ...IGNORE, rollSteps: N })
     return [j.category, j.value]
   }
 
-  it.each(TABS)('%s 탭의 계획 행 전부', (tab) => {
+  it.each(DAMAGE_TABS)('%s 탭의 계획 행 전부', (tab) => {
     let checked = 0
     for (const input of inputs) {
       const plan = planTab(input, tab)
@@ -188,7 +175,7 @@ describe('관여 능력치 속성: 키에서 뺀 능력치를 바꿔도 단건 �
         for (const rowId of card.rowIds) {
           const spec = plan.rows[rowId]
           if (spec.error !== undefined || spec.sweep === undefined) continue
-          const rel = relevantStats(spec.judge, spec.refs, calcAbility(game, spec.attacker))
+          const rel = relevantStats(spec.refs, calcAbility(game, spec.attacker))
           let expected: unknown
           try {
             expected = judged(spec, spec.attacker, spec.defender)

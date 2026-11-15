@@ -8,7 +8,7 @@ import { bucketKey, resultBucket, sortByResult, type ResultBucket } from './resu
 import { computeRowTask } from './rowTask'
 import { nextStage, pendingTasks, rowJudgements, taskKey } from './schedule'
 import { cardInput, realData } from './testing'
-import { TABS } from './types'
+import { DAMAGE_TABS } from './types'
 import type { CardView, Headline, RowTaskResult, RowView, Tab } from './types'
 
 let seq = 0
@@ -214,7 +214,7 @@ const garchomp: PokemonSet = {
 const input = cardInput({ mySet: garchomp, filters: { topN: 12, selected: [] } })
 
 describe('조립 RowView.best(실데이터)', () => {
-  for (const tab of TABS) {
+  for (const tab of DAMAGE_TABS) {
     it(`${tab}: 변화 있는 ok 행만 best가 있고, 그 행 칸 어느 것보다 나쁘지 않다`, () => {
       const view = buildTabView(input, tab)
       let variableRows = 0

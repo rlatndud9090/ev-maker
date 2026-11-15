@@ -18,12 +18,13 @@ const byMeans = (a: MeansRef, b: MeansRef): number =>
 
 /**
  * 탭별로 랭크 조건을 만드는 수단 주인(능동 수단만 있으므로 주인 = 랭크가 오르는 쪽).
- * 공격 탭 = 내 랭크업만(상대 철벽 등 방어 랭크업은 보지 않는다), 방어 탭 = 공격하는 상대의 랭크업만(내 방어 랭크업은 다루지 않는다), 스피드 탭 = 양쪽.
+ * 공격 탭 = 내 랭크업만(상대 철벽 등 방어 랭크업은 보지 않는다), 방어 탭 = 공격하는 상대의 랭크업만(내 방어 랭크업은 다루지 않는다),
+ * 스피드 탭 = 상대 랭크업만(스피드 차트 조건 배지. 내 랭크업은 다루지 않는다).
  */
 export const TAB_MEANS_OWNERS: Readonly<Record<Tab, readonly MeansCandidate['owner'][]>> = {
   attack: ['me'],
   defense: ['opponent'],
-  speed: ['opponent', 'me'],
+  speed: ['opponent'],
 }
 
 /** 래더 상대: 특성·기술 분포에서 점유율이 기준 이상인 능동 수단(id 순). */

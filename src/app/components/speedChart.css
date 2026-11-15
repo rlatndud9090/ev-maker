@@ -1,0 +1,312 @@
+/* 스피드 차트: 상태 면·태그 글자 대비는 라이트·다크 모두 4.5:1 이상(면 위 글자는 --speed-ink) */
+:root {
+  --speed-win: #d1ebd6;
+  --speed-tie: #f4e7b0;
+  --speed-lose: #f2ccc8;
+  --speed-neu: #ececef;
+  --speed-ink: #2b2b30;
+  --speed-ink-muted: #4a4a52;
+  --speed-band: #e3dcf5;
+  --speed-band-ink: #1e1633;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --speed-win: #24442d;
+    --speed-tie: #4a4122;
+    --speed-lose: #4d2926;
+    --speed-neu: #2c2c31;
+    --speed-ink: #f1f1f3;
+    --speed-ink-muted: #d0d0d6;
+    --speed-band: #3a3158;
+    --speed-band-ink: #f1ecff;
+  }
+}
+
+.speed-tab {
+  min-height: 14rem;
+}
+
+.speed-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem 0;
+}
+
+.speed-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+}
+
+.speed-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.speed-chips-label {
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
+.product .speed-chip {
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  background: var(--card);
+}
+
+.product .speed-chip[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text-strong);
+}
+
+.speed-chip-sep {
+  width: 1px;
+  height: 1.2rem;
+  background: var(--border);
+}
+
+.speed-reject,
+.speed-empty {
+  margin: 0.5rem 0.75rem 0;
+}
+
+.speed-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.5rem 0.75rem 0.75rem;
+  /* 기준선 띠 높이: 포커스 이동이 띠 뒤로 숨지 않게 한다 */
+  scroll-padding-block: 2.4rem;
+}
+
+.speed-rows,
+.speed-badges,
+.speed-unsupported ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.speed-row {
+  display: grid;
+  grid-template-columns: 3rem 3rem minmax(0, 1fr);
+  align-items: start;
+  gap: 0.25rem 0.4rem;
+  padding-block: 0.2rem;
+}
+
+.speed-row-speed {
+  font-weight: 700;
+  color: var(--text-strong);
+  text-align: right;
+  padding-top: 0.35rem;
+}
+
+.speed-row-diff {
+  color: var(--muted);
+  font-size: 0.8em;
+  padding-top: 0.45rem;
+}
+
+.speed-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.speed-baseline {
+  position: sticky;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 8px;
+  background: var(--speed-band);
+  color: var(--speed-band-ink);
+  font-weight: 600;
+  box-shadow: var(--shadow-card);
+}
+
+.speed-detail {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+
+.speed-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.speed-detail-title {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.speed-detail-kv {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.2rem 0.75rem;
+  margin: 0;
+}
+
+.speed-detail-kv dt {
+  color: var(--muted);
+}
+
+.speed-detail-kv dd {
+  margin: 0;
+}
+
+.speed-detail-goal small {
+  display: block;
+  color: var(--muted);
+}
+
+.speed-add-list {
+  list-style: none;
+  margin: 0 0 0.4rem;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.speed-add-custom,
+.speed-preset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.5rem;
+}
+
+.speed-badge-item {
+  list-style: none;
+}
+
+.product .speed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  padding: 0.2rem 0.5rem 0.2rem 0.25rem;
+  border-radius: 8px;
+  color: var(--speed-ink);
+  background: var(--speed-neu);
+}
+
+.speed-badge.win {
+  background: var(--speed-win);
+}
+
+.speed-badge.tie {
+  background: var(--speed-tie);
+}
+
+.speed-badge.lose {
+  background: var(--speed-lose);
+}
+
+.speed-badge.pre {
+  border-style: dashed;
+  border-color: var(--control-border);
+}
+
+.speed-badge.add {
+  border-color: var(--accent);
+}
+
+.speed-badge.on {
+  outline: 2px solid var(--accent);
+}
+
+.speed-badge-text {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.speed-badge-name {
+  display: none;
+}
+
+/* 이름 텍스트는 데스크톱 폭에서만(좁은 폭은 이미지와 접근 이름으로 구분) */
+@media (min-width: 60rem) {
+  .speed-badge-name {
+    display: inline;
+  }
+}
+
+.speed-tag,
+.speed-mark,
+.speed-pill {
+  font-style: normal;
+  font-size: 0.78em;
+  padding: 0 0.35rem;
+  border-radius: 4px;
+  color: var(--speed-ink);
+  background: rgba(127, 127, 140, 0.22);
+}
+
+.speed-pill {
+  justify-self: start;
+}
+
+.speed-pill.win {
+  background: var(--speed-win);
+}
+
+.speed-pill.tie {
+  background: var(--speed-tie);
+}
+
+.speed-pill.lose {
+  background: var(--speed-lose);
+}
+
+.item-negated {
+  opacity: 0.6;
+}
+
+.speed-unsupported {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.speed-unsupported h3 {
+  margin: 0 0 0.3rem;
+  font-size: 0.95em;
+}
+
+@media (max-width: 30rem) {
+  .speed-row {
+    grid-template-columns: 2.5rem 2.2rem minmax(0, 1fr);
+  }
+}
+
+/* "포켓몬 추가"는 DOM에서 차트 머리보다 앞(칩에서 Tab 한 번이 배지로 이어지게)이고 화면에서는 오른쪽 끝 */
+.speed-top .custom-add-btn {
+  order: 2;
+  margin-left: auto;
+}

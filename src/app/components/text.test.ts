@@ -43,8 +43,10 @@ describe('moveRankParts', () => {
     const r = { ...refs({ owner: 'self', stat: 'atk' }), speedDependent: true }
     expect(moveRankParts('attack', { basis: rank({ spe: 1 }, { spe: -1, spa: 1 }), refs: r })).toEqual({ own: undefined, rest: '내 S+1 상대 S−1' })
   })
-  it('스피드 탭(refs 없음)·랭크 아닌 근거', () => {
+  it('refs 없음: S 랭크만 남긴다', () => {
     expect(moveRankParts('speed', { basis: rank({}, { spe: -1 }) })).toEqual({ own: undefined, rest: '상대 S−1' })
-    expect(moveRankParts('attack', { basis: { kind: 'scarf', item: 'choicescarf', share: 0.2 } })).toEqual({ rest: '' })
+  })
+  it('근거 없음', () => {
+    expect(moveRankParts('attack', {})).toEqual({ rest: '' })
   })
 })

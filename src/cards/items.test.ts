@@ -10,7 +10,7 @@ import { defaultOption, groupCards, groupItems } from './groups'
 import { outspeedsAtMax, planTab } from './plan'
 import { cardExplore, nextStage, opponentKey, pendingTasks, taskCardId, taskKey } from './schedule'
 import { cardInput, realData } from './testing'
-import type { CardInput, CardSpec, CardView, CompactCell, RowTaskResult, Tab, TabPlan } from './types'
+import type { CardInput, CardSpec, CardView, CompactCell, DamageTab, RowTaskResult, TabPlan } from './types'
 
 const RANK = JSON.stringify(['rank', 'opponent', 'move', 'swordsdance'])
 const RANK2 = JSON.stringify(['rank', 'opponent', 'move', 'dragondance'])
@@ -664,7 +664,7 @@ describe('실데이터: 채용률·주력 기술·목록 순(R16·R4-1 재개정
 describe('기술 선택 메뉴 항목의 변동 판정(PRD R3 변동 배지, AC36)', () => {
   const only = (id: string) => ({ topN: 30, selected: [id] })
   /** 실행기 수요 없이(기본 항목 결정 집합만) 끝까지 계산한 계획·결과 */
-  function settled(input: CardInput, tab: Tab) {
+  function settled(input: CardInput, tab: DamageTab) {
     const plan = planTab(input, tab)
     const results = new Map<string, RowTaskResult>()
     for (;;) {
@@ -722,11 +722,5 @@ describe('기술 선택 메뉴 항목의 변동 판정(PRD R3 변동 배지, AC3
     // 다 계산한 뒤에는 남은 메뉴 작업이 없고, 기본 남은 작업(pendingTasks)도 새로 생기지 않는다
     expect(nextStage(cardExplore(plan, plan.cards.find((c) => c.id === card.id) as CardSpec, results))).toEqual([])
     expect(nextStage(pendingTasks(plan, results))).toEqual([])
-  })
-
-  it('후보 없는 카드(스피드 탭)는 메뉴 작업이 없다', () => {
-    const plan = planTab(cardInput({ mySet: EXAMPLE_SET, filters: only('kingambit') }), 'speed')
-    expect(plan.cards.length).toBeGreaterThan(0)
-    for (const c of plan.cards) expect(cardExplore(plan, c, new Map())).toEqual({ stage1: [], stage2: [], stage3: [], stage4: [], stage5: [] })
   })
 })

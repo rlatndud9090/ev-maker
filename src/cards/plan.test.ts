@@ -45,7 +45,7 @@ const plainDefense = (e: MetaEntry): string[] => defenseMoveIds(game, e, PLAIN_M
 describe('planTab: 내 세트', () => {
   it('내 세트가 무효면 그 탭 my-set-error, 카드 없음(이유는 CoreError detail 그대로)', () => {
     const bad = { ...PLAIN, sp: { ...PLAIN.sp, def: 40 } }
-    for (const tab of ['attack', 'defense', 'speed'] as const) {
+    for (const tab of ['attack', 'defense'] as const) {
       const plan = planTab(input({ mySet: bad }), tab)
       expect(plan.status).toEqual({
         kind: 'my-set-error',
@@ -55,13 +55,10 @@ describe('planTab: 내 세트', () => {
     }
   })
 
-  it('스피드 비교 불가 도구(선제공격손톱)는 스피드 탭만 my-set-error(INPUT·field item)', () => {
+  it('스피드 비교 불가 도구(선제공격손톱)여도 공격·방어 탭은 ok', () => {
     const set = { ...PLAIN, item: 'quickclaw' }
     expect(planTab(input({ mySet: set }), 'attack').status.kind).toBe('ok')
-    expect(planTab(input({ mySet: set }), 'speed').status).toEqual({
-      kind: 'my-set-error',
-      reasons: [expect.objectContaining({ code: 'INPUT', field: 'item' })],
-    })
+    expect(planTab(input({ mySet: set }), 'defense').status.kind).toBe('ok')
   })
 
   it('내 세트 boosts는 0으로 계획한다', () => {
@@ -79,7 +76,7 @@ describe('planTab: 내 세트', () => {
       spMaxPerStat: game.manifest.rules.spMaxPerStat,
       source: { match: 'bo1', month: bo1.meta.manifest.month, cutoff: bo1.meta.manifest.source.cutoff, format: bo1.meta.manifest.source.format },
     })
-    expect(planTab(input({ mySet: PLAIN }), 'speed').mySide).toBe('attacker')
+    expect(planTab(input({ mySet: PLAIN }), 'attack').mySide).toBe('attacker')
   })
 })
 
@@ -231,19 +228,13 @@ describe('planTab: 공격 탭', () => {
     }
   })
 
-  it('조건: 순풍 토글은 스피드 탭 전용이라 공격 탭은 순풍 없음으로 계산한다', () => {
-    const p = planTab(input({ mySet: PLAIN, conditions: { myTailwind: true, opponentTailwind: true } }), 'attack')
+  it('조건: 공격 탭은 순풍 없음으로 계산한다', () => {
+    const p = planTab(input({ mySet: PLAIN }), 'attack')
     expect(Object.values(p.rows).length).toBeGreaterThan(0)
     for (const r of Object.values(p.rows)) {
       expect(r.conditions.attacker).toEqual({ tailwind: false })
       expect(r.conditions.defender).toEqual({ tailwind: false })
     }
-  })
-
-  it('조건: 스피드 탭은 attacker(나) 순풍 = 내 순풍, defender 순풍 = 상대 순풍', () => {
-    const p = planTab(input({ mySet: PLAIN, conditions: { myTailwind: true, opponentTailwind: false } }), 'speed')
-    expect(Object.values(p.rows).length).toBeGreaterThan(0)
-    for (const r of Object.values(p.rows)) expect(r.conditions).toEqual({ attacker: { tailwind: true }, defender: { tailwind: false } })
   })
 
   it('정렬: 사용률 내림 → 종 id → 기본 카드 → 반감열매 변형(열매 점유율 내림) → 분류(물리 → 특수) → 묶음 점유율 내림, order = 인덱스', () => {
@@ -493,8 +484,8 @@ describe('planTab: 방어 탭', () => {
     }
   })
 
-  it('조건: 방어 탭도 순풍 없음으로 계산한다(순풍 토글은 스피드 탭 전용)', () => {
-    const p = planTab(input({ mySet: PLAIN, conditions: { myTailwind: true, opponentTailwind: true } }), 'defense')
+  it('조건: 방어 탭도 순풍 없음으로 계산한다', () => {
+    const p = planTab(input({ mySet: PLAIN }), 'defense')
     expect(Object.values(p.rows).length).toBeGreaterThan(0)
     for (const r of Object.values(p.rows)) {
       expect(r.conditions.attacker).toEqual({ tailwind: false })
@@ -575,75 +566,6 @@ describe('planTab: 방어 탭', () => {
   })
 })
 
-describe('planTab: 스피드 탭', () => {
-  const plan = planTab(input({ mySet: PLAIN }), 'speed')
-  const scarfRows = (p: TabPlan, id: string) =>
-    cardsOf(p, id).flatMap((c) => rowsOf(p, c).filter((r) => r.kind === 'scarf' || r.kind === 'non-scarf'))
-
-  it('카드마다 기본 행 1개(판정 speed, 스윕 내 S), 분류 null, 묶음 키 S', () => {
-    for (const c of plan.cards.filter((x) => x.state === 'ok')) {
-      expect(c.category).toBeNull()
-      expect(c.bundle.stats.map((s) => s.stat)).toEqual(['spe'])
-      const base = rowsOf(plan, c).filter((r) => r.kind === 'base')
-      expect(base.map((r) => [r.judge, r.sweep, r.moveId, r.dependsOn])).toEqual([['speed', { side: 'attacker', stat: 'spe' }, undefined, []]])
-      expect(base[0].defender).toBe(c.opponentSet)
-    }
-  })
-
-  it('대표 도구가 스카프면 스카프 아닌 최다 도구 행(그 종 첫 카드만)', () => {
-    const rows = scarfRows(plan, 'garchomp')
-    const first = cardsOf(plan, 'garchomp')[0]
-    expect(first.opponentSet.item).toBe('choicescarf')
-    expect(rows.map((r) => [r.kind, r.cardId, r.basis, r.defender.item])).toEqual([
-      ['non-scarf', first.id, { kind: 'non-scarf', item: 'lifeorb', share: entryOf('garchomp').items.shares.lifeorb }, 'lifeorb'],
-    ])
-  })
-
-  it('스카프 점유율 ≥ 기준이면 스카프 행, 미만이면 없음, 메가 항목 제외', () => {
-    const share = entryOf('basculegion').items.shares.choicescarf
-    expect(scarfRows(plan, 'basculegion').map((r) => [r.kind, r.defender.item, r.basis])).toEqual([
-      ['scarf', 'choicescarf', { kind: 'scarf', item: 'choicescarf', share }],
-    ])
-    expect(scarfRows(plan, 'archaludon')).toEqual([])
-    expect(scarfRows(plan, 'charizardmegay')).toEqual([])
-    const strict = planTab(input({ mySet: PLAIN, criteria: { ...input({ mySet: PLAIN }).criteria, scarfShareMin: share + 0.0001 } }), 'speed')
-    expect(scarfRows(strict, 'basculegion')).toEqual([])
-  })
-
-  it('스카프 아닌 최다 도구가 도구 없음이면 도구를 지운다', () => {
-    const base = entryOf('garchomp')
-    const e = syntheticEntry(base, { items: { shares: { choicescarf: 0.6, nothing: 0.3, lifeorb: 0.1 }, keptShare: 1, excludedShare: 0 } })
-    const p = planTab(input({ mySet: PLAIN, view: syntheticView(game, bo1.meta, [e]) }), 'speed')
-    const r = scarfRows(p, 'garchomp')
-    expect(r.map((x) => [x.kind, x.basis])).toEqual([['non-scarf', { kind: 'non-scarf', item: 'nothing', share: 0.3 }]])
-    expect('item' in r[0].defender).toBe(false)
-  })
-
-  it('스카프 행에는 랭크 행을 붙이지 않는다, 내 고속이동 → 모든 카드 랭크 행, 내 얼어붙은바람(상대 하락)은 행 없음', () => {
-    const icy = planTab(input({ mySet: mk('abomasnow', game.data.species.abomasnow.abilities[0], ['icywind', 'blizzard'], { nature: 'modest' }) }), 'speed')
-    expect(icy.cards.length).toBeGreaterThan(0)
-    expect(Object.values(icy.rows).some((r) => r.basis?.kind === 'rank' && r.basis.owner === 'me')).toBe(false)
-    const mine = mk('altaria', game.data.species.altaria.abilities[0], ['agility', 'hurricane'], { nature: 'timid', sp: { ...ZERO, spa: 32, spe: 32 } })
-    const p = planTab(input({ mySet: mine }), 'speed')
-    for (const c of p.cards.filter((x) => x.state === 'ok')) {
-      const rows = rowsOf(p, c)
-      const ag = rows.filter((r) => r.basis?.kind === 'rank' && r.basis.means.id === 'agility')
-      expect(ag.map((r) => r.basis)).toEqual([expect.objectContaining({ owner: 'me', myBoosts: { spe: 2 }, opponentBoosts: {} })])
-      const kinds = rows.map((r) => r.kind)
-      expect(kinds).toEqual([...kinds].sort((a, b) => ['base', 'rank', 'scarf', 'non-scarf'].indexOf(a) - ['base', 'rank', 'scarf', 'non-scarf'].indexOf(b)))
-    }
-  })
-
-  it('상대 세트가 스피드 비교 불가(행동 순서 도구)면 그 카드만 error', () => {
-    const base = entryOf('kingambit')
-    const e = syntheticEntry(base, { representative: { ...base.representative, set: { ...base.representative.set, item: 'quickclaw' } } })
-    const other = entryOf('sneasler')
-    const p = planTab(input({ mySet: PLAIN, view: syntheticView(game, bo1.meta, [e, other]) }), 'speed')
-    for (const c of cardsOf(p, 'kingambit')) expect([c.state, c.error?.code, c.error?.field, c.rowIds]).toEqual(['error', 'INPUT', 'item', []])
-    expect(cardsOf(p, 'sneasler').every((c) => c.state === 'ok')).toBe(true)
-  })
-})
-
 describe('planTab: 상대 세트 해석 실패', () => {
   it('그 상대 카드만 error(원 세트 보존), 다른 상대는 정상', () => {
     const base = entryOf('kingambit')
@@ -661,9 +583,9 @@ describe('planTab: 상대 목록·목록 밖 타겟', () => {
   const ROTOM = { rosterId: 'rotomwash', moves: ['hydropump', 'thief', 'electroweb'], edits: {} }
 
   it('상위 N, 선택 필터(사용률 순), 커스텀은 필터와 무관하게 맨 앞', () => {
-    const p5 = planTab(input({ mySet: PLAIN, filters: { topN: 5, selected: [] } }), 'speed')
+    const p5 = planTab(input({ mySet: PLAIN, filters: { topN: 5, selected: [] } }), 'attack')
     expect([...new Set(p5.cards.map((c) => c.opponent.id))]).toEqual(bo1.ranking.slice(0, 5).map((e) => e.id))
-    const sel = planTab(input({ mySet: PLAIN, filters: { topN: 5, selected: ['incineroar', 'sneasler', 'notinmeta'] }, customTargets: [ROTOM] }), 'speed')
+    const sel = planTab(input({ mySet: PLAIN, filters: { topN: 5, selected: ['incineroar', 'sneasler', 'notinmeta'] }, customTargets: [ROTOM] }), 'attack')
     expect([...new Set(sel.cards.map((c) => c.opponent.id))]).toEqual(['rotomwash', 'sneasler', 'incineroar'])
   })
 
@@ -705,13 +627,16 @@ describe('planTab: 상대 목록·목록 밖 타겟', () => {
   })
 
   it('편집값은 presetKey로 찾아 그 프리셋에만 적용', () => {
-    const edits = { [presetKey('speed', null, 2)]: { sp: { spe: 20 }, nature: 'timid' } }
-    const p = planTab(input({ mySet: PLAIN, customTargets: [{ ...ROTOM, edits }] }), 'speed')
+    const edits = { [presetKey('defense', 'physical', 2)]: { sp: { atk: 20 }, nature: 'lonely' } }
+    const p = planTab(input({ mySet: PLAIN, customTargets: [{ ...ROTOM, edits }] }), 'defense')
     const custom = p.cards.filter((c) => c.opponent.source === 'custom')
-    expect(custom.map((c) => [c.opponentSet.sp.spe, c.opponentSet.nature])).toEqual([
-      [32, 'hardy'],
-      [32, 'jolly'],
-      [20, 'timid'],
+    expect(custom.map((c) => [c.category, c.opponentSet.sp.atk, c.opponentSet.nature])).toEqual([
+      ['physical', 32, 'hardy'],
+      ['physical', 32, 'adamant'],
+      ['physical', 20, 'lonely'],
+      ['special', 0, 'hardy'],
+      ['special', 0, 'modest'],
+      ['special', 0, 'hardy'],
     ])
   })
 
@@ -738,45 +663,11 @@ describe('planTab: 상대 목록·목록 밖 타겟', () => {
     expect(p.cards.some((c) => c.opponent.source === 'custom')).toBe(false)
   })
 
-  it('스피드 탭 커스텀: 타겟 기술의 능동 수단(용의춤)이 사용자 지정 랭크 행, 하락기(일렉트릭네트)는 행 없음, 스카프 행 없음', () => {
-    const ALTARIA = { rosterId: 'altaria', moves: ['dragondance', 'dragonclaw'], edits: {} }
-    const p = planTab(input({ mySet: PLAIN, customTargets: [ROTOM, ALTARIA] }), 'speed')
-    const custom = (id: string) => p.cards.filter((x) => x.opponent.source === 'custom' && x.opponent.id === id)
-    expect(custom('rotomwash').length).toBeGreaterThan(0)
-    for (const c of custom('rotomwash')) expect(rowsOf(p, c).map((r) => r.kind)).toEqual(['base'])
-    expect(custom('altaria').length).toBeGreaterThan(0)
-    for (const c of custom('altaria')) {
-      const rows = rowsOf(p, c)
-      expect(rows.map((r) => r.kind)).toEqual(['base', 'rank'])
-      expect(rows[1].basis).toEqual({
-        kind: 'rank',
-        means: { kind: 'move', id: 'dragondance' },
-        owner: 'opponent',
-        myBoosts: {},
-        opponentBoosts: { atk: 1, spe: 1 },
-        reactions: [],
-      })
-    }
-  })
-
-  it('랭크 기준 경계(래더 상대 수단 점유율): 점유율과 같으면 포함, 기준을 올리면 빠진다', () => {
-    const share = entryOf('volcarona').moves.shares.quiverdance
-    const has = (rankShareMin: number) => {
-      const p = planTab(input({ mySet: PLAIN, filters: { topN: 30, selected: ['volcarona'] }, criteria: { ...DEFAULT_CRITERIA, rankShareMin } }), 'speed')
-      return Object.values(p.rows).some((r) => r.basis?.kind === 'rank' && r.basis.means.id === 'quiverdance')
-    }
-    expect(has(share)).toBe(true)
-    expect(has(share + 0.0001)).toBe(false)
-  })
-
   it('해석 불가 타겟(배울 수 없는 기술)은 그 커스텀 카드만 error', () => {
-    const p = planTab(input({ mySet: PLAIN, customTargets: [{ ...ROTOM, moves: ['earthquake'] }] }), 'speed')
+    const p = planTab(input({ mySet: PLAIN, customTargets: [{ ...ROTOM, moves: ['earthquake'] }] }), 'attack')
     const custom = p.cards.filter((c) => c.opponent.source === 'custom')
-    expect(custom.map((c) => [c.state, c.error?.code])).toEqual([
-      ['error', 'ILLEGAL_MOVE'],
-      ['error', 'ILLEGAL_MOVE'],
-      ['error', 'ILLEGAL_MOVE'],
-    ])
+    expect(custom).toHaveLength(6)
+    expect(custom.every((c) => c.state === 'error' && c.error?.code === 'ILLEGAL_MOVE')).toBe(true)
     expect(p.cards.filter((c) => c.opponent.source === 'ladder').every((c) => c.state === 'ok')).toBe(true)
   })
 
@@ -784,7 +675,7 @@ describe('planTab: 상대 목록·목록 밖 타겟', () => {
     const mega = game.data.megas.find((m) => !bo1.entry(m.forme) && m.base === 'alakazam') ?? game.data.megas.find((m) => !bo1.entry(m.forme))
     if (!mega) throw new Error('목록 밖 메가 폼이 없다')
     const move = game.data.species[mega.base].learnset.find((id) => game.data.moves[id].category === 'Special') as string
-    const p = planTab(input({ mySet: PLAIN, customTargets: [{ rosterId: mega.forme, moves: [move], edits: {} }] }), 'speed')
+    const p = planTab(input({ mySet: PLAIN, customTargets: [{ rosterId: mega.forme, moves: [move], edits: {} }] }), 'defense')
     const custom = p.cards.filter((c) => c.opponent.source === 'custom')
     expect(custom).toHaveLength(3)
     for (const c of custom) {
@@ -800,7 +691,7 @@ describe('planTab: 사용자 추가 배분', () => {
   const ladderCards = (plan: TabPlan, category: CardSpec['category']) =>
     plan.cards.filter((c) => c.opponent.id === opp && c.opponent.source === 'ladder' && c.category === category)
   const added = (sp: Record<string, number>, extra: Partial<AddedBundle> = {}): AddedBundle => ({ tab: 'attack', opponentId: opp, category: 'physical', sp, ...extra })
-  const planWith = (addedBundles: AddedBundle[], tab: 'attack' | 'defense' | 'speed' = 'attack') =>
+  const planWith = (addedBundles: AddedBundle[], tab: 'attack' | 'defense' = 'attack') =>
     planTab(input({ mySet: GARCHOMP, filters: { topN: 30, selected: [opp] }, addedBundles }), tab)
 
   it('그 (탭, 상대, 분류)에만 관측 카드 뒤에 사용자 카드가 생긴다: 키 능력치 neutral, 점유율 없음, id에 user 표지', () => {
@@ -940,13 +831,11 @@ describe('planTab: 공격측 특성 날씨·필드(R12·AC33)', () => {
     expect(judgementKey(steel, { kind: 'probe', target: 'filter', id: fid })).toContain('["weather","Sun"]')
   })
 
-  it('공격 탭: 내가 메가리자몽Y면 내 판정이 쾌청 기준, 스피드 탭은 날씨를 넣지 않는다', () => {
+  it('공격 탭: 내가 메가리자몽Y면 내 판정이 쾌청 기준', () => {
     const atk = planTab(input({ mySet: ZARD_Y, ...only('incineroar', 'garchomp') }), 'attack')
     const specs = specsOf(atk)
     expect(specs.length).toBeGreaterThan(0)
     for (const spec of specs) expect(spec.conditions).toEqual({ ...NO_WIND, weather: 'Sun' })
-    const speed = planTab(input({ mySet: ZARD_Y, ...only('incineroar') }), 'speed')
-    for (const r of Object.values(speed.rows)) expect(r.conditions.weather).toBeUndefined()
   })
 
   it('방어 탭: 공격측 상대 계산 특성이 그래스메이커일 때만 그래스필드, 아니면 조건이 그대로다', () => {

@@ -87,11 +87,6 @@ const SORT_OPTIONS: readonly { mode: SortMode; label: string }[] = [
   { mode: 'result', label: '계산결과순' },
 ]
 
-const TAILWIND_OPTIONS: readonly { side: 'me' | 'opponent'; label: string }[] = [
-  { side: 'me', label: '내 순풍' },
-  { side: 'opponent', label: '상대 순풍' },
-]
-
 /** 작은 굵은 라벨 + 컨트롤 줄. 줄 이름 = 라벨(스크린 리더가 묶음으로 읽는다) */
 function ToolRow({ id, label, testId, children }: { id: string; label: string; testId: string; children: ReactNode }) {
   return (
@@ -132,7 +127,8 @@ function ShareField({ label, value, onValue }: { label: string; value: number; o
 }
 
 /**
- * 결과 목록 위 설정: 탭 줄 → 통계 설정(형식·기준 월·최소 사용률 5종) → 표시 설정(상위 N·정렬·판정 기준(공격·방어 탭)·순풍(스피드 탭)) → 포켓몬 찾기(단독 줄).
+ * 결과 목록 위 설정: 탭 줄 → 통계 설정(형식·기준 월·최소 사용률 6종) → 표시 설정(상위 N, 공격·방어 탭은 정렬·판정 기준) → 포켓몬 찾기(단독 줄).
+ * 정렬·판정 기준은 카드 목록에만 관여해 스피드 탭에서는 숨긴다(상태 값은 유지).
  */
 export function Toolbar(p: Props) {
   const { game, view, state, dispatch } = p
@@ -217,55 +213,35 @@ export function Toolbar(p: Props) {
           <ShareField label="SP 배분" value={state.criteria.bundleShareMin} onValue={(v) => dispatch({ type: 'set-criteria', criteria: { bundleShareMin: v } })} />
           <ShareField label="랭크업 기술" value={state.criteria.rankShareMin} onValue={(v) => dispatch({ type: 'set-criteria', criteria: { rankShareMin: v } })} />
           <ShareField label="구애스카프" value={state.criteria.scarfShareMin} onValue={(v) => dispatch({ type: 'set-criteria', criteria: { scarfShareMin: v } })} />
+          <ShareField label="날씨 특성" value={state.criteria.weatherShareMin} onValue={(v) => dispatch({ type: 'set-criteria', criteria: { weatherShareMin: v } })} />
           <ShareField label="반감열매" value={state.criteria.berryShareMin} onValue={(v) => dispatch({ type: 'set-criteria', criteria: { berryShareMin: v } })} />
           <ShareField label="화력 도구" value={state.criteria.powerItemShareMin} onValue={(v) => dispatch({ type: 'set-criteria', criteria: { powerItemShareMin: v } })} />
         </ToolRow>
 
         <ToolRow id={`${uid}-display`} label="표시 설정" testId="tool-row-display">
           <NumberField label="상위 N" value={state.filters.topN} min={1} step={1} onValue={(v) => dispatch({ type: 'set-top-n', topN: v })} />
-          <div className="sort-field">
-            <span id={`${uid}-sort`} className="sort-label">
-              정렬
-            </span>
-            <div className="segmented" role="group" aria-labelledby={`${uid}-sort`} data-testid="sort-toggle">
-              {SORT_OPTIONS.map((o) => (
-                <button
-                  key={o.mode}
-                  type="button"
-                  aria-pressed={state.sortMode === o.mode}
-                  data-mode={o.mode}
-                  onClick={() => dispatch({ type: 'set-sort', mode: o.mode })}
-                >
-                  {o.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          {state.tab !== 'speed' && <RollThresholdField key={state.tab} tab={state.tab} rollSteps={state.rollSteps} dispatch={dispatch} />}
-          {/* 순풍은 스피드 판정에만 관여해 스피드 탭에서만 보인다(다른 탭에서는 숨길 뿐 상태 값은 유지). */}
-          {state.tab === 'speed' && (
-            <div className="sort-field">
-              <span id={`${uid}-tailwind`} className="sort-label">
-                순풍
-              </span>
-              <div className="segmented tailwind-toggles" role="group" aria-labelledby={`${uid}-tailwind`} data-testid="tailwind-toggles">
-                {TAILWIND_OPTIONS.map((o) => {
-                  const on = o.side === 'me' ? state.conditions.myTailwind : state.conditions.opponentTailwind
-                  return (
+          {state.tab !== 'speed' && (
+            <>
+              <div className="sort-field">
+                <span id={`${uid}-sort`} className="sort-label">
+                  정렬
+                </span>
+                <div className="segmented" role="group" aria-labelledby={`${uid}-sort`} data-testid="sort-toggle">
+                  {SORT_OPTIONS.map((o) => (
                     <button
-                      key={o.side}
+                      key={o.mode}
                       type="button"
-                      aria-pressed={on}
-                      data-side={o.side}
-                      data-testid="tailwind-toggle"
-                      onClick={() => dispatch({ type: 'set-tailwind', side: o.side, on: !on })}
+                      aria-pressed={state.sortMode === o.mode}
+                      data-mode={o.mode}
+                      onClick={() => dispatch({ type: 'set-sort', mode: o.mode })}
                     >
                       {o.label}
                     </button>
-                  )
-                })}
+                  ))}
+                </div>
               </div>
-            </div>
+              <RollThresholdField key={state.tab} tab={state.tab} rollSteps={state.rollSteps} dispatch={dispatch} />
+            </>
           )}
         </ToolRow>
 

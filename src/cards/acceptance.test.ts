@@ -8,10 +8,8 @@ import {
   attackEffectiveness,
   attackMoveType,
   judgeDamage,
-  judgeSpeed,
   natureMultiplier,
   sweepDamage,
-  sweepSpeed,
   validateSet,
   type BattleConditions,
   type PokemonSet,
@@ -29,7 +27,6 @@ import {
   F11,
   F2,
   F3,
-  F4,
   F5,
   F6,
   F7,
@@ -51,8 +48,8 @@ import { createLruCache } from './cache'
 import { presetKey } from './ids'
 import { planTab } from './plan'
 import { cardInput, realData, syntheticView } from './testing'
-import { DEFAULT_CRITERIA, TABS } from './types'
-import type { CardInput, CardSpec, CardView, ExtremeSpec, MoveCandidate, OpponentHeader, RankBasis, RowKind, RowSpec, RowView, ScarfBasis, Tab, TabPlan, TabView } from './types'
+import { DAMAGE_TABS, DEFAULT_CRITERIA } from './types'
+import type { CardInput, CardSpec, CardView, ExtremeSpec, MoveCandidate, OpponentHeader, RankBasis, RowKind, RowSpec, RowView, DamageTab, TabPlan, TabView } from './types'
 import { DEFAULT_ROLL_STEPS } from './types'
 /** 카드 입력과 같은 제품 판정 기준(cardInput 기본값). 코어 직접 호출 기대값도 이 기준으로 낸다 */
 const N = DEFAULT_ROLL_STEPS
@@ -69,7 +66,7 @@ const memo = new Map<string, { plan: TabPlan; view: TabView }>()
 const inputOf = new WeakMap<TabPlan, CardInput>()
 
 /** label은 입력 조합마다 유일해야 한다(같은 label이면 첫 결과를 재사용). */
-function run(label: string, input: CardInput, tab: Tab): { plan: TabPlan; view: TabView } {
+function run(label: string, input: CardInput, tab: DamageTab): { plan: TabPlan; view: TabView } {
   const key = JSON.stringify([label, tab])
   let hit = memo.get(key)
   if (!hit) {
@@ -102,9 +99,8 @@ const categoriesOf = <T>(r: SweepResult<T>): string[] => r.cells.map((c) => (c.k
 const rowBoundaries = (row: RowView): Boundary[] => row.boundaries.map((b) => ({ sp: b.sp, from: b.from, to: b.to }))
 
 /** 계획 행 명세를 코어에 그대로 넣은 스윕. 거부되면 null. */
-function coreSweep(spec: Pick<RowSpec, 'judge' | 'sweep' | 'attacker' | 'defender' | 'moveId' | 'conditions'>): SweepResult<unknown> | null {
+function coreSweep(spec: Pick<RowSpec, 'sweep' | 'attacker' | 'defender' | 'moveId' | 'conditions'>): SweepResult<unknown> | null {
   try {
-    if (spec.judge === 'speed') return sweepSpeed(game, spec.attacker, spec.defender, spec.conditions, OVER)
     if (!spec.sweep || !spec.moveId) throw new Error('대미지 행에 스윕 대상·기술이 없다')
     return sweepDamage(game, spec.sweep, spec.attacker, spec.defender, spec.moveId, spec.conditions, undefined, OVER)
   } catch (e) {
@@ -125,7 +121,7 @@ function coreCategory(f: () => { category: string }): string | null {
 const withSp = (s: PokemonSet, patch: Partial<Record<StatId, number>>): PokemonSet => ({ ...s, sp: { ...s.sp, ...patch } })
 
 /** 표시 카드에서 그 상대에 대해 나온 모든 행(종류·근거). 변화 없음 행도 카드 안에 있다. */
-function rowsFor(view: TabView, opponentId: string): { kind: RowKind; moveId?: string; basis?: RankBasis | ScarfBasis }[] {
+function rowsFor(view: TabView, opponentId: string): { kind: RowKind; moveId?: string; basis?: RankBasis }[] {
   return view.cards.filter((c) => c.opponent.id === opponentId).flatMap((c) => c.rows.map((r) => ({ kind: r.kind, moveId: r.moveId, basis: r.basis })))
 }
 
@@ -137,7 +133,7 @@ interface NoChangeRow {
   rowKind: RowKind
   moveId?: string
   sweepStat?: StatId
-  basis?: RankBasis | ScarfBasis
+  basis?: RankBasis
   fixed: string
 }
 function noChangeRows(view: TabView): NoChangeRow[] {
@@ -165,8 +161,7 @@ function shownRow(card: CardView | undefined, pred: (r: RowView) => boolean): Ro
   return row
 }
 
-const meansKey = (b: RankBasis | ScarfBasis | undefined): string | null =>
-  b === undefined ? null : b.kind === 'rank' ? JSON.stringify([b.owner, b.means.kind, b.means.id]) : JSON.stringify([b.kind, b.item])
+const meansKey = (b: RankBasis | undefined): string | null => (b === undefined ? null : JSON.stringify([b.owner, b.means.kind, b.means.id]))
 
 /** 내 쪽 세트의 성격만 바꾼 행 명세 */
 function withMyNature(plan: TabPlan, spec: RowSpec, nature: string): RowSpec {
@@ -504,24 +499,19 @@ function expectMatchesCore(plan: TabPlan, view: TabView): { items: number; cards
 
 // ---------- AC 1·F9 예시 세트 ----------
 
-describe('AC1 예시 세트(F9): 세 탭 모두 표시 카드가 있다', () => {
-  it.each(TABS)('%s', (tab) => {
+describe('AC1 예시 세트(F9): 공격·방어 탭 모두 표시 카드가 있다', () => {
+  it.each(DAMAGE_TABS)('%s', (tab) => {
     const { view } = run('example', top(EXAMPLE_SET), tab)
     expect(view.status).toEqual({ kind: 'ok' })
     expect(view.cards.length).toBeGreaterThan(0)
   })
 
-  it('공격 탭 스톤샤워·스피드 탭 기본 행 경계 = 코어', () => {
+  it('공격 탭 스톤샤워 기본 행 경계 = 코어', () => {
     const atk = run('example', top(EXAMPLE_SET), 'attack')
     const { card } = cardBySpread(atk.plan, atk.view, F9.attack.opponent, 'physical')
     const row = shownRow(card, (r) => r.kind === 'base' && r.moveId === F9.attack.move)
     const direct = sweepDamage(game, { side: 'attacker', stat: 'atk' }, EXAMPLE_SET, opponentSet(bo1, F9.attack.opponent), F9.attack.move, undefined, undefined, OVER)
     expect(rowBoundaries(row)).toEqual(boundariesOf(direct))
-
-    const spd = run('example', top(EXAMPLE_SET), 'speed')
-    const s = cardBySpread(spd.plan, spd.view, F9.speed.opponent, null)
-    const base = shownRow(s.card, (r) => r.kind === 'base')
-    expect(rowBoundaries(base)).toEqual(boundariesOf(sweepSpeed(game, EXAMPLE_SET, opponentSet(bo1, F9.speed.opponent), undefined, OVER)))
   })
 })
 
@@ -624,7 +614,7 @@ describe('AC3 묶음(실제 스냅샷 예시)', () => {
 
   it('포켓몬·분류당 카드 = 기준 이상 묶음 수(없으면 소수 배분 1장), 모든 관측 카드 점유율 ≥ 기준(기본 5%) 또는 소수 배분', () => {
     let over3 = 0
-    for (const tab of TABS) {
+    for (const tab of DAMAGE_TABS) {
       const { plan } = run('example', top(EXAMPLE_SET), tab)
       const count = new Map<string, number>()
       for (const c of plan.cards) {
@@ -885,7 +875,7 @@ describe('AC33 공격측 특성 날씨·필드', () => {
 const kingambitFoul = (moves: string[]): PokemonSet => ({ ...F5.defiant.mySet, moves })
 
 describe('AC6 변화 없음 행(목록에서 빼지 않는다)', () => {
-  it.each(TABS)('예시 세트 %s 탭: 표시 카드·변화 없음 행 = 코어 재판정, 행이 남는 래더 카드는 판정 변화와 무관하게 전부 보인다', (tab) => {
+  it.each(DAMAGE_TABS)('예시 세트 %s 탭: 표시 카드·변화 없음 행 = 코어 재판정, 행이 남는 래더 카드는 판정 변화와 무관하게 전부 보인다', (tab) => {
     const { plan, view } = run('example', top(EXAMPLE_SET), tab)
     const n = expectMatchesCore(plan, view)
     // 예시 세트 실데이터: 모든 행이 변화 없음인 래더 카드가 있다(예전 정책이면 목록에서 빠지던 카드).
@@ -931,69 +921,6 @@ describe('AC6 변화 없음 행(목록에서 빼지 않는다)', () => {
     for (const c of custom) expect(c.shownItem, c.id).toBe(c.defaultItem?.key)
   })
 })
-
-// ---------- AC 7 스피드 탭(F4) ----------
-
-describe('AC7 스피드 탭 스카프·순풍(F4)', () => {
-  it('스카프 ≥ 10% → 점유율 최대 S 묶음 카드에 스카프 행 1개(판정 = 코어)', () => {
-    const { plan, view } = run('example', top(EXAMPLE_SET), 'speed')
-    const { spec } = cardBySpread(plan, view, F4.scarf.opponent, null)
-    const first = plan.cards.find((c) => c.opponent.id === F4.scarf.opponent.id)
-    expect(first?.id).toBe(spec.id)
-    const scarfRows = spec.rowIds.map((id) => plan.rows[id]).filter((r) => r.kind === 'scarf')
-    expect(scarfRows).toHaveLength(1)
-    expect(scarfRows[0].basis).toEqual({ kind: 'scarf', item: 'choicescarf', share: F4.scarf.scarfShare })
-    const direct = sweepSpeed(game, EXAMPLE_SET, { ...opponentSet(bo1, F4.scarf.opponent), item: 'choicescarf' }, undefined, OVER)
-    const item = noChangeRows(view).find((i) => i.cardId === spec.id && i.rowKind === 'scarf')
-    expect(new Set(categoriesOf(direct))).toEqual(new Set([item?.fixed]))
-    // 같은 종의 다른 묶음 카드에는 스카프 행이 없다.
-    for (const c of plan.cards.filter((x) => x.opponent.id === F4.scarf.opponent.id && x.id !== spec.id)) {
-      expect(c.rowIds.some((id) => plan.rows[id].kind === 'scarf')).toBe(false)
-    }
-  })
-
-  it('스카프 < 10% → 스카프 행 없음', () => {
-    const { view } = run('example', top(EXAMPLE_SET), 'speed')
-    const rows = rowsFor(view, F4.noScarf.opponent.id)
-    expect(rows.length).toBeGreaterThan(0)
-    expect(rows.some((r) => r.kind === 'scarf' || r.kind === 'non-scarf')).toBe(false)
-  })
-
-  it('대표 도구 스카프 → 스카프 아닌 행 1개(도구 = 스카프를 뺀 최다, 경계 = 코어)', () => {
-    const { plan, view } = run('example', top(EXAMPLE_SET), 'speed')
-    const { card } = cardBySpread(plan, view, F4.nonScarf.opponent, null)
-    const rows = card?.rows.filter((r) => r.kind === 'non-scarf') ?? []
-    expect(rows).toHaveLength(1)
-    expect(rows[0].basis).toMatchObject({ kind: 'non-scarf', item: F4.nonScarf.item })
-    const direct = sweepSpeed(game, EXAMPLE_SET, { ...opponentSet(bo1, F4.nonScarf.opponent), item: F4.nonScarf.item }, undefined, OVER)
-    expect(rowBoundaries(rows[0])).toEqual(boundariesOf(direct))
-    expect(rowBoundaries(rows[0])).toEqual(F4.nonScarf.boundaries)
-  })
-
-  it('내 순풍·상대 순풍을 켜면 현재 판정이 코어 판정대로 바뀐다', () => {
-    const cases = [
-      ['my', F4.myTailwind, { myTailwind: true, opponentTailwind: false }, { attacker: { tailwind: true }, defender: { tailwind: false } }],
-      ['opp', F4.opponentTailwind, { myTailwind: false, opponentTailwind: true }, { attacker: { tailwind: false }, defender: { tailwind: true } }],
-    ] as const
-    for (const [label, c, conditions, battle] of cases) {
-      const opp = opponentSet(bo1, c.opponent)
-      const current = (v: TabView, p: TabPlan) => shownOrHidden(p, v, c.opponent)
-      const off = run('example', top(EXAMPLE_SET), 'speed')
-      const on = run(`tailwind-${label}`, top(EXAMPLE_SET, { conditions }), 'speed')
-      expect(current(off.view, off.plan)).toBe(judgeSpeed(game, EXAMPLE_SET, opp).category)
-      expect(current(on.view, on.plan)).toBe(judgeSpeed(game, EXAMPLE_SET, opp, battle as BattleConditions).category)
-      expect([current(off.view, off.plan), current(on.view, on.plan)]).toEqual([c.off, c.on])
-    }
-  })
-})
-
-/** 스피드 탭 기본 행의 현재 판정(변화 없음 행도 카드 안에 있다). */
-function shownOrHidden(plan: TabPlan, view: TabView, ref: OpponentRef): string | undefined {
-  const { card } = cardBySpread(plan, view, ref, null)
-  return card?.rows.find((r) => r.kind === 'base')?.current.category
-}
-
-// ---------- AC 8 랭크 행(F5) ----------
 
 describe('AC8 랭크 행(F5)', () => {
   const intimidateRows = (view: TabView, id: string) =>
@@ -1063,16 +990,16 @@ describe('AC10 상위 N·포켓몬 선택', () => {
     new Set(view.cards.filter((c) => c.opponent.source === 'ladder').map((c) => c.opponent.id))
 
   it('상위 10 → 래더 카드는 사용률 상위 10마리만, 커스텀은 유지', () => {
-    const { view } = run('top10', top(EXAMPLE_SET, { filters: { topN: 10, selected: [] }, customTargets: [target] }), 'speed')
+    const { view } = run('top10', top(EXAMPLE_SET, { filters: { topN: 10, selected: [] }, customTargets: [target] }), 'defense')
     expect(ladderIds(view)).toEqual(new Set(bo1.ranking.slice(0, 10).map((e) => e.id)))
-    expect(view.cards.filter((c) => c.opponent.source === 'custom')).toHaveLength(3)
+    expect(view.cards.filter((c) => c.opponent.source === 'custom')).toHaveLength(6)
   })
 
   it('선택 2마리 → 래더 카드는 그 2마리만, 커스텀은 유지', () => {
     const ids = ['incineroar', 'basculegion']
-    const { view } = run('select2', only(EXAMPLE_SET, ids, { customTargets: [target] }), 'speed')
+    const { view } = run('select2', only(EXAMPLE_SET, ids, { customTargets: [target] }), 'defense')
     expect(ladderIds(view)).toEqual(new Set(ids))
-    expect(view.cards.filter((c) => c.opponent.source === 'custom')).toHaveLength(3)
+    expect(view.cards.filter((c) => c.opponent.source === 'custom')).toHaveLength(6)
   })
 })
 
@@ -1153,21 +1080,6 @@ describe('AC11 목록 밖 타겟(F6·F10)', () => {
     }
   })
 
-  it('스피드 탭: 타겟 기술의 상대 하락기(일렉트릭네트)는 랭크 행이 아니고(능동 랭크업만), 기본 행 판정 = 코어', () => {
-    const { plan, view } = run('custom-rotom', top(EXAMPLE_SET, { customTargets: [target] }), 'speed')
-    const cards = customCards(view)
-    expect(cards).toHaveLength(3)
-    for (const c of cards) {
-      expect(c.rows.filter((r) => r.kind === 'rank')).toEqual([])
-      expect(Object.values(plan.rows).some((r) => r.cardId === c.id && r.basis?.kind === 'rank' && r.basis.means.id === F10.rankMeans)).toBe(false)
-      const base = c.rows.filter((r) => r.kind === 'base')
-      expect(base).toHaveLength(1)
-      const spec = plan.cards.find((x) => x.id === c.id) as CardSpec
-      const direct = sweepSpeed(game, EXAMPLE_SET, spec.opponentSet, undefined, OVER)
-      expect(base[0].cells.map((x) => x.category)).toEqual(categoriesOf(direct))
-    }
-  })
-
   it('프리셋 SP·타겟 기술을 고치면 그 카드 판정이 코어대로 바뀐다', () => {
     const k = presetKey('attack', 'physical', 0)
     const edited = { ...target, edits: { [k]: { sp: { hp: 0, def: 0 } } } }
@@ -1189,7 +1101,7 @@ describe('AC11 목록 밖 타겟(F6·F10)', () => {
   it('목록 밖 메가 폼은 원종 + 메가스톤 + mega, 목록 안 종은 충돌로 돌린다', () => {
     const mega = { rosterId: F6.outsideMega.rosterId, moves: ['aurasphere'], edits: {} }
     const conflict = { rosterId: F6.conflict, moves: ['dragonclaw'], edits: {} }
-    const { plan, view } = run('custom-mega-conflict', top(EXAMPLE_SET, { customTargets: [mega, conflict] }), 'speed')
+    const { plan, view } = run('custom-mega-conflict', top(EXAMPLE_SET, { customTargets: [mega, conflict] }), 'defense')
     const cards = plan.cards.filter((c) => c.opponent.source === 'custom')
     expect(cards.map((c) => c.opponent.id)).toEqual([F6.outsideMega.rosterId, F6.outsideMega.rosterId, F6.outsideMega.rosterId])
     for (const c of cards) expect(c.opponentSet).toMatchObject({ species: F6.outsideMega.base, item: F6.outsideMega.stone, mega: true })
@@ -1298,26 +1210,24 @@ describe('AC12 오류 격리', () => {
     expect(ok.length).toBeGreaterThan(0)
   })
 
-  it('내 세트 오류: 합계 초과는 세 탭 모두, 퀵드로는 스피드 탭만, 방어측 탈은 방어 탭만', () => {
-    for (const tab of TABS) {
+  it('내 세트 오류: 합계 초과는 공격·방어 탭 모두, 퀵드로는 공격·방어 탭에서 정상, 방어측 탈은 방어 탭만', () => {
+    for (const tab of DAMAGE_TABS) {
       const { view } = run('F7-total', top(F7.mySet.spTotal.set, { filters: { topN: 5, selected: [] } }), tab)
       expect(view.status.kind, tab).toBe('my-set-error')
       if (view.status.kind === 'my-set-error') expect(view.status.reasons.map((r) => r.code)).toContain(F7.mySet.spTotal.code)
       expect(view.cards).toEqual([])
     }
-    const quick = (tab: Tab) => run('F7-quick', top(F7.mySet.speedOnly.set, { filters: { topN: 5, selected: [] } }), tab).view
-    expect(quick('speed').status).toMatchObject({ kind: 'my-set-error', reasons: [{ field: F7.mySet.speedOnly.field }] })
+    const quick = (tab: DamageTab) => run('F7-quick', top(F7.mySet.speedOnly.set, { filters: { topN: 5, selected: [] } }), tab).view
     expect(quick('attack').status).toEqual({ kind: 'ok' })
     expect(quick('defense').status).toEqual({ kind: 'ok' })
 
     const d = F7.mySet.defenseOnly
-    const disguise = (tab: Tab) => run('F7-disguise', only(d.set, [d.attacker.id]), tab).view
+    const disguise = (tab: DamageTab) => run('F7-disguise', only(d.set, [d.attacker.id]), tab).view
     const def = disguise('defense')
     expect(def.status.kind).toBe('my-set-error')
     if (def.status.kind === 'my-set-error') expect(def.status.reasons.map((r) => r.field)).toContain(d.field)
     expect(disguise('attack').status).toEqual({ kind: 'ok' })
     expect(disguise('attack').cards.length).toBeGreaterThan(0)
-    expect(disguise('speed').status).toEqual({ kind: 'ok' })
   })
 
   it('내 하양허브 + 껍질깨기: 그 랭크 행의 연속기만 WHITE_HERB_MULTIHIT', () => {
@@ -1368,7 +1278,7 @@ describe('AC13 Bo3·월 변경 → 그 스냅샷 기준·출처', () => {
   })
 
   it('Bo3: 출처와 래더 상대(순위·사용률)가 Bo3 스냅샷이다', () => {
-    const { view } = run('bo3', top(EXAMPLE_SET, { view: bo3, filters: { topN: 10, selected: [] } }), 'speed')
+    const { view } = run('bo3', top(EXAMPLE_SET, { view: bo3, filters: { topN: 10, selected: [] } }), 'defense')
     expect(view.source).toEqual(sourceOf(bo3.meta))
     expect(view.source).not.toEqual(sourceOf(bo1.meta))
     const heads = view.cards.map((c) => c.opponent)
@@ -1405,7 +1315,7 @@ describe('AC13 Bo3·월 변경 → 그 스냅샷 기준·출처', () => {
 
 // ---------- AC 15 표시 기준 ----------
 
-describe('AC15 표시 기준 3개를 바꾸면 결과가 그에 맞게 바뀐다', () => {
+describe('AC15 묶음 표시 기준을 바꾸면 결과가 그에 맞게 바뀐다', () => {
   const criteria = (patch: Partial<typeof DEFAULT_CRITERIA>) => ({ ...DEFAULT_CRITERIA, ...patch })
 
   it('묶음 기준: 높이면 기준 미만 묶음이 빠지고, 넘는 묶음이 없으면 소수 배분 1장', () => {
@@ -1429,24 +1339,6 @@ describe('AC15 표시 기준 3개를 바꾸면 결과가 그에 맞게 바뀐다
     expect(def.cards.length).toBeGreaterThan(plan.cards.length)
   })
 
-  it('랭크 기준: 상대 나비춤 점유율 이하면 스피드 탭 랭크 행, 점유율보다 높이면 사라진다', () => {
-    const quiver = (rankShareMin: number) =>
-      rowsFor(run(`rank-${rankShareMin}`, only(EXAMPLE_SET, ['volcarona'], { criteria: criteria({ rankShareMin }) }), 'speed').view, 'volcarona').filter(
-        (r) => r.basis?.kind === 'rank' && r.basis.owner === 'opponent' && r.basis.means.id === 'quiverdance',
-      )
-    const share = (bo1.entry('volcarona') as MetaEntry).moves.shares.quiverdance
-    expect(quiver(share).length).toBeGreaterThan(0)
-    expect(quiver(share + 0.0001)).toEqual([])
-  })
-
-  it('스카프 기준: 올리면 대쓰여너 스카프 행이 사라지고, 내리면 타부자고에 생긴다', () => {
-    const hi = run('scarf-0.2', top(EXAMPLE_SET, { criteria: criteria({ scarfShareMin: 0.2 }) }), 'speed').view
-    expect(rowsFor(hi, F4.scarf.opponent.id).some((r) => r.kind === 'scarf')).toBe(false)
-    const lo = run('scarf-0.04', top(EXAMPLE_SET, { criteria: criteria({ scarfShareMin: 0.04 }) }), 'speed').view
-    const scarf = rowsFor(lo, F4.noScarf.opponent.id).filter((r) => r.kind === 'scarf')
-    expect(scarf).toHaveLength(1)
-    expect(scarf[0].basis).toEqual({ kind: 'scarf', item: 'choicescarf', share: F4.noScarf.scarfShare })
-  })
 })
 
 // ---------- ADR 결정 3: 관여 능력치 S(F11) ----------

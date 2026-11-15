@@ -7,7 +7,11 @@ import type { MetaView } from '../meta'
 
 export type Tab = 'attack' | 'defense' | 'speed'
 export const TABS: readonly Tab[] = ['attack', 'defense', 'speed']
-/** 참조 방어 능력치 기준: def → physical, spd → special. 스피드 탭 카드는 null */
+/** 실행기가 행 작업으로 계산하는 탭(스피드 탭은 스피드 차트 모델이 따로 계산한다) */
+export type DamageTab = Exclude<Tab, 'speed'>
+export const DAMAGE_TABS: readonly DamageTab[] = ['attack', 'defense']
+export const isDamageTab = (tab: Tab): tab is DamageTab => tab !== 'speed'
+/** 참조 방어 능력치 기준: def → physical, spd → special */
 export type Category = 'physical' | 'special'
 export const CATEGORY_ORDER: readonly Category[] = ['physical', 'special']
 
@@ -16,8 +20,10 @@ export interface DisplayCriteria {
   bundleShareMin: number
   /** 상대 랭크 수단 점유율 기준(0~1, 이상) */
   rankShareMin: number
-  /** 구애스카프 점유율 기준(0~1, 이상) */
+  /** 구애스카프 점유율 기준(0~1, 이상). 스피드 차트만 쓴다 */
   scarfShareMin: number
+  /** 날씨·필드 ×2 특성 점유율 기준(0~1, 이상). 스피드 차트만 쓴다 */
+  weatherShareMin: number
   /** 반감열매 점유율 기준(0~1, 이상이면 공격 탭에 그 열매를 지닌 별도 행) */
   berryShareMin: number
   /** 화력 도구 점유율 기준(0~1, 이상이면 방어 탭에 그 도구를 지닌 별도 행) */
@@ -26,7 +32,8 @@ export interface DisplayCriteria {
 export const DEFAULT_CRITERIA: Readonly<DisplayCriteria> = Object.freeze({
   bundleShareMin: 0.05,
   rankShareMin: 0.1,
-  scarfShareMin: 0.1,
+  scarfShareMin: 0.05,
+  weatherShareMin: 0.1,
   berryShareMin: 0.05,
   powerItemShareMin: 0.05,
 })
@@ -44,9 +51,17 @@ export const ROLL_STEPS = ROLL_DENOMINATOR
 /** 제품 기본 "고난수 기준" n: 고난수1타 = 14/16 이상, 저난수1타 = 2/16 이하(코어 rollTier) */
 export const DEFAULT_ROLL_STEPS = 14
 
-export interface CardConditions {
-  myTailwind: boolean
-  opponentTailwind: boolean
+/** 스피드 차트 조건 필터 종류(조건 배지의 filterKind) */
+export type SpeedConditionKind = 'rank' | 'scarf' | 'tailwind' | 'field'
+export const SPEED_CONDITION_KINDS: readonly SpeedConditionKind[] = ['rank', 'scarf', 'tailwind', 'field']
+export type SpeedConditionFilters = Readonly<Record<SpeedConditionKind, boolean>>
+export const DEFAULT_SPEED_FILTERS: SpeedConditionFilters = Object.freeze({ rank: true, scarf: true, tailwind: false, field: true })
+/** 스피드 차트에 사용자가 더한 래더 상대 배분(S SP·S 보정 부호만) */
+export interface SpeedAddedBundle {
+  /** 래더 메타 항목 id */
+  opponentId: string
+  sp: number
+  nature: BundleStat['nature']
 }
 
 export type PresetIndex = 0 | 1 | 2
@@ -107,7 +122,6 @@ export interface CardInput {
   view: MetaView
   /** 검증 전 그대로. 무효면 탭 상태가 my-set-error */
   mySet: PokemonSet
-  conditions: CardConditions
   /** 고난수 기준 n(1~ROLL_STEPS−1 정수). 모든 대미지 칸 범주가 코어 rollTier(p, n) 5단 판정이다(코어 normalizeRollSteps로 검증) */
   rollSteps: number
   criteria: DisplayCriteria
@@ -149,7 +163,7 @@ export interface MetaSourceView {
 
 // ---------- 계획(planTab 출력) ----------
 
-export type RowKind = 'base' | 'rank' | 'scarf' | 'non-scarf'
+export type RowKind = 'base' | 'rank'
 
 export interface RankBasis {
   kind: 'rank'
@@ -163,13 +177,6 @@ export interface RankBasis {
   /** 발동한 반응 특성·도구 id(적용 순서) */
   reactions: readonly string[]
 }
-export interface ScarfBasis {
-  kind: 'scarf' | 'non-scarf'
-  /** 메타 도구 키(NO_ITEM = 'nothing' 포함) */
-  item: string
-  /** 그 도구의 분포 점유율 */
-  share: number
-}
 
 export interface RowSpec {
   /** 탭 계획 안에서 유일 */
@@ -178,8 +185,7 @@ export interface RowSpec {
   kind: RowKind
   /** 카드 안 정렬 순번(0부터) */
   order: number
-  judge: 'damage' | 'speed'
-  /** 스피드 탭은 없음 */
+  judge: 'damage'
   moveId?: string
   /** 내 쪽 스윕 대상. error 행이면 없음 */
   sweep?: { side: 'attacker' | 'defender'; stat: StatId }
@@ -190,7 +196,7 @@ export interface RowSpec {
   refs?: MoveStatRefs
   /** 내 능력치 중 이 행 판정이 의존하는 것(스윕 능력치 제외). 드래그 갱신 대기 판정 기준 */
   dependsOn: readonly StatId[]
-  basis?: RankBasis | ScarfBasis
+  basis?: RankBasis
   /** 방어 탭: 이 극단 필터를 통과해야 행 작업이 생긴다 */
   gate?: string
   /** 노출·목표에 쓰는 내 성격 변형(스윕 행만, 방어 탭은 그 필터와 같은 값) */
@@ -219,7 +225,7 @@ export interface ExtremeSpec {
 }
 
 /**
- * 내 성격 변형 2종(실제 성격 id). stat = 상승 대상(공격·스피드 탭 스윕 능력치, 방어 탭 B/D).
+ * 내 성격 변형 2종(실제 성격 id). stat = 상승 대상(공격 탭 스윕 능력치, 방어 탭 B/D).
  * neutral: stat 보정 없음, plus: stat 상승·하락은 판정에 관여하지 않는 능력치. 현재 성격이 그 조건이면 현재 성격 id 그대로.
  */
 export interface NatureVariants {
@@ -325,7 +331,7 @@ export interface CardSpec {
   rowIds: readonly string[]
   filterIds: readonly string[]
   fixedIds: readonly string[]
-  /** 조건별 기술 후보 = 기술 선택 항목(스피드 탭·error 카드는 빈 배열) */
+  /** 조건별 기술 후보 = 기술 선택 항목(error 카드는 빈 배열) */
   conditions: readonly ConditionGroup[]
   /**
    * 도구 변형 카드만(이름은 반감열매에서 왔고 방어 탭 화력 도구도 쓴다). triggers = 이 카드 대표 세트에서 그 도구가 관여하는 기술 id
@@ -341,13 +347,13 @@ export interface CardSpec {
 }
 
 export interface TabPlan {
-  tab: Tab
+  tab: DamageTab
   game: Snapshot
   status: TabStatus
   source: MetaSourceView
   /** 계획 시점 내 SP(조립의 갱신 대기 기준) */
   mySp: SpTable
-  /** 이 탭에서 내 세트가 서는 쪽(공격·스피드 탭 attacker, 방어 탭 defender) */
+  /** 이 탭에서 내 세트가 서는 쪽(공격 탭 attacker, 방어 탭 defender) */
   mySide: 'attacker' | 'defender'
   /** 검증한 고난수 기준 n. 모든 대미지 행 작업 판정(rollTier)과 캐시 키에 쓴다 */
   rollSteps: number
@@ -400,9 +406,6 @@ export interface CompactCell {
   ohkoChance?: number
   minPercent?: number
   maxPercent?: number
-  /** 스피드 칸만(앱 최종 스피드) */
-  mySpeed?: number
-  opponentSpeed?: number
 }
 
 export type RowTaskResult =
@@ -470,7 +473,7 @@ export interface RowView {
   sweepStat?: StatId
   /** 기술 분류와 참조가 다를 때 표기용(예: 사이코쇼크 → 상대 def) */
   refs?: MoveStatRefs
-  basis?: RankBasis | ScarfBasis
+  basis?: RankBasis
   /** pending = 판정 전, stale = 드래그로 낡음(칸·경계는 계획 시점 값 그대로) */
   status: 'ok' | 'stale' | 'error' | 'pending'
   error?: ErrorReason
@@ -491,7 +494,7 @@ export interface RowView {
   target?: TargetView
   /**
    * 도달 가능한 최선 판정: 내 SP 0~최대 × 성격(무보정·상승, 예산 무시 — 칸 표기와 같은 기준)에서 그 탭 관점 가장 유리한 판정
-   * (공격·방어 RollTier, 스피드 SpeedOrder). 변화 있는 ok·stale 행만. 방어 쌍 행(극단 필터 통과)은 높은 극단(H·B/D 최대·상승),
+   * (RollTier). 변화 있는 ok·stale 행만. 방어 쌍 행(극단 필터 통과)은 높은 극단(H·B/D 최대·상승),
    * 그 밖은 변형 범위 끝·현재·변형 스윕 칸 중 최선이며 성격 변형 스윕이 다 나온 뒤에만 붙는다. 판정을 다시 하지 않고 이미 나온 칸에서 고른다.
    */
   best?: string
@@ -503,9 +506,9 @@ export interface TargetStat {
   sp: number
 }
 export interface TargetOption {
-  /** 그 최소 SP의 실제 판정(목표 순위보다 좋을 수 있다). 공격·방어 탭 RollTier, 스피드 탭 SpeedOrder */
+  /** 그 최소 SP의 실제 판정(목표 순위보다 좋을 수 있다). RollTier */
   label: string
-  /** 공격·스피드 탭은 스윕 능력치 하나, 방어 탭은 [hp, def|spd] */
+  /** 공격 탭은 스윕 능력치 하나, 방어 탭은 [hp, def|spd] */
   stats: readonly TargetStat[]
   /** 다른 능력치에서 빼야 할 SP n = (stats SP 합 − 현재 그 능력치 SP 합) − 잔여 예산. 0이면 붙이지 않음 */
   need: number
@@ -515,7 +518,7 @@ export interface TargetView {
   label: string
   /** better: 현재보다 한 단계 이상 위. keep: 이미 최상위이거나 두 변형 모두 위가 SP 0~최대에서 불가능해 현재 판정 유지 최소값 */
   goal: 'better' | 'keep'
-  /** 상승(+) 대상 능력치(공격·스피드 탭 스윕 능력치, 방어 탭 def|spd) */
+  /** 상승(+) 대상 능력치(공격 탭 스윕 능력치, 방어 탭 def|spd) */
   plusStat: Exclude<StatId, 'hp'>
   /** 무보정 성격 최소. SP 0~최대에서 목표 순위에 닿지 않으면 null("불가") */
   neutral: TargetOption | null
@@ -568,7 +571,7 @@ export interface CardView {
   /** 도구 변형 카드(별도 행: 공격 탭 반감열매·방어 탭 화력 도구)면 그 도구 */
   berry?: BerryVariant
   /**
-   * 보이는 항목의 판정 행(공격 탭 1행, 방어 탭 H행·B/D행 쌍 또는 극단 필터 고정 1줄, 계산 불가·판정 전 포함). 스피드 탭은 카드의 모든 행
+   * 보이는 항목의 판정 행(공격 탭 1행, 방어 탭 H행·B/D행 쌍 또는 극단 필터 고정 1줄, 계산 불가·판정 전 포함)
    */
   rows: readonly RowView[]
   /**
@@ -578,7 +581,7 @@ export interface CardView {
   headline: Headline
   /** 보이는 항목 행 중 칸이 있는 ok·stale 변화 있는 행이 있음("변동 가능"). 대표 행과 따로 세어 드래그 중(updating)에도 유지된다 */
   variable: boolean
-  /** 이 카드의 기술 선택 항목(기술 채용률 순, items.compareItems). 스피드 탭·error 카드는 빈 배열 */
+  /** 이 카드의 기술 선택 항목(기술 채용률 순, items.compareItems). error 카드는 빈 배열 */
   items: readonly ItemView[]
   /** 보이는 항목 키(기본 항목이 정해지기 전이고 사용자가 고르지 않았으면 없음) */
   shownItem?: string
@@ -629,7 +632,7 @@ export interface DefaultItemView {
   basisCell?: CompactCell
 }
 export interface TabView {
-  tab: Tab
+  tab: DamageTab
   status: TabStatus
   /** 이 뷰를 계산한 고난수 기준 n(칸 범주·배지·목표가 같은 기준이다) */
   rollSteps: number

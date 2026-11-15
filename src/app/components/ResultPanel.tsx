@@ -3,7 +3,7 @@ import type { PokemonSet } from '../../core'
 import { chosenOption, groupCards, groupItems, sortByResult, type CardGroup, type CardView, type CustomTarget, type GroupItem, type PinnedBundle, type ResultBucket, type SortMode, type Tab } from '../../cards'
 import type { Snapshot } from '../../data/schema'
 import { namesOf } from '../../ui/names'
-import { categoryBadge, orderBadge, progressText } from '../../ui/format'
+import { categoryBadge, progressText } from '../../ui/format'
 import { josa, koReason } from '../../ui/koErrors'
 import type { TabViewState } from '../executor'
 import type { AppAction, MoveChoice } from '../state'
@@ -44,18 +44,15 @@ interface Props {
 }
 
 /** 계산결과순 그룹 이름(글자): 판정 그룹은 "<배지 문구>까지 가능" */
-function bucketText(tab: Tab, bucket: ResultBucket): string {
-  if (bucket.kind === 'tier') {
-    const badge = tab === 'speed' ? orderBadge({ category: bucket.tier }) : categoryBadge(bucket.tier)
-    return `${badge?.label ?? bucket.tier}까지 가능`
-  }
+function bucketText(bucket: ResultBucket): string {
+  if (bucket.kind === 'tier') return `${categoryBadge(bucket.tier)?.label ?? bucket.tier}까지 가능`
   return bucket.kind === 'no-change' ? '변동 없음' : bucket.kind === 'error' ? '계산 불가' : '계산 중'
 }
 
 /** 계산결과순 그룹 라벨: 판정 그룹은 결과 배지와 같은 배지에 "까지 가능"을 붙여 쓰고, 그 밖은 글자. 행 수는 "n마리" */
-function SectionLabel({ id, tab, bucket, count }: { id: string; tab: Tab; bucket: ResultBucket; count: number }) {
+function SectionLabel({ id, bucket, count }: { id: string; bucket: ResultBucket; count: number }) {
   let body: ReactNode
-  const badge = bucket.kind !== 'tier' ? undefined : tab === 'speed' ? orderBadge({ category: bucket.tier }) : categoryBadge(bucket.tier)
+  const badge = bucket.kind !== 'tier' ? undefined : categoryBadge(bucket.tier)
   if (bucket.kind === 'tier' && badge !== undefined) {
     body = (
       <span className="sort-group-name">
@@ -64,7 +61,7 @@ function SectionLabel({ id, tab, bucket, count }: { id: string; tab: Tab; bucket
       </span>
     )
   } else {
-    body = <span className="sort-group-text">{bucketText(tab, bucket)}</span>
+    body = <span className="sort-group-text">{bucketText(bucket)}</span>
   }
   return (
     <h2 className="sort-group-label" id={id}>
@@ -126,7 +123,7 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
   const view = state.kind === 'view' ? state.view : undefined
   const groups = useMemo(() => (view === undefined ? [] : groupCards(view.cards, tab, pinnedBundles)), [view, tab, pinnedBundles])
   // 포켓몬 한 줄의 기술 선택 항목(분류마다 분류 기본 배분의 항목). 행은 항목을 원소 단위로 비교해 바뀐 줄만 다시 그린다(CardItem sameProps).
-  const itemsOf = useMemo(() => new Map(tab === 'speed' ? [] : groups.map((g) => [g.key, groupItems(g)] as const)), [groups, tab])
+  const itemsOf = useMemo(() => new Map(groups.map((g) => [g.key, groupItems(g)] as const)), [groups])
   const onChooseItem = useCallback(
     (group: CardGroup, card: CardView, item: GroupItem) => {
       dispatch({ type: 'choose-move', choice: { tab, source: group.opponent.source, opponentId: group.opponent.id, key: item.item.key } })
@@ -181,7 +178,7 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
     const g = to.items.find((it) => it.group.key === key)
     if (live !== null && g !== undefined) {
       const berry = g.group.berry === undefined ? '' : ` ${game.data.items[g.group.berry.item]?.name.ko ?? g.group.berry.item} 지닌 경우`
-      live.textContent = `${names.species.label(g.group.opponent.id)}${berry}: ${bucketText(tab, to.bucket)} 그룹으로 옮겼습니다.`
+      live.textContent = `${names.species.label(g.group.opponent.id)}${berry}: ${bucketText(to.bucket)} 그룹으로 옮겼습니다.`
     }
   }, [sections, sortMode, tab, names, game])
   // 추가 패널을 열면(패널의 포커스 이동보다 먼저) 목록 스크롤을 맨 위로: 패널이 고정된 진행 줄 밑에 숨지 않는다.
@@ -211,7 +208,7 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
   // 1·2단계가 끝난 현재 세대 뷰에서, 그 상대 줄이 있고 어느 배분에도 그 항목이 없을 때만(계산 중 일시 상태로는 풀지 않는다).
   const stage12Done = view !== undefined && !superseded && view.stage12Done
   useEffect(() => {
-    if (!stage12Done || tab === 'speed') return
+    if (!stage12Done) return
     for (const c of moveChoices) {
       if (c.tab !== tab) continue
       const mine = groups.filter((g) => g.opponent.source === c.source && g.opponent.id === c.opponentId)
@@ -345,7 +342,7 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
                       data-tier={sec.bucket.kind === 'tier' ? sec.bucket.tier : undefined}
                       data-count={sec.items.length}
                     >
-                      <SectionLabel id={labelId(sec.key)} tab={tab} bucket={sec.bucket} count={sec.items.length} />
+                      <SectionLabel id={labelId(sec.key)} bucket={sec.bucket} count={sec.items.length} />
                     </li>,
                     ...items,
                   ]

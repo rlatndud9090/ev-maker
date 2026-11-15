@@ -146,8 +146,10 @@ export function sameImageGroups(entries, known = KNOWN_SAME_IMAGE) {
 }
 
 /**
- * 이번에 받는 도구: 반감열매 18종(src/cards/berries.ts RESIST_BERRIES) + 화력 도구 22종(src/cards/powerItems.ts POWER_ITEMS).
- * 두 목록의 합과 같아야 한다(단위 테스트가 확인).
+ * 받는 도구(PRD R14 대상 집합에서 메가스톤을 뺀 정적 목록). 이 스크립트는 cards·core를 import하지 않는다.
+ *  - 반감열매 18종(src/cards/berries.ts RESIST_BERRIES) + 화력 도구 22종(src/cards/powerItems.ts POWER_ITEMS)
+ *  - 번들된 전 메타의 래더 가정 세트 도구, 구애스카프, "스카프 아닌 최다 도구" 후보, 검은철구(AC19)
+ * cards의 R14 집합 계산 결과(메가스톤 밖)가 이 목록에 모두 들어 있어야 한다(단위 검사가 확인).
  */
 export const ITEM_ICON_IDS = Object.freeze([
   'babiriberry',
@@ -190,6 +192,19 @@ export const ITEM_ICON_IDS = Object.freeze([
   'silkscarf',
   'spelltag',
   'softsand',
+  'choicescarf',
+  'ironball',
+  'damprock',
+  'electricseed',
+  'focussash',
+  'grassyseed',
+  'leftovers',
+  'lightclay',
+  'psychicseed',
+  'rockyhelmet',
+  'sitrusberry',
+  'whiteherb',
+  'widelens',
 ])
 
 /** 스냅샷들(+메타 등장 종)에서 아이콘을 받을 로스터. 같은 id는 처음 본 스냅샷 기준. */

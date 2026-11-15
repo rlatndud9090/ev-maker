@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { cards, combo, findOverlaps, openProduct, region, selectTab, tabPanel, waitComplete, type ProductTab } from './helpers'
+import { cards, combo, findOverlaps, mySet, openProduct, region, selectTab, tabPanel, waitComplete, type ProductTab } from './helpers'
 
 // 목록 위 설정 개편(사용자 요청 2026-11-12): 통계 설정 → 표시 설정 → 포켓몬 찾기 3줄, 정렬 토글(사용률/계산결과순),
 // 계산결과순 그룹 라벨, "포켓몬 추가"는 진행 줄 오른쪽 끝.
@@ -11,21 +11,17 @@ const sortButton = (page: Page, name: '사용률' | '계산결과순') => sortTo
 const generation = async (page: Page) => Number(await tabPanel(page).getAttribute('data-generation'))
 
 /** 탭 관점 유리 → 불리 순서의 그룹 라벨 배지 문구(독립 기대값) */
-const TIER_LABELS: Record<ProductTab, readonly string[]> = {
+const TIER_LABELS: Record<Exclude<ProductTab, '스피드'>, readonly string[]> = {
   공격: ['확정1타', '고난수1타', '중난수1타', '저난수1타', '확정견딤'],
   방어: ['확정견딤', '저난수1타', '중난수1타', '고난수1타', '확정1타'],
-  스피드: ['선공', '동속', '후공'],
 }
-/** 결과 배지 색 단계(ui/format KO_BADGE·ORDER_TONE과 같은 계약) */
+/** 결과 배지 색 단계(ui/format KO_BADGE와 같은 계약) */
 const TONE: Record<string, string> = {
   확정1타: 'red',
   고난수1타: 'orange',
   중난수1타: 'yellow',
   저난수1타: 'lime',
   확정견딤: 'green',
-  선공: 'green',
-  동속: 'yellow',
-  후공: 'red',
 }
 const TAIL = ['no-change', 'error', 'pending']
 
@@ -72,7 +68,7 @@ async function listItems(page: Page): Promise<Item[]> {
           variable: e.dataset.variable,
           rank: e.dataset.rank === undefined ? undefined : Number(e.dataset.rank),
           origin: e.dataset.origin,
-          current: e.querySelector('[data-testid="ko-badge"], [data-testid="order-badge"]')?.firstChild?.textContent ?? undefined,
+          current: e.querySelector('[data-testid="ko-badge"]')?.firstChild?.textContent ?? undefined,
           describedBy: (e.querySelector('.card-toggle')?.getAttribute('aria-describedby') ?? '').split(' ').filter(Boolean),
         }
       }),
@@ -95,39 +91,35 @@ test.describe('설정 영역 3줄', () => {
     const box = (await page.getByTestId('result-box').boundingBox())!
     expect(ys[2]).toBeLessThan(box.y)
 
-    // 1행: 형식 · 기준 월 · 최소 사용률 5종(SP 배분 · 랭크업 기술 · 구애스카프 · 반감열매 · 화력 도구) 순
+    // 1행: 형식 · 기준 월 · 최소 사용률 6종(SP 배분 · 랭크업 기술 · 구애스카프 · 날씨 특성 · 반감열매 · 화력 도구) 순
     const statNames = await stats.locator('select, input').evaluateAll((els) => els.map((e) => (e as HTMLElement).getAttribute('aria-label') ?? e.closest('label')?.firstChild?.textContent?.trim()))
-    expect(statNames).toEqual(['형식', '기준 월', 'SP 배분 최소(%)', '랭크업 기술 최소(%)', '구애스카프 최소(%)', '반감열매 최소(%)', '화력 도구 최소(%)'])
+    expect(statNames).toEqual(['형식', '기준 월', 'SP 배분 최소(%)', '랭크업 기술 최소(%)', '구애스카프 최소(%)', '날씨 특성 최소(%)', '반감열매 최소(%)', '화력 도구 최소(%)'])
     await expect(combo(stats, '형식')).toHaveValue('bo1')
     await expect(combo(stats, '기준 월')).toBeVisible()
     await expect(spin(stats, 'SP 배분 최소(%)')).toHaveValue('5')
     await expect(spin(stats, '랭크업 기술 최소(%)')).toHaveValue('10')
-    await expect(spin(stats, '구애스카프 최소(%)')).toHaveValue('10')
+    await expect(spin(stats, '구애스카프 최소(%)')).toHaveValue('5')
+    await expect(spin(stats, '날씨 특성 최소(%)')).toHaveValue('10')
     await expect(spin(stats, '반감열매 최소(%)')).toHaveValue('5')
     await expect(spin(stats, '화력 도구 최소(%)')).toHaveValue('5')
     await expect(stats).toContainText('통계 설정')
     // 보이는 라벨이 그대로 접근 이름(WCAG 2.5.3), "사용률" 뜻은 설명으로
-    for (const name of ['SP 배분', '랭크업 기술', '구애스카프', '반감열매', '화력 도구']) {
+    for (const name of ['SP 배분', '랭크업 기술', '구애스카프', '날씨 특성', '반감열매', '화력 도구']) {
       await expect(spin(stats, `${name} 최소(%)`)).toHaveAccessibleDescription(new RegExp(`^${name} 최소 사용률\\(%\\)`))
     }
 
-    // 2행: 상위 N → 정렬(사용률/계산결과순) → 고난수 기준(공격·방어 탭). 순풍 토글은 스피드 탭에서만(고난수 기준 대신)
+    // 2행: 상위 N → 정렬(사용률/계산결과순) → 고난수 기준(공격·방어 탭). 스피드 탭은 상위 N만(순풍은 차트 머리 "내 순풍")
     const displayOrder = () =>
-      display.locator('input, [data-testid="sort-toggle"], [data-testid="tailwind-toggles"]').evaluateAll((els) =>
-        els.map((e) =>
-          e.matches('[data-testid="sort-toggle"]')
-            ? '정렬'
-            : e.matches('[data-testid="tailwind-toggles"]')
-              ? `순풍:${[...e.querySelectorAll('button')].map((b) => b.textContent).join('/')}`
-              : e.closest('label')?.firstChild?.textContent?.trim() || e.closest('label')?.textContent?.trim(),
-        ),
+      display.locator('input, [data-testid="sort-toggle"]').evaluateAll((els) =>
+        els.map((e) => (e.matches('[data-testid="sort-toggle"]') ? '정렬' : e.closest('label')?.firstChild?.textContent?.trim() || e.closest('label')?.textContent?.trim())),
       )
     expect(await displayOrder()).toEqual(['상위 N', '정렬', '고난수 1타 기준'])
     await expect(display.getByRole('checkbox')).toHaveCount(0)
     await selectTab(page, '방어')
     expect(await displayOrder()).toEqual(['상위 N', '정렬', '고난수 견딤 기준'])
     await selectTab(page, '스피드')
-    expect(await displayOrder()).toEqual(['상위 N', '정렬', '순풍:내 순풍/상대 순풍'])
+    expect(await displayOrder()).toEqual(['상위 N'])
+    await expect(display.getByRole('button', { name: /순풍/ })).toHaveCount(0)
     await selectTab(page, '공격')
     await expect(display.getByRole('group', { name: '정렬', exact: true }).getByRole('button')).toHaveText(['사용률', '계산결과순'])
     await expect(sortButton(page, '사용률')).toHaveAttribute('aria-pressed', 'true')
@@ -147,11 +139,23 @@ test.describe('설정 영역 3줄', () => {
     await expect(page.locator('.toolbar').getByRole('button', { name: '포켓몬 추가', exact: true })).toHaveCount(0)
   })
 
-  test('최소 사용률 3종은 인라인으로 바로 반영(세대 +1·재계산), 범위 밖은 반영하지 않는다', async ({ page }) => {
+  test('최소 사용률: 카드 계산 기준 2종은 인라인으로 바로 반영(세대 +1·재계산), 스피드 차트 전용 2종(구애스카프·날씨 특성)은 세대 그대로, 범위 밖은 반영하지 않는다', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     const stats = rowGroup(page, '통계 설정')
-    for (const name of ['SP 배분 최소(%)', '랭크업 기술 최소(%)', '구애스카프 최소(%)']) {
+    for (const name of ['구애스카프 최소(%)', '날씨 특성 최소(%)']) {
+      const field = spin(stats, name)
+      const before = await generation(page)
+      await field.fill('150')
+      await field.blur()
+      await expect(field).not.toHaveValue('150')
+      await field.fill('1')
+      await field.blur()
+      await expect(field).toHaveValue('1')
+      expect(await generation(page), `${name}는 카드 계산에 쓰이지 않는다`).toBe(before)
+      await expect(tabPanel(page)).toHaveAttribute('data-complete', 'true')
+    }
+    for (const name of ['SP 배분 최소(%)', '랭크업 기술 최소(%)']) {
       const field = spin(stats, name)
       await expect(field).toBeVisible()
       const before = await generation(page)
@@ -166,7 +170,7 @@ test.describe('설정 영역 3줄', () => {
       await waitComplete(page)
     }
     // 랭크업 기술 기준을 낮추면(1%) 랭크 후 항목이 늘거나 같다: 100%로 올리면 랭크 후 항목이 사라져 기술 선택 항목 수가 준다.
-    // 상대 랭크 수단은 방어·스피드 탭만 보므로(공격 탭은 내 능동 랭크업만, 2026-11-12) 방어 탭에서 센다.
+    // 상대 랭크 수단은 방어 탭 카드만 보므로(공격 탭은 내 능동 랭크업만, 2026-11-12) 방어 탭에서 센다.
     await selectTab(page, '방어')
     const rankRows = async () => {
       await waitComplete(page)
@@ -175,8 +179,6 @@ test.describe('설정 영역 3줄', () => {
     const low = await rankRows()
     await spin(stats, '랭크업 기술 최소(%)').fill('100')
     await spin(stats, '랭크업 기술 최소(%)').blur()
-    await spin(stats, '구애스카프 최소(%)').fill('100')
-    await spin(stats, '구애스카프 최소(%)').blur()
     const high = await rankRows()
     expect(low).toBeGreaterThan(high)
   })
@@ -204,7 +206,7 @@ test.describe('정렬: 계산결과순', () => {
     expect(await generation(page)).toBe(before)
   })
 
-  for (const tab of ['공격', '방어', '스피드'] as const) {
+  for (const tab of ['공격', '방어'] as const) {
     test(`${tab} 탭: 그룹은 유리 → 불리 → 변동 없음 순, 그룹 안 사용률 내림차순, 변동 가능 태그와 그룹 일치, 라벨 배지는 결과 배지 디자인`, async ({ page }) => {
       await openProduct(page)
       await selectTab(page, tab)
@@ -365,12 +367,8 @@ test.describe('정렬: 계산결과순', () => {
     await expect(row.locator('.bundle-btn')).toBeFocused()
     // 화면도 그 행으로 따라간다
     await expect(row.locator('.bundle-btn')).toBeInViewport()
-    // 이름 칸의 포켓몬 이름(반감열매 행이면 배지를 뺀 이름)
-    const name = (await row.locator('.card-name').evaluate((el) => {
-      const c = el.cloneNode(true) as HTMLElement
-      c.querySelector('[data-testid="berry-badge"]')?.remove()
-      return c.textContent ?? ''
-    })).trim()
+    // 이름 칸의 포켓몬 이름(도구 겹침은 이름 칸 밖 이미지 상자에 있다)
+    const name = ((await row.locator('.card-name').textContent()) ?? '').trim()
     await expect(page.getByTestId('sort-moved')).toContainText(name)
     await expect(page.getByTestId('sort-moved')).toContainText(/(까지 가능|변동 없음) 그룹으로 옮겼습니다/)
     await expect(page.getByTestId('sort-moved')).toHaveAttribute('aria-live', 'polite')
@@ -397,11 +395,10 @@ test.describe('정렬: 계산결과순', () => {
       }
       new MutationObserver(read).observe(document.querySelector('[data-testid="tab-panel"]')!, { childList: true, subtree: true })
     })
-    await selectTab(page, '스피드')
     await waitComplete(page)
-    const wind = rowGroup(page, '순풍').getByRole('button', { name: '상대 순풍', exact: true })
-    await wind.click()
-    await expect(wind).toHaveAttribute('aria-pressed', 'true')
+    const before = await generation(page)
+    await mySet(page).getByRole('button', { name: 'SP 공격 1 내리기', exact: true }).click()
+    await expect.poll(() => generation(page)).toBeGreaterThan(before)
     await waitComplete(page)
     await expect(page.getByTestId('sort-group').filter({ hasText: '계산 중' })).toHaveCount(0)
     expect(seen.has('pending-not-last')).toBe(false)

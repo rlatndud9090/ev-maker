@@ -38,7 +38,6 @@ function canonical(v: unknown): unknown {
 interface KeyParts {
   /** 키의 작업 종류. variant는 같은 세트의 sweep과 같은 키 공간을 쓴다 */
   kind: string
-  judge: 'damage' | 'speed'
   options: Record<string, boolean>
   side: 'attacker' | 'defender' | null
   stats: readonly StatId[]
@@ -62,7 +61,6 @@ function partsOf(plan: TabPlan, task: RowTask): KeyParts {
     if (moveId === undefined) throw new Error(`단건 판정 대상 ${task.id}에 기술이 없다`)
     return {
       kind: 'probe',
-      judge: 'damage',
       options: {},
       side: filter !== undefined ? 'defender' : (row?.sweep?.side ?? 'attacker'),
       stats: [],
@@ -86,7 +84,6 @@ function partsOf(plan: TabPlan, task: RowTask): KeyParts {
     }
     return {
       kind: task.kind === 'ends' ? 'ends' : 'sweep',
-      judge: spec.judge,
       options: task.kind === 'ends' ? { ignoreSpTotal: true } : { judgeOverBudget: true },
       side: spec.sweep.side,
       stats: [spec.sweep.stat],
@@ -103,7 +100,6 @@ function partsOf(plan: TabPlan, task: RowTask): KeyParts {
     if (spec === undefined) throw new Error(`극단 필터 ${task.filterId}가 계획에 없다`)
     return {
       kind: task.kind,
-      judge: 'damage',
       options: { ignoreSpTotal: true },
       side: 'defender',
       stats: spec.stats,
@@ -119,7 +115,6 @@ function partsOf(plan: TabPlan, task: RowTask): KeyParts {
   if (spec === undefined) throw new Error(`고정 판정 ${task.fixedId}가 계획에 없다`)
   return {
     kind: 'fixed',
-    judge: 'damage',
     options: {},
     side: null,
     stats: [],
@@ -135,16 +130,15 @@ function partsOf(plan: TabPlan, task: RowTask): KeyParts {
 /**
  * 세트 moves는 키에 넣지 않는다: 합법성 검증은 계획 단계(내 세트 validateSet, 상대 resolveAssumption)에서 끝났다는 전제다.
  * 스윕·양 끝·극단·쌍 판정은 덮어쓰는 능력치 SP를 빼고, 고정 판정은 관여 SP를 그대로 넣는다.
- * 대미지 칸 범주는 rollTier(p, rollSteps)라 rollSteps를 넣고, 스피드는 넣지 않는다.
+ * 대미지 칸 범주는 rollTier(p, rollSteps)라 rollSteps를 넣는다.
  */
 export function judgementKey(plan: TabPlan, task: RowTask): string {
   const p = partsOf(plan, task)
-  const rel = relevantStats(p.judge, p.refs, calcAbility(plan.game, p.attacker))
+  const rel = relevantStats(p.refs, calcAbility(plan.game, p.attacker))
   const exclude = (side: 'attacker' | 'defender') => (p.side === side ? p.stats : [])
   return JSON.stringify([
     plan.game.manifest.regulation.id,
     p.kind,
-    p.judge,
     canonical(p.options),
     p.side,
     p.stats,
@@ -153,6 +147,6 @@ export function judgementKey(plan: TabPlan, task: RowTask): string {
     p.moveId,
     canonical(p.conditions),
     p.natures === null ? null : [p.natures.stat, p.natures.neutral, p.natures.plus],
-    p.judge === 'speed' ? null : ['rollSteps', plan.rollSteps],
+    ['rollSteps', plan.rollSteps],
   ])
 }

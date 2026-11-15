@@ -1,6 +1,6 @@
 // 행 작업 하나를 코어 판정으로 계산한다. 범주는 코어가 낸 값을 그대로 옮긴다.
-import { CoreError, CoreInputError, judgeDamage, judgeSpeed, sweepDamage, sweepSpeed } from '../core'
-import type { CellJudgement, DamageResult, PokemonSet, RollTier, SpeedResult, SweepResult } from '../core'
+import { CoreError, CoreInputError, judgeDamage, sweepDamage } from '../core'
+import type { CellJudgement, DamageResult, PokemonSet, RollTier, SweepResult } from '../core'
 import type { StatId } from '../data/schema'
 import { judgementKey } from './key'
 import { variantNature, withNature } from './natures'
@@ -36,16 +36,6 @@ function compactDamage(sp: number, j: CellJudgement<DamageResult>): CompactCell 
   return { sp, category: j.category, immune: true, ohkoChance: 0 }
 }
 
-function compactSpeed(plan: TabPlan, sp: number, j: CellJudgement<SpeedResult>): CompactCell {
-  const mine = plan.mySide === 'attacker'
-  return {
-    sp,
-    category: j.category,
-    mySpeed: mine ? j.value.attackerSpeed : j.value.defenderSpeed,
-    opponentSpeed: mine ? j.value.defenderSpeed : j.value.attackerSpeed,
-  }
-}
-
 function compactSweep<T>(result: SweepResult<T>, toCell: (sp: number, j: CellJudgement<T>) => CompactCell): CompactCell[] {
   return result.cells.map((c) => {
     if (c.kind !== 'ok') throw new Error(`judgeOverBudget 스윕에 판정하지 않은 칸(sp ${c.sp})이 있다`)
@@ -63,7 +53,6 @@ function endCell(plan: TabPlan, spec: RowSpec & { sweep: NonNullable<RowSpec['sw
   const { side, stat } = spec.sweep
   const a = side === 'attacker' ? withSps(spec.attacker, [stat], sp) : spec.attacker
   const d = side === 'defender' ? withSps(spec.defender, [stat], sp) : spec.defender
-  if (spec.judge === 'speed') return compactSpeed(plan, sp, judgeSpeed(plan.game, a, d, spec.conditions, IGNORE_TOTAL))
   return compactDamage(sp, judgeDamage(plan.game, side, a, d, moveOf(spec), spec.conditions, undefined, { ...IGNORE_TOTAL, rollSteps: plan.rollSteps }))
 }
 
@@ -86,11 +75,6 @@ function moveOf(spec: RowSpec): string {
 function computeSweep(plan: TabPlan, rowId: string, nature?: NatureVariant): CompactCell[] {
   const base = rowSpec(plan, rowId)
   const spec = nature === undefined ? base : (specWithNature(plan, base, rowVariantNature(base, nature)) as typeof base)
-  if (spec.judge === 'speed') {
-    return compactSweep(sweepSpeed(plan.game, spec.attacker, spec.defender, spec.conditions, OVER_BUDGET), (sp, j) =>
-      compactSpeed(plan, sp, j),
-    )
-  }
   const r = sweepDamage(plan.game, spec.sweep, spec.attacker, spec.defender, moveOf(spec), spec.conditions, undefined, { ...OVER_BUDGET, rollSteps: plan.rollSteps })
   return compactSweep(r, compactDamage)
 }

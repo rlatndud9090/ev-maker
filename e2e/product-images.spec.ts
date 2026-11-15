@@ -42,21 +42,21 @@ test('목록 행: 이름 왼쪽 아이콘(장식)·열 정렬 유지, 이미지 
     if (r.request().resourceType() === 'image') images.push({ url: r.url(), status: r.status() })
   })
   await openProduct(page)
-  for (const tab of ['방어', '스피드', '공격'] as const) {
+  for (const tab of ['방어', '공격'] as const) {
     await selectTab(page, tab)
     await waitComplete(page)
     const n = await cards(page).count()
     expect(n).toBeGreaterThan(5)
-    // 행마다 아이콘(또는 같은 크기 빈 자리) 하나, 이름 칸 버튼 안·이름 왼쪽
-    expect(await cards(page).locator('.card-who > [data-testid="mon-icon"]').count()).toBe(n)
+    // 행마다 아이콘(또는 같은 크기 빈 자리) 하나, 이름 칸 버튼 안 이미지 상자(도구 겹침)·이름 왼쪽
+    expect(await cards(page).locator('.card-who [data-testid="mon-icon"]').count()).toBe(n)
     const geo = await cards(page).evaluateAll((els) =>
       els.slice(0, 12).map((el) => {
-        const icon = el.querySelector('.card-who > [data-testid="mon-icon"]')!.getBoundingClientRect()
+        const icon = el.querySelector('.card-who [data-testid="mon-icon"]')!.getBoundingClientRect()
         const name = el.querySelector('.card-name')!.getBoundingClientRect()
         const bundle = el.querySelector('.bundle-cell')!.getBoundingClientRect()
         return {
           id: (el as HTMLElement).dataset.opponent,
-          species: el.querySelector('.card-who > [data-testid="mon-icon"]')!.getAttribute('data-species-icon'),
+          species: el.querySelector('.card-who [data-testid="mon-icon"]')!.getAttribute('data-species-icon'),
           iconLeft: Math.round(icon.left),
           iconSize: [Math.round(icon.width), Math.round(icon.height)],
           nameLeft: Math.round(name.left),
@@ -78,7 +78,7 @@ test('목록 행: 이름 왼쪽 아이콘(장식)·열 정렬 유지, 이미지 
     expect(new Set(geo.map((g) => g.nameLeft)).size).toBe(1)
     expect(new Set(geo.map((g) => g.bundleLeft)).size).toBe(1)
     // 처음 보이는 행 아이콘은 실제로 그려진다(목록 아이콘은 지연 로드)
-    const first = cards(page).first().locator('.card-who > img')
+    const first = cards(page).first().locator('.card-who img[data-testid="mon-icon"]')
     await expect(first).toHaveAttribute('alt', '')
     await expect(first).toHaveAttribute('loading', 'lazy')
     await expect.poll(() => first.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(128)
@@ -113,8 +113,8 @@ test('다크 테마: 목록·내 포켓몬 아이콘 뒤에 옅은 받침 원(�
   await page.emulateMedia({ colorScheme: 'dark' })
   await openProduct(page)
   await waitComplete(page)
-  expect(await bg('.card-who > img.mon-icon')).toContain('radial-gradient')
+  expect(await bg('.card-who img.mon-icon')).toContain('radial-gradient')
   expect(await bg('img.my-mon-icon')).toContain('radial-gradient')
   await page.emulateMedia({ colorScheme: 'light' })
-  expect(await bg('.card-who > img.mon-icon')).toBe('none')
+  expect(await bg('.card-who img.mon-icon')).toBe('none')
 })

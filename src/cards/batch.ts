@@ -3,10 +3,10 @@ import { assembleTab } from './assemble'
 import { planTab } from './plan'
 import { computeRowTask } from './rowTask'
 import { nextStage, pendingTasks, taskKey } from './schedule'
-import type { CardInput, JudgementCache, RowTaskResult, Tab, TabView } from './types'
+import type { CardInput, DamageTab, JudgementCache, RowTaskResult, TabView } from './types'
 
 /** selections = 사용자 기술 선택(상대 키 opponentKey → 항목 키) */
-export function buildTabView(input: CardInput, tab: Tab, cache?: JudgementCache, selections: ReadonlyMap<string, string> = new Map()): TabView {
+export function buildTabView(input: CardInput, tab: DamageTab, cache?: JudgementCache, selections: ReadonlyMap<string, string> = new Map()): TabView {
   const plan = planTab(input, tab)
   const results = new Map<string, RowTaskResult>()
   for (;;) {

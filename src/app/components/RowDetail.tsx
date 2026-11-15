@@ -7,7 +7,6 @@ import {
   categoryTone,
   currentText,
   fixedText,
-  spanNeedText,
   spanText,
   spansOf,
   sumBandAriaLabel,
@@ -20,11 +19,25 @@ import {
 } from '../../ui/format'
 import { koReason } from '../../ui/koErrors'
 import { MoveLabel, VariableTag } from './MoveLabel'
-import { ROW_KIND_LABEL, basisText, rowRefsNote, rowTitle } from './text'
+import { MonWithItem } from './MonWithItem'
+import { rowRefsNote, type CardItemOverlay } from './text'
 
-/** 행 조건(기본·랭크 수단·도구) 식별 문자열 */
-const conditionOf = (row: RowView): string =>
-  row.basis === undefined ? 'base' : row.basis.kind === 'rank' ? JSON.stringify([row.basis.owner, row.basis.means.kind, row.basis.means.id]) : JSON.stringify([row.basis.kind, row.basis.item])
+/** 행 조건(기본·랭크 수단) 식별 문자열 */
+const conditionOf = (row: RowView): string => (row.basis === undefined ? 'base' : JSON.stringify([row.basis.owner, row.basis.means.kind, row.basis.means.id]))
+
+/**
+ * 펼친 상세 머리: 간단행과 같은 겹침 + 도구 이름 글자(터치 화면용, 점유율 없음). 간단행 표지와 겹치지 않게 겹침은 장식(held)이고
+ * 읽기 이름은 이 글자가 담는다. 도구가 없으면 그리지 않는다.
+ */
+export function DetailItem({ game, opponentId, item }: { game: Snapshot; opponentId: string; item: CardItemOverlay | undefined }) {
+  if (item === undefined) return null
+  return (
+    <p className="detail-item" data-testid="detail-item" data-item-id={item.id} data-item-role={item.role}>
+      <MonWithItem speciesId={opponentId} size={40} item={{ ...item, role: 'held' }} game={game} />
+      <span className="detail-item-name">{item.role === 'variant' ? `${item.name} 지닌 경우` : item.name}</span>
+    </p>
+  )
+}
 
 /** 판정 색 칩(결과 배지와 같은 5색) + 그 탭 관점의 좋고 나쁨 기호 */
 function TierChip({ tab, category }: { tab: Tab; category: string }) {
@@ -38,8 +51,6 @@ function TierChip({ tab, category }: { tab: Tab; category: string }) {
 interface BandCell {
   sp: number
   category: string
-  /** 예산 밖 빗금(스피드 탭만) */
-  over?: boolean
   title: string
 }
 
@@ -65,9 +76,8 @@ function Band({ cells, current, className = '', testId, label }: { cells: readon
             data-testid="band-cell"
             data-sp={c.sp}
             data-category={c.category}
-            data-over-budget={c.over === undefined ? undefined : c.over ? 'true' : 'false'}
             aria-current={c.sp === current ? 'true' : undefined}
-            className={`cell ko-${categoryTone(c.category)}${c.over ? ' over' : ''}${c.sp === current ? ' current' : ''}`}
+            className={`cell ko-${categoryTone(c.category)}${c.sp === current ? ' current' : ''}`}
             title={c.title}
           />
         ))}
@@ -83,14 +93,13 @@ function Band({ cells, current, className = '', testId, label }: { cells: readon
   )
 }
 
-/** 목표 문구: SP 조합("H0 B0+")은 한 덩어리로만 줄바꿈한다. need = "다른 능력치에서 n 필요"(스피드 탭만) */
-function TargetText({ target, need }: { target: TargetLike; need: boolean }) {
+/** 목표 문구: SP 조합("H0 B0+")은 한 덩어리로만 줄바꿈한다 */
+function TargetText({ target }: { target: TargetLike }) {
   const seg = targetSegments(target)
   const opt = (o: TargetSegment) => (
     <>
       {o.lead}
       {o.sps !== undefined && <span className="sp-combo">{o.sps}</span>}
-      {need && o.note}
     </>
   )
   return (
@@ -121,24 +130,15 @@ interface Props {
   row: RowView
 }
 
-/**
- * 판정 행 하나. 공격·방어 탭(R9): 제목은 기술 라벨만("+2 도각참"), 빗금·"다른 능력치에서 n 필요" 없음.
- * 스피드 탭은 이전 표기(행 종류 배지·근거·능력치 접두·예산 밖 빗금) 그대로.
- */
+/** 판정 행 하나(R9): 제목은 기술 라벨만("+2 도각참"), 빗금·"다른 능력치에서 n 필요" 없음. */
 export const RowDetail = memo(function RowDetail({ game, tab, row }: Props) {
-  const speed = tab === 'speed'
   const note = rowRefsNote(game, tab, row)
   const stat = row.sweepStat
-  // 현재 판정은 목표 문구와 같은 판정 라벨(코어 5단 판정·행동 순서)로 쓴다.
+  // 현재 판정은 목표 문구와 같은 판정 라벨(코어 5단 판정)로 쓴다.
   const cur = row.cells.find((c) => c.sp === row.current.sp)
   const currentLabel = cur === undefined ? undefined : cellLabel(tab, cur)
-  const cells: BandCell[] = row.cells.map((c) => ({
-    sp: c.sp,
-    category: c.category,
-    ...(speed ? { over: c.overBudget } : {}),
-    title: `SP ${c.sp}: ${categoryLabel(c.category)}${speed && c.need > 0 ? ` (다른 능력치에서 ${c.need} 필요)` : ''}`,
-  }))
-  const spans = spansOf(row.cells.map((c) => (speed ? c : { ...c, overBudget: false, need: 0 })))
+  const cells: BandCell[] = row.cells.map((c) => ({ sp: c.sp, category: c.category, title: `SP ${c.sp}: ${categoryLabel(c.category)}` }))
+  const spans = spansOf(row.cells.map((c) => ({ sp: c.sp, category: c.category, overBudget: false })))
   return (
     <li
       className={`row row-${row.status}`}
@@ -151,18 +151,10 @@ export const RowDetail = memo(function RowDetail({ game, tab, row }: Props) {
       data-provisional={row.provisional ? 'true' : undefined}
     >
       <div className="row-head">
-        {speed ? (
-          <>
-            <span className="row-kind">{ROW_KIND_LABEL[row.kind]}</span>
-            <strong className="row-title">{rowTitle(game, row)}</strong>
-          </>
-        ) : (
-          <strong className="row-title">
-            <MoveLabel game={game} tab={tab} row={row} />
-          </strong>
-        )}
+        <strong className="row-title">
+          <MoveLabel game={game} tab={tab} row={row} />
+        </strong>
         {note && <span className="hint">({note})</span>}
-        {speed && row.basis && <span className="row-basis">{basisText(game, row.basis)}</span>}
       </div>
       <RowStatus game={game} row={row} />
       {row.noChange && !row.provisional && row.current.category !== undefined && (
@@ -182,26 +174,17 @@ export const RowDetail = memo(function RowDetail({ game, tab, row }: Props) {
             {row.target !== undefined && (
               <span className="boundary" data-testid="row-target">
                 {' '}
-                · <TargetText target={row.target} need={speed} />
+                · <TargetText target={row.target} />
               </span>
             )}
           </p>
           <Band cells={cells} current={row.current.sp} />
           <p className="band-legend">
-            {spans.map((s) => {
-              const need = speed ? spanNeedText(s) : undefined
-              return (
-                <span key={s.from} className={s.overBudget ? 'span over' : 'span'}>
-                  <span className={`tier-swatch ko-${categoryTone(s.category)}`} aria-hidden="true" /> {spanText(s)}
-                  {need !== undefined && <span className="span-need"> · {need}</span>}
-                </span>
-              )
-            })}
-            {speed && row.cells.some((c) => c.overBudget) && (
-              <span className="span over-key">
-                <span className="tier-swatch over-swatch" aria-hidden="true" /> 빗금 = 예산 밖(다른 능력치에서 SP를 빼야 닿는 칸)
+            {spans.map((s) => (
+              <span key={s.from} className="span">
+                <span className={`tier-swatch ko-${categoryTone(s.category)}`} aria-hidden="true" /> {spanText(s)}
               </span>
-            )}
+            ))}
           </p>
         </>
       )}

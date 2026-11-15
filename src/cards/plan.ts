@@ -4,7 +4,6 @@ import {
   CoreInputError,
   HELD_ITEM_POWER_MOVES,
   STAT_IDS,
-  checkSpeedSupport,
   compareSpeed,
   effectivenessAgainst,
   moveStatRefs,
@@ -23,7 +22,6 @@ import {
   type SpTable,
 } from '../core'
 import type { MetaEntry } from '../data/meta-schema'
-import { NO_ITEM } from '../data/meta-schema'
 import type { Snapshot, StatId } from '../data/schema'
 import { observedSpreadAssumption, representativeAssumption, resolveAssumption, type Assumption } from '../meta'
 import { berryActivates, resistBerriesOf } from './berries'
@@ -31,6 +29,7 @@ import { powerItemBoosts, powerItemsOf } from './powerItems'
 import { bundleStats, bundlesOf, natureSign } from './bundles'
 import { LAST_RESPECTS, LAST_RESPECTS_FAINTS, addedBundleKey, addedCardId, faintConditionId, cardId as makeCardId, presetKey, rowId } from './ids'
 import { presetAssumption } from './presets'
+import { trimSp } from './spTrim'
 import { TAB_MEANS_OWNERS, ladderMeans, rankMoveAllowed, rankVariants, setMeansCandidates, type CardRefStats, type MeansCandidate } from './rank'
 import type { BoostStat } from './rankMeans'
 import { mainMoves } from './items'
@@ -55,8 +54,7 @@ import {
   type PresetIndex,
   type RankBasis,
   type RowSpec,
-  type ScarfBasis,
-  type Tab,
+  type DamageTab,
   type TabPlan,
 } from './types'
 
@@ -137,13 +135,13 @@ class PlanBuilder {
   readonly fixed: Record<string, FixedSpec> = {}
 
   readonly input: CardInput
-  readonly tab: Tab
+  readonly tab: DamageTab
   readonly me: ResolvedSet
   readonly mySet: PokemonSet
   readonly conditions: BattleConditions
   readonly myMeans: readonly MeansCandidate[]
 
-  constructor(input: CardInput, tab: Tab, me: ResolvedSet, mySet: PokemonSet, conditions: BattleConditions, myMeans: readonly MeansCandidate[]) {
+  constructor(input: CardInput, tab: DamageTab, me: ResolvedSet, mySet: PokemonSet, conditions: BattleConditions, myMeans: readonly MeansCandidate[]) {
     this.input = input
     this.tab = tab
     this.me = me
@@ -311,13 +309,6 @@ class PlanBuilder {
   seed(category: Category | null, bundle: BundleSpec, assumption: Assumption): CardSeed {
     const r = resolveAssumption(this.game, assumption)
     if (!r.usable) return { category, bundle, assumption, error: errorReasons(r.error)[0] }
-    if (this.tab === 'speed') {
-      try {
-        checkSpeedSupport(this.game, assumption.set)
-      } catch (e) {
-        return { category, bundle, assumption, error: errorReasons(e)[0] }
-      }
-    }
     return { category, bundle, assumption, resolved: r.resolved }
   }
 
@@ -432,8 +423,8 @@ class PlanBuilder {
   }
 
   /** 내 쪽 세트(nature 공통)의 stat 성격 변형. 하락은 이 판정의 내 관여 능력치 밖에 둔다. */
-  natures(stat: NatureVariants['stat'], judge: 'damage' | 'speed', refs: MoveStatRefs | undefined, attackerAbility: string): NatureVariants {
-    const rel = relevantStats(judge, refs, attackerAbility)
+  natures(stat: NatureVariants['stat'], refs: MoveStatRefs | undefined, attackerAbility: string): NatureVariants {
+    const rel = relevantStats(refs, attackerAbility)
     return natureVariants(this.game, this.mySet.nature, stat, this.tab === 'defense' ? rel.defender : rel.attacker)
   }
 
@@ -479,12 +470,12 @@ class PlanBuilder {
         defender,
         conditions: this.damageConditions(this.me.ability),
         refs,
-        dependsOn: extra.error ? [] : myDependsOn({ judge: 'damage', refs, sweep }, 'attacker', [], this.me.ability),
+        dependsOn: extra.error ? [] : myDependsOn({ refs, sweep }, 'attacker', [], this.me.ability),
         ...extra,
       }
       if (!extra.error) {
         spec.sweep = sweep
-        spec.natures = this.natures(sweep.stat as NatureVariants['stat'], 'damage', refs, this.me.ability)
+        spec.natures = this.natures(sweep.stat as NatureVariants['stat'], refs, this.me.ability)
       }
       return this.addRow(card, parts, spec)
     }
@@ -575,7 +566,7 @@ class PlanBuilder {
         if (basis) spec.basis = basis
         return this.candidate('row', this.addRow(card, parts, spec).id, slot.moveId, resolved, meta, added)
       }
-      const natures = this.natures(def, 'damage', refs, ability)
+      const natures = this.natures(def, refs, ability)
       const f = this.addFilter(card, ['extreme', ...parts], {
         moveId: slot.moveId,
         attacker,
@@ -583,7 +574,7 @@ class PlanBuilder {
         conditions,
         stats: ['hp', def],
         natures,
-        dependsOn: myDependsOn({ judge: 'damage', refs, sweep: undefined }, 'defender', ['hp', def], ability),
+        dependsOn: myDependsOn({ refs, sweep: undefined }, 'defender', ['hp', def], ability),
         ...(basis ? { basis } : {}),
       })
       for (const stat of ['hp', def] as const) {
@@ -597,7 +588,7 @@ class PlanBuilder {
           defender,
           conditions,
           refs,
-          dependsOn: myDependsOn({ judge: 'damage', refs, sweep }, 'defender', [], ability),
+          dependsOn: myDependsOn({ refs, sweep }, 'defender', [], ability),
           gate: f.id,
           natures,
         }
@@ -655,47 +646,6 @@ class PlanBuilder {
       group(rankCondition(v.basis), attacker, defender, v.basis, v.whiteHerbConsumed)
     }
   }
-
-  speedCard(opp: Opponent, seed: CardSeed, scarf: boolean): void {
-    const card = this.openCard(opp, seed, [])
-    const resolved = seed.resolved
-    if (!resolved) return
-    const oppSet = seed.assumption.set
-    const sweep = { side: 'attacker' as const, stat: 'spe' as const }
-    const row = (kind: RowSpec['kind'], attacker: PokemonSet, defender: PokemonSet, parts: (string | null)[], basis?: RankBasis | ScarfBasis) => {
-      const spec: Omit<RowSpec, 'id' | 'cardId' | 'order'> = {
-        kind,
-        judge: 'speed',
-        sweep,
-        attacker,
-        defender,
-        conditions: this.conditions,
-        dependsOn: myDependsOn({ judge: 'speed', refs: undefined, sweep }, 'attacker'),
-        natures: this.natures('spe', 'speed', undefined, this.me.ability),
-      }
-      if (basis) spec.basis = basis
-      this.addRow(card, parts, spec)
-    }
-    row('base', this.mySet, oppSet, ['base'])
-    for (const v of this.variants(opp, resolved, { my: ['spe'], opponent: ['spe'] })) {
-      row('rank', withBoosts(this.mySet, v.basis.myBoosts), withBoosts(oppSet, v.basis.opponentBoosts), ['rank', ...meansParts(v.basis)], v.basis)
-    }
-    if (!scarf || !opp.entry) return
-    const shares = opp.entry.items.shares
-    if (oppSet.item === SCARF) {
-      const other = Object.entries(shares)
-        .filter(([id]) => id !== SCARF)
-        .sort((a, b) => b[1] - a[1] || byString(a[0], b[0]))[0]
-      if (!other) return
-      const [item, share] = other
-      const set = { ...oppSet }
-      if (item === NO_ITEM) delete set.item
-      else set.item = item
-      row('non-scarf', this.mySet, set, ['non-scarf', item], { kind: 'non-scarf', item, share })
-    } else if ((shares[SCARF] ?? 0) >= this.input.criteria.scarfShareMin) {
-      row('scarf', this.mySet, { ...oppSet, item: SCARF }, ['scarf', SCARF], { kind: 'scarf', item: SCARF, share: shares[SCARF] })
-    }
-  }
 }
 
 /**
@@ -734,25 +684,13 @@ function neutralNature(game: Snapshot, fallback: string): string {
   return Object.keys(natures).sort().find((id) => natures[id].plus === undefined || natures[id].plus === natures[id].minus) ?? fallback
 }
 
-/** SP 합이 total을 넘으면 키 밖 능력치에서 큰 것부터(동률 STAT_IDS 순) 덜어 낸다(제자리 수정). */
-function trimSp(sp: SpTable, keys: ReadonlySet<StatId>, total: number): void {
-  let over = STAT_IDS.reduce((a, s) => a + sp[s], 0) - total
-  const others = STAT_IDS.filter((s) => !keys.has(s))
-  while (over > 0) {
-    const s = others.reduce<StatId | undefined>((best, x) => (sp[x] > 0 && (best === undefined || sp[x] > sp[best]) ? x : best), undefined)
-    if (s === undefined) return
-    const cut = Math.min(over, sp[s])
-    sp[s] -= cut
-    over -= cut
-  }
-}
 const meansParts = (b: RankBasis): string[] => [b.owner, b.means.kind, b.means.id]
 
-function emptyPlan(input: CardInput, tab: Tab, mySp: SpTable, status: TabPlan['status'], conflicts: string[]): TabPlan {
+function emptyPlan(input: CardInput, tab: DamageTab, mySp: SpTable, status: TabPlan['status'], conflicts: string[]): TabPlan {
   return { ...planHead(input, tab, mySp), status, cards: [], rows: {}, filters: {}, fixed: {}, customTargetConflicts: conflicts, notices: [] }
 }
 
-function planHead(input: CardInput, tab: Tab, mySp: SpTable) {
+function planHead(input: CardInput, tab: DamageTab, mySp: SpTable) {
   const { manifest } = input.view.meta
   const { rules } = input.game.manifest
   return {
@@ -767,15 +705,8 @@ function planHead(input: CardInput, tab: Tab, mySp: SpTable) {
   }
 }
 
-/**
- * 스피드 탭: 공격측(나) attacker 순풍 = 내 순풍, defender 순풍 = 상대 순풍. 순풍 토글은 스피드 탭에서만 보이므로 공격·방어 탭은
- * 순풍 없음으로 계산한다(화면에 없는 입력이 판정·캐시 키에 섞이지 않게. 자이로볼 등 스피드 의존 위력도 순풍 없음 가정). 나머지 조건은 코어 기본값.
- */
-function conditionsFor(input: CardInput, tab: Tab): BattleConditions {
-  if (tab !== 'speed') return { attacker: { tailwind: false }, defender: { tailwind: false } }
-  const { myTailwind, opponentTailwind } = input.conditions
-  return { attacker: { tailwind: myTailwind }, defender: { tailwind: opponentTailwind } }
-}
+/** 공격·방어 판정은 순풍 없음(자이로볼 등 스피드 의존 위력도 순풍 없음 가정). 나머지 조건은 코어 기본값 */
+const DAMAGE_CONDITIONS: BattleConditions = { attacker: { tailwind: false }, defender: { tailwind: false } }
 
 /** 상위 N 또는 선택 종(사용률 순) + 목록 밖 타겟(추가 순). 목록 안 종 타겟은 충돌로 돌린다. */
 function opponentsOf(input: CardInput): { ladder: MetaEntry[]; custom: CustomTarget[]; conflicts: string[] } {
@@ -838,7 +769,7 @@ function representativeAbility(input: CardInput, entry: MetaEntry): string {
   return r.usable ? r.resolved.ability : a.set.ability
 }
 
-export function planTab(input: CardInput, tab: Tab): TabPlan {
+export function planTab(input: CardInput, tab: DamageTab): TabPlan {
   const { game } = input
   const raw = input.mySet as unknown
   const mySp = (isPlainObject(raw) && isPlainObject(raw.sp) ? { ...raw.sp } : {}) as SpTable
@@ -848,12 +779,11 @@ export function planTab(input: CardInput, tab: Tab): TabPlan {
   let me: ResolvedSet
   try {
     me = validateSet(game, mySet)
-    if (tab === 'speed') checkSpeedSupport(game, mySet)
   } catch (e) {
     return emptyPlan(input, tab, mySp, { kind: 'my-set-error', reasons: errorReasons(e) }, conflicts)
   }
 
-  const b = new PlanBuilder(input, tab, me, mySet, conditionsFor(input, tab), setMeansCandidates(me, 'me'))
+  const b = new PlanBuilder(input, tab, me, mySet, DAMAGE_CONDITIONS, setMeansCandidates(me, 'me'))
   const tabNotices: MoveNotice[] = []
   const opponents: Opponent[] = [
     ...custom.map((t): Opponent => ({ header: { id: t.rosterId, source: 'custom' }, custom: t })),
@@ -879,7 +809,7 @@ export function planTab(input: CardInput, tab: Tab): TabPlan {
         seeds.forEach((list) => list.forEach((seed) => b.attackCard(opp, b.withItem(seed, berry.item), slots, berry)))
       }
     }
-  } else if (tab === 'defense') {
+  } else {
     const myDefender: EffectivenessDefender = { types: me.species.types, ability: me.ability, item: me.item }
     for (const opp of opponents) {
       const notices: MoveNotice[] = []
@@ -916,12 +846,6 @@ export function planTab(input: CardInput, tab: Tab): TabPlan {
       for (const power of b.powerItemVariants(opp, seeds.flat(), ok)) {
         seeds.forEach((list) => list.forEach((seed) => b.defenseCard(opp, b.withItem(seed, power.item), ok, errors, notices, added, power)))
       }
-    }
-  } else {
-    for (const opp of opponents) {
-      const seeds = seedsOf(opp, null, ['spe'])
-      const scarfEligible = opp.entry !== undefined && opp.entry.mega === undefined
-      seeds.forEach((seed, i) => b.speedCard(opp, seed, scarfEligible && i === 0))
     }
   }
 
