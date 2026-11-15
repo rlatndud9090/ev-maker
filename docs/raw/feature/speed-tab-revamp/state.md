@@ -48,6 +48,7 @@ adr_status: pre-accepted
 - 2026-11-15 pre-approved: 사용자 명시 사전 승인 (harness:approve)
 - 2026-11-15 pre-approved 표기 수정: ADR 결정 3 데이터 표 표기의 중괄호를 하네스 템플릿 토큰 검사 통과용으로 풀어 씀(의미 변경 없음)
 - 2026-11-15 implementing: $feature-develop 진입(Phase 1 설계·구현 계획부터)
+- 2026-11-16 implementing: 구현 완료(웨이브 5개·리뷰 3관점 반영·스피드 차트 e2e 22건·시각 검증 스크린샷 수정). harness:gate 통과, 전체 e2e 135/135(단독 실행). $make-pr 대기
 ## 승인 이벤트
 
 <!-- 이 블록은 `npm run harness:approve`만 기록한다. 사용자의 명시 승인 발화가

@@ -1,4 +1,4 @@
-import { useMemo, useState, type Dispatch, type Ref } from 'react'
+import { useEffect, useMemo, useRef, useState, type Dispatch, type Ref } from 'react'
 import {
   bundleLabel,
   checkSpeedAddition,
@@ -143,12 +143,17 @@ function AddBundle({ game, model, opponentId, dispatch, onAdded }: { game: Snaps
     onAdded(b)
   }
   const listId = `${opponentId}-add-list`
+  const body = useRef<HTMLDivElement>(null)
+  // 펼친 목록이 프레임 끝에 붙은 기준선 띠 뒤로 숨지 않게 보이는 곳까지 스크롤(프레임 scroll-padding = 띠 높이)
+  useEffect(() => {
+    if (expanded) body.current?.scrollIntoView({ block: 'nearest' })
+  }, [expanded])
   return (
     <div className="speed-add">
       <button type="button" className="speed-detail-btn" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded((v) => !v)} data-testid="speed-add-toggle">
         다른 배분 추가 {expanded ? '▴' : '▾'}
       </button>
-      <div id={listId} className="speed-add-body" hidden={!expanded}>
+      <div id={listId} ref={body} className="speed-add-body" hidden={!expanded}>
         <ul className="speed-add-list" aria-label="S 배분 묶음">
           {options.map((o) => (
             <li key={JSON.stringify([o.sp, o.nature])}>

@@ -47,6 +47,8 @@ function abilityOf(game: Snapshot, set: PokemonSet): string | null {
   }
 }
 
+const summaryText = (s: ReturnType<typeof summarize>): string => (s === null ? '' : `추월 ${s.outspeeds} · 동속 ${s.tie} · 추월당함 ${s.outsped}`)
+
 /** 스피드 탭: 내 세트의 특성만 입력으로 받는 배지 모델을 한 번 만들고, 기준선(표시 SP)만 드래그를 따라간다 */
 export function SpeedTab({ game, view, state, mySet, displaySp, dispatch, tabId, panelId, generation, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel }: Props) {
   const { filters, myTailwind, added } = state.speedChart
@@ -68,10 +70,9 @@ export function SpeedTab({ game, view, state, mySet, displaySp, dispatch, tabId,
   const shownSet = useMemo(() => (shownSp === null ? mySet : { ...mySet, sp: shownSp }), [mySet, shownSp])
   const baseline: SpeedBaseline = useMemo(() => (shownSp === null ? confirmedBaseline : speedBaseline(game, shownSet, myTailwind)), [shownSp, confirmedBaseline, game, shownSet, myTailwind])
   const rows = useMemo(() => ladderRows(badges, baseline.kind === 'ok' ? baseline.speed : null, cmp), [badges, baseline, cmp])
-  const summary = useMemo(() => {
-    const s = summarize(badges, confirmedBaseline)
-    return s === null ? '' : `추월 ${s.outspeeds} · 동속 ${s.tie} · 추월당함 ${s.outsped}`
-  }, [badges, confirmedBaseline])
+  // 알림 영역은 확정 SP 기준, 띠 안의 보이는 요약은 화면 기준선(드래그 중 표시 SP)을 따른다
+  const summary = useMemo(() => summaryText(summarize(badges, confirmedBaseline)), [badges, confirmedBaseline])
+  const shownSummary = useMemo(() => summaryText(summarize(badges, baseline)), [badges, baseline])
 
   useLayoutEffect(() => {
     markSpeedChart(SPEED_CHART_FIRST_MARK, generation)
@@ -81,7 +82,8 @@ export function SpeedTab({ game, view, state, mySet, displaySp, dispatch, tabId,
 
   const rejected = baseline.kind === 'rejected' ? rejectionText(game, baseline.rejection, 'mine') : null
   const targets: readonly CustomTarget[] = state.customTargets
-  const empty = badges.length === 0 && model.unsupported.length === 0
+  // 축 위 배지가 하나도 없으면 빈 상태(순서 비교 불가 영역은 그 아래에 그대로, ADR 결정 1)
+  const empty = badges.length === 0
 
   return (
     <div
@@ -119,13 +121,20 @@ export function SpeedTab({ game, view, state, mySet, displaySp, dispatch, tabId,
       <p className="sr-only" role="status" data-testid="speed-summary">
         {summary}
       </p>
-      {empty ? (
-        <p className="empty speed-empty" data-testid="speed-empty">
-          표시할 상대가 없습니다. 사용률 상위 수나 선택 필터를 바꿔 보세요.
-        </p>
-      ) : (
-        <SpeedChart game={game} model={model} badges={badges} rows={rows} baseline={baseline} shownSet={shownSet} myTailwind={myTailwind} customTargets={targets} dispatch={dispatch} />
-      )}
+      {/* 빈 상태에서도 기준선 띠(요약 0)는 프레임 안에 보인다 */}
+      <SpeedChart
+        game={game}
+        model={model}
+        badges={badges}
+        rows={rows}
+        baseline={baseline}
+        shownSet={shownSet}
+        myTailwind={myTailwind}
+        customTargets={targets}
+        dispatch={dispatch}
+        summary={shownSummary}
+        empty={empty}
+      />
     </div>
   )
 }

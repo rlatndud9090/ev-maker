@@ -161,7 +161,113 @@ ux-gaps (MAJOR 5 · MINOR 10)
 
 ## 검증
 
-- (구현 단계에서 기록)
+> 2026-11-16 T12 기록. 값은 모두 테스트에 고정된 값이나 이번에 직접 잰 측정값이다. 출처 테스트를 행마다 적는다.
+
+### AC7b 기존 목표 문구 고정표 (10건)
+
+- 고정 데이터: `src/cards/__fixtures__/speedMinSpLegacy.ts`(기존 경로 `planTab(input, 'speed')` → `computeRowTask` → `assembleTab` → `targetText` 결과를 기존 스피드 카드를 지우기 전에 고정). 앱 코드는 이 파일을 import하지 않는다.
+- 새 결과 출처: `src/cards/speedLadder.test.ts` "기존 결과 고정표" 두 테스트(`minSpToPass`, 추월 목표 사례는 코어 `minSpToOutspeed`와도 같은지 확인).
+- 내 세트는 모두 한카리아스(m-c). "잔여"는 규칙 합계 66 − 내 SP 합으로, 10건 모두 0이다. 새 결과의 `over-budget`는 `remaining` = 현재 S SP + 잔여.
+- 표기: 무보정 / 상승. "S n"은 ok, "S n 초과(잔여 r)"은 over-budget, "불가"는 impossible.
+
+| id | 입력 요약 | 기존 문구 (목표) | 분류 | 새 결과 (엄격 추월 최소 S) |
+|---|---|---|---|---|
+| both-impossible | 내 S32 무보정 생명의구슬 vs 포푸니크 고집 S32 흰색허브 | 없음(전 칸 후공, 변화 없음) | 추월 목표 비교 대상 | 불가 / 불가 |
+| neutral-impossible | 내 S32 무보정 vs 메가 플라엣테(영원의꽃) 조심 S32 | "선공: 무보정 불가 / S19+" (better) | 추월 목표 비교 대상 | 불가 / S19 |
+| tie-boundary-outspeed | 내 S14 무보정 vs 타부자고 조심 S32 | "선공: 최소 S15 (다른 능력치에서 1 필요) / S3+" (better) | 추월 목표 비교 대상 | S15 초과(잔여 14) / S3 |
+| tie-boundary-tie-goal | 내 S16 무보정 vs 타부자고 겁쟁이 S32 | "동속: 최소 S27 (다른 능력치에서 11 필요) / S14+" (better, 동속 목표) | 규칙 변경으로 결과 다름 | S28 초과(잔여 16) / S15 |
+| my-tailwind | 내 S6 용감 + 내 순풍 vs 한카리아스 명랑 S32 스카프 | "선공: 최소 S5 / S0+" (better) | 추월 목표 비교 대상 | S5 / S0 |
+| my-scarf | 내 S14 용감 스카프 vs 메가 라이츄Y 겁쟁이 S32 | "선공: 최소 S12 / S0+" (better) | 추월 목표 비교 대상 | S12 / S0 |
+| opponent-scarf-tie-goal | 내 S10 용감 스카프 vs 대쓰여너 고집 S32 스카프(스카프 행) | "동속: 최소 S8 / S0+" (better, 무보정 동속 목표) | 규칙 변경으로 결과 다름 | S9 / S0 |
+| over-budget | 내 S0 무보정 스카프(H32·A32·B2) vs 메가 한카리아스Z 조심 S32 | "선공: 최소 S14 (다른 능력치에서 14 필요) / S2+ (다른 능력치에서 2 필요)" (better) | 추월 목표 비교 대상 | S14 초과(잔여 0) / S2 초과(잔여 0) |
+| keep-first | 내 S32 무보정 vs 대쓰여너 고집 S32 기합의띠 | "선공: 최소 S9 / S0+" (keep, 현재 유지) | 규칙 변경으로 결과 다름 | S9 / S0 |
+| opponent-scarf-keep | 내 S10 무보정 스카프 vs 대쓰여너 고집 S32 스카프(스카프 행) | "선공: 최소 S9 / S0+" (keep, 현재 유지) | 규칙 변경으로 결과 다름 | S9 / S0 |
+
+- 추월 목표 비교 대상 6건은 기존 값과 같다. 기존 "다른 능력치에서 n 필요"는 새 결과에서 `sp − remaining = n`으로 같은지 함께 본다(tie-boundary-outspeed 15 − 14 = 1, over-budget 14 − 0 = 14, 2 − 0 = 2).
+- 규칙 변경 4건: 동속 목표 2건은 엄격 추월이라 1씩 오른다(S27 → S28, S14+ → S15, S8 → S9). 현재 유지 2건은 숫자가 같지만 목표 뜻이 "현재 유지"에서 "추월"로 바뀌어 비교에서 뺀다(ADR 결정 2).
+- AC7b (a)(b)(c)도 같은 파일에서 고정한다: "(a) 그 SP에서 엄격히 앞서고 SP−1에서는 아니다, (b) 동속은 추월이 아니다", "(c) 0~32에서 닿지 않으면 불가".
+
+### AC12 조건 배지 경계 실수치
+
+- 출처: `src/cards/speedChart.test.ts` describe "경계 실수치(AC12)"(배지), `src/cards/speedLadder.test.ts` "기준선" 첫 테스트(내 기준선). 배지 값은 매번 `finalSpeed` 호출 결과와도 같은지 함께 본다(화면이 배수를 곱하지 않음).
+- 실데이터는 m-c 스냅숏·Bo1 메타(`realData()`). 합성 항목은 `speciesEntry` + `syntheticView`로 만든다.
+
+| 경계 | 입력 | 기대값 | 계산 |
+|---|---|---|---|
+| 스카프×순풍(상대 배지) | 실데이터 한카리아스 가정 세트(스카프 지님)의 순풍 배지 | 462 | 154 × 1.5 × 2 |
+| 스카프×순풍(내 기준선) | 내 한카리아스 무보정 S32: 도구 없음 / 스카프 / 스카프 + 내 순풍 | 154 / 231 / 462 | 154 × 1.5 = 231, × 2 = 462. 날씨·필드는 넣지 않고, 내 S 랭크(+2)도 기준선에 넣지 않는다(154) |
+| +1×스카프 | 합성 한카리아스 고집 S32 스카프, 용의춤 20% → 랭크업 배지 | 346 | floor(154 × 1.5) = 231, × 1.5 = 346.5 → 내림 346 |
+| 날씨×스카프 | 합성 대쓰여너 고집 S32 스카프, 특성 적응력 80%·쓱쓱 20% → 비 배지 | 390 | 130 × 2 × 1.5 (`finalSpeed(set, { weather: 'Rain' })`와 같음) |
+| 홀수 반올림 | 실데이터 펠리퍼 스카프 조건 배지 | 127 | 85 × 1.5 = 127.5 → 127 |
+| 무딘손 | 합성 이어롭 무딘손 명랑 S32: (1) 대표 도구 스카프(60%)·먹다남은음식 40% (2) 대표 도구 먹다남은음식 60%·스카프 40% | (1) 기본 배지 172, 도구 표시 `negated`, "스카프 아닌 최다 도구" 배지 없음 (2) 스카프 배지 없음 | 도구 효과가 없어 스카프 배수 미적용 |
+
+### AC21 성능 (2026-11-16)
+
+- 조건: `e2e/product-perf.spec.ts` 단독 실행(`--project=desktop`), 프로덕션 빌드 + vite preview, Chromium 156.0.8078.4, 상위 30, 시나리오마다 10회 중앙값. 스피드 차트 슬라이더 놓기는 조건 필터 전부 켬.
+- 예산: 첫 표시 중앙값 ≤ 500ms, 완료 중앙값 ≤ 3000ms, 계산 구간 Long Task ≤ 100ms.
+
+| 시나리오 | 첫 표시(첫 카드) 중앙값 | 완료 중앙값 | Long Task 최대 | 이전 측정(main 이력) |
+|---|---|---|---|---|
+| 스피드 차트 처음 열기(조건 필터 기본값, 배지 37개) | 11ms | 13ms | 0ms | 카드 리스트 18~20ms · 300~465ms |
+| 스피드 차트 다시 열기(조건 필터 전부 켬, 배지 67개) | 8ms | 9ms | 0ms | — |
+| 스피드 차트 S 슬라이더 놓기(전부 켬, SP 32→28) | 1ms | 11ms | 0ms | 카드 27ms · 146ms |
+| 공격 탭 처음 열기 | 80ms | 950ms | 0ms | 76ms · 619ms, 77 · 777ms |
+| 공격 탭 슬라이더 놓기(SP 32→28) | 25ms | 305ms | 0ms | 25ms · 230ms |
+| 방어 탭 처음 열기 | 35ms (2회 35·35) | 1652ms (2회 1627·1652) | 0ms | 17 · 561ms, 35 · 1103ms, 35 · 1117ms |
+| 방어 탭 슬라이더 놓기(SP 2→0) | 36ms (2회 33·36) | 588ms (2회 584·588) | 0ms | 25ms · 251ms |
+| 보조: 공격 탭 계산 중 클릭 입력 지연 | 중앙값 9ms, 최대 11ms | — | — | 9ms · 14ms |
+| 보조: 공격 탭 계산 중 rAF 간격 | 회차 중앙값 17ms | — | — | 17ms |
+
+- 스피드 탭은 첫 기준(첫 카드 19ms·완료 305ms)보다 빨라졌다. 계산 구간 Long Task는 전 시나리오 0ms이고 계측 자체 확인(120ms setTimeout 작업이 Long Task로 잡힘)도 통과했다.
+- 공격·방어 탭 Long Task 예산 초과는 재현되지 않았다. 첫 표시·완료 중앙값도 예산 안이다.
+- 첫 전체 실행에서 공격 탭 시나리오가 한 번 실패했다: 슬라이더를 놓은 뒤 5초 안에 `data-generation`이 바뀌지 않았다(`product-perf.spec.ts:184`, 예산 단언 전 단계라 측정값 없음). 같은 시나리오만 다시 돌리니 통과했다(위 공격 탭 값). 드래그 입력이 부하 때 반영되지 않는 계측 쪽 불안정으로 보며, 코드 결함으로 확인하지는 않았다.
+- 완료 시간 악화(예산 안): 공격 처음 열기 619 → 950ms, 방어 처음 열기 561 → 1652ms(main 이력 마지막 값 1117ms보다도 느림), 방어 슬라이더 놓기 251 → 588ms, 공격 슬라이더 놓기 230 → 305ms. 첫 카드 시간은 거의 같다.
+  - main과의 비교 근거: 같은 날 main 빌드를 재지 않았다(작업 지시로 stash·`git worktree add` 금지). 비교값은 `docs/raw/feature/damage-tabs-row-revamp/notes.md`의 측정 이력(2026-11-14, 같은 Chromium 156, 같은 spec)이다. 그 이력 안에서도 방어 완료가 561 → 1103 → 1117ms로 R14~R16 추가 때마다 늘었다.
+  - 원인 추정(확인 안 함): (1) 측정 기계 부하 차이. 이전 측정과 같은 조건이라 보장할 수 없다. (2) 공격·방어 행마다 도구 겹침 이미지 상자(`MonWithItem`)가 생겨 도구 아이콘 이미지 요청·디코드가 늘었다. 첫 카드 시간이 그대로이고 완료(전 카드 표시)만 늘어난 모양이 렌더 쪽 비용과 맞는다. (3) 계산은 줄었을 것이다: 실행기가 스피드 탭을 계산하지 않는다(`executor.test.ts` "스피드 탭은 계산하지 않는다"). 분리 확인은 main 빌드 같은 기계 재측정이 필요하다(후속).
+
+### AC23 바꾸거나 지운 기존 테스트 매핑
+
+- 확인 방법: `git diff origin/main --stat`, `git diff origin/main -- e2e 'src/**/*.test.ts' 'src/**/*.test.tsx'`. 새로 만든 테스트 파일(`e2e/speed-chart.spec.ts`(미추적), `e2e/speed-chart-a11y.spec.ts`, `src/cards/speedChart.test.ts`, `src/cards/speedLadder.test.ts`, `src/cards/iconTargets.test.ts`, `src/app/components/MonWithItem.test.tsx`, `src/app/components/RowDetail.test.tsx`)은 신규라 표에서 뺀다. diff에 없는 기존 spec(`product-myset`·`offline`·`product-power-item` 등)은 바뀌지 않았다.
+- "구조 변경"은 기능은 같고 셀렉터·타입·탭 목록만 바뀐 것이다.
+
+| 파일 | 바꾸거나 지운 테스트 | 대체 요구 / 없어진 기능 | 대체 테스트 |
+|---|---|---|---|
+| e2e/product-berry.spec.ts | 통계 설정 줄 "다섯 칸" → "여섯 칸" | R7 날씨/필드(툴바 "날씨 특성 최소(%)" 추가) | 같은 테스트(제목·기대 칸 수 갱신) |
+| e2e/product-berry.spec.ts | 삭제: "순풍 토글(스피드 탭 전용)" describe | 없어진 기능: 툴바 내 순풍/상대 순풍 토글. 내 순풍 → R11(차트 머리), 상대 순풍 → R8(순풍 조건 필터) | speed-chart.spec AC8, AC11 |
+| e2e/product-layout.spec.ts | 삭제: "스피드 탭 배분 메뉴·상세 배분 목록이 화면 안 …" | 없어진 기능: 스피드 카드 배분 메뉴·상세(R12). 좁은 폭 배치는 R2 | speed-chart.spec AC2(400px·1280px), AC24 |
+| e2e/product-toolbar.spec.ts | "최소 사용률 3종 인라인 반영" → 카드 기준 2종은 세대 +1, 스피드 차트 전용 2종(구애스카프·날씨 특성)은 세대 그대로 | R7(스카프 기준은 스피드 차트만 씀, 날씨 특성 기준 신설) | 같은 테스트(재작성), state.test "스피드 차트 상태" |
+| e2e/product-toolbar.spec.ts | 구애스카프 기본 표시값 10 → 5, 날씨 특성 10 | R7 구애스카프 기준 기본값 10% → 5% | 같은 테스트, speed-chart.spec AC11(새로고침 기본값 5) |
+| e2e/product-toolbar.spec.ts | 2행 순서에서 순풍 토글 제거, 결과 배지 단계에서 선공·동속·후공 제거 | R11(순풍은 차트 머리), R12 결과 배지 → R5 상태 | speed-chart.spec AC5, AC8 |
+| e2e/product.spec.ts | 삭제: 스피드 탭 펼친 상세(왼쪽 배분 목록·결과 배지) | 없어진 기능: 스피드 카드 상세(R12) → R6 배지 상세 | speed-chart.spec AC7 |
+| e2e/product.spec.ts | 삭제: 스피드 탭 상세 직접 추가 폼 → "고정됨", Delete·핀 삭제 | 직접 추가 → R15. 핀 = 없어진 기능(R12) | speed-chart.spec AC26 |
+| e2e/product.spec.ts | 삭제: 핀 Tab 순서·Enter 고정·Delete 해제 | 없어진 기능: 핀(R12). 키보드 조작은 R6 배지 포커스로 | speed-chart-a11y.spec |
+| e2e/product-images.spec.ts | 스피드 탭을 목록 행 아이콘 루프에서 뺌, `.card-who > [data-testid="mon-icon"]` 직계 → 자손 셀렉터 | R1(스피드 카드 없음) + 구조 변경(R13 이미지 상자) | 같은 테스트, speed-chart.spec AC3(배지 이미지) |
+| e2e/product-perf.spec.ts | 스피드 탭 카드 측정 → 스피드 차트 측정(표식 `speed-chart:first`·`complete`) | R1, 비기능 성능 | 같은 파일 "반응성 스피드 차트" |
+| src/app/components/text.test.ts | "스피드 탭(refs 없음)·랭크 아닌 근거" → "refs 없음: S 랭크만 남긴다"·"근거 없음"으로 나눔, scarf 근거 사례 삭제 | R7(스카프 행 근거 `ScarfBasis` 삭제, 스카프는 조건 배지) | 같은 파일 두 테스트, speedChart.test AC9 스카프 |
+| src/app/executor.test.ts | "최종 뷰는 탭마다 buildTabView와 같다" → 공격·방어만, 스피드는 idle | R1(스피드 탭은 실행기 밖 동기 배지 모델, ADR 결정 2) | 같은 파일 "스피드 탭은 계산하지 않는다" 3건 |
+| src/app/state.test.ts | "표시 기준 변경은 세대를 올린다" → 공격·방어 기준만 | R7(스카프·날씨 기준은 차트 전용, 세대 그대로) | 같은 파일 "스피드 차트 상태" |
+| src/app/state.test.ts | "순풍·세트 초안 변경" → "세트 초안 변경" | R11(내 순풍은 스피드 차트 상태) | "조건 필터·내 순풍은 세대 그대로" |
+| src/cards/__fixtures__/acceptance.test.ts | 삭제: 스피드 탭 대쓰여너 최대 S 묶음 경계, "F4 스피드 탭" 4건(스카프 ≥ 10%, < 10%, 대표 도구 스카프, 내·상대 순풍) | R3(1위 묶음 기본 배지), R7(스카프 기준 5%·스카프 아닌 최다 도구), R8·R11(순풍) | speedChart.test 기본 배지·AC9 스카프·순풍, speedLadder.test 기준선 |
+| src/cards/acceptance.test.ts | AC1 "세 탭" → 공격·방어 탭, 스피드 기본 행 경계 제거 | R1, R3·R4 | speedChart.test 기본 배지, speedLadder.test 최소 S |
+| src/cards/acceptance.test.ts | 삭제: "AC7 스피드 탭 스카프·순풍(F4)" 4건 | R7 스카프·순풍 조건 배지, R11 내 순풍 | speedChart.test AC9·AC12 |
+| src/cards/acceptance.test.ts | 삭제: 스피드 탭 일렉트릭네트(상대 하락기)는 랭크 행 아님 | R7 랭크업(능동 수단만, ADR 결정 3) | speedChart.test "랭크업: … S 없는 수단·순풍 제외" |
+| src/cards/acceptance.test.ts | "내 세트 오류: 퀵드로는 스피드 탭만" → "퀵드로는 공격·방어 탭에서 정상" | R4·R9(스피드 전용 거부는 차트 머리 안내) | executor.test my-set-error 부재, speedLadder.test AC5b, speed-chart.spec AC5b |
+| src/cards/acceptance.test.ts | AC15 "표시 기준 3개" → "묶음 표시 기준", 랭크 기준 스피드 랭크 행·스카프 기준 대쓰여너/타부자고 사례 삭제 | R12(상위 AC15 스피드 부분 대체) → R7 | speedChart.test 랭크업 10% 경계, 스카프 5.0%/4.9% 경계 |
+| src/cards/batch.test.ts | `TABS` → `DAMAGE_TABS`, 삭제: "스피드 판정은 기준을 읽지 않아 키가 같고 전부 캐시 적중" | R1. 없어진 기능: 스피드 행 캐시 | 같은 파일(공격·방어) |
+| src/cards/berries.test.ts | "스피드 탭은 대표 도구 그대로, 방어 탭 도구 없음" → 방어 탭만 | R3(스피드 기본 배지는 가정 세트 도구 그대로), R13 | speedChart.test "기본 배지는 가정 세트 도구를 그대로" |
+| src/cards/items.test.ts | 삭제: "후보 없는 카드(스피드 탭)는 메뉴 작업이 없다", 타입 `Tab` → `DamageTab` | 없어진 기능: 스피드 카드·배분 메뉴(R12) | 없음(기능 삭제) |
+| src/cards/plan.test.ts | "선제공격손톱은 스피드 탭만 my-set-error" → "공격·방어 탭은 ok" | R4·R9 | executor.test, speedLadder.test AC5b |
+| src/cards/plan.test.ts | 조건 순풍 3건 → 공격·방어 순풍 없음 2건(스피드 attacker/defender 순풍 사례 삭제) | R11 내 순풍, R8 상대 순풍 배지 | speedLadder.test 기준선 순풍·"내 순풍을 켠 채 상대 순풍 배지의 최소 S", speedChart.test 순풍 |
+| src/cards/plan.test.ts | 삭제: "planTab: 스피드 탭" describe 9건(기본 행, 스카프 아닌 최다 도구, 스카프 기준, 도구 없음, 랭크 행, 비교 불가, 커스텀, 랭크 기준 경계) | R3, R7, R9, R10. 묶음 기준 이상 전부 카드 → R3(1위 묶음 하나) | speedChart.test 기본 배지·AC9·AC13·목록 밖 타겟 |
+| src/cards/plan.test.ts | "메가리자몽Y면 쾌청, 스피드 탭은 날씨 없음" → 공격 탭만 | R4(기준선에 날씨 미포함) | speedLadder.test "날씨·필드는 넣지 않는다" |
+| src/cards/rank.test.ts | 스피드 탭 랭크 주체 "양쪽" → "상대만", 랭크 기준 경계 제목 정리 | R7 랭크업(ADR 결정 3 `TAB_MEANS_OWNERS.speed`), 내 랭크업 토글은 후속 | 같은 파일 |
+| src/cards/relevance.test.ts | 삭제: 스피드 판정 양쪽 S, 스피드 행 S 외 의존 없음. `relevantStats`·`myDependsOn`에서 `judge` 인자 제거 | 없어진 기능: 스피드 행 계산 경로(R1) | 같은 파일(대미지만) |
+| src/cards/resultSort.test.ts | `TABS` → `DAMAGE_TABS` | R1(구조 변경) | 같은 파일 |
+| src/cards/rowTask.test.ts | 삭제: speed 양 끝·스윕, 스피드 키 spe만 | 없어진 기능: 스피드 rowTask(R1). 코어 스피드 함수는 core/speed.test 유지 | speedChart.test·speedLadder.test(코어 값 대조) |
+| src/ui/images.test.ts | "도구 아이콘 대상 = 18 + 22종" → "포함", 폴백 "텍스트 배지" → "가방 표지" | R14(대상 집합 확대, 공통 가방 표지) | 같은 파일 "R14 아이콘 대상 집합 대조(AC19)" 4건 |
+| src/core/speed.test.ts | 추가만(거부 원인·날씨 특성 표) | — | — |
+
+- 매핑 밖 기존 테스트는 바뀌지 않았다. 이번 T12에서는 `product-perf.spec.ts`만 다시 돌렸다. 단위·e2e 전체와 harness gate 통과는 이 기록에서 확인하지 않았으므로 최종 gate에서 본다.
 
 ## 후속 작업
 
@@ -566,3 +672,24 @@ type AppAction = /* 기존 … (set-tailwind 삭제) */
 - 9 수용: 날씨 배지 상세 "내 쪽 날씨 미반영"(열린 질문 7 기본값)을 T8 완료 기준에 넣었다.
 - 10 부분 수용: `src/dev/*`는 코어 `BattleConditions`·`compareSpeed`·`minSpToOutspeed`·`sweepSpeed`만 쓰고 cards·app 상태 타입은 쓰지 않는다(grep 확인). 영향은 없지만 T6 완료 기준에 dev 포함 `tsc -b` 통과를 적었다.
 - 열린 질문(over-budget.remaining) 해소: 코어 `OutspeedResult`가 이미 `remaining`을 가지며 `minSpToOutspeed`가 `mySet`과 스냅숏 SP 총량으로 계산한다. 잔여 예산 입력을 따로 두지 않는다고 계약에 적었다.
+
+## 구현 결과 (2026-11-16, T12 기록)
+
+> 위 "구현 계획"은 계획 당시 그대로 둔다. 실제와 다른 점과 남은 위험만 여기 적는다.
+
+### 계획 대비 차이
+
+- **T8 중단**: ui-engineer T8(SpeedTab·SpeedChart·배지·상세)은 끝나지 못했다. `SpeedTab.tsx`·`SpeedChart.tsx`(와 `SpeedBadgeDetail.tsx`·`speedChart.css`)는 리뷰 반영 단계에서 작성·마무리했다. 그 결과 웨이브 3 게이트와 웨이브 4(T10·T11)의 일부가 리뷰 반영 뒤 코드에 대해 돌았다.
+- **`speedText.ts` 분리**: 배지 이름·배분 표기·조건 상세·점유율 문구를 컴포넌트에서 떼어 `src/app/components/speedText.ts` 한 곳에 모았다(계획에는 없던 파일).
+- **배지 이름 텍스트 폭 경계 60rem**: `.speed-badge-name`은 `@media (min-width: 60rem)`에서만 보인다. 좁은 폭은 이미지와 접근 이름으로 구분한다. 같은 경계에서 상세를 배지 칸 시작선에 맞춰 들여 쓴다(`speedChart.css`). 30rem 이하는 줄 그리드 열을 좁힌다. 차트 프레임은 `.speed-frame`이 세로 스크롤을 맡고(`overflow-y: auto`), 컨테이너 `min-height: 14rem`이며, `scroll-padding-block`은 SpeedChart가 잰 띠 높이(`--speed-band-h`, 기본 2.4rem) + 0.25rem이다.
+- **`MonWithItem`에 `game` prop 추가**: 메가스톤 판정에 스냅숏이 필요해 `game?: Snapshot`을 받는다. 있으면 `itemGlyphOf(game, id)`로 정한다(메가스톤 판정이 PNG 조회보다 먼저).
+- **도구 아이콘 53종(신규 13)**: `src/assets/item-icons/` PNG가 53개이고 이번에 13개가 늘었다(구애스카프 등 R14 대상 집합). 라이선스·README·`THIRD_PARTY_NOTICES.md`를 함께 고쳤다.
+- **공통 표지 SVG**: 메가스톤은 PNG를 쓰지 않고 공통 메가스톤 표지(`kind: 'mega'`), 집합 밖이고 받은 그림도 없는 도구는 공통 가방 표지(`kind: 'bag'`)다(`src/ui/images.ts` `ItemGlyphSpec`). 이전 "텍스트 배지 폴백"을 대체한다.
+
+### 남은 위험
+
+- **부하 민감 테스트 시간**: `product-perf.spec.ts` 공격 탭 시나리오가 첫 전체 실행에서 슬라이더 놓기 뒤 세대 변화 5초 대기에 걸려 한 번 실패했고, 다시 돌리면 통과했다. 동기 배지 모델·rAF 좌표 기록(AC25)·10회 반복 측정처럼 시간에 민감한 spec은 부하가 큰 기계나 다른 spec과 같이 돌 때 흔들릴 수 있다. 성능 수치는 단독 실행 값으로만 판단한다.
+- **공격·방어 완료 시간 악화(예산 안)**: 방어 처음 열기 완료 1652ms 등 이전 이력보다 느리다. 원인은 확인하지 못했다(위 "AC21 성능" 원인 추정). 같은 기계에서 main 빌드와 나란히 재는 측정이 후속으로 필요하다.
+- **날씨 배지 상세 "내 쪽 날씨 미반영"**: 열린 질문 7 기본값대로 `speedText.ts`가 날씨/필드 배지 상세를 "{특성} 점유율 n% · 파트너 날씨 가정 · 내 쪽 날씨 미반영"(필드는 "내 쪽 필드 미반영")으로 낸다. 이 문구를 직접 확인하는 단위·e2e 단언은 없다(AC10 e2e는 "파트너 날씨 가정"만 본다). 문구가 바뀌어도 테스트가 잡지 못한다.
+- **실데이터 의존 e2e**: AC10(쓱쓱 대쓰여너)·AC13 사례는 2026-10 m-c 메타에 기댄다. 데이터 월이 바뀌면 `e2e/helpers.ts` 상수를 고쳐야 한다.
+- **`e2e/speed-chart.spec.ts` 미추적**: 이 기록 시점에 git 미추적 파일이다. 커밋에서 빠지면 AC1~AC26 e2e 근거가 사라진다.

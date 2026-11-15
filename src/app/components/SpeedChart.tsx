@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent } from 'react'
 import {
+  bundleLabel,
   focusAfterRemove,
   minSpToPass,
   navigate,
@@ -15,6 +16,7 @@ import type { PokemonSet } from '../../core'
 import type { Snapshot } from '../../data/schema'
 import { namesOf } from '../../ui/names'
 import type { AppAction } from '../state'
+import { MonWithItem } from './MonWithItem'
 import { SpeedBadge } from './SpeedBadge'
 import { SpeedBadgeDetail } from './SpeedBadgeDetail'
 import { rejectionText, type SpeedBadgeHandlers } from './speedText'
@@ -36,12 +38,16 @@ interface Props {
   myTailwind: boolean
   customTargets: readonly CustomTarget[]
   dispatch: Dispatch<AppAction>
+  /** 화면 기준선(드래그 중 표시 SP) 요약. 띠 안에 보인다(알림 영역은 SpeedTab이 따로 둔다) */
+  summary: string
+  /** 표시할 배지가 없음: 띠 아래 빈 상태 안내 */
+  empty: boolean
 }
 
 type Pending = { kind: 'id'; id: string } | { kind: 'added'; opponentId: string; sp: number; nature: NatureSign }
 
 /** 실수치 내림차순 줄 목록(기준선 띠 포함)과 줄 아래 인라인 상세, 순서 비교 불가 영역 */
-export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTailwind, customTargets, dispatch }: Props) {
+export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTailwind, customTargets, dispatch, summary, empty }: Props) {
   const frame = useRef<HTMLDivElement>(null)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -118,6 +124,18 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
     if (btn !== null) el.scrollTop += btn.getBoundingClientRect().top - a.top
   }, [detailId, buttonOf])
 
+  // 프레임 위·아래 스크롤 여백 = 기준선 띠 높이(포커스·펼친 상세가 끝에 붙은 띠 뒤로 숨지 않게, ADR 결정 1)
+  useLayoutEffect(() => {
+    const el = frame.current
+    const bandEl = el?.querySelector<HTMLElement>('[data-testid="speed-baseline"]')
+    if (el === null || el === undefined || bandEl === null || bandEl === undefined) return
+    const sync = () => el.style.setProperty('--speed-band-h', `${bandEl.offsetHeight}px`)
+    sync()
+    const ro = new ResizeObserver(sync)
+    ro.observe(bandEl)
+    return () => ro.disconnect()
+  }, [baseline.kind, rows])
+
   // 추가·삭제 뒤 포커스
   useEffect(() => {
     const p = pending.current
@@ -137,7 +155,6 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
     return () => document.removeEventListener('pointerdown', onDown)
   }, [detailId])
 
-  const baselineSpeed = baseline.kind === 'ok' ? baseline.speed : null
   const names = namesOf(game)
   const minSp = useMemo(
     () => (detailBadge === undefined || baseline.kind !== 'ok' ? null : minSpToPass(game, shownSet, detailBadge.speed, myTailwind)),
@@ -147,69 +164,93 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
   return (
     <div className="speed-frame" ref={frame} data-testid="speed-frame">
       <ul className="speed-rows" aria-label="스피드 실수치 내림차순">
-        {rows.map((row) => (
-          <Fragment key={row.speed}>
-            {row.baseline && baselineSpeed !== null && (
-              <li className="speed-baseline" data-testid="speed-baseline">
-                <span>
-                  내 스피드 <b className="num">{baselineSpeed}</b>
-                </span>
-                <span className="sr-only">. {baselineSpeed}과 같으면 동속, 그보다 아래는 추월</span>
-              </li>
-            )}
-            {row.badgeIds.length > 0 && (
-              <li className="speed-row" data-speed={row.speed}>
-                <span className="speed-row-speed num">{row.speed}</span>
-                <span className="speed-row-diff num" aria-hidden="true">
-                  {row.diff === null ? '' : `−${row.diff}`}
-                </span>
-                <ul className="speed-badges" aria-label={`실수치 ${row.speed}`}>
-                  {row.badgeIds.map((id) => {
-                    const b = byId.get(id)
-                    if (b === undefined) return null
-                    return (
-                      <SpeedBadge
-                        key={id}
-                        game={game}
-                        badge={b}
-                        status={statusOf(b.speed, baseline)}
-                        active={id === active}
-                        open={id === detailId}
-                        detailId={DETAIL_ID}
-                        handlers={handlers}
-                      />
-                    )
-                  })}
-                </ul>
-                {detailBadge !== undefined && row.badgeIds.includes(detailBadge.id) && (
-                  <SpeedBadgeDetail
-                    id={DETAIL_ID}
+        {rows.map((row) => {
+          const band = row.baseline && baseline.kind === 'ok'
+          const hasDetail = detailBadge !== undefined && row.badgeIds.includes(detailBadge.id)
+          const badgeList = row.badgeIds.length > 0 && (
+            <ul className="speed-badges" aria-label={`실수치 ${row.speed}`}>
+              {row.badgeIds.map((id) => {
+                const b = byId.get(id)
+                if (b === undefined) return null
+                return (
+                  <SpeedBadge
+                    key={id}
                     game={game}
-                    model={model}
-                    badge={detailBadge}
-                    status={statusOf(detailBadge.speed, baseline)}
-                    baseline={baseline}
-                    minSp={minSp}
-                    myTailwind={myTailwind}
-                    target={customTargets.find((t) => t.rosterId === detailBadge.opponentId)}
-                    dispatch={dispatch}
-                    onClose={close}
-                    onAdded={(b) => {
-                      pending.current = { kind: 'added', ...b }
-                    }}
-                    onRemove={(b) => {
-                      const next = focusAfterRemove(rowsRef.current, b.id)
-                      pending.current = next === null ? null : { kind: 'id', id: next }
-                      setDetailId(null)
-                      dispatch({ type: 'remove-speed-bundle', bundle: { opponentId: b.opponentId, sp: b.bundle.sp, nature: b.bundle.nature } })
-                    }}
+                    badge={b}
+                    status={statusOf(b.speed, baseline)}
+                    active={id === active}
+                    open={id === detailId}
+                    detailId={DETAIL_ID}
+                    handlers={handlers}
                   />
-                )}
-              </li>
-            )}
-          </Fragment>
-        ))}
+                )
+              })}
+            </ul>
+          )
+          const detail = hasDetail && detailBadge !== undefined && (
+            <SpeedBadgeDetail
+              id={DETAIL_ID}
+              game={game}
+              model={model}
+              badge={detailBadge}
+              status={statusOf(detailBadge.speed, baseline)}
+              baseline={baseline}
+              minSp={minSp}
+              myTailwind={myTailwind}
+              target={customTargets.find((t) => t.rosterId === detailBadge.opponentId)}
+              dispatch={dispatch}
+              onClose={close}
+              onAdded={(b) => {
+                pending.current = { kind: 'added', ...b }
+              }}
+              onRemove={(b) => {
+                const next = focusAfterRemove(rowsRef.current, b.id)
+                pending.current = next === null ? null : { kind: 'id', id: next }
+                setDetailId(null)
+                dispatch({ type: 'remove-speed-bundle', bundle: { opponentId: b.opponentId, sp: b.bundle.sp, nature: b.bundle.nature } })
+              }}
+            />
+          )
+          if (band) {
+            // 기준선 띠 = 내 실수치 줄: 구분 텍스트 → 동속 배지 → 요약. 동속 배지 상세는 띠 바로 아래 항목(띠와 함께 끝에 붙지 않게)
+            return (
+              <Fragment key={row.speed}>
+                <li className="speed-baseline" data-testid="speed-baseline" data-speed={row.speed}>
+                  <span className="speed-baseline-label">
+                    내 스피드 <b className="num">{baseline.speed}</b>
+                    <span className="speed-baseline-bundle num" data-testid="speed-baseline-bundle">
+                      {bundleLabel(baseline.sp, baseline.nature)}
+                      {baseline.tailwind ? ' · 순풍' : ''}
+                    </span>
+                  </span>
+                  <span className="sr-only">. {baseline.speed}과 같으면 동속, 그보다 아래는 추월</span>
+                  {badgeList}
+                  <span className="speed-baseline-summary num" aria-hidden="true" data-testid="speed-band-summary">
+                    {summary}
+                  </span>
+                </li>
+                {detail && <li className="speed-row speed-band-detail">{detail}</li>}
+              </Fragment>
+            )
+          }
+          if (row.badgeIds.length === 0) return null
+          return (
+            <li key={row.speed} className="speed-row" data-speed={row.speed}>
+              <span className="speed-row-speed num">{row.speed}</span>
+              <span className="speed-row-diff num" aria-hidden="true">
+                {row.diff === null ? '' : `−${row.diff}`}
+              </span>
+              {badgeList}
+              {detail}
+            </li>
+          )
+        })}
       </ul>
+      {empty && (
+        <p className="empty speed-empty" data-testid="speed-empty">
+          표시할 상대가 없습니다. 사용률 상위 수나 선택 필터를 바꿔 보세요.
+        </p>
+      )}
       {model.unsupported.length > 0 && (
         <section className="speed-unsupported" data-testid="speed-unsupported" aria-labelledby="speed-unsupported-h">
           <h3 id="speed-unsupported-h">순서 비교 불가</h3>
@@ -218,6 +259,13 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
               const r = rejectionText(game, u.rejection, 'opponent')
               return (
                 <li key={`${u.origin}:${u.opponentId}:${u.presetIndex ?? ''}`}>
+                  <MonWithItem
+                    speciesId={u.speciesId}
+                    size={28}
+                    lazy
+                    game={game}
+                    item={u.item === null ? undefined : { id: u.item, name: names.items.label(u.item), role: 'held' }}
+                  />
                   {names.species.label(u.speciesId)}
                   {u.presetIndex !== undefined && ` (프리셋 ${u.presetIndex + 1})`} · {r.reason} · {r.cause}
                 </li>
