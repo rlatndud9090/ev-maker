@@ -1,7 +1,7 @@
 ---
 title: "스피드 탭 개편"
 date: "2026-11-15"
-stage: adr-draft
+stage: adr-review
 prd_status: review
 adr_status: proposed
 ---
@@ -44,6 +44,7 @@ adr_status: proposed
 - 2026-11-15 prd-draft: 사용자 인터뷰(세로 스피드 차트·조건별 배지·전 탭 도구 겹침 표시) 후 PRD 초안 작성 시작
 - 2026-11-15 prd-review: 리서치 2갈래·3관점 리뷰(MAJOR 18·MINOR 25) 반영 후 PRD review 전환, 열린 질문 15건 사용자 확인 대기, ADR 필요 판정
 - 2026-11-15 adr-draft: $adr-helper 진입, ADR 6결정 작성 시작(결정 1 화면 배치는 디자인 레인 시안 비교)
+- 2026-11-15 adr-review: 결정 1 사용자 선택(시안 C 실수치 사다리)·날씨 특성 기준 툴바 신설(10%)·공통 메가스톤 아이콘 반영, 독립 검증 7건 반영(PRD 정합 정정 포함). PRD·ADR 통합 사전 승인 대기
 
 ## 승인 이벤트
 
