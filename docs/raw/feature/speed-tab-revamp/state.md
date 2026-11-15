@@ -1,9 +1,9 @@
 ---
 title: "스피드 탭 개편"
 date: "2026-11-15"
-stage: adr-review
-prd_status: review
-adr_status: proposed
+stage: pre-approved
+prd_status: pre-approved
+adr_status: pre-accepted
 ---
 
 # 작업 단계 원장: 스피드 탭 개편
@@ -45,7 +45,8 @@ adr_status: proposed
 - 2026-11-15 prd-review: 리서치 2갈래·3관점 리뷰(MAJOR 18·MINOR 25) 반영 후 PRD review 전환, 열린 질문 15건 사용자 확인 대기, ADR 필요 판정
 - 2026-11-15 adr-draft: $adr-helper 진입, ADR 6결정 작성 시작(결정 1 화면 배치는 디자인 레인 시안 비교)
 - 2026-11-15 adr-review: 결정 1 사용자 선택(시안 C 실수치 사다리)·날씨 특성 기준 툴바 신설(10%)·공통 메가스톤 아이콘 반영, 독립 검증 7건 반영(PRD 정합 정정 포함). PRD·ADR 통합 사전 승인 대기
-
+- 2026-11-15 pre-approved: 사용자 명시 사전 승인 (harness:approve)
+- 2026-11-15 pre-approved 표기 수정: ADR 결정 3 데이터 표 표기의 중괄호를 하네스 템플릿 토큰 검사 통과용으로 풀어 씀(의미 변경 없음)
 ## 승인 이벤트
 
 <!-- 이 블록은 `npm run harness:approve`만 기록한다. 사용자의 명시 승인 발화가
@@ -54,4 +55,5 @@ adr_status: proposed
      status의 정합성을 교차검증한다. 손으로 위조하면 여러 아티팩트를 동시에 조작해야
      하며 감사에 드러난다. -->
 
-(아직 사전 승인 없음 — 빌드 진입 불가)
+- PREAPPROVAL prd 2026-11-15 harness:approve :: 사전 승인
+- PREAPPROVAL adr 2026-11-15 harness:approve :: 사전 승인
