@@ -5,7 +5,7 @@ import type { MetaView } from '../meta'
 import { bundlesOf } from './bundles'
 import { presetKey } from './ids'
 import { buildSpeedChart, checkSpeedAddition, ladderBaseSet, scarfConditionOf, type SpeedBadge, type SpeedChartInput } from './speedChart'
-import { bundleLabel } from './speedLadder'
+import { bundleLabel, bundleSpoken } from './speedLadder'
 import { realData, syntheticEntry, syntheticView } from './testing'
 import { DEFAULT_CRITERIA, type CustomTarget } from './types'
 
@@ -89,10 +89,13 @@ describe('기본 배지(1위 묶음)', () => {
     expect(base[0].speed).toBe(169)
   })
 
-  it('배분 표기는 S32+ · S20 = · S0 − 형식이다', () => {
-    expect(bundleLabel(32, 'plus')).toBe('S32+')
-    expect(bundleLabel(20, 'neutral')).toBe('S20 =')
-    expect(bundleLabel(0, 'minus')).toBe('S0 −')
+  it('배분 표기는 공격·방어 탭처럼 화살표만: S32↑ · S20(무보정 기호 없음) · S0↓, 읽기 이름은 성격 보정 글자', () => {
+    expect(bundleLabel(32, 'plus')).toBe('S32↑')
+    expect(bundleLabel(20, 'neutral')).toBe('S20')
+    expect(bundleLabel(0, 'minus')).toBe('S0↓')
+    expect(bundleSpoken(32, 'plus')).toBe('S32 성격 상승')
+    expect(bundleSpoken(20, 'neutral')).toBe('S20 성격 무보정')
+    expect(bundleSpoken(0, 'minus')).toBe('S0 성격 하락')
   })
 
   it('기본 배지는 가정 세트 도구를 그대로 쓰고, 메가 폼은 메가 폼 id와 메가스톤이다', () => {

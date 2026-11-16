@@ -63,6 +63,7 @@ export {
 } from './speedChart'
 export {
   bundleLabel,
+  bundleSpoken,
   compareInRow,
   focusAfterRemove,
   ladderRows,
@@ -70,7 +71,6 @@ export {
   navigate,
   speedBaseline,
   statusOf,
-  summarize,
   visibleBadges,
   type LadderRow,
   type MinSp,

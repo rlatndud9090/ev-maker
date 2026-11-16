@@ -2,7 +2,8 @@ import { memo, type FocusEvent, type MouseEvent, type PointerEvent, type Ref } f
 import { bundleLabel, type SpeedBadge as Badge, type SpeedStatus } from '../../cards'
 import type { Snapshot } from '../../data/schema'
 import { namesOf } from '../../ui/names'
-import { MonWithItem } from './MonWithItem'
+import { ItemMark } from './ItemMark'
+import { PokemonIcon } from './PokemonIcon'
 import { STATUS_CLASS, badgeLabel, conditionTag, presetMark, type SpeedBadgeHandlers } from './speedText'
 
 interface Props {
@@ -17,11 +18,11 @@ interface Props {
   buttonRef?: Ref<HTMLButtonElement>
 }
 
-/** 배지 버튼: 이미지(도구 겹침) · 배분 표기 · 조건 태그 · 표지. 이름은 글자 없이 툴팁(title)·접근 이름으로만 */
+/** 배지 버튼: 포켓몬 이미지 · 배분 표기 · 도구 아이콘(배분 오른쪽, 겹치지 않음) · 조건 태그 · 표지. 이름은 글자 없이 툴팁(title)·접근 이름으로만 */
 export const SpeedBadge = memo(function SpeedBadge({ game, badge: b, status, active, open, detailId, handlers, buttonRef }: Props) {
   const names = namesOf(game)
   const label = badgeLabel(game, b, status)
-  const tag = conditionTag(game, b.condition)
+  const tag = conditionTag(b.condition)
   const preset = presetMark(b)
   const cls = ['speed-badge', status === null ? 'neu' : STATUS_CLASS[status], b.origin === 'preset' ? 'pre' : '', b.origin === 'added' ? 'add' : '', open ? 'on' : '']
     .filter(Boolean)
@@ -59,19 +60,14 @@ export const SpeedBadge = memo(function SpeedBadge({ game, badge: b, status, act
         }}
         onKeyDown={(e) => handlers.onKey(b.id, e)}
       >
-        <MonWithItem
-          speciesId={b.speciesId}
-          size={28}
-          lazy
-          game={game}
-          item={b.item === null ? undefined : { id: b.item.id, name: names.items.label(b.item.id), role: 'held' }}
-          className={b.item?.negated ? 'item-negated' : undefined}
-        />
+        <PokemonIcon speciesId={b.speciesId} size={28} lazy />
         <span className="speed-badge-text" aria-hidden="true">
           <b className="num">{bundleLabel(b.bundle.sp, b.bundle.nature)}</b>
+          {b.item !== null && (
+            <ItemMark item={{ id: b.item.id, name: names.items.label(b.item.id), role: 'held' }} lazy game={game} className={b.item.negated ? 'item-negated' : undefined} />
+          )}
           {tag !== undefined && <em className="speed-tag">{tag}</em>}
           {b.item?.negated && <span className="speed-mark off">도구 무효</span>}
-          {status === 'tie' && <span className="speed-mark tie">동속</span>}
           {b.origin === 'added' && <span className="speed-mark add">추가</span>}
           {preset !== undefined && <span className="speed-mark pre">{preset}</span>}
         </span>

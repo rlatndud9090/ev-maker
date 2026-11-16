@@ -5,7 +5,7 @@ import type { MatchType } from '../../data/meta-schema'
 import type { Snapshot } from '../../data/schema'
 import { namesOf } from '../../ui/names'
 import { STAT_SHORT, rankText, refsNote } from '../../ui/format'
-import type { MonWithItemProps } from './MonWithItem'
+import type { ItemMarkItem } from './ItemMark'
 
 export const TAB_LABEL: Record<Tab, string> = { attack: '공격', defense: '방어', speed: '스피드' }
 
@@ -89,15 +89,15 @@ export function sourceText(s: MetaSourceView): string {
   return `${MATCH_LABEL[s.match]} · ${s.month} · 컷 ${s.cutoff} · ${s.format}`
 }
 
-export type CardItemOverlay = NonNullable<MonWithItemProps['item']>
+export type CardHeldItem = ItemMarkItem
 
 const itemName = (game: Snapshot, item: string): string => game.data.items[item]?.name.ko ?? item
 
 /**
  * 카드 줄이 계산에 가정한 지닌 도구(R13): 도구 변형 줄은 그 도구(variant), 메가 폼 기본 줄은 그 메가스톤(mega), 그 밖은 없음.
- * 공격·방어 래더 기본 줄은 상대 도구를 지우므로 겹침이 없다.
+ * 공격·방어 래더 기본 줄은 상대 도구를 지우므로 도구 아이콘이 없다.
  */
-export function cardItemOf(game: Snapshot, opponentId: string, variantItem: string | undefined): CardItemOverlay | undefined {
+export function cardItemOf(game: Snapshot, opponentId: string, variantItem: string | undefined): CardHeldItem | undefined {
   if (variantItem !== undefined) return { id: variantItem, name: itemName(game, variantItem), role: 'variant' }
   const mega = game.data.megas.find((m) => m.forme === opponentId)
   return mega === undefined ? undefined : { id: mega.stone, name: itemName(game, mega.stone), role: 'mega' }

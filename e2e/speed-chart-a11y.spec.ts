@@ -1,13 +1,14 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { combo, dragSlider, mySet, openProduct, region, selectTab, waitComplete } from './helpers'
 
-// 스피드 차트 접근성: 접근성 트리(목록·기준선 구분 항목·배지 접근 이름), 알림 영역 갱신 시점, 키보드 탐색, 태그 글자 대비, 도구 겹침 기하(받침 없음·오른쪽 아래·너비 0.45~0.55배).
+// 스피드 차트 접근성: 접근성 트리(목록·기준선 구분 항목·배지 접근 이름), 알림 영역 갱신 시점, 키보드 탐색, 태그 글자 대비, 도구 아이콘 기하(포켓몬 이미지와 겹치지 않고 글자 오른쪽).
 
 const badges = (page: Page) => page.getByTestId('speed-badge')
 const chip = (page: Page, filter: string) => page.locator(`[data-testid="speed-head"] [data-filter="${filter}"]`)
 const SPEED_FILTERS = ['rank', 'scarf', 'tailwind', 'field'] as const
-const SUMMARY = /추월 (\d+) · 동속 (\d+) · 추월당함 (\d+)/
-const BUNDLE = /S\d+(\+| =| −)/
+/** 알림 영역: 확정 내 스피드만(추월·동속 개수 요약 없음) */
+const LIVE = /^내 스피드 \d+$/
+const BUNDLE = /S\d+ 성격 (상승|무보정|하락)/
 
 async function openSpeed(page: Page, allFilters = true) {
   await openProduct(page)
@@ -29,15 +30,8 @@ function liveRegion(page: Page): Locator {
     .and(page.locator(':not([data-testid="speed-add-msg"])'))
 }
 
-/** 화면에 보이는 배지의 상태 개수(배지 id 기준 중복 없이) */
-async function statusCounts(page: Page) {
-  return badges(page).evaluateAll((els) => {
-    const seen = new Map<string, string>()
-    for (const el of els) seen.set((el as HTMLElement).dataset.badgeId ?? '', (el as HTMLElement).dataset.status ?? '')
-    const n = (s: string) => [...seen.values()].filter((v) => v === s).length
-    return { outspeeds: n('outspeeds'), tie: n('tie'), outsped: n('outsped') }
-  })
-}
+/** 띠 라벨의 내 실수치 */
+const bandSpeed = async (page: Page) => Number(await page.getByTestId('speed-baseline').getAttribute('data-speed'))
 
 const activeBadge = (page: Page) =>
   page.evaluate(() => {
@@ -88,13 +82,14 @@ test.describe('스피드 차트 접근성', () => {
         name: el.getAttribute('aria-label') ?? '',
         condition: (el as HTMLElement).dataset.condition ?? '',
         status: (el as HTMLElement).dataset.status ?? '',
-        hasItem: el.querySelector('.mon-item') !== null,
+        hasItem: el.querySelector('.item-mark') !== null,
         origin: (el as HTMLElement).dataset.origin ?? '',
       })),
     )
     expect(names.length).toBeGreaterThan(30)
     for (const b of names) {
       expect(b.name).toMatch(BUNDLE)
+      expect(b.name).not.toMatch(/[↑↓]/)
       expect(b.name).toMatch(/실수치 \d+/)
       expect(b.name).toMatch(/^[^\s,]+/)
       if (b.status !== 'neutral') expect(b.name).toMatch(/추월|동속|추월당함/)
@@ -149,7 +144,7 @@ test.describe('스피드 차트 접근성', () => {
     expect(marks).toEqual(['1', '2', '3'])
   })
 
-  test('알림 영역: 드래그 중에는 그대로, SP 확정·필터 변경·추가·삭제 뒤에 요약으로 갱신', async ({ page }) => {
+  test('알림 영역: 확정 내 스피드만 알린다(드래그 중에는 그대로, SP 확정·내 순풍 뒤 새 실수치, 필터 변경은 알리지 않음)', async ({ page }) => {
     await openSpeed(page, false)
     const live = liveRegion(page)
     await expect(live).toHaveCount(1)
@@ -161,34 +156,39 @@ test.describe('스피드 차트 접근성', () => {
       window.addEventListener('pointerup', () => w.__ups.push(performance.now()), true)
     })
     const read = () => page.evaluate(() => (window as unknown as { __live: { t: number; text: string }[] }).__live)
-    const expectSummary = async () => {
-      const c = await statusCounts(page)
-      await expect(live).toHaveText(new RegExp(`추월 ${c.outspeeds} · 동속 ${c.tie} · 추월당함 ${c.outsped}`))
+    const expectLive = async () => {
+      await expect(live).toHaveText(`내 스피드 ${await bandSpeed(page)}`)
+      await expect(live).not.toContainText(/추월|동속/)
     }
+    await expectLive()
 
-    // SP 확정: S 32 → 12(요약이 바뀌는 큰 이동)
+    // SP 확정: 실수치가 바뀌는 큰 이동
     const slider = mySet(page).getByRole('slider', { name: 'SP 스피드', exact: true })
     const from = Number(await slider.inputValue())
     const to = from >= 16 ? from - 20 : from + 16
-    const before = await statusCounts(page)
+    const before = await live.textContent()
     expect(await dragSlider(page, slider, to)).toBe(to)
     const upAt = await page.evaluate(() => (window as unknown as { __ups: number[] }).__ups.at(-1)!)
-    await expectSummary()
+    await expectLive()
     const changes = await read()
     expect(changes.length).toBeGreaterThan(0)
     for (const c of changes) expect(c.t, `드래그 중 알림 갱신: ${c.text}`).toBeGreaterThanOrEqual(upAt)
-    expect(await statusCounts(page)).not.toEqual(before)
+    await expect(live).not.toHaveText(before ?? '')
 
-    // 필터 변경(순풍 켬 → 배지가 늘어 요약이 바뀐다)
+    // 필터 변경(순풍 켬 → 배지가 늘어도 내 스피드는 그대로라 알림이 바뀌지 않는다)
     const n0 = (await read()).length
+    const beforeFilter = await live.textContent()
     await chip(page, 'tailwind').click()
-    await expectSummary()
-    expect((await read()).length).toBeGreaterThan(n0)
+    await expect(page.locator('[data-testid="speed-badge"][data-condition="tailwind"]').first()).toBeVisible()
+    await expectLive()
+    await expect(live).toHaveText(beforeFilter ?? '')
+    expect((await read()).slice(n0).every((c) => c.text === beforeFilter), '필터 변경으로 알림 글자가 바뀌지 않음').toBe(true)
 
-    // 내 순풍 칩도 기준선을 옮긴다
+    // 내 순풍 칩은 기준선을 옮겨(×2) 새 실수치를 알린다
     const n1 = (await read()).length
     await chip(page, 'my-tailwind').click()
-    await expectSummary()
+    await expectLive()
+    await expect(live).not.toHaveText(beforeFilter ?? '')
     expect((await read()).length).toBeGreaterThan(n1)
   })
 
@@ -274,8 +274,9 @@ test.describe('스피드 차트 접근성', () => {
     await page.keyboard.press('Enter')
     await expect.poll(async () => (await activeBadge(page))?.origin).toBe('added')
     await expect(page.locator('[data-testid="speed-badge"][data-origin="added"]')).toHaveCount(1)
-    await expect(live).toHaveText(SUMMARY)
-    await expect(live).not.toHaveText(liveBefore ?? '')
+    // 추가해도 내 스피드는 그대로라 알림은 같은 글자
+    await expect(live).toHaveText(LIVE)
+    await expect(live).toHaveText(liveBefore ?? '')
 
     // 키보드로 삭제: 추가 배지 상세 → "이 배지 지우기" → 포커스는 이웃 배지
     await expect(page.getByTestId('speed-detail')).toBeVisible()
@@ -284,7 +285,7 @@ test.describe('스피드 차트 접근성', () => {
     await page.keyboard.press('Enter')
     await expect(page.locator('[data-testid="speed-badge"][data-origin="added"]')).toHaveCount(0)
     await expect.poll(async () => (await activeBadge(page)) !== null).toBe(true)
-    await expect(live).not.toHaveText(afterAdd ?? '')
+    await expect(live).toHaveText(afterAdd ?? '')
   })
 })
 
@@ -354,13 +355,15 @@ const TAG_SELECTORS = [
   { kind: '상태 알약', sel: '[data-testid="speed-detail"] .speed-pill' },
 ]
 
-interface OverlaySample {
+interface ItemMarkSample {
   item: string
   role: string
-  /** 겹침 너비 / 포켓몬 이미지 상자 너비 */
-  ratio: number
-  /** 겹침 가운데가 이미지 상자의 오른쪽 아래 사분면, 겹침이 상자 안 */
-  bottomRight: boolean
+  /** 도구 아이콘 한 변(px) */
+  size: number
+  /** 같은 줄 포켓몬 이미지와 겹치는 면적(px²). 0이어야 한다 */
+  overlap: number
+  /** 기준 글자(배지·상세 = 배분 표기, 카드 = 포켓몬 이름) 오른쪽이고 세로로 같은 줄 */
+  rightOfText: boolean
   /** 받침·테두리 없음(테두리 두께 0, 배경 투명) */
   bare: boolean
   /** 뷰포트 안이면 그림이 실제로 그려짐(이미지는 로드 완료·자연 너비 > 0) */
@@ -368,29 +371,40 @@ interface OverlaySample {
   painted: boolean
 }
 
-/** 도구 겹침(.mon-item) 기하: 포켓몬 이미지 상자(.mon-with-item) 대비 크기·자리, 받침 유무, 그림 그려짐 */
-async function measureOverlays(page: Page): Promise<OverlaySample[]> {
+/** 도구 아이콘(.item-mark) 기하: 포켓몬 이미지와 겹치지 않고 기준 글자 오른쪽에 나란히, 받침 없음, 그림 그려짐 */
+async function measureItemMarks(page: Page): Promise<ItemMarkSample[]> {
   return page.evaluate(() => {
-    const out: OverlaySample[] = []
-    for (const el of document.querySelectorAll<HTMLElement>('.mon-item')) {
+    const out: ItemMarkSample[] = []
+    for (const el of document.querySelectorAll<HTMLElement>('.item-mark')) {
       const r = el.getBoundingClientRect()
       if (r.width === 0 || r.height === 0) continue
-      const box = el.closest('.mon-with-item')!.getBoundingClientRect()
-      const face = el.querySelector('.mon-item-face')
-      const fr = face?.getBoundingClientRect()
+      const scope = el.closest('.speed-badge, .card-who, .detail-item, .speed-detail-head, .speed-unsupported li') ?? el.parentElement!
+      const mon = scope.querySelector('[data-testid="mon-icon"]')?.getBoundingClientRect()
+      const overlap = mon === undefined ? 0 : Math.max(0, Math.min(r.right, mon.right) - Math.max(r.left, mon.left)) * Math.max(0, Math.min(r.bottom, mon.bottom) - Math.max(r.top, mon.top))
+      // 기준 글자: 배지·상세 머리는 배분 표기, 카드 이름 칸은 그 칸의 첫 글자 노드, 그 밖은 포켓몬 이미지
+      let anchor: DOMRect | undefined
+      const text = el.closest('.speed-badge')?.querySelector('.speed-badge-text .num') ?? el.closest('.speed-detail-bundle')?.querySelector('.bundle-mark')
+      if (text) anchor = text.getBoundingClientRect()
+      else if (el.closest('.card-name')) {
+        const range = document.createRange()
+        range.selectNodeContents(el.closest('.card-name')!)
+        range.setEndBefore(el)
+        anchor = range.getBoundingClientRect()
+      } else anchor = mon
+      const cy = r.top + r.height / 2
+      const rightOfText = anchor !== undefined && r.left >= anchor.right - 0.5 && cy >= anchor.top - 2 && cy <= anchor.bottom + 2
       const cs = getComputedStyle(el)
+      const face = el.querySelector('.item-mark-face')
+      const fr = face?.getBoundingClientRect()
       const transparent = cs.backgroundColor === 'transparent' || /rgba\(.*,\s*0\)$/.test(cs.backgroundColor)
       const inView = r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth
       const img = face instanceof HTMLImageElement ? face : null
       out.push({
         item: el.dataset.itemId ?? '',
         role: el.dataset.itemRole ?? '',
-        ratio: r.width / box.width,
-        bottomRight:
-          r.left + r.width / 2 >= box.left + box.width / 2 &&
-          r.top + r.height / 2 >= box.top + box.height / 2 &&
-          r.right <= box.right + 0.5 &&
-          r.bottom <= box.bottom + 0.5,
+        size: r.width,
+        overlap,
+        rightOfText,
         bare: parseFloat(cs.borderTopWidth) === 0 && transparent && cs.backgroundImage === 'none',
         inView,
         painted: fr !== undefined && fr.width > 0 && fr.height > 0 && (img === null || (img.complete && img.naturalWidth > 0)),
@@ -400,19 +414,21 @@ async function measureOverlays(page: Page): Promise<OverlaySample[]> {
   })
 }
 
-async function checkOverlays(page: Page, scope: string) {
-  // 지연 로드 이미지: 뷰포트 안 겹침이 모두 그려질 때까지 기다린다
-  await expect.poll(async () => (await measureOverlays(page)).filter((o) => o.inView && !o.painted).map((o) => o.item)).toEqual([])
-  const xs = await measureOverlays(page)
-  const ratios = xs.map((o) => o.ratio)
-  test.info().annotations.push({ type: 'overlay', description: `${scope} 겹침 ${xs.length}개 너비 비율 ${Math.min(...ratios).toFixed(3)}~${Math.max(...ratios).toFixed(3)}` })
-  expect(xs.length, `${scope} 겹침 표본`).toBeGreaterThan(0)
-  expect(xs.some((o) => o.inView && o.painted), `${scope} 뷰포트 안 겹침 그림`).toBe(true)
+async function checkItemMarks(page: Page, scope: string) {
+  // 지연 로드 이미지: 뷰포트 안 아이콘이 모두 그려질 때까지 기다린다
+  await expect.poll(async () => (await measureItemMarks(page)).filter((o) => o.inView && !o.painted).map((o) => o.item)).toEqual([])
+  const xs = await measureItemMarks(page)
+  test.info().annotations.push({ type: 'item-mark', description: `${scope} 도구 아이콘 ${xs.length}개 크기 ${Math.min(...xs.map((o) => o.size))}~${Math.max(...xs.map((o) => o.size))}px` })
+  expect(xs.length, `${scope} 도구 아이콘 표본`).toBeGreaterThan(0)
+  expect(xs.some((o) => o.inView && o.painted), `${scope} 뷰포트 안 아이콘 그림`).toBe(true)
+  await expect(page.locator('.mon-with-item, .mon-item')).toHaveCount(0)
   for (const o of xs) {
     const at = `${scope} ${o.role}:${o.item}`
-    expect.soft(o.ratio, at).toBeGreaterThanOrEqual(0.45)
-    expect.soft(o.ratio, at).toBeLessThanOrEqual(0.55)
-    expect.soft(o.bottomRight, `${at} 오른쪽 아래 사분면`).toBe(true)
+    // 이름 옆 아이콘 크기 수준(22px, 펼친 상세 머리만 28px)
+    expect.soft(o.size, at).toBeGreaterThanOrEqual(21)
+    expect.soft(o.size, at).toBeLessThanOrEqual(29)
+    expect.soft(o.overlap, `${at} 포켓몬 이미지와 겹치지 않음`).toBe(0)
+    expect.soft(o.rightOfText, `${at} 기준 글자 오른쪽 같은 줄`).toBe(true)
     expect.soft(o.bare, `${at} 받침·테두리 없음`).toBe(true)
     if (o.inView) expect.soft(o.painted, `${at} 그림 그려짐`).toBe(true)
   }
@@ -428,10 +444,10 @@ function summarizeContrast(samples: ContrastSample[]) {
 }
 
 for (const scheme of ['light', 'dark'] as const) {
-  test(`대비·겹침(${scheme}): 상태·조건 태그 글자 4.5:1 이상, 도구 겹침은 받침 없이 이미지 오른쪽 아래·너비 0.45~0.55배(스피드·공격·방어)`, async ({ page }) => {
+  test(`대비·겹침(${scheme}): 상태·조건 태그 글자 4.5:1 이상, 도구 아이콘은 받침 없이 포켓몬 이미지와 겹치지 않고 글자 오른쪽(스피드·공격·방어)`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme })
     await openSpeed(page)
-    // 동속·추가 표지와 상세 상태 알약까지 화면에 올린다
+    // 추가 표지와 상세 상태 알약까지 화면에 올린다
     await badges(page).first().click()
     const detail = page.getByTestId('speed-detail')
     await detail.getByTestId('speed-add-toggle').click()
@@ -439,12 +455,12 @@ for (const scheme of ['light', 'dark'] as const) {
     await expect(page.locator('[data-testid="speed-badge"][data-origin="added"]')).toHaveCount(1)
     const speed = await measureContrast(page, TAG_SELECTORS)
     for (const kind of ['조건 태그', '상태 알약']) expect(speed.some((s) => s.kind === kind), `${kind} 표본`).toBe(true)
-    await checkOverlays(page, '스피드')
+    await checkItemMarks(page, '스피드')
 
     // 방어 탭 화력 도구 줄(대도각참 생명의구슬), 공격 탭 반감열매 줄(대도각참 → 대쓰여너 마코열매)
     await selectTab(page, '방어')
     await waitComplete(page)
-    await checkOverlays(page, '방어')
+    await checkItemMarks(page, '방어')
     await selectTab(page, '공격')
     const species = combo(mySet(page), '종')
     await species.fill('대도각참')
@@ -452,7 +468,7 @@ for (const scheme of ['light', 'dark'] as const) {
     await expect(species).toHaveValue('대도각참')
     await waitComplete(page)
     await expect(page.getByRole('tabpanel').getByTestId('berry-badge').first()).toBeVisible()
-    await checkOverlays(page, '공격')
+    await checkItemMarks(page, '공격')
 
     const lines = summarizeContrast(speed)
     for (const l of lines) {

@@ -20,8 +20,11 @@ const ranking = [...meta.entries].sort((a, b) => a.rank - b.rank)
 type Sign = 'plus' | 'neutral' | 'minus'
 /** S 보정만 다른 대표 성격(스피드 계산은 S 보정만 본다) */
 const SIGN_NATURE: Record<Sign, string> = { plus: 'timid', neutral: 'hardy', minus: 'brave' }
-const SIGN_TEXT: Record<Sign, string> = { plus: '+', neutral: ' =', minus: ' −' }
+// 화면 표기는 공격·방어 탭과 같은 화살표만(무보정 기호 없음), 접근 이름은 성격 보정 글자
+const SIGN_TEXT: Record<Sign, string> = { plus: '↑', neutral: '', minus: '↓' }
+const SIGN_SPOKEN: Record<Sign, string> = { plus: '성격 상승', neutral: '성격 무보정', minus: '성격 하락' }
 const bundleText = (sp: number, sign: Sign) => `S${sp}${SIGN_TEXT[sign]}`
+const bundleSpoken = (sp: number, sign: Sign) => `S${sp} ${SIGN_SPOKEN[sign]}`
 const STATUS_KO = { outspeeds: '추월', tie: '동속', outsped: '추월당함' } as const
 
 function signOf(natureId: string): Sign {
@@ -64,7 +67,6 @@ const idByKo = <T extends { name: { ko?: string } }>(table: Record<string, T>, k
 const badges = (page: Page) => page.getByTestId('speed-badge')
 const frame = (page: Page) => page.getByTestId('speed-frame')
 const band = (page: Page) => page.getByTestId('speed-baseline')
-const bandSummary = (page: Page) => page.getByTestId('speed-band-summary')
 const detail = (page: Page) => page.getByTestId('speed-detail')
 const chip = (page: Page, f: string) => page.locator(`[data-testid="speed-head"] [data-filter="${f}"]`)
 const toolbarSpin = (page: Page, name: string) => page.getByRole('spinbutton', { name, exact: true })
@@ -184,10 +186,11 @@ const countStatus = (list: BadgeInfo[]) => ({
   tie: list.filter((b) => b.status === 'tie').length,
   outsped: list.filter((b) => b.status === 'outsped').length,
 })
-const summaryOf = (c: { outspeeds: number; tie: number; outsped: number }) => `추월 ${c.outspeeds} · 동속 ${c.tie} · 추월당함 ${c.outsped}`
-
-async function expectSummaryMatches(page: Page) {
-  await expect.poll(async () => (await bandSummary(page).textContent()) === summaryOf(countStatus(await readBadges(page)))).toBe(true)
+/** 띠·알림 영역에 추월·동속·추월당함 개수 요약이 없다(총수가 없어 무의미, 사용자 피드백 2026-11-16) */
+async function expectNoCountSummary(page: Page) {
+  await expect(page.getByTestId('speed-band-summary')).toHaveCount(0)
+  await expect(band(page)).not.toContainText(/추월 \d|동속 \d|추월당함 \d/)
+  await expect(page.getByTestId('speed-summary')).not.toContainText(/추월|동속/)
 }
 
 /** 기준선 띠가 끝에 붙지 않은(제자리) 스크롤 위치로 프레임을 옮긴다. 띠 바로 앞·뒤 줄에 맞닿았는지 돌려준다 */
@@ -208,14 +211,11 @@ async function placeBandInPlace(page: Page): Promise<boolean> {
 const OVERLAP_SEL = [
   '[data-testid="speed-frame"] [data-testid="speed-badge"]',
   '[data-testid="speed-frame"] .speed-row-speed',
-  '[data-testid="speed-frame"] .speed-row-diff',
   '[data-testid="speed-frame"] .speed-baseline-label',
-  '[data-testid="speed-band-summary"]',
 ].join(', ')
 const STUCK_OVERLAP_SEL = [
   '[data-testid="speed-frame"] li.speed-row [data-testid="speed-badge"]',
   '[data-testid="speed-frame"] .speed-row-speed',
-  '[data-testid="speed-frame"] .speed-row-diff',
 ].join(', ')
 
 /** 요소가 프레임 사각형 안에 온전히 있는가 */
@@ -259,7 +259,7 @@ test.describe('스피드 차트 배치(AC1~AC4, AC24)', () => {
   })
 
   for (const width of [400, 1280]) {
-    test(`AC2(${width}px): 실수치 내림차순 줄, 같은 실수치는 한 줄·라벨 한 번, 띠 제자리에서 배지·라벨·띠·요약 겹침 없음(1 차이 이웃 줄 포함)`, async ({ page }) => {
+    test(`AC2(${width}px): 실수치 내림차순 줄, 같은 실수치는 한 줄·라벨 한 번, 윗줄 차이 숫자 없음, 띠 제자리에서 배지·라벨·띠 겹침 없음(1 차이 이웃 줄 포함)`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 })
       await openSpeed(page, true)
       const list = await readBadges(page)
@@ -281,9 +281,9 @@ test.describe('스피드 차트 배치(AC1~AC4, AC24)', () => {
         }),
       )
       expect(flowOk).toBe(true)
-      // 1 차이 이웃 줄이 데이터에 있다
-      const diffs = await frame(page).locator('.speed-row-diff').allTextContents()
-      expect(diffs.filter((d) => d === '−1').length, '실수치 1 차이 이웃 줄').toBeGreaterThan(0)
+      // 윗줄과의 차이 숫자는 그리지 않는다. 1 차이 이웃 줄은 데이터에 있다(줄 실수치로 확인)
+      await expect(frame(page).locator('.speed-row-diff')).toHaveCount(0)
+      expect(rowSpeeds.some((s, i) => i > 0 && rowSpeeds[i - 1] - s === 1), '실수치 1 차이 이웃 줄').toBe(true)
 
       // 띠 제자리 위치에서 영역 교차 검사, 그다음 프레임 전체를 화면 높이씩 훑는다
       await frame(page).scrollIntoViewIfNeeded()
@@ -337,7 +337,7 @@ test.describe('스피드 차트 배치(AC1~AC4, AC24)', () => {
     }
   })
 
-  test('AC4: 래더 상대마다 기본 배지 하나 = 메타 원자료의 점유율 1위 S 묶음(동률은 빠른 쪽), 표기 "S32+"·"S20 ="·"S0 −", 실수치 = 코어 공식', async ({ page }) => {
+  test('AC4: 래더 상대마다 기본 배지 하나 = 메타 원자료의 점유율 1위 S 묶음(동률은 빠른 쪽), 표기 "S32↑"·"S20"·"S0↓"(접근 이름은 성격 보정 글자), 실수치 = 코어 공식', async ({ page }) => {
     await openSpeed(page)
     const list = await readBadges(page)
     const base = list.filter((b) => b.origin === 'ladder' && b.condition === 'none')
@@ -352,19 +352,20 @@ test.describe('스피드 차트 배치(AC1~AC4, AC24)', () => {
       if (top.share < 0.05) small++
       if (top.tied) tied++
       expect({ sp: mine[0].sp, sign: mine[0].sign }, id).toEqual({ sp: top.sp, sign: top.sign })
-      expect(mine[0].label, id).toContain(` ${bundleText(top.sp, top.sign)}`)
+      expect(mine[0].label, id).toContain(` ${bundleSpoken(top.sp, top.sign)}`)
       expect(mine[0].speed, `${id} 실수치`).toBe(top.speed)
     }
     // 표기 형식: 세 보정 모두 화면에 나온다(상위 30에 하락 묶음이 없으면 래더 전 종에서 찾는다)
     const visible = await badges(page).locator('.num').allTextContents()
-    for (const v of visible) expect(v).toMatch(/^S\d{1,2}(\+| =| −)$/)
-    expect(visible.some((v) => v.endsWith('+'))).toBe(true)
-    expect(visible.some((v) => v.endsWith(' ='))).toBe(true)
+    for (const v of visible) expect(v).toMatch(/^S\d{1,2}[↑↓]?$/)
+    expect(visible.some((v) => v.endsWith('↑'))).toBe(true)
+    expect(visible.some((v) => /\d$/.test(v)), '무보정은 기호 없음').toBe(true)
+    for (const v of visible) expect(v).not.toMatch(/[=+−]/)
     test.info().annotations.push({ type: 'AC4', description: `상위 30 중 1위 점유율 5% 미만 ${small}종, 1위 동률 ${tied}종(그 밖의 경계 사례는 단위 테스트)` })
   })
 
   for (const width of [400, 1280]) {
-    test(`AC24(${width}px): 상위 30·조건 전부 켬, 열기·S0·S32·위아래 끝 스크롤에서 기준선 띠와 요약이 프레임 안`, async ({ page }) => {
+    test(`AC24(${width}px): 상위 30·조건 전부 켬, 열기·S0·S32·위아래 끝 스크롤에서 기준선 띠가 프레임 안(개수 요약 없음)`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 })
       await openSpeed(page, true)
       await frame(page).scrollIntoViewIfNeeded()
@@ -372,8 +373,8 @@ test.describe('스피드 차트 배치(AC1~AC4, AC24)', () => {
       const check = async (when: string) => {
         await frame(page).scrollIntoViewIfNeeded()
         expect(await insideFrame(page, band(page)), `${when}: 띠`).toBe(true)
-        await expect(bandSummary(page)).toHaveText(/추월 \d+ · 동속 \d+ · 추월당함 \d+/)
-        expect(await insideFrame(page, bandSummary(page)), `${when}: 요약`).toBe(true)
+        expect(await insideFrame(page, band(page).locator('.speed-baseline-label')), `${when}: 띠 라벨`).toBe(true)
+        await expectNoCountSummary(page)
       }
       await check('열기')
       await setMySp(page, 0)
@@ -399,18 +400,21 @@ test.describe('기준선과 상태(AC5, AC5b, AC6, AC8, AC25)', () => {
       expect(b.status, b.label).toBe(want)
       expect(b.label.split(', '), b.label).toContain(STATUS_KO[want])
     }
-    // 동속 배지: 화면 "동속" 표지, 띠(내 실수치 줄) 안
+    // 동속 배지: "동속" 태그 없이 상태 색(동속 면)으로만, 띠(내 실수치 줄) 안
     const ties = badges(page).and(page.locator('[data-status="tie"]'))
     const n = await ties.count()
     for (let i = 0; i < n; i++) {
-      await expect(ties.nth(i).locator('.speed-mark.tie')).toHaveText('동속')
+      await expect(ties.nth(i).locator('.speed-mark')).toHaveCount(0)
+      await expect(ties.nth(i)).not.toContainText('동속')
+      await expect(ties.nth(i)).toHaveClass(/\btie\b/)
       expect(await ties.nth(i).evaluate((el) => el.closest('[data-testid="speed-baseline"]') !== null)).toBe(true)
     }
-    await expect(bandSummary(page)).toHaveText(summaryOf(countStatus(list)))
+    expect(Object.values(countStatus(list)).reduce((a, b) => a + b, 0)).toBe(list.length)
+    await expectNoCountSummary(page)
     return n
   }
 
-  test('AC5: S SP를 바꾸면 띠가 새 실수치로 옮기고 추월·동속·추월당함·요약·띠 배분 표기가 따라 바뀐다(동속 줄 = 띠)', async ({ page }) => {
+  test('AC5: S SP를 바꾸면 띠가 새 실수치로 옮기고 추월·동속·추월당함·띠 배분 표기(화살표)가 따라 바뀐다(동속 줄 = 띠, 개수 요약 없음)', async ({ page }) => {
     await openSpeed(page, true)
     let sawTie = false
     for (const sp of [32, 20, 7, 0]) {
@@ -419,18 +423,19 @@ test.describe('기준선과 상태(AC5, AC5b, AC6, AC8, AC25)', () => {
       await expect(band(page)).toHaveAttribute('data-speed', stat)
       await expect(band(page).locator('.speed-baseline-label')).toContainText(`내 스피드 ${stat}`)
       const sign = (await mySetFromUi(page)).nature === SIGN_NATURE.plus ? 'plus' : (await mySetFromUi(page)).nature === SIGN_NATURE.minus ? 'minus' : 'neutral'
-      await expect(page.getByTestId('speed-baseline-bundle')).toHaveText(bundleText(sp, sign))
+      await expect(page.getByTestId('speed-baseline-bundle').locator('.bundle-mark')).toHaveText(bundleText(sp, sign))
+      await expect(page.getByTestId('speed-baseline-bundle').locator('.sr-only')).toHaveText(bundleSpoken(sp, sign))
+      await expect(page.getByTestId('speed-summary')).toHaveText(`내 스피드 ${stat}`)
       if ((await expectStatuses(page)) > 0) sawTie = true
     }
     expect(sawTie, '동속 줄이 있는 사례를 지났다').toBe(true)
   })
 
-  test('AC5b: 내 도구 선제공격손톱(순서 변경)이면 띠·요약·상태가 사라지고 원인 안내, 상세 최소 S 자리도 같은 안내, 되돌리면 복귀', async ({ page }) => {
+  test('AC5b: 내 도구 선제공격손톱(순서 변경)이면 띠·상태가 사라지고 원인 안내, 상세 최소 S 자리도 같은 안내, 되돌리면 복귀', async ({ page }) => {
     await openSpeed(page)
-    const before = await bandSummary(page).textContent()
+    const before = await band(page).getAttribute('data-speed')
     await setMyItem(page, '선제공격손톱')
     await expect(band(page)).toHaveCount(0)
-    await expect(bandSummary(page)).toHaveCount(0)
     const notice = page.getByTestId('speed-reject')
     await expect(notice).toHaveText('내 행동 순서 변경 · 선제공격손톱')
     await expect(page.getByTestId('speed-summary')).toHaveText('')
@@ -443,7 +448,7 @@ test.describe('기준선과 상태(AC5, AC5b, AC6, AC8, AC25)', () => {
     await setMyItem(page, '생명의구슬')
     await expect(page.getByTestId('speed-reject')).toHaveCount(0)
     await expect(band(page)).toHaveCount(1)
-    await expect(bandSummary(page)).toHaveText(before!)
+    await expect(band(page)).toHaveAttribute('data-speed', before!)
   })
 
   test('AC6: 내 구애스카프 → 띠가 코어 공식(×1.5) 값, 내 특성 날씨부정(구름보기) → 날씨 배지만 사라진다', async ({ page }) => {
@@ -552,7 +557,20 @@ test.describe('배지 상세(AC7, AC10)', () => {
     await expect(detail(page)).toHaveAttribute('data-badge-id', scarf.id)
     const d = detail(page)
     await expect(d.getByTestId('speed-detail-name')).toHaveText(speciesKo(scarf.opponent))
-    await expect(d.locator('.speed-detail-title')).toContainText(`${bundleText(scarf.sp, scarf.sign)} · 스카프 · 실수치 ${scarf.speed}`)
+    // 상세 배분 줄: "S32↑ {스카프 아이콘} · 실수치 n"(스카프 태그 글자 없음, 도구 아이콘은 배분 표기 오른쪽)
+    const bundleRow = d.locator('.speed-detail-bundle')
+    await expect(bundleRow.locator('.bundle-mark')).toHaveText(bundleText(scarf.sp, scarf.sign))
+    await expect(bundleRow.locator('.sr-only')).toHaveText(bundleSpoken(scarf.sp, scarf.sign))
+    await expect(bundleRow).toContainText(`· 실수치 ${scarf.speed}`)
+    await expect(bundleRow).not.toContainText('스카프')
+    const detailMark = bundleRow.locator('.item-mark[data-item-id="choicescarf"]')
+    await expect(detailMark).toHaveCount(1)
+    expect((await detailMark.boundingBox())!.x).toBeGreaterThanOrEqual((await bundleRow.locator('.bundle-mark').boundingBox())!.x + (await bundleRow.locator('.bundle-mark').boundingBox())!.width - 0.5)
+    // 스카프 배지 버튼: "스카프" 태그 없이 배분 표기 오른쪽 구애스카프 아이콘
+    const scarfBadge = badgeById(page, scarf.id)
+    await expect(scarfBadge.locator('.speed-tag')).toHaveCount(0)
+    await expect(scarfBadge.locator('.speed-badge-text')).not.toContainText('스카프')
+    await expect(scarfBadge.locator('.speed-badge-text > .item-mark[data-item-id="choicescarf"]')).toHaveCount(1)
     await expect(d.getByTestId('speed-detail-share')).toHaveText(/^\d+(\.\d+)?%$/)
     await expect(d.getByTestId('speed-detail-condition')).toHaveText(/^구애스카프 점유율 \d+(\.\d+)?%$/)
     await expect(d.getByTestId('speed-detail-item')).toHaveText('구애스카프')
@@ -562,17 +580,22 @@ test.describe('배지 상세(AC7, AC10)', () => {
     await badgeById(page, mega.id).click()
     await expect(detail(page)).toHaveAttribute('data-badge-id', mega.id)
     await expect(detail(page).getByTestId('speed-detail-name')).toHaveText(`${speciesKo(mega.opponent)} (메가진화 폼)`)
-    // 메가 배지 버튼: 이름 글자·"메가" 태그 없이 배분 표기만, 이름은 툴팁(title)과 접근 이름 첫 덩어리, 메가 표지는 겹친 메가진화 문양
+    // 메가 배지 버튼: 이름 글자·"메가" 태그 없이 배분 표기만, 이름은 툴팁(title)과 접근 이름 첫 덩어리, 메가 표지는 배분 표기 오른쪽 메가진화 문양
     const megaBadge = badgeById(page, mega.id)
-    await expect(megaBadge.locator('.speed-badge-text')).toHaveText(new RegExp(`^${bundleText(mega.sp, mega.sign).replace(/[+]/g, '\\+')}`))
+    await expect(megaBadge.locator('.speed-badge-text')).toHaveText(new RegExp(`^${bundleText(mega.sp, mega.sign)}`))
     await expect(megaBadge.locator('.speed-badge-text')).not.toContainText('메가')
     await expect(megaBadge.locator('.speed-badge-text')).not.toContainText(speciesKo(mega.opponent))
     const megaTitle = (await megaBadge.getAttribute('title')) ?? ''
     expect(megaTitle.length).toBeGreaterThan(0)
     expect(megaTitle).toContain(speciesKo(mega.opponent))
     expect(((await megaBadge.getAttribute('aria-label')) ?? '').startsWith(`${megaTitle} `)).toBe(true)
-    const megaMark = megaBadge.locator('.mon-item img[data-item-glyph="mega"]')
+    const megaMark = megaBadge.locator('.speed-badge-text > .item-mark img[data-item-glyph="mega"]')
     await expect(megaMark).toHaveCount(1)
+    const numBox = (await megaBadge.locator('.speed-badge-text .num').boundingBox())!
+    const markBox = (await megaBadge.locator('.item-mark').boundingBox())!
+    const iconBox = (await megaBadge.locator('[data-testid="mon-icon"]').boundingBox())!
+    expect(markBox.x, '메가 문양은 배분 표기 오른쪽').toBeGreaterThanOrEqual(numBox.x + numBox.width - 0.5)
+    expect(markBox.x, '메가 문양은 포켓몬 이미지와 겹치지 않음').toBeGreaterThanOrEqual(iconBox.x + iconBox.width - 0.5)
     await expect.poll(() => megaMark.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(200)
     // Esc
     await page.keyboard.press('Escape')
@@ -600,7 +623,8 @@ test.describe('배지 상세(AC7, AC10)', () => {
     const top = topBundle(e)
     const rain = (await readBadges(page)).find((b) => b.opponent === e.id && b.condition === 'field')
     expect(rain, '비 배지').toBeDefined()
-    expect(rain!.label.split(', ')[0]).toBe(`${speciesKo(e.id)} ${bundleText(top.sp, top.sign)} 비`)
+    expect(rain!.label.split(', ')[0]).toBe(`${speciesKo(e.id)} ${bundleSpoken(top.sp, top.sign)} 비`)
+    await expect(badgeById(page, rain!.id).locator('.speed-tag')).toHaveText('비')
     const want = finalSpeed(game, { ...withSpeed(e.representative.set, top.sp, top.sign), ability: 'swiftswim' }, { weather: 'Rain' })
     expect(rain!.speed).toBe(want)
     expect(rain!.rowSpeed).toBe(want)
@@ -627,7 +651,7 @@ test.describe('AC7 터치(400px)', () => {
 // ---------- 필터·범위 ----------
 
 test.describe('필터와 범위(AC11, AC13~AC16)', () => {
-  test('AC11: 기본 필터(랭크업·스카프·날씨 켬, 순풍 끔), 끄면 그 종류만 사라짐, 요약 따라감, 탭 왕복 유지, 새로고침이면 기본값·구애스카프 기준 5', async ({ page }) => {
+  test('AC11: 기본 필터(랭크업·스카프·날씨 켬, 순풍 끔), 끄면 그 종류만 사라짐, 개수 요약 없음, 탭 왕복 유지, 새로고침이면 기본값·구애스카프 기준 5', async ({ page }) => {
     await openSpeed(page)
     const pressed = async () => Object.fromEntries(await Promise.all(FILTERS.map(async (f) => [f, await chip(page, f).getAttribute('aria-pressed')])))
     expect(await pressed()).toEqual({ rank: 'true', scarf: 'true', tailwind: 'false', field: 'true' })
@@ -643,7 +667,7 @@ test.describe('필터와 범위(AC11, AC13~AC16)', () => {
     expect(c0.tailwind).toBe(0)
     await chip(page, 'tailwind').click()
     await expect.poll(async () => (await counts()).tailwind).toBeGreaterThan(0)
-    await expectSummaryMatches(page)
+    await expectNoCountSummary(page)
     const all = await counts()
     expect(all.base).toBe(c0.base)
     for (const f of FILTERS) {
@@ -652,7 +676,6 @@ test.describe('필터와 범위(AC11, AC13~AC16)', () => {
       await expect.poll(async () => (await counts())[f]).toBe(0)
       const c = await counts()
       for (const g of [...FILTERS, 'base']) if (g !== f) expect(c[g], `${f} 끔 → ${g}`).toBe(all[g])
-      await expectSummaryMatches(page)
       await chip(page, f).click()
       await expect.poll(async () => (await counts())[f]).toBe(all[f])
     }
@@ -686,7 +709,12 @@ test.describe('필터와 범위(AC11, AC13~AC16)', () => {
     const area = page.getByTestId('speed-unsupported')
     await expect(area.getByRole('heading', { name: '순서 비교 불가' })).toBeVisible()
     await expect(area.getByRole('listitem')).toHaveText(['워시로토무 (프리셋 1) · 행동 순서 변경 · 선제공격손톱'])
-    await expect(area.locator('[data-testid="mon-with-item"] .mon-item[data-item-id="quickclaw"]')).toHaveCount(1)
+    // 도구 아이콘은 포켓몬 이미지 옆(겹치지 않음)
+    const qc = area.locator('li .item-mark[data-item-id="quickclaw"]')
+    await expect(qc).toHaveCount(1)
+    const qcBox = (await qc.boundingBox())!
+    const monBox = (await area.locator('li [data-testid="mon-icon"]').first().boundingBox())!
+    expect(qcBox.x).toBeGreaterThanOrEqual(monBox.x + monBox.width - 0.5)
   })
 
   test('AC14: 목록 밖 타겟 프리셋 3종이 각자 실수치 줄에 다른 배경·"프리셋 n" 표지로, 삭제하면 사라진다', async ({ page }) => {
@@ -732,7 +760,7 @@ test.describe('필터와 범위(AC11, AC13~AC16)', () => {
 
   test.describe('빈 상태(고정 데이터: 포푸니크 대표 도구를 선제공격손톱으로 바꾼 메타)', () => {
     test.use({ serviceWorkers: 'block' })
-    test('AC15·AC13: 선택 결과의 배지가 없으면 띠(요약 0)와 빈 상태 안내, 래더 상대는 "순서 비교 불가"에 이유와 함께', async ({ page }) => {
+    test('AC15·AC13: 선택 결과의 배지가 없으면 띠와 빈 상태 안내, 래더 상대는 "순서 비교 불가"에 이유와 함께', async ({ page }) => {
       let patched = 0
       await page.route(/\/assets\/\d{4}-\d{2}-bo1-[\w-]+\.js$/, async (route) => {
         const res = await route.fetch()
@@ -753,7 +781,7 @@ test.describe('필터와 범위(AC11, AC13~AC16)', () => {
       await expect(badges(page)).toHaveCount(0)
       await expect(page.getByTestId('speed-empty')).toContainText('표시할 상대가 없습니다')
       await expect(band(page)).toBeVisible()
-      await expect(bandSummary(page)).toHaveText('추월 0 · 동속 0 · 추월당함 0')
+      await expectNoCountSummary(page)
       await expect(page.getByTestId('speed-unsupported').getByRole('listitem')).toHaveText(['포푸니크 · 행동 순서 변경 · 선제공격손톱'])
     })
   })
@@ -800,17 +828,14 @@ test.describe('필터와 범위(AC11, AC13~AC16)', () => {
 // ---------- 차트 배분 추가 ----------
 
 test.describe('차트에서 배분 추가(AC26)', () => {
-  test('AC26: 목록·직접 입력 추가, "추가" 표지·실수치 줄·도구 겹침·상태·최소 S·요약 ±1, 이미 있음, 지우기, 탭 왕복·필터·새로고침', async ({ page }) => {
+  test('AC26: 목록·직접 입력 추가, "추가" 표지·실수치 줄·도구 아이콘·상태·최소 S·배지 수 ±1, 이미 있음, 지우기, 탭 왕복·필터·새로고침', async ({ page }) => {
     await openSpeed(page)
     const set = await mySetFromUi(page)
     // 순위 2 이상인 래더 상대 기본 배지(상위 N으로 뺄 수 있게)
     const base = (await readBadges(page)).find((b) => b.origin === 'ladder' && b.condition === 'none' && entryOf(b.opponent).rank >= 2)!
     const entry = entryOf(base.opponent)
     const ofOpponent = async () => (await readBadges(page)).filter((b) => b.opponent === base.opponent)
-    const total = async () => {
-      const m = /추월 (\d+) · 동속 (\d+) · 추월당함 (\d+)/.exec((await bandSummary(page).textContent()) ?? '')!
-      return Number(m[1]) + Number(m[2]) + Number(m[3])
-    }
+    const total = async () => (await readBadges(page)).length
     const n0 = (await ofOpponent()).length
     const sum0 = await total()
 
@@ -818,17 +843,21 @@ test.describe('차트에서 배분 추가(AC26)', () => {
     await badgeById(page, base.id).click()
     await detail(page).getByTestId('speed-add-toggle').click()
     const options = detail(page).getByTestId('speed-add-option')
-    const baseOpt = options.filter({ has: page.locator('b', { hasText: new RegExp(`^${bundleText(base.sp, base.sign)}$`) }) })
+    const baseOpt = options.filter({ has: page.locator('b .bundle-mark', { hasText: new RegExp(`^${bundleText(base.sp, base.sign)}$`) }) })
     await expect(baseOpt).toBeDisabled()
     await expect(baseOpt).toContainText('차트에 있음')
     const pickOpt = options.and(page.locator(':enabled')).first()
-    const optLabel = (await pickOpt.locator('b').textContent())!
+    const optLabel = (await pickOpt.locator('b .bundle-mark').textContent())!
+    const optSpoken = (await pickOpt.locator('b .sr-only').textContent())!
+    expect(optLabel).toMatch(/^S\d{1,2}[↑↓]?$/)
     const optSpeed = Number(await pickOpt.locator('span.num').nth(1).textContent())
     await pickOpt.click()
     const added = page.locator('[data-testid="speed-badge"][data-origin="added"]')
     await expect(added).toHaveCount(1)
     const a = (await readBadges(page)).find((b) => b.origin === 'added')!
-    expect(a.label.split(', ')[0]).toBe(`${speciesKo(base.opponent)} ${optLabel}`)
+    expect(a.label.split(', ')[0]).toBe(`${speciesKo(base.opponent)} ${optSpoken}`)
+    expect(optSpoken).toBe(bundleSpoken(a.sp, a.sign))
+    expect(optLabel).toBe(bundleText(a.sp, a.sign))
     expect(a.speed).toBe(optSpeed)
     expect(a.speed).toBe(finalSpeed(game, withSpeed(entry.representative.set, a.sp, a.sign)))
     expect(a.rowSpeed).toBe(a.speed)
@@ -836,17 +865,17 @@ test.describe('차트에서 배분 추가(AC26)', () => {
     await expect(added.locator('.speed-mark.add')).toHaveText('추가')
     expect((await ofOpponent()).length).toBe(n0 + 1)
     expect(await total()).toBe(sum0 + 1)
-    const itemOf = (id: string) => badgeById(page, id).locator('.mon-item').getAttribute('data-item-id')
+    const itemOf = (id: string) => badgeById(page, id).locator('.item-mark').getAttribute('data-item-id')
     expect(await itemOf(a.id)).toBe(await itemOf(base.id))
     // 추가 배지 상세: 상태·최소 S, 같은 묶음은 다시 고를 수 없다
     await expect(detail(page)).toHaveAttribute('data-badge-id', a.id)
     await expect(detail(page).locator('.speed-pill')).toHaveText(STATUS_KO[a.status as keyof typeof STATUS_KO])
     await expect(detail(page).getByTestId('speed-detail-min-sp')).toContainText(bruteMinSp(set, a.speed, false))
     await detail(page).getByTestId('speed-add-toggle').click()
-    await expect(detail(page).getByTestId('speed-add-option').filter({ has: page.locator('b', { hasText: new RegExp(`^${optLabel.replace('+', '\\+')}$`) }) })).toBeDisabled()
+    await expect(detail(page).getByTestId('speed-add-option').filter({ has: page.locator('b .bundle-mark', { hasText: new RegExp(`^${optLabel}$`) }) })).toBeDisabled()
 
     // (b) 직접 입력: 목록에 없는 SP·성격
-    const listed = new Set(await detail(page).getByTestId('speed-add-option').locator('b').allTextContents())
+    const listed = new Set(await detail(page).getByTestId('speed-add-option').locator('b .bundle-mark').allTextContents())
     let custom: { sp: number; sign: Sign } | undefined
     for (let sp = 0; sp <= 32 && !custom; sp++) for (const sign of ['minus', 'neutral', 'plus'] as Sign[]) if (!custom && !listed.has(bundleText(sp, sign))) custom = { sp, sign }
     const form = detail(page).locator('.speed-add-custom')
@@ -872,7 +901,7 @@ test.describe('차트에서 배분 추가(AC26)', () => {
       expect((await readBadges(page)).length).toBe(count)
     }
 
-    // 지우기 → 요약 −1
+    // 지우기 → 배지 수 −1
     const sumBefore = await total()
     await detail(page).getByTestId('speed-remove').click()
     await expect(added).toHaveCount(1)

@@ -8,7 +8,8 @@ import { koReason } from '../../ui/koErrors'
 import type { AppAction } from '../state'
 import { CustomEditor } from './CustomEditor'
 import { DetailItem, PairDetail, RowDetail } from './RowDetail'
-import { MonWithItem } from './MonWithItem'
+import { ItemMark } from './ItemMark'
+import { PokemonIcon } from './PokemonIcon'
 import { MoveLabel, VariableTag } from './MoveLabel'
 import { MoveMenu, type MoveAdding } from './MoveMenu'
 import { Caret } from './Caret'
@@ -576,11 +577,17 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
       {/* 행 어디를 눌러도 펼친다. 키보드·스크린 리더는 이름 칸 버튼(클릭이 이 줄로 버블돼 한 번만 토글). */}
       <div className="card-line" onClick={() => onToggle(group.key)}>
         <button type="button" className="card-toggle card-who" aria-expanded={expanded} aria-controls={detailId} aria-describedby={describedBy}>
-          {/* 읽기 순서(이름 → "OO 지닌 경우")를 지키려고 이미지 상자를 이름 뒤에 두고 CSS로 왼쪽 열에 놓는다 */}
+          <PokemonIcon speciesId={card.opponent.id} size={32} lazy />
+          {/* 지닌 도구(변형 도구·메가스톤)는 이름 오른쪽 아이콘(포켓몬 이미지와 겹치지 않음) */}
           <span className="card-name">
             <SpeciesName label={names.species.label(card.opponent.id)} />
+            {item !== undefined && (
+              <>
+                {' '}
+                <ItemMark item={item} lazy game={game} />
+              </>
+            )}
           </span>
-          <MonWithItem speciesId={card.opponent.id} size={32} lazy item={item} game={game} />
           {!ladder && (
             <span className="card-meta">
               <span className="custom-tag">출처: 사용자 지정</span>

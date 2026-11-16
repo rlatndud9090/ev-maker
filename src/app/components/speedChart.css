@@ -107,7 +107,7 @@
 
 .speed-row {
   display: grid;
-  grid-template-columns: 3rem 3rem minmax(0, 1fr);
+  grid-template-columns: 3rem minmax(0, 1fr);
   align-items: start;
   gap: 0.25rem 0.4rem;
   padding-block: 0.2rem;
@@ -118,12 +118,6 @@
   color: var(--text-strong);
   text-align: right;
   padding-top: 0.35rem;
-}
-
-.speed-row-diff {
-  color: var(--muted);
-  font-size: 0.8em;
-  padding-top: 0.45rem;
 }
 
 .speed-badges {
@@ -299,7 +293,7 @@
 
 @media (max-width: 30rem) {
   .speed-row {
-    grid-template-columns: 2.5rem 2.2rem minmax(0, 1fr);
+    grid-template-columns: 2.5rem minmax(0, 1fr);
   }
 }
 
@@ -309,7 +303,7 @@
   margin-left: auto;
 }
 
-/* 기준선 띠 = 내 실수치 줄: 라벨 · 동속 배지 · 요약이 한 흐름(서로 가리지 않음). 400px에서는 요약이 다음 줄로 넘어간다 */
+/* 기준선 띠 = 내 실수치 줄: 라벨 · 동속 배지가 한 흐름(서로 가리지 않음) */
 .speed-baseline {
   flex-wrap: wrap;
   gap: 0.3rem 0.6rem;
@@ -325,12 +319,6 @@
   font-weight: 600;
 }
 
-.speed-baseline-summary {
-  margin-left: auto;
-  font-weight: 600;
-  font-size: 0.9em;
-}
-
 .speed-band-detail {
   display: block;
 }
@@ -342,8 +330,17 @@
 
 .speed-unsupported li {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
+}
+
+/* 상세 머리 배분 줄: 배분 표기 오른쪽 도구 아이콘 */
+.speed-detail-bundle {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 0.3rem;
 }
 
 /* "다른 배분 추가" 묶음 목록: 배분 표기 · 점유율 · 실수치 · 상태를 칸으로 나눠 숫자가 붙어 읽히지 않게 */
@@ -364,9 +361,9 @@
 /* 데스크톱: 상세는 배지 칸 시작선에 맞춰 들여 쓴다(400px은 들여쓰기 없음, ADR 결정 1) */
 @media (min-width: 60rem) {
   .speed-row > .speed-detail {
-    grid-column: 3 / -1;
+    grid-column: 2 / -1;
   }
   .speed-band-detail {
-    padding-left: calc(6rem + 0.8rem);
+    padding-left: calc(3rem + 0.4rem);
   }
 }

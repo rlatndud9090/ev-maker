@@ -4,7 +4,6 @@ import {
   compareInRow,
   ladderRows,
   speedBaseline,
-  summarize,
   visibleBadges,
   type CustomTarget,
   type SpeedBaseline,
@@ -47,7 +46,8 @@ function abilityOf(game: Snapshot, set: PokemonSet): string | null {
   }
 }
 
-const summaryText = (s: ReturnType<typeof summarize>): string => (s === null ? '' : `추월 ${s.outspeeds} · 동속 ${s.tie} · 추월당함 ${s.outsped}`)
+/** 알림 영역 글자: 확정 기준선의 내 실수치만(총수 없는 추월·동속 개수는 알리지 않는다, 사용자 피드백 2026-11-16) */
+const summaryText = (b: SpeedBaseline): string => (b.kind === 'ok' ? `내 스피드 ${b.speed}` : '')
 
 /** 스피드 탭: 내 세트의 특성만 입력으로 받는 배지 모델을 한 번 만들고, 기준선(표시 SP)만 드래그를 따라간다 */
 export function SpeedTab({ game, view, state, mySet, displaySp, dispatch, tabId, panelId, generation, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel }: Props) {
@@ -70,9 +70,8 @@ export function SpeedTab({ game, view, state, mySet, displaySp, dispatch, tabId,
   const shownSet = useMemo(() => (shownSp === null ? mySet : { ...mySet, sp: shownSp }), [mySet, shownSp])
   const baseline: SpeedBaseline = useMemo(() => (shownSp === null ? confirmedBaseline : speedBaseline(game, shownSet, myTailwind)), [shownSp, confirmedBaseline, game, shownSet, myTailwind])
   const rows = useMemo(() => ladderRows(badges, baseline.kind === 'ok' ? baseline.speed : null, cmp), [badges, baseline, cmp])
-  // 알림 영역은 확정 SP 기준, 띠 안의 보이는 요약은 화면 기준선(드래그 중 표시 SP)을 따른다
-  const summary = useMemo(() => summaryText(summarize(badges, confirmedBaseline)), [badges, confirmedBaseline])
-  const shownSummary = useMemo(() => summaryText(summarize(badges, baseline)), [badges, baseline])
+  // 알림 영역은 확정 SP 기준(드래그 중에는 알리지 않는다)
+  const summary = summaryText(confirmedBaseline)
 
   useLayoutEffect(() => {
     markSpeedChart(SPEED_CHART_FIRST_MARK, generation)
@@ -121,7 +120,7 @@ export function SpeedTab({ game, view, state, mySet, displaySp, dispatch, tabId,
       <p className="sr-only" role="status" data-testid="speed-summary">
         {summary}
       </p>
-      {/* 빈 상태에서도 기준선 띠(요약 0)는 프레임 안에 보인다 */}
+      {/* 빈 상태에서도 기준선 띠는 프레임 안에 보인다 */}
       <SpeedChart
         game={game}
         model={model}
@@ -132,7 +131,6 @@ export function SpeedTab({ game, view, state, mySet, displaySp, dispatch, tabId,
         myTailwind={myTailwind}
         customTargets={targets}
         dispatch={dispatch}
-        summary={shownSummary}
         empty={empty}
       />
     </div>

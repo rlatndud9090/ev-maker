@@ -63,7 +63,7 @@ test.describe('공격 탭 상대 도구: 기합의띠 없음 · 반감열매 별
     expect(baseCats.length).toBeGreaterThan(0)
     expect(baseCats.every((c) => c === 'guaranteed-survive' || /확정견딤/.test(c))).toBe(false)
 
-    // 열매 행: 포켓몬 이미지에 겹친 열매 표지, data-item-id, 접근 이름 "… 마코열매 지닌 경우"
+    // 열매 행: 이름 오른쪽 열매 아이콘(포켓몬 이미지와 겹치지 않음), data-item-id, 접근 이름 "… 마코열매 지닌 경우"
     const berry = groupRow(page, COLBUR)
     await expect(berry).toHaveCount(1)
     await expect(berry).toHaveAttribute('data-berry', 'colburberry')
@@ -76,6 +76,21 @@ test.describe('공격 탭 상대 도구: 기합의띠 없음 · 반감열매 별
     await expect(badge).not.toContainText('(마코)')
     await expect.poll(() => icon.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(48)
     await expect(berry.locator('.card-name')).toContainText('대쓰여너')
+    // 자리: 이름 칸 안, 이름 글자 오른쪽, 포켓몬 이미지와 겹치지 않고 크기는 이름 옆 아이콘(22px)
+    await expect(berry.locator('.card-name [data-testid="berry-badge"]')).toHaveCount(1)
+    const geo = await berry.locator('.card-who').evaluate((who) => {
+      const name = who.querySelector('.card-name')!
+      const mark = name.querySelector<HTMLElement>('[data-testid="berry-badge"]')!.getBoundingClientRect()
+      const mon = who.querySelector('[data-testid="mon-icon"]')!.getBoundingClientRect()
+      const range = document.createRange()
+      range.selectNodeContents(name)
+      range.setEndBefore(name.querySelector('[data-testid="berry-badge"]')!)
+      const text = range.getBoundingClientRect()
+      return { markLeft: mark.left, textRight: text.right, monRight: mon.right, size: [Math.round(mark.width), Math.round(mark.height)] }
+    })
+    expect(geo.markLeft).toBeGreaterThanOrEqual(geo.textRight - 0.5)
+    expect(geo.markLeft).toBeGreaterThan(geo.monRight)
+    expect(geo.size).toEqual([22, 22])
     await expect(berry.locator('.card-toggle')).toHaveAccessibleName(/^대쓰여너.*마코열매 지닌 경우/)
     // 사용률 순: 원래 행 바로 뒤
     const keys = await cards(page).evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.groupKey))

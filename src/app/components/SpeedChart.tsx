@@ -1,6 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent } from 'react'
 import {
-  bundleLabel,
   focusAfterRemove,
   minSpToPass,
   navigate,
@@ -16,7 +15,9 @@ import type { PokemonSet } from '../../core'
 import type { Snapshot } from '../../data/schema'
 import { namesOf } from '../../ui/names'
 import type { AppAction } from '../state'
-import { MonWithItem } from './MonWithItem'
+import { BundleText } from './BundleText'
+import { ItemMark } from './ItemMark'
+import { PokemonIcon } from './PokemonIcon'
 import { SpeedBadge } from './SpeedBadge'
 import { SpeedBadgeDetail } from './SpeedBadgeDetail'
 import { rejectionText, type SpeedBadgeHandlers } from './speedText'
@@ -38,8 +39,6 @@ interface Props {
   myTailwind: boolean
   customTargets: readonly CustomTarget[]
   dispatch: Dispatch<AppAction>
-  /** 화면 기준선(드래그 중 표시 SP) 요약. 띠 안에 보인다(알림 영역은 SpeedTab이 따로 둔다) */
-  summary: string
   /** 표시할 배지가 없음: 띠 아래 빈 상태 안내 */
   empty: boolean
 }
@@ -47,7 +46,7 @@ interface Props {
 type Pending = { kind: 'id'; id: string } | { kind: 'added'; opponentId: string; sp: number; nature: NatureSign }
 
 /** 실수치 내림차순 줄 목록(기준선 띠 포함)과 줄 아래 인라인 상세, 순서 비교 불가 영역 */
-export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTailwind, customTargets, dispatch, summary, empty }: Props) {
+export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTailwind, customTargets, dispatch, empty }: Props) {
   const frame = useRef<HTMLDivElement>(null)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -212,22 +211,19 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
             />
           )
           if (band) {
-            // 기준선 띠 = 내 실수치 줄: 구분 텍스트 → 동속 배지 → 요약. 동속 배지 상세는 띠 바로 아래 항목(띠와 함께 끝에 붙지 않게)
+            // 기준선 띠 = 내 실수치 줄: 구분 텍스트 → 동속 배지. 동속 배지 상세는 띠 바로 아래 항목(띠와 함께 끝에 붙지 않게)
             return (
               <Fragment key={row.speed}>
                 <li className="speed-baseline" data-testid="speed-baseline" data-speed={row.speed}>
                   <span className="speed-baseline-label">
                     내 스피드 <b className="num">{baseline.speed}</b>
                     <span className="speed-baseline-bundle num" data-testid="speed-baseline-bundle">
-                      {bundleLabel(baseline.sp, baseline.nature)}
+                      <BundleText sp={baseline.sp} nature={baseline.nature} />
                       {baseline.tailwind ? ' · 순풍' : ''}
                     </span>
                   </span>
                   <span className="sr-only">. {baseline.speed}과 같으면 동속, 그보다 아래는 추월</span>
                   {badgeList}
-                  <span className="speed-baseline-summary num" aria-hidden="true" data-testid="speed-band-summary">
-                    {summary}
-                  </span>
                 </li>
                 {detail && <li className="speed-row speed-band-detail">{detail}</li>}
               </Fragment>
@@ -237,9 +233,6 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
           return (
             <li key={row.speed} className="speed-row" data-speed={row.speed}>
               <span className="speed-row-speed num">{row.speed}</span>
-              <span className="speed-row-diff num" aria-hidden="true">
-                {row.diff === null ? '' : `−${row.diff}`}
-              </span>
               {badgeList}
               {detail}
             </li>
@@ -259,14 +252,9 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
               const r = rejectionText(game, u.rejection, 'opponent')
               return (
                 <li key={`${u.origin}:${u.opponentId}:${u.presetIndex ?? ''}`}>
-                  <MonWithItem
-                    speciesId={u.speciesId}
-                    size={28}
-                    lazy
-                    game={game}
-                    item={u.item === null ? undefined : { id: u.item, name: names.items.label(u.item), role: 'held' }}
-                  />
+                  <PokemonIcon speciesId={u.speciesId} size={28} lazy />
                   {names.species.label(u.speciesId)}
+                  {u.item !== null && <ItemMark item={{ id: u.item, name: names.items.label(u.item), role: 'held' }} lazy game={game} />}
                   {u.presetIndex !== undefined && ` (프리셋 ${u.presetIndex + 1})`} · {r.reason} · {r.cause}
                 </li>
               )

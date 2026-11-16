@@ -1276,19 +1276,19 @@ td.src {
   column-gap: 0.4rem;
 }
 
-/* 이미지 상자는 마크업에서 이름 뒤(읽기 순서)지만 첫 열 첫 줄에 놓는다 */
-.card-who > .mon-with-item {
+/* 포켓몬 이미지는 첫 열 첫 줄 */
+.card-who > .mon-icon {
   grid-column: 1;
   grid-row: 1;
   align-self: center;
 }
 
 /* 출처 태그 줄이 있는 커스텀 행만 아이콘이 두 줄에 걸친다(없으면 빈 둘째 줄이 이름을 위로 밀지 않게) */
-.card-who:has(> .card-meta) > .mon-with-item {
+.card-who:has(> .card-meta) > .mon-icon {
   grid-row: 1 / span 2;
 }
 
-.card-who > :not(.mon-with-item) {
+.card-who > :not(.mon-icon) {
   grid-column: 2;
   min-width: 0;
 }
@@ -1311,9 +1311,14 @@ img.mon-icon {
   background: var(--mon-icon-halo);
 }
 
-.card-who > .mon-with-item {
+.card-who > .mon-icon {
   width: 2rem;
   height: 2rem;
+}
+
+/* 이름 오른쪽 도구 아이콘: 줄 높이를 늘리지 않게 위아래를 살짝 당긴다 */
+.card-name .item-mark {
+  margin: -0.2rem 0;
 }
 
 /* 내 포켓몬: 종 검색 왼쪽 이미지 영역 */
@@ -1713,7 +1718,7 @@ img.mon-icon {
   min-width: 0;
 }
 
-/* 상세 머리: 간단행과 같은 도구 겹침 + 도구 이름 글자 */
+/* 상세 머리: 포켓몬 이미지 · 도구 아이콘 · 도구 이름 글자(나란히) */
 .detail-item {
   margin: 0;
   display: flex;

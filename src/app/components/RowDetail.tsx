@@ -19,21 +19,23 @@ import {
 } from '../../ui/format'
 import { koReason } from '../../ui/koErrors'
 import { MoveLabel, VariableTag } from './MoveLabel'
-import { MonWithItem } from './MonWithItem'
-import { rowRefsNote, type CardItemOverlay } from './text'
+import { ItemMark } from './ItemMark'
+import { PokemonIcon } from './PokemonIcon'
+import { rowRefsNote, type CardHeldItem } from './text'
 
 /** 행 조건(기본·랭크 수단) 식별 문자열 */
 const conditionOf = (row: RowView): string => (row.basis === undefined ? 'base' : JSON.stringify([row.basis.owner, row.basis.means.kind, row.basis.means.id]))
 
 /**
- * 펼친 상세 머리: 간단행과 같은 겹침 + 도구 이름 글자(터치 화면용, 점유율 없음). 간단행 표지와 겹치지 않게 겹침은 장식(held)이고
- * 읽기 이름은 이 글자가 담는다. 도구가 없으면 그리지 않는다.
+ * 펼친 상세 머리: 포켓몬 이미지 · 도구 아이콘 · 도구 이름 글자를 나란히(겹치지 않음, 터치 화면용, 점유율 없음). 간단행 표지와 겹치지 않게
+ * 아이콘은 장식(held)이고 읽기 이름은 이 글자가 담는다. 도구가 없으면 그리지 않는다.
  */
-export function DetailItem({ game, opponentId, item }: { game: Snapshot; opponentId: string; item: CardItemOverlay | undefined }) {
+export function DetailItem({ game, opponentId, item }: { game: Snapshot; opponentId: string; item: CardHeldItem | undefined }) {
   if (item === undefined) return null
   return (
     <p className="detail-item" data-testid="detail-item" data-item-id={item.id} data-item-role={item.role}>
-      <MonWithItem speciesId={opponentId} size={40} item={{ ...item, role: 'held' }} game={game} />
+      <PokemonIcon speciesId={opponentId} size={40} />
+      <ItemMark item={{ ...item, role: 'held' }} size={28} game={game} />
       <span className="detail-item-name">{item.role === 'variant' ? `${item.name} 지닌 경우` : item.name}</span>
     </p>
   )

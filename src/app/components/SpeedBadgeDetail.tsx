@@ -20,7 +20,9 @@ import { heldItemIds, namesOf } from '../../ui/names'
 import { searchIndexOf } from '../../ui/search'
 import type { AppAction } from '../state'
 import { Combobox } from './Combobox'
-import { MonWithItem } from './MonWithItem'
+import { BundleText } from './BundleText'
+import { ItemMark } from './ItemMark'
+import { PokemonIcon } from './PokemonIcon'
 import { NumberField } from './NumberField'
 import { STATUS_CLASS, STATUS_LABEL, conditionDetail, conditionTag, itemDetail, minSpText, rejectionText, shareDetail } from './speedText'
 
@@ -51,27 +53,22 @@ interface Props {
 /** 배지 줄 바로 아래 인라인 상세. 열 때마다 "다른 배분 추가"는 접힌 채 시작한다(배지 id로 key) */
 export function SpeedBadgeDetail({ id, game, model, badge: b, status, baseline, minSp, myTailwind, target, dispatch, onClose, onAdded, onRemove, closeRef }: Props) {
   const names = namesOf(game)
-  const tag = conditionTag(game, b.condition)
+  const tag = conditionTag(b.condition)
   const condition = conditionDetail(game, b)
   const ladder = b.origin !== 'preset'
   const name = names.species.label(b.speciesId)
   return (
     <div id={id} className="speed-detail" role="region" aria-label={`${name} 상세`} data-testid="speed-detail" data-badge-id={b.id}>
       <div className="speed-detail-head">
-        <MonWithItem
-          speciesId={b.speciesId}
-          size={44}
-          game={game}
-          item={b.item === null ? undefined : { id: b.item.id, name: names.items.label(b.item.id), role: 'held' }}
-          className={b.item?.negated ? 'item-negated' : undefined}
-        />
+        <PokemonIcon speciesId={b.speciesId} size={44} />
         <div className="speed-detail-title">
           <b data-testid="speed-detail-name">
             {name}
             {b.mega && ' (메가진화 폼)'}
           </b>
-          <span>
-            {bundleLabel(b.bundle.sp, b.bundle.nature)}
+          <span className="speed-detail-bundle">
+            <BundleText sp={b.bundle.sp} nature={b.bundle.nature} className="num" />
+            {b.item !== null && <ItemMark item={{ id: b.item.id, name: names.items.label(b.item.id), role: 'held' }} game={game} className={b.item.negated ? 'item-negated' : undefined} />}
             {tag !== undefined && ` · ${tag}`} · 실수치 <b className="num">{b.speed}</b>
           </span>
           {status !== null && <span className={`speed-pill ${STATUS_CLASS[status]}`}>{STATUS_LABEL[status]}</span>}
@@ -158,7 +155,9 @@ function AddBundle({ game, model, opponentId, dispatch, onAdded }: { game: Snaps
           {options.map((o) => (
             <li key={JSON.stringify([o.sp, o.nature])}>
               <button type="button" className="speed-add-op" disabled={o.onChart} onClick={() => add(o)} data-testid="speed-add-option">
-                <b className="num">{bundleLabel(o.sp, o.nature)}</b>
+                <b className="num">
+                  <BundleText sp={o.sp} nature={o.nature} />
+                </b>
                 <span className="num">{shareText(o.share)}</span>
                 <span className="num">{o.speed}</span>
                 <em>{o.onChart ? '차트에 있음' : '+ 추가'}</em>

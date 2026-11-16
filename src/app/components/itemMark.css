@@ -1,0 +1,14 @@
+/* 도구 아이콘(ItemMark): 이름·배분 글자 옆에 나란히(포켓몬 이미지와 겹치지 않음), 받침·테두리 없이 그림만 */
+.item-mark {
+  display: inline-block;
+  flex: none;
+  vertical-align: middle;
+  line-height: 0;
+}
+
+.item-mark-face {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}

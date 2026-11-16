@@ -47,16 +47,17 @@ test('목록 행: 이름 왼쪽 아이콘(장식)·열 정렬 유지, 이미지 
     await waitComplete(page)
     const n = await cards(page).count()
     expect(n).toBeGreaterThan(5)
-    // 행마다 아이콘(또는 같은 크기 빈 자리) 하나, 이름 칸 버튼 안 이미지 상자(도구 겹침)·이름 왼쪽
-    expect(await cards(page).locator('.card-who [data-testid="mon-icon"]').count()).toBe(n)
+    // 행마다 아이콘(또는 같은 크기 빈 자리) 하나, 이름 칸 버튼의 직계 자식·이름 왼쪽(도구 아이콘은 겹치지 않고 이름 칸 안)
+    expect(await cards(page).locator('.card-who > [data-testid="mon-icon"]').count()).toBe(n)
+    await expect(cards(page).locator('.mon-with-item, .mon-item')).toHaveCount(0)
     const geo = await cards(page).evaluateAll((els) =>
       els.slice(0, 12).map((el) => {
-        const icon = el.querySelector('.card-who [data-testid="mon-icon"]')!.getBoundingClientRect()
+        const icon = el.querySelector('.card-who > [data-testid="mon-icon"]')!.getBoundingClientRect()
         const name = el.querySelector('.card-name')!.getBoundingClientRect()
         const bundle = el.querySelector('.bundle-cell')!.getBoundingClientRect()
         return {
           id: (el as HTMLElement).dataset.opponent,
-          species: el.querySelector('.card-who [data-testid="mon-icon"]')!.getAttribute('data-species-icon'),
+          species: el.querySelector('.card-who > [data-testid="mon-icon"]')!.getAttribute('data-species-icon'),
           iconLeft: Math.round(icon.left),
           iconSize: [Math.round(icon.width), Math.round(icon.height)],
           nameLeft: Math.round(name.left),
@@ -78,7 +79,7 @@ test('목록 행: 이름 왼쪽 아이콘(장식)·열 정렬 유지, 이미지 
     expect(new Set(geo.map((g) => g.nameLeft)).size).toBe(1)
     expect(new Set(geo.map((g) => g.bundleLeft)).size).toBe(1)
     // 처음 보이는 행 아이콘은 실제로 그려진다(목록 아이콘은 지연 로드)
-    const first = cards(page).first().locator('.card-who img[data-testid="mon-icon"]')
+    const first = cards(page).first().locator('.card-who > img[data-testid="mon-icon"]')
     await expect(first).toHaveAttribute('alt', '')
     await expect(first).toHaveAttribute('loading', 'lazy')
     await expect.poll(() => first.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(128)

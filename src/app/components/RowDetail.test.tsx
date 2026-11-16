@@ -1,4 +1,4 @@
-// 공격·방어 카드의 간단행·펼친 상세 표기(R13 겹침, 열린 질문 13 상세 도구 이름)와 판정 행 표기(랭크 근거·SP 구간)를 실데이터 탭 뷰로 확인한다.
+// 공격·방어 카드의 간단행·펼친 상세 표기(R13 이름 옆 도구 아이콘, 열린 질문 13 상세 도구 이름)와 판정 행 표기(랭크 근거·SP 구간)를 실데이터 탭 뷰로 확인한다.
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { EXAMPLE_SET } from '../../cards/__fixtures__/acceptance'
@@ -69,51 +69,57 @@ const openTag = (html: string, marker: string) => {
 const itemName = (id: string) => game.data.items[id]?.name.ko ?? id
 const isMega = (g: CardGroup) => game.data.megas.some((m) => m.forme === g.opponent.id)
 
-describe.each(['attack', 'defense'] as const)('%s 탭 카드 도구 겹침(R13)', (tab) => {
-  it('변형 줄: 이미지 오른쪽 아래 겹침이 변형 표지이고 이름 옆 도구 아이콘이 없다. 상세에는 도구 이름 글자(점유율 없음)', () => {
+describe.each(['attack', 'defense'] as const)('%s 탭 카드 도구 아이콘(이름 오른쪽, R13)', (tab) => {
+  it('변형 줄: 이름 오른쪽 도구 아이콘이 변형 표지이고 포켓몬 이미지와 겹치지 않는다. 상세에는 이미지·아이콘·도구 이름 글자가 나란히(점유율 없음)', () => {
     const group = groupsOf(tab).find((g) => g.berry !== undefined)
     expect(group, '변형 줄이 있는 실데이터').toBeDefined()
     const item = group!.berry!.item
     const html = cardHtml(tab, group!)
     expect(count(html, 'data-testid="berry-badge"')).toBe(1)
     const who = whoOf(html)
-    const box = slice(who, 'class="mon-with-item"', '</button>')
-    const badge = openTag(box, 'data-testid="berry-badge"')
+    // 버튼 안 순서: 포켓몬 이미지 → 이름 칸(이름 → 도구 아이콘)
+    expect(who.indexOf('data-testid="mon-icon"')).toBeLessThan(who.indexOf('class="card-name"'))
+    const name = slice(who, 'class="card-name"', '</button>')
+    const badge = openTag(name, 'data-testid="berry-badge"')
+    expect(attr(badge, 'class')).toBe('item-mark')
     expect(attr(badge, 'data-item-id')).toBe(item)
     expect(attr(badge, 'title')).toBe(itemName(item))
     expect(attr(badge, 'aria-hidden')).toBeUndefined()
-    expect(box).toContain(`<span class="sr-only">${itemName(item)} 지닌 경우</span>`)
-    const name = slice(who, 'class="card-name"', 'class="mon-with-item"')
-    expect(name).not.toMatch(/<img|data-item-id/)
+    expect(attr(badge, 'style')).toBe('width:22px;height:22px')
+    expect(name).toContain(`data-item-icon="${item}"`)
+    expect(name).toContain(`<span class="sr-only">${itemName(item)} 지닌 경우</span>`)
+    expect(name.indexOf(names.species.label(group!.opponent.id).replace(/\(.+\)$/, ''))).toBeLessThan(name.indexOf('data-testid="berry-badge"'))
+    expect(who).not.toMatch(/mon-with-item|mon-item/)
     expect(textOf(who)).not.toMatch(/\d%/)
     const detail = detailOf(html)
     const head = slice(detail, 'data-testid="detail-item"', '</p>')
     expect(attr(openTag(detail, 'data-testid="detail-item"'), 'data-item-role')).toBe('variant')
+    expect(head.indexOf('data-testid="mon-icon"')).toBeLessThan(head.indexOf('class="item-mark"'))
     expect(head).toContain(`<span class="detail-item-name">${itemName(item)} 지닌 경우</span>`)
     expect(textOf(head)).not.toMatch(/\d%/)
-    // 상세 겹침은 장식이라 읽기 이름·변형 testid가 간단행과 겹치지 않는다
-    expect(attr(openTag(head, 'class="mon-item"'), 'aria-hidden')).toBe('true')
+    // 상세 아이콘은 장식이라 읽기 이름·변형 testid가 간단행과 겹치지 않는다
+    expect(attr(openTag(head, 'class="item-mark"'), 'aria-hidden')).toBe('true')
   })
 
-  it('도구 없는 기본 줄: 겹침·상세 도구 머리가 없다', () => {
+  it('도구 없는 기본 줄: 도구 아이콘·상세 도구 머리가 없다', () => {
     const group = groupsOf(tab).find((g) => g.berry === undefined && !isMega(g))!
     const html = cardHtml(tab, group)
-    expect(slice(whoOf(html), 'class="mon-with-item"', '</button>')).toContain('data-testid="mon-icon"')
-    expect(html).not.toContain('class="mon-item"')
+    expect(whoOf(html)).toContain('data-testid="mon-icon"')
+    expect(html).not.toContain('class="item-mark"')
     expect(html).not.toContain('data-testid="detail-item"')
   })
 
-  it('메가 기본 줄: 공통 메가스톤 표지가 장식으로 겹치고 변형 표지가 아니다', () => {
+  it('메가 기본 줄: 이름 오른쪽에 메가진화 문양이 장식으로 놓이고 변형 표지가 아니다', () => {
     const group = groupsOf(tab).find((g) => g.berry === undefined && isMega(g))
     expect(group, '메가 상대가 있는 실데이터').toBeDefined()
     const stone = game.data.megas.find((m) => m.forme === group!.opponent.id)!.stone
     const html = cardHtml(tab, group!)
-    const who = whoOf(html)
-    const overlay = openTag(who, 'class="mon-item"')
-    expect(attr(overlay, 'data-item-role')).toBe('mega')
-    expect(attr(overlay, 'aria-hidden')).toBe('true')
-    expect(attr(overlay, 'title')).toBe(itemName(stone))
-    expect(who).toContain('data-item-glyph="mega"')
+    const name = slice(whoOf(html), 'class="card-name"', '</button>')
+    const mark = openTag(name, 'class="item-mark"')
+    expect(attr(mark, 'data-item-role')).toBe('mega')
+    expect(attr(mark, 'aria-hidden')).toBe('true')
+    expect(attr(mark, 'title')).toBe(itemName(stone))
+    expect(name).toContain('data-item-glyph="mega"')
     expect(html).not.toContain('data-testid="berry-badge"')
     expect(detailOf(html)).toContain(`<span class="detail-item-name">${itemName(stone)}</span>`)
   })
@@ -126,7 +132,7 @@ describe.each(['attack', 'defense'] as const)('%s 탭 카드 도구 겹침(R13)'
     const who = whoOf(html)
     const name = names.species.label(group.opponent.id)
     expect(textOf(who).startsWith(name)).toBe(true)
-    expect(textOf(who)).toBe(`${name}${itemName(group.berry!.item)} 지닌 경우`)
+    expect(textOf(who)).toBe(`${name} ${itemName(group.berry!.item)} 지닌 경우`)
   })
 })
 

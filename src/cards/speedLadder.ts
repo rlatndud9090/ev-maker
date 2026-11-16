@@ -1,4 +1,4 @@
-// 스피드 차트 응용 로직: 기준선·상태·요약, 조건 필터, 같은 줄 순서, 사다리 줄, 최소 S, 키보드 탐색, 배분 표기. 화면 없는 순수 함수다.
+// 스피드 차트 응용 로직: 기준선·상태, 조건 필터, 같은 줄 순서, 사다리 줄, 최소 S, 키보드 탐색, 배분 표기. 화면 없는 순수 함수다.
 import { CoreError, CoreInputError, finalSpeed, minSpToOutspeed, speedSupport, validateSet, type OutspeedResult, type PokemonSet, type SpeedRejection } from '../core'
 import type { Snapshot } from '../data/schema'
 import { natureSign } from './bundles'
@@ -49,13 +49,6 @@ export function statusOf(badgeSpeed: number, baseline: SpeedBaseline): SpeedStat
   return badgeSpeed < baseline.speed ? 'outspeeds' : badgeSpeed === baseline.speed ? 'tie' : 'outsped'
 }
 
-export function summarize(badges: readonly SpeedBadge[], baseline: SpeedBaseline): { outspeeds: number; tie: number; outsped: number } | null {
-  if (baseline.kind !== 'ok') return null
-  const out = { outspeeds: 0, tie: 0, outsped: 0 }
-  for (const b of badges) out[statusOf(b.speed, baseline) as SpeedStatus] += 1
-  return out
-}
-
 /** 기본·추가 배지는 늘 보이고, 조건 배지는 그 종류 필터가 켜졌을 때만 */
 export function visibleBadges(model: SpeedChartModel, filters: SpeedConditionFilters): SpeedBadge[] {
   return model.badges.filter((b) => b.filterKind === null || filters[b.filterKind])
@@ -89,10 +82,9 @@ export function compareInRow(nameOf: (speciesId: string) => string): (a: SpeedBa
   }
 }
 
-/** diff = 윗줄 실수치 − 이 줄 실수치(맨 윗줄 null). baseline = 내 실수치 줄(배지가 없으면 badgeIds가 빈 줄) */
+/** baseline = 내 실수치 줄(배지가 없으면 badgeIds가 빈 줄) */
 export interface LadderRow {
   speed: number
-  diff: number | null
   badgeIds: readonly string[]
   baseline: boolean
 }
@@ -107,9 +99,8 @@ export function ladderRows(badges: readonly SpeedBadge[], baselineSpeed: number 
   }
   if (baselineSpeed !== null && !bySpeed.has(baselineSpeed)) bySpeed.set(baselineSpeed, [])
   const speeds = [...bySpeed.keys()].sort((a, b) => b - a)
-  return speeds.map((speed, i) => ({
+  return speeds.map((speed) => ({
     speed,
-    diff: i === 0 ? null : speeds[i - 1] - speed,
     badgeIds: [...(bySpeed.get(speed) ?? [])].sort(cmp).map((b) => b.id),
     baseline: speed === baselineSpeed,
   }))
@@ -183,9 +174,16 @@ export function focusAfterRemove(rows: readonly LadderRow[], removedId: string):
   return neighbor === undefined ? null : neighbor[Math.min(at.i, neighbor.length - 1)]
 }
 
-const NATURE_MARK: Readonly<Record<NatureSign, string>> = { plus: '+', neutral: ' =', minus: ' −' }
+// 성격 보정 표기는 공격·방어 탭 배분 표기(ui/format bundleText)와 같은 화살표만 쓴다. 무보정은 기호 없음
+const NATURE_MARK: Readonly<Record<NatureSign, string>> = { plus: '↑', neutral: '', minus: '↓' }
+const NATURE_SPOKEN: Readonly<Record<NatureSign, string>> = { plus: '성격 상승', neutral: '성격 무보정', minus: '성격 하락' }
 
-/** 배분 표기: "S32+" · "S20 =" · "S0 −" */
+/** 배분 표기: "S32↑" · "S20" · "S0↓" */
 export function bundleLabel(sp: number, nature: NatureSign): string {
   return `S${sp}${NATURE_MARK[nature]}`
+}
+
+/** 배분 읽기 이름(접근 이름용): "S32 성격 상승" · "S20 성격 무보정" · "S0 성격 하락" */
+export function bundleSpoken(sp: number, nature: NatureSign): string {
+  return `S${sp} ${NATURE_SPOKEN[nature]}`
 }

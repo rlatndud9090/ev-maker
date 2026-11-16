@@ -10,7 +10,6 @@ import {
   navigate,
   speedBaseline,
   statusOf,
-  summarize,
   visibleBadges,
   type LadderRow,
   type SpeedBaseline,
@@ -59,7 +58,7 @@ describe('기준선', () => {
     expect(speedBaseline(game, { ...chomp, boosts: { spe: 2 } }, false)).toMatchObject({ speed: 154 })
   })
 
-  it('내 세트가 스피드 거부면 원인, 세트 자체 오류면 invalid이고 상태·요약·최소 S를 내지 않는다(AC5b)', () => {
+  it('내 세트가 스피드 거부면 원인, 세트 자체 오류면 invalid이고 상태·최소 S를 내지 않는다(AC5b)', () => {
     const claw = speedBaseline(game, { ...chomp, item: 'quickclaw' }, false)
     expect(claw).toEqual({ kind: 'rejected', rejection: { kind: 'order', field: 'item', id: 'quickclaw' } })
     const stall: PokemonSet = { ...chomp, species: 'sableye', ability: 'stall', moves: ['fakeout'] }
@@ -68,7 +67,6 @@ describe('기준선', () => {
     expect(invalid).toEqual({ kind: 'invalid' })
     for (const b of [claw, invalid]) {
       expect(statusOf(100, b)).toBeNull()
-      expect(summarize([badge('a', 100)], b)).toBeNull()
     }
     expect(minSpToPass(game, { ...chomp, item: 'quickclaw' }, 100, false)).toBeNull()
     expect(minSpToPass(game, { ...chomp, sp: { ...chomp.sp, hp: 32 } }, 100, false)).toBeNull()
@@ -76,11 +74,10 @@ describe('기준선', () => {
   })
 })
 
-describe('상태·요약·필터', () => {
-  it('기준선 아래는 추월, 같으면 동속, 위는 추월당함이고 요약은 그 개수다', () => {
+describe('상태·필터', () => {
+  it('기준선 아래는 추월, 같으면 동속, 위는 추월당함', () => {
     const b = ok(150)
     expect([statusOf(149, b), statusOf(150, b), statusOf(151, b)]).toEqual(['outspeeds', 'tie', 'outsped'])
-    expect(summarize([badge('a', 100), badge('b', 150), badge('c', 160), badge('d', 170)], b)).toEqual({ outspeeds: 1, tie: 1, outsped: 2 })
   })
 
   it('조건 필터는 조건 배지만 거르고 기본·추가 배지는 늘 보인다', () => {
@@ -100,12 +97,11 @@ describe('상태·요약·필터', () => {
     expect(visibleBadges(model, { rank: false, scarf: false, tailwind: true, field: false }).map((b) => b.id)).toEqual(['base', 'added', 'tw'])
   })
 
-  it('실데이터 기본 필터 요약: 순풍 배지가 빠지고 개수 합은 표시 배지 수다', () => {
+  it('실데이터 기본 필터: 순풍 배지가 빠지고 그 밖의 배지는 남는다', () => {
     const model = buildSpeedChart({ game, view: bo1, myAbility: 'roughskin', criteria: DEFAULT_CRITERIA, filters: { topN: 30, selected: [] }, customTargets: [], added: [] })
     const shown = visibleBadges(model, DEFAULT_SPEED_FILTERS)
     expect(shown.some((b) => b.condition.kind === 'tailwind')).toBe(false)
-    const s = summarize(shown, speedBaseline(game, chomp, false))
-    expect(s && s.outspeeds + s.tie + s.outsped).toBe(shown.length)
+    expect(shown.length).toBe(model.badges.filter((b) => b.condition.kind !== 'tailwind').length)
   })
 })
 
@@ -131,12 +127,12 @@ describe('같은 줄 순서(R2)', () => {
 describe('사다리 줄', () => {
   const cmp = compareInRow((id) => id)
   const badges = [badge('a', 200), badge('b', 150), badge('c', 150, { bundle: { sp: 0, nature: 'neutral', share: 0.9 } }), badge('d', 149)]
-  it('실수치 내림차순 줄, 윗줄 차이, 내 실수치에 배지가 없으면 빈 기준선 줄이 낀다', () => {
+  it('실수치 내림차순 줄(윗줄 차이 없음), 내 실수치에 배지가 없으면 빈 기준선 줄이 낀다', () => {
     expect(ladderRows(badges, 160, cmp)).toEqual([
-      { speed: 200, diff: null, badgeIds: ['a'], baseline: false },
-      { speed: 160, diff: 40, badgeIds: [], baseline: true },
-      { speed: 150, diff: 10, badgeIds: ['c', 'b'], baseline: false },
-      { speed: 149, diff: 1, badgeIds: ['d'], baseline: false },
+      { speed: 200, badgeIds: ['a'], baseline: false },
+      { speed: 160, badgeIds: [], baseline: true },
+      { speed: 150, badgeIds: ['c', 'b'], baseline: false },
+      { speed: 149, badgeIds: ['d'], baseline: false },
     ])
   })
   it('동속 줄이 기준선 줄이고, 거부(null)면 기준선 줄이 없다', () => {
@@ -146,7 +142,7 @@ describe('사다리 줄', () => {
       [149, false],
     ])
     expect(ladderRows(badges, null, cmp).some((r) => r.baseline)).toBe(false)
-    expect(ladderRows([], 154, cmp)).toEqual([{ speed: 154, diff: null, badgeIds: [], baseline: true }])
+    expect(ladderRows([], 154, cmp)).toEqual([{ speed: 154, badgeIds: [], baseline: true }])
   })
 })
 
@@ -214,10 +210,10 @@ describe('최소 S(AC7b·AC8)', () => {
 
 describe('키보드 탐색(AC20)', () => {
   const rows: LadderRow[] = [
-    { speed: 300, diff: null, badgeIds: ['a1', 'a2', 'a3'], baseline: false },
-    { speed: 250, diff: 50, badgeIds: [], baseline: true },
-    { speed: 200, diff: 50, badgeIds: ['b1'], baseline: false },
-    { speed: 100, diff: 100, badgeIds: ['c1', 'c2'], baseline: false },
+    { speed: 300, badgeIds: ['a1', 'a2', 'a3'], baseline: false },
+    { speed: 250, badgeIds: [], baseline: true },
+    { speed: 200, badgeIds: ['b1'], baseline: false },
+    { speed: 100, badgeIds: ['c1', 'c2'], baseline: false },
   ]
   it('위아래는 이웃 배지 줄의 같은 순번(없으면 마지막), 빈 기준선 줄은 건너뛴다', () => {
     expect(navigate(rows, 'a3', 'ArrowDown')).toBe('b1')
@@ -225,7 +221,7 @@ describe('키보드 탐색(AC20)', () => {
     expect(navigate(rows, 'c2', 'ArrowUp')).toBe('b1')
     expect(navigate(rows, 'a2', 'ArrowUp')).toBe('a2')
     expect(navigate(rows, 'c1', 'ArrowDown')).toBe('c1')
-    const wide: LadderRow[] = [rows[0], { speed: 50, diff: 250, badgeIds: ['d1', 'd2', 'd3'], baseline: false }]
+    const wide: LadderRow[] = [rows[0], { speed: 50, badgeIds: ['d1', 'd2', 'd3'], baseline: false }]
     expect(navigate(wide, 'd2', 'ArrowUp')).toBe('a2')
   })
   it('좌우는 같은 줄 이웃, Home/End는 첫 배지·마지막 배지', () => {
@@ -236,15 +232,15 @@ describe('키보드 탐색(AC20)', () => {
     expect(navigate(rows, 'b1', 'Home')).toBe('a1')
     expect(navigate(rows, 'b1', 'End')).toBe('c2')
     expect(navigate(rows, 'gone', 'ArrowDown')).toBe('a1')
-    expect(navigate([{ speed: 1, diff: null, badgeIds: [], baseline: true }], 'x', 'Home')).toBe('x')
+    expect(navigate([{ speed: 1, badgeIds: [], baseline: true }], 'x', 'Home')).toBe('x')
   })
   it('삭제 뒤 포커스: 같은 줄 다음 → 앞 → 아랫줄 → 윗줄, 마지막 하나면 null', () => {
     expect(focusAfterRemove(rows, 'a2')).toBe('a3')
     expect(focusAfterRemove(rows, 'a3')).toBe('a2')
     expect(focusAfterRemove(rows, 'b1')).toBe('c1')
-    const tail: LadderRow[] = [rows[0], { speed: 100, diff: 200, badgeIds: ['z'], baseline: false }]
+    const tail: LadderRow[] = [rows[0], { speed: 100, badgeIds: ['z'], baseline: false }]
     expect(focusAfterRemove(tail, 'z')).toBe('a1')
-    expect(focusAfterRemove([{ speed: 1, diff: null, badgeIds: ['only'], baseline: false }], 'only')).toBeNull()
+    expect(focusAfterRemove([{ speed: 1, badgeIds: ['only'], baseline: false }], 'only')).toBeNull()
     expect(focusAfterRemove(rows, 'gone')).toBeNull()
   })
 })

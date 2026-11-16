@@ -1,4 +1,4 @@
-import { bundleLabel, type MinSp, type SpeedBadge as Badge, type SpeedCondition, type SpeedStatus } from '../../cards'
+import { bundleSpoken, type MinSp, type SpeedBadge as Badge, type SpeedCondition, type SpeedStatus } from '../../cards'
 import type { SpeedConditionKind } from '../../cards'
 import type { SpeedRejection } from '../../core'
 import type { Snapshot } from '../../data/schema'
@@ -14,17 +14,20 @@ export const STATUS_LABEL: Readonly<Record<SpeedStatus, string>> = { outspeeds: 
 /** 상태별 클래스(색 토큰) */
 export const STATUS_CLASS: Readonly<Record<SpeedStatus, string>> = { outspeeds: 'win', tie: 'tie', outsped: 'lose' }
 
-/** 조건 태그 글자. 기본 배지는 undefined */
-export function conditionTag(game: Snapshot, c: SpeedCondition): string | undefined {
+/**
+ * 조건 태그 글자. 기본 배지는 undefined. 스카프·스카프 아닌 최다 도구 배지는 도구 아이콘이 그 조건을 보이므로 태그가 없다
+ * (도구가 없는 "스카프 아님" 배지만 아이콘이 없어 "도구 없음" 태그).
+ */
+export function conditionTag(c: SpeedCondition): string | undefined {
   switch (c.kind) {
     case 'none':
       return undefined
     case 'rank':
       return `+${c.stage}`
     case 'scarf':
-      return '스카프'
+      return undefined
     case 'non-scarf':
-      return c.item === null ? '도구 없음' : namesOf(game).items.label(c.item)
+      return c.item === null ? '도구 없음' : undefined
     case 'tailwind':
       return '순풍'
     case 'field':
@@ -42,11 +45,11 @@ export function rejectionText(game: Snapshot, r: SpeedRejection, who: 'mine' | '
 
 export const presetMark = (b: Pick<Badge, 'presetIndex'>): string | undefined => (b.presetIndex === undefined ? undefined : `프리셋 ${b.presetIndex + 1}`)
 
-/** 배지 접근 이름·툴팁: 이름 배분 조건, 실수치, 상태, 지닌 도구, 표지 */
+/** 배지 접근 이름: 이름 배분(성격 보정 글자) 조건, 실수치, 상태, 지닌 도구, 표지 */
 export function badgeLabel(game: Snapshot, b: Badge, status: SpeedStatus | null): string {
   const names = namesOf(game)
-  const tag = conditionTag(game, b.condition)
-  const parts = [`${names.species.label(b.speciesId)} ${bundleLabel(b.bundle.sp, b.bundle.nature)}${tag === undefined ? '' : ` ${tag}`}`, `실수치 ${b.speed}`]
+  const tag = conditionTag(b.condition)
+  const parts = [`${names.species.label(b.speciesId)} ${bundleSpoken(b.bundle.sp, b.bundle.nature)}${tag === undefined ? '' : ` ${tag}`}`, `실수치 ${b.speed}`]
   if (status !== null) parts.push(STATUS_LABEL[status])
   if (b.item !== null) parts.push(`${names.items.label(b.item.id)} 지님`)
   if (b.item?.negated) parts.push('도구 효과 없음')
