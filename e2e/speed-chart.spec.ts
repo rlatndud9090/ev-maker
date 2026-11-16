@@ -562,6 +562,18 @@ test.describe('배지 상세(AC7, AC10)', () => {
     await badgeById(page, mega.id).click()
     await expect(detail(page)).toHaveAttribute('data-badge-id', mega.id)
     await expect(detail(page).getByTestId('speed-detail-name')).toHaveText(`${speciesKo(mega.opponent)} (메가진화 폼)`)
+    // 메가 배지 버튼: 이름 글자·"메가" 태그 없이 배분 표기만, 이름은 툴팁(title)과 접근 이름 첫 덩어리, 메가 표지는 겹친 메가진화 문양
+    const megaBadge = badgeById(page, mega.id)
+    await expect(megaBadge.locator('.speed-badge-text')).toHaveText(new RegExp(`^${bundleText(mega.sp, mega.sign).replace(/[+]/g, '\\+')}`))
+    await expect(megaBadge.locator('.speed-badge-text')).not.toContainText('메가')
+    await expect(megaBadge.locator('.speed-badge-text')).not.toContainText(speciesKo(mega.opponent))
+    const megaTitle = (await megaBadge.getAttribute('title')) ?? ''
+    expect(megaTitle.length).toBeGreaterThan(0)
+    expect(megaTitle).toContain(speciesKo(mega.opponent))
+    expect(((await megaBadge.getAttribute('aria-label')) ?? '').startsWith(`${megaTitle} `)).toBe(true)
+    const megaMark = megaBadge.locator('.mon-item img[data-item-glyph="mega"]')
+    await expect(megaMark).toHaveCount(1)
+    await expect.poll(() => megaMark.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(200)
     // Esc
     await page.keyboard.press('Escape')
     await expect(detail(page)).toHaveCount(0)

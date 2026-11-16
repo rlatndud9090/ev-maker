@@ -7,6 +7,7 @@
 | 항목 | 종류 | 버전 | 라이선스 | 용도 |
 | --- | --- | --- | --- | --- |
 | Bulbagarden Archives — Champions Bag sprites | asset | 2026-11-12 수집 | NOASSERTION | 반감열매 18종·화력 도구 22종·스피드 탭 도구 13종 도구 아이콘(화력 도구는 2026-11-14, 스피드 탭 도구는 2026-11-15 수집, 48px PNG 원본 그대로 정적 파일로 번들). 이미지 IP © Nintendo/Creatures/GAME FREAK(The Pokémon Company). 오픈 라이선스 아님, 비상업 팬 도구의 식별 목적 |
+| 메가진화 문양(사용자 제공) | asset | 2026-11-16 수집 | NOASSERTION | 메가스톤·메가진화 도구 겹침 표지(200px WebP 원본 그대로 정적 파일로 번들, 프로젝트 작성자가 제공한 고해상 사본, 원 문양 참고는 source). 이미지 IP © Nintendo/Creatures/GAME FREAK(The Pokémon Company). 오픈 라이선스 아님, 비상업 팬 도구의 식별 목적 |
 | Pokémon Type Icons(partywhale) | asset | fcbe6978c61c359680bc07636c3f9bdc0f346b43 | MIT | 기술 타입 아이콘(SVG, 원본 그대로 번들) |
 | PokeAPI sprites — Pokémon Champions 메뉴 아이콘 | asset | ba403973fdf9d0ac59175813861e6a1f8ed5020c | CC0-1.0 | 포켓몬 아이콘(내 포켓몬·상대 목록, 128px PNG 원본 그대로 정적 파일로 번들). 이미지 IP © Nintendo/Creatures/GAME FREAK(The Pokémon Company) |
 | PokeAPI CSV | data | e5b79b2e15d7c50735a945936afd4cd1cfd94eae | BSD-3-Clause | 스냅샷의 한국어 명칭 파생 데이터(원본 CSV는 번들하지 않음) |
@@ -376,4 +377,19 @@ Used only to identify items in this unofficial, non-commercial fan tool.
 
 오픈 라이선스가 아니다. 원본 그림의 권리는 Nintendo / Creatures Inc. / GAME FREAK inc.(The Pokémon Company)에 있으며,
 이 비공식·비상업 팬 도구에서 도구 식별 목적으로만 쓴다.
+```
+
+### 메가진화 문양(사용자 제공) (2026-11-16 수집, 오픈 라이선스 아님, src/assets/marks)
+
+```text
+Mega Evolution mark (mega.webp, 200x200 WebP, sha256 5b8356e0dbef248954f897c6ec34b98b6e270c1e33a5a06799ce9bc068c00463)
+
+Source: high-resolution copy provided by the project author (taken from the author's own
+non-public project). Reference for the original mark: https://bulbapedia.bulbagarden.net/wiki/Mega_Evolution
+
+Original mark © Nintendo / Creatures Inc. / GAME FREAK inc. (The Pokémon Company).
+Not under an open license. Used only to mark Mega Stones / Mega Evolution in this unofficial, non-commercial fan tool.
+
+오픈 라이선스가 아니다. 원본 문양의 권리는 Nintendo / Creatures Inc. / GAME FREAK inc.(The Pokémon Company)에 있으며,
+이 비공식·비상업 팬 도구에서 메가스톤·메가진화 표지 목적으로만 쓴다. 파일은 프로젝트 작성자가 제공한 고해상 사본이다.
 ```

@@ -1,16 +1,4 @@
-/* 포켓몬 이미지 + 도구 겹침 상자(MonWithItem). 받침 테두리는 카드·표면 배경과 3:1 이상 */
-:root {
-  --mon-item-plate: #ffffff;
-  --mon-item-ring: #64646b;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --mon-item-plate: #2c2c31;
-    --mon-item-ring: #a3a3ab;
-  }
-}
-
+/* 포켓몬 이미지 + 도구 겹침 상자(MonWithItem). 겹침은 받침·테두리 없이 도구 그림만 오른쪽 아래에 덮는다 */
 .mon-with-item {
   position: relative;
   display: inline-block;
@@ -28,14 +16,7 @@
   position: absolute;
   right: 0;
   bottom: 0;
-  box-sizing: border-box;
-  display: grid;
-  place-items: center;
-  padding: 1px;
-  border: 1px solid var(--mon-item-ring);
-  border-radius: 50%;
-  background: var(--mon-item-plate);
-  overflow: hidden;
+  display: block;
 }
 
 .mon-item-face {

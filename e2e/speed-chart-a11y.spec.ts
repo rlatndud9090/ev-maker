@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { combo, dragSlider, mySet, openProduct, region, selectTab, waitComplete } from './helpers'
 
-// 스피드 차트 접근성: 접근성 트리(목록·기준선 구분 항목·배지 접근 이름), 알림 영역 갱신 시점, 키보드 탐색, 태그 글자·겹침 받침 대비.
+// 스피드 차트 접근성: 접근성 트리(목록·기준선 구분 항목·배지 접근 이름), 알림 영역 갱신 시점, 키보드 탐색, 태그 글자 대비, 도구 겹침 기하(받침 없음·오른쪽 아래·너비 0.45~0.55배).
 
 const badges = (page: Page) => page.getByTestId('speed-badge')
 const chip = (page: Page, filter: string) => page.locator(`[data-testid="speed-head"] [data-filter="${filter}"]`)
@@ -108,10 +108,16 @@ test.describe('스피드 차트 접근성', () => {
     tagged('rank', /\+\d/)
     tagged('scarf', /스카프/)
     tagged('tailwind', /순풍/)
-    // 이름 첫 덩어리는 화면의 한국어 종 이름과 같다
+    // 배지에 이름 글자는 없고, 이름 첫 덩어리는 툴팁(title)의 한국어 종 이름과 같다
+    const titled = await badges(page).evaluateAll((els) =>
+      els.map((el) => ({ title: el.getAttribute('title') ?? '', name: el.getAttribute('aria-label') ?? '', text: el.querySelector('.speed-badge-text')?.textContent ?? '' })),
+    )
+    for (const b of titled) {
+      expect(b.title, b.name).not.toBe('')
+      expect(b.name.startsWith(`${b.title} `), b.name).toBe(true)
+      expect(b.text, b.name).not.toContain(b.title)
+    }
     const first = badges(page).first()
-    const shown = await first.locator('.speed-badge-name').textContent()
-    if (shown) await expect(first).toHaveAccessibleName(new RegExp(`^${shown}`))
 
     // "추가" 표지: 상세의 다른 배분 추가
     await first.click()
@@ -292,8 +298,8 @@ interface ContrastSample {
   bg: string
 }
 
-/** 글자·받침 테두리 색과 그 뒤 실제 배경(조상 배경색 합성)의 대비. 그라데이션 배경은 그 요소의 배경색으로 본다 */
-async function measureContrast(page: Page, selectors: { kind: string; sel: string; prop: 'color' | 'border' }[]): Promise<ContrastSample[]> {
+/** 글자 색과 그 뒤 실제 배경(조상 배경색 합성)의 대비. 그라데이션 배경은 그 요소의 배경색으로 본다 */
+async function measureContrast(page: Page, selectors: { kind: string; sel: string }[]): Promise<ContrastSample[]> {
   return page.evaluate((list) => {
     const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!
     const rgba = (css: string): [number, number, number, number] => {
@@ -329,21 +335,13 @@ async function measureContrast(page: Page, selectors: { kind: string; sel: strin
       return (x + 0.05) / (y + 0.05)
     }
     const out: ContrastSample[] = []
-    for (const { kind, sel, prop } of list) {
+    for (const { kind, sel } of list) {
       for (const el of document.querySelectorAll(sel)) {
         const r = el.getBoundingClientRect()
         if (r.width === 0 || r.height === 0) continue
-        const cs = getComputedStyle(el)
-        if (prop === 'color') {
-          const bg = backdrop(el)
-          const fg = over(rgba(cs.color), bg)
-          out.push({ kind, text: (el.textContent ?? '').trim().slice(0, 12), ratio: ratio(fg, bg), fg: `${fg.map(Math.round)}`, bg: `${bg.map(Math.round)}` })
-        } else {
-          // 받침 테두리 vs 상자 바깥 배경(겹침 상자의 부모 배경)
-          const bg = backdrop(el.parentElement?.parentElement ?? null)
-          const ring = over(rgba(cs.borderTopColor), bg)
-          out.push({ kind, text: el.getAttribute('data-item-id') ?? '', ratio: ratio(ring, bg), fg: `${ring.map(Math.round)}`, bg: `${bg.map(Math.round)}` })
-        }
+        const bg = backdrop(el)
+        const fg = over(rgba(getComputedStyle(el).color), bg)
+        out.push({ kind, text: (el.textContent ?? '').trim().slice(0, 12), ratio: ratio(fg, bg), fg: `${fg.map(Math.round)}`, bg: `${bg.map(Math.round)}` })
       }
     }
     return out
@@ -351,11 +349,74 @@ async function measureContrast(page: Page, selectors: { kind: string; sel: strin
 }
 
 const TAG_SELECTORS = [
-  { kind: '조건 태그', sel: '[data-testid="speed-badge"] .speed-tag', prop: 'color' as const },
-  { kind: '표지', sel: '[data-testid="speed-badge"] .speed-mark', prop: 'color' as const },
-  { kind: '상태 알약', sel: '[data-testid="speed-detail"] .speed-pill', prop: 'color' as const },
+  { kind: '조건 태그', sel: '[data-testid="speed-badge"] .speed-tag' },
+  { kind: '표지', sel: '[data-testid="speed-badge"] .speed-mark' },
+  { kind: '상태 알약', sel: '[data-testid="speed-detail"] .speed-pill' },
 ]
-const PLATE = (scope: string) => ({ kind: `겹침 받침(${scope})`, sel: '.mon-item', prop: 'border' as const })
+
+interface OverlaySample {
+  item: string
+  role: string
+  /** 겹침 너비 / 포켓몬 이미지 상자 너비 */
+  ratio: number
+  /** 겹침 가운데가 이미지 상자의 오른쪽 아래 사분면, 겹침이 상자 안 */
+  bottomRight: boolean
+  /** 받침·테두리 없음(테두리 두께 0, 배경 투명) */
+  bare: boolean
+  /** 뷰포트 안이면 그림이 실제로 그려짐(이미지는 로드 완료·자연 너비 > 0) */
+  inView: boolean
+  painted: boolean
+}
+
+/** 도구 겹침(.mon-item) 기하: 포켓몬 이미지 상자(.mon-with-item) 대비 크기·자리, 받침 유무, 그림 그려짐 */
+async function measureOverlays(page: Page): Promise<OverlaySample[]> {
+  return page.evaluate(() => {
+    const out: OverlaySample[] = []
+    for (const el of document.querySelectorAll<HTMLElement>('.mon-item')) {
+      const r = el.getBoundingClientRect()
+      if (r.width === 0 || r.height === 0) continue
+      const box = el.closest('.mon-with-item')!.getBoundingClientRect()
+      const face = el.querySelector('.mon-item-face')
+      const fr = face?.getBoundingClientRect()
+      const cs = getComputedStyle(el)
+      const transparent = cs.backgroundColor === 'transparent' || /rgba\(.*,\s*0\)$/.test(cs.backgroundColor)
+      const inView = r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth
+      const img = face instanceof HTMLImageElement ? face : null
+      out.push({
+        item: el.dataset.itemId ?? '',
+        role: el.dataset.itemRole ?? '',
+        ratio: r.width / box.width,
+        bottomRight:
+          r.left + r.width / 2 >= box.left + box.width / 2 &&
+          r.top + r.height / 2 >= box.top + box.height / 2 &&
+          r.right <= box.right + 0.5 &&
+          r.bottom <= box.bottom + 0.5,
+        bare: parseFloat(cs.borderTopWidth) === 0 && transparent && cs.backgroundImage === 'none',
+        inView,
+        painted: fr !== undefined && fr.width > 0 && fr.height > 0 && (img === null || (img.complete && img.naturalWidth > 0)),
+      })
+    }
+    return out
+  })
+}
+
+async function checkOverlays(page: Page, scope: string) {
+  // 지연 로드 이미지: 뷰포트 안 겹침이 모두 그려질 때까지 기다린다
+  await expect.poll(async () => (await measureOverlays(page)).filter((o) => o.inView && !o.painted).map((o) => o.item)).toEqual([])
+  const xs = await measureOverlays(page)
+  const ratios = xs.map((o) => o.ratio)
+  test.info().annotations.push({ type: 'overlay', description: `${scope} 겹침 ${xs.length}개 너비 비율 ${Math.min(...ratios).toFixed(3)}~${Math.max(...ratios).toFixed(3)}` })
+  expect(xs.length, `${scope} 겹침 표본`).toBeGreaterThan(0)
+  expect(xs.some((o) => o.inView && o.painted), `${scope} 뷰포트 안 겹침 그림`).toBe(true)
+  for (const o of xs) {
+    const at = `${scope} ${o.role}:${o.item}`
+    expect.soft(o.ratio, at).toBeGreaterThanOrEqual(0.45)
+    expect.soft(o.ratio, at).toBeLessThanOrEqual(0.55)
+    expect.soft(o.bottomRight, `${at} 오른쪽 아래 사분면`).toBe(true)
+    expect.soft(o.bare, `${at} 받침·테두리 없음`).toBe(true)
+    if (o.inView) expect.soft(o.painted, `${at} 그림 그려짐`).toBe(true)
+  }
+}
 
 function summarizeContrast(samples: ContrastSample[]) {
   const by = new Map<string, ContrastSample[]>()
@@ -367,7 +428,7 @@ function summarizeContrast(samples: ContrastSample[]) {
 }
 
 for (const scheme of ['light', 'dark'] as const) {
-  test(`대비(${scheme}): 상태·조건 태그 글자 4.5:1 이상, 도구 겹침 받침 3:1 이상(스피드·공격·방어)`, async ({ page }) => {
+  test(`대비·겹침(${scheme}): 상태·조건 태그 글자 4.5:1 이상, 도구 겹침은 받침 없이 이미지 오른쪽 아래·너비 0.45~0.55배(스피드·공격·방어)`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme })
     await openSpeed(page)
     // 동속·추가 표지와 상세 상태 알약까지 화면에 올린다
@@ -376,14 +437,14 @@ for (const scheme of ['light', 'dark'] as const) {
     await detail.getByTestId('speed-add-toggle').click()
     await detail.getByTestId('speed-add-option').and(page.locator(':enabled')).first().click()
     await expect(page.locator('[data-testid="speed-badge"][data-origin="added"]')).toHaveCount(1)
-    const speed = await measureContrast(page, [...TAG_SELECTORS, PLATE('스피드')])
-    for (const kind of ['조건 태그', '상태 알약', '겹침 받침(스피드)']) expect(speed.some((s) => s.kind === kind), `${kind} 표본`).toBe(true)
+    const speed = await measureContrast(page, TAG_SELECTORS)
+    for (const kind of ['조건 태그', '상태 알약']) expect(speed.some((s) => s.kind === kind), `${kind} 표본`).toBe(true)
+    await checkOverlays(page, '스피드')
 
     // 방어 탭 화력 도구 줄(대도각참 생명의구슬), 공격 탭 반감열매 줄(대도각참 → 대쓰여너 마코열매)
     await selectTab(page, '방어')
     await waitComplete(page)
-    const defense = await measureContrast(page, [PLATE('방어')])
-    expect(defense.length).toBeGreaterThan(0)
+    await checkOverlays(page, '방어')
     await selectTab(page, '공격')
     const species = combo(mySet(page), '종')
     await species.fill('대도각참')
@@ -391,17 +452,13 @@ for (const scheme of ['light', 'dark'] as const) {
     await expect(species).toHaveValue('대도각참')
     await waitComplete(page)
     await expect(page.getByRole('tabpanel').getByTestId('berry-badge').first()).toBeVisible()
-    const attack = await measureContrast(page, [PLATE('공격')])
+    await checkOverlays(page, '공격')
 
-    const all = [...speed, ...defense, ...attack]
-    const lines = summarizeContrast(all)
+    const lines = summarizeContrast(speed)
     for (const l of lines) {
       console.log(`[speed-chart-a11y] ${scheme} ${l}`)
       test.info().annotations.push({ type: 'contrast', description: `${scheme} ${l}` })
     }
-    for (const s of all) {
-      const limit = s.kind.startsWith('겹침') ? 3 : 4.5
-      expect.soft(s.ratio, `${scheme} ${s.kind} "${s.text}" fg ${s.fg} bg ${s.bg}`).toBeGreaterThanOrEqual(limit)
-    }
+    for (const s of speed) expect.soft(s.ratio, `${scheme} ${s.kind} "${s.text}" fg ${s.fg} bg ${s.bg}`).toBeGreaterThanOrEqual(4.5)
   })
 }

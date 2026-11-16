@@ -1,6 +1,6 @@
 import type { Snapshot } from '../../data/schema'
 import { ItemGlyph } from '../../ui/ItemGlyph'
-import { itemGlyphOf, itemIconUrl, type ItemGlyphSpec } from '../../ui/images'
+import { MEGA_MARK_URL, itemGlyphOf, itemIconUrl, type ItemGlyphSpec } from '../../ui/images'
 import { PokemonIcon } from './PokemonIcon'
 import './monWithItem.css'
 
@@ -18,8 +18,8 @@ export interface MonWithItemProps {
   className?: string
 }
 
-/** 겹침 너비 비율(PRD R13 범위 0.35~0.45) */
-export const ITEM_OVERLAY_RATIO = 0.4
+/** 겹침 너비 비율: 포켓몬 이미지 면적의 약 1/4(너비 0.5배, 사용자 피드백 2026-11-16) */
+export const ITEM_OVERLAY_RATIO = 0.5
 
 const itemOverlaySize = (size: number): number => Math.round(size * ITEM_OVERLAY_RATIO)
 
@@ -31,7 +31,7 @@ function glyphFor(item: NonNullable<MonWithItemProps['item']>, game: Snapshot | 
 }
 
 /**
- * 포켓몬 이미지 + 오른쪽 아래 도구 겹침. 상자 크기는 이미지와 같아 줄 높이가 바뀌지 않는다. 상자와 겹침에 상호작용은 없다.
+ * 포켓몬 이미지 + 오른쪽 아래 도구 겹침(받침·테두리 없이 도구 그림만). 상자 크기는 이미지와 같아 줄 높이가 바뀌지 않는다. 상자와 겹침에 상호작용은 없다.
  * variant는 변형 줄 표지(testid berry-badge, 읽기 이름 "OO 지닌 경우")이고, mega·held는 장식(title만)이다.
  */
 export function MonWithItem({ speciesId, size, lazy = false, item, game, className = '' }: MonWithItemProps) {
@@ -68,6 +68,16 @@ export function MonWithItem({ speciesId, size, lazy = false, item, game, classNa
             decoding="async"
             draggable={false}
             data-item-icon={item.id}
+          />
+        ) : glyph.kind === 'mega' ? (
+          <img
+            className="mon-item-face"
+            src={MEGA_MARK_URL}
+            alt=""
+            aria-hidden="true"
+            decoding="async"
+            draggable={false}
+            data-item-glyph="mega"
           />
         ) : (
           <ItemGlyph kind={glyph.kind} className="mon-item-face" />

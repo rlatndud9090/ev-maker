@@ -6,6 +6,9 @@ import type { Snapshot } from '../data/schema'
 const POKEMON = import.meta.glob<string>('../assets/pokemon-icons/*.png', { eager: true, query: '?url', import: 'default' })
 const ITEMS = import.meta.glob<string>('../assets/item-icons/*.png', { eager: true, query: '?url', import: 'default' })
 
+/** 메가진화 문양(사용자 제공 WebP, src/assets/marks): 메가스톤·메가진화 겹침 표지 */
+export { default as MEGA_MARK_URL } from '../assets/marks/mega.webp?url'
+
 /** glob 결과(경로 → URL)를 파일 이름(확장자 뺀 id) → URL로. */
 export function indexByFileId(globbed: Readonly<Record<string, string>>): ReadonlyMap<string, string> {
   const out = new Map<string, string>()
@@ -26,7 +29,7 @@ export const pokemonIconUrl = (speciesId: string | undefined): string | undefine
 /** 도구 id → 받은 아이콘 URL. 없으면 undefined. 화면 표시는 itemGlyphOf를 쓴다. */
 export const itemIconUrl = (itemId: string | undefined): string | undefined => (itemId === undefined ? undefined : ITEM_BY_ID.get(itemId))
 
-/** 도구 겹침 그림: 받은 PNG, 공통 메가스톤 표지, 공통 가방 표지 중 하나(깨진 이미지·텍스트 대체 없음). */
+/** 도구 겹침 그림: 받은 PNG, 메가진화 문양(MEGA_MARK_URL), 공통 가방 표지 중 하나(깨진 이미지·텍스트 대체 없음). */
 export type ItemGlyphSpec = { kind: 'img'; url: string } | { kind: 'mega' } | { kind: 'bag' }
 
 const MEGA_STONES = new WeakMap<Snapshot, ReadonlySet<string>>()
@@ -39,7 +42,7 @@ const megaStonesOf = (game: Snapshot): ReadonlySet<string> => {
   return set
 }
 
-/** 메가스톤 판정(스냅숏 megas의 stone)이 PNG 조회보다 먼저다 — 메가스톤은 PNG가 있어도 공통 표지로 그린다. */
+/** 메가스톤 판정(스냅숏 megas의 stone)이 PNG 조회보다 먼저다 — 메가스톤은 PNG가 있어도 메가진화 문양으로 그린다. */
 export function itemGlyphOf(game: Snapshot, itemId: string): ItemGlyphSpec {
   if (megaStonesOf(game).has(itemId)) return { kind: 'mega' }
   const url = ITEM_BY_ID.get(itemId)

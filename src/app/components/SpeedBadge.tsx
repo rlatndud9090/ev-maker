@@ -17,7 +17,7 @@ interface Props {
   buttonRef?: Ref<HTMLButtonElement>
 }
 
-/** 배지 버튼: 이미지(도구 겹침) · 이름(넓은 화면) · 배분 표기 · 조건 태그 · 표지 */
+/** 배지 버튼: 이미지(도구 겹침) · 배분 표기 · 조건 태그 · 표지. 이름은 글자 없이 툴팁(title)·접근 이름으로만 */
 export const SpeedBadge = memo(function SpeedBadge({ game, badge: b, status, active, open, detailId, handlers, buttonRef }: Props) {
   const names = namesOf(game)
   const label = badgeLabel(game, b, status)
@@ -35,7 +35,7 @@ export const SpeedBadge = memo(function SpeedBadge({ game, badge: b, status, act
         className={cls}
         tabIndex={active ? 0 : -1}
         aria-label={label}
-        title={label}
+        title={names.species.label(b.speciesId)}
         aria-expanded={open}
         aria-controls={open ? detailId : undefined}
         data-testid="speed-badge"
@@ -68,10 +68,8 @@ export const SpeedBadge = memo(function SpeedBadge({ game, badge: b, status, act
           className={b.item?.negated ? 'item-negated' : undefined}
         />
         <span className="speed-badge-text" aria-hidden="true">
-          <span className="speed-badge-name">{names.species.label(b.speciesId)}</span>
           <b className="num">{bundleLabel(b.bundle.sp, b.bundle.nature)}</b>
           {tag !== undefined && <em className="speed-tag">{tag}</em>}
-          {b.mega && <span className="speed-mark mega">메가</span>}
           {b.item?.negated && <span className="speed-mark off">도구 무효</span>}
           {status === 'tie' && <span className="speed-mark tie">동속</span>}
           {b.origin === 'added' && <span className="speed-mark add">추가</span>}

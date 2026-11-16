@@ -255,17 +255,6 @@
   min-width: 0;
 }
 
-.speed-badge-name {
-  display: none;
-}
-
-/* 이름 텍스트는 데스크톱 폭에서만(좁은 폭은 이미지와 접근 이름으로 구분) */
-@media (min-width: 60rem) {
-  .speed-badge-name {
-    display: inline;
-  }
-}
-
 .speed-tag,
 .speed-mark,
 .speed-pill {
