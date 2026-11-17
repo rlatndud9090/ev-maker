@@ -1,8 +1,8 @@
 ---
 title: "스피드 탭 개편"
 date: "2026-11-15"
-status: pre-accepted
-approval: "user:2026-11-15:사전 승인"
+status: accepted
+approval: "user:2026-11-17:여기까지만 하면 이제 이번 작업은 make-pr 해도 될듯."
 related_prd: "./prd.md"
 unit_type: feature
 branch: "feature/speed-tab-revamp"

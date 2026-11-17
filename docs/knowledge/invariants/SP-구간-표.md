@@ -23,3 +23,18 @@ area: SP 구간 표
 > area: SP 구간 표 · 출처: docs/raw/feature/damage-tabs-row-revamp/adr.md#결정-7 · 코드: `src/core/fieldAbilities.ts:withAttackerField`, `src/cards/plan.ts:damageConditions` · 봉인: `src/core/fieldAbilities.test.ts`, `src/cards/plan.test.ts` (어흥염 vs 메가리자몽Y 양방향)
 
 **위반 시:** 맞는 쪽이 까는 날씨로 내 화력이 올라가 낙관 판정이 된다(내 어흥염 플레어드라이브가 상대 메가리자몽Y 가뭄의 쾌청으로 계산됨). 더블에서 실제 날씨는 정할 수 없으므로 공격측이 스스로 까는 날씨만 확실하다.
+
+### INV-261117-relevant-item-only: 도구 표시는 그 판정 계산에 효과를 준 도구만 하고, 스피드 도구 효과 판정은 core 공식 함수로만 한다
+> area: SP 구간 표 · 출처: docs/raw/feature/speed-tab-revamp/adr.md#결정-4, docs/raw/feature/speed-tab-revamp/adr.md#결정-5 · 코드: `src/core/speed.ts:speedItemApplies`, `src/core/speed.ts:SPEED_ITEM_MODIFIERS`, `src/cards/speedChart.ts`, `src/app/components/text.ts:cardItemOf`, `src/cards/iconTargets.ts` · 봉인: `src/cards/speedChart.test.ts` "기본 배지는 스카프 없는 가정 세트이고, 표시 도구(item)는 스피드 배수를 건 도구뿐이다", `src/ui/images.test.ts`(받기 목록 = 매니페스트 = 대상 집합), `e2e/speed-chart.spec.ts`
+
+**위반 시:** 생명의구슬·메가스톤처럼 판정에 효과가 없는 도구가 아이콘으로 떠 사용자가 그 도구가 계산에 반영된 것으로 오해하고 공간만 차지한다(사용자 결정 2026-11-17). UI에 스피드 도구 목록을 따로 두면 core 공식(무딘손 무효 포함)과 표시가 어긋나고, 쓰이지 않는 아이콘 자산·고지가 번들에 남는다.
+
+### INV-261117-speed-base-scarf-free: 스피드 차트 기본 배지는 늘 스카프 없는 세트이고 구애스카프는 기준 이상일 때 조건 배지로만 나온다
+> area: SP 구간 표 · 출처: docs/raw/feature/speed-tab-revamp/adr.md#결정-3 · 코드: `src/cards/speedChart.ts:scarfFreeSet`, `src/cards/speedChart.ts:scarfConditionOf` · 봉인: `src/cards/speedChart.test.ts` "스카프: 대표 도구가 스카프여도 기본 배지는 스카프 없는 세트이고, 스카프 배지는 구애스카프 점유율로만 붙는다", `e2e/speed-chart.spec.ts` AC11(스카프 필터 off → 구애스카프 래더 배지 0)
+
+**위반 시:** 대표 도구가 구애스카프인 상대(예: 한카리아스)의 기본 배지가 스카프 세트가 되어, 스카프 필터를 꺼도 스카프 속도가 차트에 남고 "기본 = 스카프 없음"이라는 사용자 기대(2026-11-17)와 어긋난다. 상위 단위의 "대표 도구가 스카프면 스카프 아닌 최다 도구 행" 규칙으로 되돌리지 않는다.
+
+### INV-261117-speed-weather-opponent-only: 스피드 날씨·필드 배지는 상대 세트에만 날씨를 걸고 날씨 무효 판정은 내 특성으로만 한다
+> area: SP 구간 표 · 출처: docs/raw/feature/speed-tab-revamp/adr.md#결정-2, docs/raw/feature/speed-tab-revamp/adr.md#결정-3 · 코드: `src/cards/speedChart.ts` (fieldConditions, fieldAllowed — 내 특성의 WEATHER_NEGATING_ABILITIES만 봄) · 봉인: `src/cards/speedChart.test.ts`(내 구름보기·에어록이면 날씨 배지 없음, 서핑테일은 남음), `src/core/speed.test.ts`(상대 단독 finalSpeed는 자기 특성만 본다)
+
+**위반 시:** 날씨를 양쪽 공통 입력으로 넣으면 내 기준선까지 날씨가 걸리거나(내 쓱쓱이 비에서 ×2), 상대 세트의 날씨 무효 특성 처리와 섞여 "파트너가 날씨를 깐다고 가정한 상대 속도"라는 조건 배지 의미가 깨진다. 대미지 판정의 INV-261115-attacker-field-only와는 다른 축이다(스피드 날씨 배지는 가정 조건).

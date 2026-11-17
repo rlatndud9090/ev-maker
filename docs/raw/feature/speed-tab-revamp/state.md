@@ -1,9 +1,9 @@
 ---
 title: "스피드 탭 개편"
 date: "2026-11-15"
-stage: implementing
-prd_status: pre-approved
-adr_status: pre-accepted
+stage: approved
+prd_status: approved
+adr_status: accepted
 ---
 
 # 작업 단계 원장: 스피드 탭 개편
@@ -55,7 +55,11 @@ adr_status: pre-accepted
 - 2026-11-17 빌드 중 개정 4·5차(사용자 확인): 공·방·스 전 탭에서 판정 계산에 관여한 도구만 표시(메가 문양 포함 제거, mega.webp 자산·고지 삭제, 스피드는 core 스피드 도구 배수 적용 도구만), 스피드 상세 닫기(×) 버튼 제거. PRD R3·R7·R13·R14·AC18·AC19·AC26, ADR 결정 1·3~6 본문 개정
 - 2026-11-17 빌드 중 개정 6·7차(사용자 확인): 상위 N 기본 30→100, 성능 완료 예산 3초→5초(상위 100 기준), 스카프 규칙(기본 배지는 늘 스카프 없는 세트, 스카프는 기준 이상이면 조건 배지, "스카프 아님" 배지 삭제). 부수: 집단구타 등 엔진 미지원 기술을 화력 도구 근거에서 제외(버그 수정), 미사용 도구 아이콘 11종 삭제(42종). 게이트·단위 1235·e2e 136/136 통과
 - 2026-11-17 구현 마무리: 다른 배분 추가 직접 입력을 SP 칸 축소·▲▼ 성격 토글(내 포켓몬 패널과 동일)로 정리. 사용자 "여기까지만 하면 make-pr 해도 될듯". 후속 후보 3건(공·방 사다리 뷰, 컷 고정, 포켓몬 추가 UX) notes 기록
+- 2026-11-17 approved: 사용자 명시 최종 승인 (harness:approve --final)
 ## 승인 이벤트
+
+- APPROVAL prd 2026-11-17 make-pr :: 여기까지만 하면 이제 이번 작업은 make-pr 해도 될듯.
+- APPROVAL adr 2026-11-17 make-pr :: 여기까지만 하면 이제 이번 작업은 make-pr 해도 될듯.
 
 <!-- 이 블록은 `npm run harness:approve`만 기록한다. 사용자의 명시 승인 발화가
      verbatim으로 남는다. 두 종류: `PREAPPROVAL`(사전 승인 — 빌드 진입 게이트)과
@@ -65,3 +69,7 @@ adr_status: pre-accepted
 
 - PREAPPROVAL prd 2026-11-15 harness:approve :: 사전 승인
 - PREAPPROVAL adr 2026-11-15 harness:approve :: 사전 승인
+
+## 지식 기록
+
+- KNOWLEDGE 2026-11-17 invariants=INV-261117-relevant-item-only,INV-261117-speed-base-scarf-free,INV-261117-speed-weather-opponent-only gotchas=G-261117-power-item-engine-unsupported via=make-pr
