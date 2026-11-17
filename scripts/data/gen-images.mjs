@@ -7,7 +7,7 @@
 //   디스크 내용이 매니페스트 sha256과 다르면 다시 받는다. 그 밖은 건너뛴다.
 // 도구(Bulbagarden)는 Special:FilePath가 늘 최신 판이라 imageinfo API로 현재 판의 올린 시각·sha1을 받아 매니페스트에 기록하고,
 //   받은 바이트의 sha1이 그 판과 같은지 확인한다(판이 바뀌면 다시 받고 WARNING).
-// 매니페스트(manifest.json)는 디스크에 있는 파일만 기록한다. 실패·매핑 실패는 manifest.missing과 콘솔에 남는다.
+// 매니페스트(manifest.json)는 디스크에 있는 파일만 기록하고, ITEM_ICON_IDS 밖 도구 PNG는 지운다. 실패·매핑 실패는 manifest.missing과 콘솔에 남는다.
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -208,6 +208,9 @@ async function itemIcons(snapshots) {
     entries[id] = { file: name, uploadedAt: info[name].timestamp, sha1: info[name].sha1, sha256: sha256(png), ...pngSize(png) }
   }
   for (const m of missing) rmSync(join(ITEM_DIR, `${m.id}.png`), { force: true })
+  // 대상 목록에서 빠진 도구의 옛 PNG도 지운다(매니페스트·디스크가 ITEM_ICON_IDS와 같게)
+  const wanted = new Set(ITEM_ICON_IDS)
+  for (const f of readdirSync(ITEM_DIR)) if (f.endsWith('.png') && !wanted.has(f.slice(0, -4))) rmSync(join(ITEM_DIR, f))
   const manifest = {
     source: {
       site: 'Bulbagarden Archives',

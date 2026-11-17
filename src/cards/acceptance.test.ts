@@ -11,6 +11,7 @@ import {
   natureMultiplier,
   sweepDamage,
   validateSet,
+  withAttackerField,
   type BattleConditions,
   type PokemonSet,
   type SweepResult,
@@ -48,7 +49,7 @@ import { createLruCache } from './cache'
 import { presetKey } from './ids'
 import { planTab } from './plan'
 import { cardInput, realData, syntheticView } from './testing'
-import { DAMAGE_TABS, DEFAULT_CRITERIA } from './types'
+import { DAMAGE_TABS, DEFAULT_CRITERIA, DEFAULT_TOP_N } from './types'
 import type { CardInput, CardSpec, CardView, ExtremeSpec, MoveCandidate, OpponentHeader, RankBasis, RowKind, RowSpec, RowView, DamageTab, TabPlan, TabView } from './types'
 import { DEFAULT_ROLL_STEPS } from './types'
 /** 카드 입력과 같은 제품 판정 기준(cardInput 기본값). 코어 직접 호출 기대값도 이 기준으로 낸다 */
@@ -79,7 +80,7 @@ function run(label: string, input: CardInput, tab: DamageTab): { plan: TabPlan; 
 
 const top = (mySet: PokemonSet, extra: Partial<CardInput> = {}) => cardInput({ mySet, ...extra })
 const only = (mySet: PokemonSet, ids: string[], extra: Partial<CardInput> = {}) =>
-  cardInput({ mySet, filters: { topN: 30, selected: ids }, ...extra })
+  cardInput({ mySet, filters: { topN: DEFAULT_TOP_N, selected: ids }, ...extra })
 
 const entryOf = (view: MetaView, id: string): MetaEntry => {
   const e = view.entry(id)
@@ -890,7 +891,11 @@ describe('AC6 변화 없음 행(목록에서 빼지 않는다)', () => {
     const ok = plan.cards.filter((c) => c.opponent.source === 'ladder' && c.state === 'ok')
     expect(ok.every((c) => c.rowIds.length === 0 && c.fixedIds.length === 1)).toBe(true)
     const n = expectMatchesCore(plan, view)
-    expect(n).toEqual({ items: ok.length, cards: 0, allSame: ok.length })
+    // 코어가 계산하지 않는 규칙(변장 특성 미미큐 등: ENGINE_UNSUPPORTED)의 카드는 오류 행 1개라 변화 없음 항목이 아니다
+    const unsupported = ok.filter((c) => c.opponentSet.ability === 'disguise')
+    expect(unsupported.length).toBeGreaterThan(0)
+    for (const c of unsupported) expect(view.cards.find((v) => v.id === c.id)?.rows.map((r) => r.status)).toEqual(['error'])
+    expect(n).toEqual({ items: ok.length - unsupported.length, cards: 0, allSame: ok.length - unsupported.length })
     const rows = noChangeRows(view)
     expect(rows.every((i) => i.kind === 'sp-independent')).toBe(true)
     // 칸이 없는 고정 판정 행도 결과 배지용 판정 칸(fixedCell)을 싣는다.
@@ -1304,12 +1309,12 @@ describe('AC13 Bo3·월 변경 → 그 스냅샷 기준·출처', () => {
     expect(before.cards.some((c) => c.opponent.id === dropped)).toBe(true)
     expect(after.cards.some((c) => c.opponent.id === dropped)).toBe(false)
     for (const c of after.cards) expect(c.opponent.rank).toBe(entryOf(view, c.opponent.id).rank)
-    // 빠진 종 자리에 상위 30으로 들어온 종의 카드는 맨 뒤에 붙을 수 있다(5단 판정에서는 들어온 종도 판정이 바뀐다)
-    const kept = new Set(bo1.ranking.slice(0, 30).map((e) => e.id))
+    // 빠진 종 자리에 상위 N으로 들어온 종의 카드는 맨 뒤에 붙을 수 있다(5단 판정에서는 들어온 종도 판정이 바뀐다)
+    const kept = new Set(bo1.ranking.slice(0, DEFAULT_TOP_N).map((e) => e.id))
     expect(after.cards.filter((c) => kept.has(c.opponent.id)).map((c) => c.opponent.id)).toEqual(
       before.cards.filter((c) => c.opponent.id !== dropped).map((c) => c.opponent.id),
     )
-    for (const c of after.cards.filter((x) => !kept.has(x.opponent.id))) expect(c.opponent.rank).toBe(30)
+    for (const c of after.cards.filter((x) => !kept.has(x.opponent.id))) expect(c.opponent.rank).toBe(DEFAULT_TOP_N)
   })
 })
 
@@ -1411,10 +1416,12 @@ describe('AC35 방어 탭 화력 도구 행: 기본 줄 도구 없음, 도구 �
         if (c.state !== 'ok' || c.bundle.userAdded !== undefined) continue
         // 성묘의 랭크 전 항목은 1기절 조건(R15)
         for (const g of c.conditions.filter((x) => x.id === JSON.stringify(['base']) || x.id === JSON.stringify(['faint', 1])))
-          for (const cand of g.candidates) if (game.data.moves[cand.moveId] !== undefined && !setOf.has(cand.moveId)) setOf.set(cand.moveId, c.opponentSet)
+          for (const cand of g.candidates) // 엔진이 계산하지 못하는 기술(비트업 등)은 대미지를 견줄 수 없어 도구 보정 기술이 아니다
+          if (game.data.moves[cand.moveId] !== undefined && !game.manifest.engineUnsupported.moves.includes(cand.moveId) && !setOf.has(cand.moveId)) setOf.set(cand.moveId, c.opponentSet)
       }
       const maxOf = (set: PokemonSet, move: string): number => {
-        const v = judgeDamage(game, 'defender', set, EXAMPLE_SET, move, undefined, undefined, { rollSteps: N }).value
+        // 공격측 특성이 까는 날씨(R13: 드리즐 → 웨더볼 물 타입)도 코어 규칙대로 넣어 견준다
+        const v = judgeDamage(game, 'defender', set, EXAMPLE_SET, move, withAttackerField({}, set.ability), undefined, { rollSteps: N }).value
         return v.kind === 'damage' ? v.max : 0
       }
       const expected: { item: string; share: number; triggers: string[] }[] = []

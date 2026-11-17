@@ -35,10 +35,8 @@ export type SpeedCondition =
   | { kind: 'none' }
   /** 같은 S 랭크 값의 수단은 하나로 합친다. share 없음 = 목록 밖 타겟 */
   | { kind: 'rank'; stage: number; means: readonly { means: MeansRef; share?: number }[] }
-  /** 도구 = 구애스카프 */
+  /** 도구 = 구애스카프(메가 아닌 래더 상대, 점유율 기준 이상) */
   | { kind: 'scarf'; share: number }
-  /** 대표 도구가 구애스카프일 때의 다른 최다 도구. item null = 도구 없음. 필터 종류는 scarf */
-  | { kind: 'non-scarf'; item: string | null; share: number }
   | { kind: 'tailwind' }
   /** share 없음 = 목록 밖 타겟 */
   | { kind: 'field'; ability: string; field: SpeedFieldCondition; share?: number }
@@ -152,30 +150,25 @@ function withSpeBoost(set: PokemonSet, stage: number): PokemonSet {
   return { ...set, boosts: { spe: stage } }
 }
 
-/** 래더 기본 배지의 가정 세트(1위 묶음 적용 전 대표 세트)와 계산 폼 */
+/** 래더 가정 세트의 스카프 없는 판: 도구가 구애스카프면 스카프 밖 최다 도구(동률 id 순, 없으면 도구 없음)로 바꾼다 */
+export function scarfFreeSet(entry: MetaEntry, set: PokemonSet): PokemonSet {
+  if (set.item !== SCARF) return set
+  const other = Object.entries(entry.items.shares)
+    .filter(([id]) => id !== SCARF)
+    .sort((a, b) => b[1] - a[1] || byString(a[0], b[0]))[0]
+  return withItem(set, other?.[0] ?? null)
+}
+
+/** 래더 기본 배지의 가정 세트(1위 묶음 적용 전 대표 세트, 스카프 없는 판)와 계산 폼 */
 export function ladderBaseSet(game: Snapshot, entry: MetaEntry): { set: PokemonSet; speciesId: string; mega: boolean } {
-  const set = structuredClone(entry.representative.set)
+  const set = scarfFreeSet(entry, structuredClone(entry.representative.set))
   return { set, speciesId: resolve(game, set)?.species.id ?? entry.id, mega: entry.mega !== undefined }
 }
 
-/**
- * 스카프 조건: 대표 도구가 구애스카프면 그 밖 최다 도구(동률 id 순), 아니면 구애스카프 점유율이 기준 이상일 때 스카프.
- * 메가 항목은 호출 전에 뺀다.
- */
-export function scarfConditionOf(
-  entry: MetaEntry,
-  assumedItem: string | undefined,
-  scarfShareMin: number,
-): Extract<SpeedCondition, { kind: 'scarf' | 'non-scarf' }> | null {
-  const shares = entry.items.shares
-  if (assumedItem === SCARF) {
-    const other = Object.entries(shares)
-      .filter(([id]) => id !== SCARF)
-      .sort((a, b) => b[1] - a[1] || byString(a[0], b[0]))[0]
-    if (other === undefined) return null
-    return { kind: 'non-scarf', item: other[0] === NO_ITEM ? null : other[0], share: other[1] }
-  }
-  const share = shares[SCARF] ?? 0
+/** 스카프 조건: 메가 아닌 래더 상대의 구애스카프 점유율이 기준 이상이면 스카프(대표 도구와 무관) */
+export function scarfConditionOf(entry: MetaEntry, scarfShareMin: number): Extract<SpeedCondition, { kind: 'scarf' }> | null {
+  if (entry.mega !== undefined) return null
+  const share = entry.items.shares[SCARF] ?? 0
   return share >= scarfShareMin ? { kind: 'scarf', share } : null
 }
 
@@ -210,8 +203,6 @@ function conditionKey(c: SpeedCondition): string {
       return c.kind
     case 'rank':
       return `rank:${c.stage}`
-    case 'non-scarf':
-      return `non-scarf:${c.item ?? NO_ITEM}`
     case 'field':
       return `field:${c.ability}`
   }
@@ -221,7 +212,6 @@ const FILTER_KIND: Readonly<Record<SpeedCondition['kind'], SpeedConditionKind | 
   none: null,
   rank: 'rank',
   scarf: 'scarf',
-  'non-scarf': 'scarf',
   tailwind: 'tailwind',
   field: 'field',
 }
@@ -267,7 +257,7 @@ function conditionBadges(
   base: SpeedBadge,
   baseResolved: ResolvedSet,
   means: readonly MeansCandidate[],
-  scarf: Extract<SpeedCondition, { kind: 'scarf' | 'non-scarf' }> | null,
+  scarf: Extract<SpeedCondition, { kind: 'scarf' }> | null,
   fields: readonly { ability: string; field: SpeedFieldCondition; share?: number }[],
 ): SpeedBadge[] {
   const out: SpeedBadge[] = []
@@ -289,7 +279,7 @@ function conditionBadges(
     add({ kind: 'rank', stage, means: byStage.get(stage) ?? [] }, withSpeBoost(base.set, stage))
   }
 
-  if (scarf !== null) add(scarf, withItem(base.set, scarf.kind === 'scarf' ? SCARF : scarf.item))
+  if (scarf !== null) add(scarf, withItem(base.set, SCARF))
 
   add({ kind: 'tailwind' }, base.set, { attacker: { tailwind: true } })
 
@@ -329,14 +319,14 @@ interface LadderBundle {
   set: PokemonSet
 }
 
-/** 스냅숏의 전 S 묶음(점유율 내림차순). 보존 배분이 없으면 대표 세트 하나를 점유율 0으로 낸다 */
+/** 스냅숏의 전 S 묶음(점유율 내림차순, 세트는 스카프 없는 판). 보존 배분이 없으면 대표 세트 하나를 점유율 0으로 낸다 */
 function ladderBundles(game: Snapshot, view: MetaView, entry: MetaEntry, baseSet: PokemonSet): LadderBundle[] {
   const bundles = bundlesOf(game, entry, SPE_KEY, { bundleShareMin: 0 })
   if (bundles.length === 0) {
     return [{ sp: baseSet.sp.spe, nature: natureSign(game, baseSet.nature, 'spe'), share: 0, set: baseSet }]
   }
   return bundles.map((b) => {
-    const set = observedSpreadAssumption(view, entry.id, entry.spreads.kept.findIndex(([key]) => key === b.representativeSpread)).set
+    const set = scarfFreeSet(entry, observedSpreadAssumption(view, entry.id, entry.spreads.kept.findIndex(([key]) => key === b.representativeSpread)).set)
     return { sp: b.stats[0].sp, nature: b.stats[0].nature, share: b.share ?? 0, set }
   })
 }
@@ -364,7 +354,7 @@ export function buildSpeedChart(input: SpeedChartInput): SpeedChartModel {
     badges.push(base)
 
     const means = ladderMeans(entry, criteria.rankShareMin)
-    const scarf = entry.mega === undefined ? scarfConditionOf(entry, top.set.item, criteria.scarfShareMin) : null
+    const scarf = scarfConditionOf(entry, criteria.scarfShareMin)
     const fields = fieldAbilityIds
       .filter((ab) => (entry.abilities[ab] ?? 0) >= criteria.weatherShareMin && fieldAllowed(SPEED_FIELD_ABILITIES[ab], myAbility))
       .map((ab) => ({ ability: ab, field: SPEED_FIELD_ABILITIES[ab], share: entry.abilities[ab] }))

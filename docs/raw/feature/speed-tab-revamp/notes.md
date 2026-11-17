@@ -70,7 +70,7 @@ Status: draft
 카드·래더 규칙
 8. 배지 단위 = S의 (SP, 성격 +/=/−) 묶음, 점유율 ≥ `bundleShareMin`(0.05) 전부, 없으면 최대 묶음 1개 "소수 배분"(`plan.ts:204-219`, `sp-sweep-table/prd.md:160-161`) → R3. — **2차 결정으로 대체: 포켓몬마다 1위 묶음 하나(R3)**
 9. 랭크 배지는 능동 수단만, 래더 수단 점유율 ≥ `rankShareMin`(0.1)(`rank.ts:30-34`, INV-261113-rank-active-means-only). 순풍은 수단 아님(rankMeans.test "순풍은 수단이 아니다"). S 없는 수단 제외, 껍질깨기 S+2는 S만 → R7.
-10. 스카프: 메가 아닌 래더 종의 첫 묶음(최대 점유율)에만, `scarfShareMin`(0.1), 대표 도구가 스카프면 "스카프 아닌 최다 도구", 메가 제외(`plan.ts:683-697, 923-924`, `sp-sweep-table/prd.md:163-165`) → R7, 열린 질문 1.
+10. 스카프: 메가 아닌 래더 종의 첫 묶음(최대 점유율)에만, `scarfShareMin`(0.1), 대표 도구가 스카프면 "스카프 아닌 최다 도구", 메가 제외(`plan.ts:683-697, 923-924`, `sp-sweep-table/prd.md:163-165`) → R7, 열린 질문 1. (빌드 중 개정 7차로 대체: 기본 배지는 늘 스카프 없는 세트, 스카프는 조건 배지)
 11. 상대 도구는 스피드 탭에서 가정 세트 그대로(`sp-sweep-table/prd.md:143`; INV-261113-attack-opp-no-item은 공격 탭 한정) → 기본 배지에도 도구 겹침 가능(R3).
 12. 목록 밖 타겟 프리셋 3종(S32 무보정, S32+ 명랑, S0 무보정)과 커스텀 맨 앞 정렬(`presets.ts:26`, `sp-sweep-table/prd.md:209, 275`) → R10.
 13. 상위 N(기본 30)·포켓몬 선택 필터는 전 탭 공통(`Toolbar.tsx:225, 283`), 순풍 토글은 스피드 탭 전용·탭 간 유지(`Toolbar.tsx:245-261`) → R8·R11.
@@ -274,6 +274,8 @@ ux-gaps (MAJOR 5 · MINOR 10)
 - 트릭룸, 마비 조건, 곡예·고대활성·쿼크차지 지원, 선공기 우선도 표시.
 - 스피드 배수 적용 순서의 외부 근거 확인(현재 앱 공식 유지, 경계 사례 테스트만).
 - 방어 탭 `speedEdge` 독립 오라클(기존 후속 과제).
+- **(다음 피처 후보) 공·방 사다리 뷰**: 공격·방어 탭도 스피드 탭처럼 내 SP를 축으로 상대를 사다리로 늘어놓는 보기.
+- **(다음 피처 후보) 컷 고정**: 특정 컷(예: 어떤 상대 추월·확정수)을 고정한 뒤 남은 SP 예산으로 나머지를 다시 계산하는 기능.
 
 ## 인터뷰 결정 2차 (2026-11-15, PRD review 중)
 
@@ -298,13 +300,13 @@ ux-gaps (MAJOR 5 · MINOR 10)
 - `index.ts` (변경): 위 심볼 export.
 
 카드 모델 `src/cards`
-- `speedChart.ts` (신규): 배지 모델 생성. 기본 배지(1위 묶음), 조건 배지(랭크업·스카프/스카프 아닌 최다 도구·순풍·날씨/필드), 추가 배지(R15), 목록 밖 타겟 배지, 순서 비교 불가 목록, 상대별 묶음 목록을 낸다. `plan.ts`에서 옮겨 온 스카프 규칙 `scarfConditionOf`가 여기 있다(ADR 결정 3).
+- `speedChart.ts` (신규): 배지 모델 생성. 기본 배지(1위 묶음), 조건 배지(랭크업·스카프/스카프 아닌 최다 도구·순풍·날씨/필드), 추가 배지(R15), 목록 밖 타겟 배지, 순서 비교 불가 목록, 상대별 묶음 목록을 낸다. `plan.ts`에서 옮겨 온 스카프 규칙 `scarfConditionOf`가 여기 있다(ADR 결정 3). (빌드 중 개정 7차로 대체: 기본 배지는 늘 스카프 없는 세트, 스카프는 조건 배지)
 - `speedLadder.ts` (신규): 기준선·상태·요약, 조건 필터 적용, 같은 줄 순서, 사다리 줄 구성, 최소 S, 키보드 탐색, 추가·삭제 뒤 포커스, 배분 표기 문자열. 전부 화면 없는 순수 함수다.
 - `iconTargets.ts` (신규): R14 아이콘 대상 집합 계산(ADR 결정 5).
 - `types.ts` (변경)
   - 추가: `DisplayCriteria.weatherShareMin`(기본 0.1), `SpeedConditionKind`·`SpeedConditionFilters`·`DEFAULT_SPEED_FILTERS`·`SpeedAddedBundle`, `DamageTab`·`DAMAGE_TABS`.
   - 변경: `scarfShareMin` 기본값 0.05.
-  - 삭제: `CardConditions`·`CardInput.conditions`, `RowKind`의 `scarf`·`non-scarf`, `ScarfBasis`.
+  - 삭제: `CardConditions`·`CardInput.conditions`, `RowKind`의 `scarf`·`non-scarf`, `ScarfBasis`. (빌드 중 개정 7차로 대체: 기본 배지는 늘 스카프 없는 세트, 스카프는 조건 배지)
 - `spTrim.ts` (신규): `plan.ts:738`의 비공개 `trimSp`를 옮긴 공유 헬퍼 `trimSp(sp, keys, total)`. `plan.ts`와 `speedChart.ts`가 같이 쓴다(단일 출처).
 - `plan.ts` (변경): `speedCard`, 스피드 분기, `conditionsFor`의 순풍, `seed`의 스피드 검사를 지운다. `planTab(input, tab: DamageTab)`. 방어 탭 `outspeedsAtMax`(speedEdge)는 그대로 둔다.
 - `batch.ts` (변경): `buildTabView(input, tab: DamageTab, …)`. `planTab` 시그니처 변경에 맞춘다.
@@ -332,7 +334,7 @@ ux-gaps (MAJOR 5 · MINOR 10)
 - `components/monWithItem.css` (신규): 겹침 상자 스타일.
 - `components/CardItem.tsx` (변경): `PokemonIcon` + 이름 옆 `ItemVariantBadge`를 `MonWithItem`(변형 줄 = variant, 메가 기본 줄 = mega)으로 바꾼다. 스피드 분기(상세 왼쪽 `BundleList`·`speed` 플래그)를 지운다.
 - `components/RowDetail.tsx`·`components/ResultPanel.tsx` (변경): 스피드 행·`orderBadge`·스피드 분기 삭제. `RowDetail.tsx:129-192`의 `tab === 'speed'` 분기(over·need·basisText)를 지운다. 변형 줄 상세에 `MonWithItem`과 도구 이름 텍스트(점유율 없음, 열린 질문 13 기본값)를 둔다.
-- `components/text.ts`·`text.test.ts` (변경): `ScarfBasis` import, `ROW_KIND_LABEL`의 `scarf`·`non-scarf`, `basisText`의 `ScarfBasis` 갈래를 지운다. `text.test.ts:47-48`의 scarf basis 사례를 지우고 AC23 매핑에 적는다.
+- `components/text.ts`·`text.test.ts` (변경): `ScarfBasis` import, `ROW_KIND_LABEL`의 `scarf`·`non-scarf`, `basisText`의 `ScarfBasis` 갈래를 지운다. `text.test.ts:47-48`의 scarf basis 사례를 지우고 AC23 매핑에 적는다. (빌드 중 개정 7차로 대체: 기본 배지는 늘 스카프 없는 세트, 스카프는 조건 배지)
 
 UI 공용 `src/ui`
 - `images.ts` (변경): `itemGlyphOf(game, itemId)` → `{ kind: 'img'; url } | { kind: 'mega' } | { kind: 'bag' }`. 메가스톤 판정은 `game.data.megas`의 stone이다. 텍스트 배지 폴백은 지운다.
@@ -386,7 +388,7 @@ type SpeedCondition =
   | { kind: 'none' }
   | { kind: 'rank'; stage: number; means: readonly { means: MeansRef; share?: number }[] } // 같은 S 랭크 값 수단은 합친다
   | { kind: 'scarf'; share: number }                                                       // 도구 = choicescarf
-  | { kind: 'non-scarf'; item: string | null; share: number }                              // 필터 종류는 'scarf'
+  | { kind: 'non-scarf'; item: string | null; share: number }                              // 필터 종류는 'scarf' // (빌드 중 개정 7차로 대체: 기본 배지는 늘 스카프 없는 세트, 스카프는 조건 배지)
   | { kind: 'tailwind' }
   | { kind: 'field'; ability: string; field: SpeedFieldCondition; share?: number }         // share 없음 = 목록 밖 타겟
 interface SpeedBadge {
@@ -423,7 +425,7 @@ interface SpeedChartInput {
   added: readonly SpeedAddedBundle[]
 }
 function buildSpeedChart(input: SpeedChartInput): SpeedChartModel
-function scarfConditionOf(entry: MetaEntry, assumedItem: string | undefined, scarfShareMin: number): Extract<SpeedCondition, { kind: 'scarf' | 'non-scarf' }> | null // 메가는 호출 전에 뺀다
+function scarfConditionOf(entry: MetaEntry, assumedItem: string | undefined, scarfShareMin: number): Extract<SpeedCondition, { kind: 'scarf' | 'non-scarf' }> | null // 메가는 호출 전에 뺀다 // (빌드 중 개정 7차로 대체: 기본 배지는 늘 스카프 없는 세트, 스카프는 조건 배지)
 type AddCheck = { kind: 'ok'; listed: boolean } | { kind: 'duplicate' } | { kind: 'invalid' }
 function checkSpeedAddition(model: SpeedChartModel, opponentId: string, sp: number, nature: NatureSign, spMax: number): AddCheck
 function ladderBaseSet(game: Snapshot, entry: MetaEntry): { set: PokemonSet; speciesId: string; mega: boolean } // 래더 기본 배지 가정 세트(1위 묶음 적용 전 대표 세트). buildSpeedChart와 iconTargets가 같이 쓴다
@@ -683,7 +685,7 @@ type AppAction = /* 기존 … (set-tailwind 삭제) */
 - **`speedText.ts` 분리**: 배지 이름·배분 표기·조건 상세·점유율 문구를 컴포넌트에서 떼어 `src/app/components/speedText.ts` 한 곳에 모았다(계획에는 없던 파일).
 - **배지 이름 텍스트 폭 경계 60rem**: `.speed-badge-name`은 `@media (min-width: 60rem)`에서만 보인다. 좁은 폭은 이미지와 접근 이름으로 구분한다. 같은 경계에서 상세를 배지 칸 시작선에 맞춰 들여 쓴다(`speedChart.css`). 30rem 이하는 줄 그리드 열을 좁힌다. 차트 프레임은 `.speed-frame`이 세로 스크롤을 맡고(`overflow-y: auto`), 컨테이너 `min-height: 14rem`이며, `scroll-padding-block`은 SpeedChart가 잰 띠 높이(`--speed-band-h`, 기본 2.4rem) + 0.25rem이다.
 - **`MonWithItem`에 `game` prop 추가**: 메가스톤 판정에 스냅숏이 필요해 `game?: Snapshot`을 받는다. 있으면 `itemGlyphOf(game, id)`로 정한다(메가스톤 판정이 PNG 조회보다 먼저).
-- **도구 아이콘 53종(신규 13)**: `src/assets/item-icons/` PNG가 53개이고 이번에 13개가 늘었다(구애스카프 등 R14 대상 집합). 라이선스·README·`THIRD_PARTY_NOTICES.md`를 함께 고쳤다.
+- **도구 아이콘 53종(신규 13)**: `src/assets/item-icons/` PNG가 53개이고 이번에 13개가 늘었다(구애스카프 등 R14 대상 집합). 라이선스·README·`THIRD_PARTY_NOTICES.md`를 함께 고쳤다. (빌드 중 개정 4차 뒤 정리: 판정 계산에 관여하는 도구만 표시하게 되어 최종 42종 — 신규는 choicescarf·ironball 2종만 남기고 11종 삭제)
 - **공통 표지 SVG**: 메가스톤은 PNG를 쓰지 않고 공통 메가스톤 표지(`kind: 'mega'`), 집합 밖이고 받은 그림도 없는 도구는 공통 가방 표지(`kind: 'bag'`)다(`src/ui/images.ts` `ItemGlyphSpec`). 이전 "텍스트 배지 폴백"을 대체한다.
 
 ### 남은 위험
@@ -693,3 +695,12 @@ type AppAction = /* 기존 … (set-tailwind 삭제) */
 - **날씨 배지 상세 "내 쪽 날씨 미반영"**: 열린 질문 7 기본값대로 `speedText.ts`가 날씨/필드 배지 상세를 "{특성} 점유율 n% · 파트너 날씨 가정 · 내 쪽 날씨 미반영"(필드는 "내 쪽 필드 미반영")으로 낸다. 이 문구를 직접 확인하는 단위·e2e 단언은 없다(AC10 e2e는 "파트너 날씨 가정"만 본다). 문구가 바뀌어도 테스트가 잡지 못한다.
 - **실데이터 의존 e2e**: AC10(쓱쓱 대쓰여너)·AC13 사례는 2026-10 m-c 메타에 기댄다. 데이터 월이 바뀌면 `e2e/helpers.ts` 상수를 고쳐야 한다.
 - **`e2e/speed-chart.spec.ts` 미추적**: 이 기록 시점에 git 미추적 파일이다. 커밋에서 빠지면 AC1~AC26 e2e 근거가 사라진다.
+
+### 빌드 중 개정 요약 (1~7차, 2026-11-16~17, 사용자 확인)
+
+- **메가 문양**: 메가스톤 공통 표지를 교체했다가 최종적으로 제거했다.
+- **도구 표시 위치**: 포켓몬 이미지 위 겹침 → 이름·배분 표기 오른쪽 나란히 → 그 줄·배지의 판정 계산에 관여한 도구만 표시.
+- **스피드 배지 단순화**: 배지 안 이름 텍스트·메가 태그, 차이 숫자, 개수 요약을 제거했다.
+- **스피드 배지 상세**: 클릭으로 여닫고, 닫기(X) 버튼을 없앴으며, 배분·조건 점유율과 안내 문구를 빼 내용을 단순화했다(점유율은 "다른 배분 추가" 목록에만 작은 회색 글씨로 남김).
+- **6차**: 상위 N 기본값 30 → 100(사실상 전 종). 성능 예산의 전체 완료 중앙값을 ≤ 3초 → ≤ 5초로 완화(첫 표시 ≤ 500ms·Long Task ≤ 100ms 유지). 집단구타 화력 계산의 도구 근거 버그를 수정했다.
+- **7차**: 기본 배지는 늘 스카프 없는 세트로 계산하고, 구애스카프는 조건 배지로만 표시한다. 옛 "스카프 아닌 최다 도구" 배지 설계(`non-scarf`)는 이것으로 대체됐다.

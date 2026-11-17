@@ -205,8 +205,8 @@ describe('생성 매니페스트·번들 이미지', () => {
     for (const k of Object.keys(HAND_POKEAPI_IDS)) expect(pokemonManifest.entries[k]?.via, k).toBe('hand')
   })
 
-  it('도구 아이콘 대상 = 반감열매 18종 + 화력 도구 22종(R14) 포함, 전부 받았고 앱에서 해석된다', () => {
-    for (const id of [...Object.keys(RESIST_BERRIES), ...POWER_ITEMS]) expect(ITEM_ICON_IDS, id).toContain(id)
+  it('도구 아이콘 대상 = 반감열매 18종 + 화력 도구 22종 + 스피드 배수 도구 2종(R14), 전부 받았고 앱에서 해석된다', () => {
+    expect([...ITEM_ICON_IDS].sort()).toEqual([...Object.keys(RESIST_BERRIES), ...POWER_ITEMS, 'choicescarf', 'ironball'].sort())
     expect(itemManifest.missing).toEqual([])
     expect(Object.keys(itemManifest.entries).sort()).toEqual(pngIds(ITEM_DIR))
     for (const id of ITEM_ICON_IDS) {
@@ -260,6 +260,20 @@ describe('R14 아이콘 대상 집합 대조(AC19)', () => {
       }
     }
     expect(missing).toEqual([])
+  })
+
+  it('받는 목록(ITEM_ICON_IDS)은 전 레귤레이션 대상 집합의 합집합과 같다(표시하지 않는 도구는 받지 않는다)', () => {
+    const union = new Set(perRegulation.flatMap(({ targets }) => [...targets.keys()]))
+    expect([...ITEM_ICON_IDS].sort()).toEqual([...union].sort())
+    expect(Object.keys(itemManifest.entries).sort()).toEqual([...union].sort())
+  })
+
+  it('판정에 관여하지 않는 도구(먹다남은음식·기합의띠 등)는 받지 않고 가방 표지로 그린다', () => {
+    for (const id of ['leftovers', 'focussash', 'sitrusberry', 'lightclay', 'damprock', 'widelens', 'whiteherb', 'rockyhelmet']) {
+      expect(ITEM_ICON_IDS, id).not.toContain(id)
+      expect(existsSync(join(ITEM_DIR, `${id}.png`)), id).toBe(false)
+      expect(itemGlyphOf(id), id).toEqual({ kind: 'bag' })
+    }
   })
 
   it('대상 집합에 메가스톤이 없다(메가진화 문양·메가스톤 표시 없음)', () => {

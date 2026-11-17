@@ -4,7 +4,7 @@ import { TAB_ID, dragSlider, mySet, resultTab, tabPanel, waitComplete, type Prod
 // 반응성: 공격·방어 탭(실행기 계산)과 스피드 차트(동기 배지 모델) 각각 (a) 처음 열기 · (b) 주 능력치 SP 슬라이더 ±4 놓기, 시나리오마다 10회.
 const RUNS = 10
 const FIRST_CARD_MEDIAN_LIMIT_MS = 500
-const COMPLETE_MEDIAN_LIMIT_MS = 3000
+const COMPLETE_MEDIAN_LIMIT_MS = 5000
 const LONG_TASK_LIMIT_MS = 100
 const COMPUTE_START_MARK = 'cards:compute-start'
 

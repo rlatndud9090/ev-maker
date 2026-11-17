@@ -125,6 +125,15 @@ describe('buildLicenses 메타 출처', () => {
     expect(bag).toContain('오픈 라이선스가 아니다')
   })
 
+  it('도구 아이콘 범위 문구(설정 usage·고지 원문)는 받는 목록 42종 구성과 같다(옛 스피드 탭 도구 13종 표현 없음)', () => {
+    const { licenses, notices } = buildLicenses(PROJECT_ROOT, config, POKEAPI_TEXT, metaIndex)
+    const scope = '반감열매 18종·화력 도구 22종·스피드 배수 도구 2종'
+    expect(licenses.entries.find((e) => e.id === 'asset:bulbagarden-champions-bag')?.usage).toContain(scope)
+    const bag = notices.split('\n### ').find((s) => s.startsWith('Bulbagarden Archives'))
+    expect(bag).toContain(scope)
+    expect(notices).not.toContain('스피드 탭 도구 13종')
+  })
+
   it('attributionOnly 자산은 license NOASSERTION·수집일이 있어야 한다', () => {
     const assets = (config as { assets: { id: string }[] }).assets
     const bag = assets.find((a) => a.id === 'asset:bulbagarden-champions-bag')!

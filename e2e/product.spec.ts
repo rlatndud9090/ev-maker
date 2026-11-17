@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { cards, combo, mySet, openProduct, region, resultTab, selectTab, tabPanel, waitComplete } from './helpers'
+/** 상위 N 기본값(src/cards/types.ts DEFAULT_TOP_N과 같다) */
+const DEFAULT_TOP_N = 100
 
 /** 5단 판정 단계명(결과 배지·상세 공용) */
 const TIER = '(확정1타|고난수1타|중난수1타|저난수1타|확정견딤)'
@@ -130,15 +132,22 @@ test.describe('제품 화면', () => {
   test('상위 N 래더 상대는 판정 변화와 무관하게 탭마다 전부 한 행, 변동 가능 태그는 변화 있는 행에만, 기술 라벨은 모든 행(사용자 피드백 2026-11-12)', async ({ page }) => {
     await openProduct(page)
     const topN = Number(await toolbarSpin(page, '상위 N').inputValue())
-    expect(topN).toBe(30)
+    expect(topN).toBe(DEFAULT_TOP_N)
+    // 메타 종 수가 상위 N보다 적으면 래더는 메타 전 종이다
+    const items = metaIndexItems()
+    const month = items.map((i) => i.month).sort().at(-1)!
+    const pick = items.filter((i) => i.month === month).reduce((a, b) => (b.battles > a.battles || (b.battles === a.battles && b.match === 'bo1') ? b : a))
+    const metaSize = (JSON.parse(readFileSync(new URL(`../src/data/meta/m-c/${month}-${pick.match}.json`, import.meta.url), 'utf8')) as { entries: unknown[] }).entries.length
+    const expected = Math.min(topN, metaSize)
     for (const tab of ['공격', '방어'] as const) {
       await selectTab(page, tab)
       await waitComplete(page)
-      // 예시 세트는 모든 상위 30마리에 계산할 기술이 있다(계산 대상 = 상위 N).
+      // 예시 세트는 모든 상위 N마리에 계산할 기술이 있다(계산 대상 = 상위 N).
       const ranks = await ladderRanks(page)
-      expect(ranks.map((r) => r.rank).sort((a, b) => a - b), tab).toEqual(Array.from({ length: topN }, (_, i) => i + 1))
+      expect(ranks.map((r) => r.rank).sort((a, b) => a - b), tab).toEqual(Array.from({ length: expected }, (_, i) => i + 1))
       const lines = await ladderCards(page).evaluateAll((els) =>
         els.map((el) => ({
+          opponent: (el as HTMLElement).dataset.opponent ?? '',
           variable: (el as HTMLElement).dataset.variable,
           headline: (el as HTMLElement).dataset.headline,
           tag: el.querySelector('.card-line [data-testid="variable-tag"]')?.textContent ?? null,
@@ -148,6 +157,11 @@ test.describe('제품 화면', () => {
       expect(lines.filter((l) => l.variable === 'true').length, tab).toBeGreaterThan(0)
       expect(lines.filter((l) => l.variable === 'false').length, tab).toBeGreaterThan(0)
       for (const l of lines) {
+        // 가면(disguise) 미미큐는 코어가 계산을 거부해 오류 한 행으로 나온다(ENGINE_UNSUPPORTED)
+        if (l.headline === 'error') {
+          expect(l.opponent, tab).toMatch(/^mimikyu/)
+          continue
+        }
         expect(l.headline, tab).toBe('row')
         expect(l.tag, tab).toBe(l.variable === 'true' ? '변동 가능' : null)
         expect(l.label, tab).toBe(true)

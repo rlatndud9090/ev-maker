@@ -4,10 +4,10 @@ import type { MetaEntry } from '../data/meta-schema'
 import type { MetaView } from '../meta'
 import { bundlesOf } from './bundles'
 import { presetKey } from './ids'
-import { buildSpeedChart, checkSpeedAddition, ladderBaseSet, scarfConditionOf, type SpeedBadge, type SpeedChartInput } from './speedChart'
-import { bundleLabel, bundleSpoken } from './speedLadder'
+import { buildSpeedChart, checkSpeedAddition, ladderBaseSet, scarfConditionOf, scarfFreeSet, type SpeedBadge, type SpeedChartInput } from './speedChart'
+import { bundleLabel, bundleSpoken, visibleBadges } from './speedLadder'
 import { realData, syntheticEntry, syntheticView } from './testing'
-import { DEFAULT_CRITERIA, type CustomTarget } from './types'
+import { DEFAULT_CRITERIA, DEFAULT_SPEED_FILTERS, type CustomTarget } from './types'
 
 const { game, bo1 } = realData()
 
@@ -98,11 +98,12 @@ describe('기본 배지(1위 묶음)', () => {
     expect(bundleSpoken(0, 'minus')).toBe('S0 성격 하락')
   })
 
-  it('기본 배지는 가정 세트 도구를 그대로 쓰고, 표시 도구(item)는 스피드 배수를 건 도구뿐이다(메가스톤 없음)', () => {
+  it('기본 배지는 스카프 없는 가정 세트이고, 표시 도구(item)는 스피드 배수를 건 도구뿐이다(메가스톤 없음)', () => {
     const m = build()
+    // 가브리아스 Bo1 대표 도구 구애스카프(51.55%) → 스카프 밖 최다 도구 생명의구슬(18.43%), 102족 S32 무보정 = 154
     const chomp = of(m.badges, 'garchomp').find((b) => b.condition.kind === 'none')
-    expect(chomp?.set.item).toBe('choicescarf')
-    expect(chomp?.item).toBe('choicescarf')
+    expect(chomp).toMatchObject({ set: { item: 'lifeorb' }, item: null, speed: 154 })
+    expect(ladderBaseSet(game, entryOf(bo1, 'garchomp')).set.item).toBe('lifeorb')
     const zard = of(m.badges, 'charizardmegay').find((b) => b.condition.kind === 'none')
     expect(zard).toMatchObject({ speciesId: 'charizardmegay', mega: true, set: { item: 'charizarditey' }, item: null })
     expect(ladderBaseSet(game, entryOf(bo1, 'charizardmegay'))).toMatchObject({ speciesId: 'charizardmegay', mega: true })
@@ -157,13 +158,42 @@ describe('조건 배지 생성(AC9)', () => {
     expect(scarf?.condition).toEqual({ kind: 'scarf', share: 0.0552 })
   })
 
-  it('스카프: 대표 도구가 스카프면 스카프 아닌 최다 도구 배지, 메가는 스카프 배지가 없다', () => {
-    const chomp = of(build().badges, 'garchomp').find((b) => b.condition.kind === 'non-scarf')
-    expect(chomp).toMatchObject({ condition: { kind: 'non-scarf', item: 'lifeorb', share: 0.1843 }, filterKind: 'scarf', set: { item: 'lifeorb' }, item: null })
+  it('스카프: 대표 도구가 스카프여도 기본 배지는 스카프 없는 세트이고, 스카프 배지는 구애스카프 점유율로만 붙는다', () => {
+    const chomp = of(build().badges, 'garchomp')
+    const scarf = chomp.find((b) => b.condition.kind === 'scarf')
+    // 154 × 1.5 = 231
+    expect(scarf).toMatchObject({ condition: { kind: 'scarf', share: 0.5155 }, filterKind: 'scarf', set: { item: 'choicescarf' }, item: 'choicescarf', speed: 231 })
+    expect(chomp.filter((b) => b.condition.kind === 'none').map((b) => b.set.item)).toEqual(['lifeorb'])
+    expect(scarfConditionOf(entryOf(bo1, 'garchomp'), 0.05)).toEqual({ kind: 'scarf', share: 0.5155 })
+    expect(scarfConditionOf(entryOf(bo1, 'pelipper'), 0.06)).toBeNull()
+  })
+
+  it('스카프: 대표 도구가 스카프라도 점유율이 기준 미만이면 스카프 배지가 없고, 스카프 밖 도구가 없으면 도구 없음', () => {
+    const rep = { ability: 'roughskin', item: 'choicescarf', nature: 'adamant', sp: { hp: 2, atk: 32, def: 0, spa: 0, spd: 0, spe: 32 } }
+    const low = speciesEntry('garchomp', rep, { spreads: spreads([['adamant:2/32/0/0/0/32', 0.5]]), items: dist({ choicescarf: 0.04, lifeorb: 0.03, focussash: 0.03 }) })
+    const lowBadges = build({ view: viewWith(low) }).badges
+    expect(kinds(lowBadges)).not.toContain('scarf')
+    // 동률(3%)이면 id 순: focussash
+    expect(lowBadges[0]).toMatchObject({ condition: { kind: 'none' }, set: { item: 'focussash' }, item: null, speed: 154 })
+    const only = speciesEntry('garchomp', rep, { spreads: spreads([['adamant:2/32/0/0/0/32', 0.5]]), items: dist({ choicescarf: 1 }) })
+    const onlyBadges = build({ view: viewWith(only) }).badges
+    expect(onlyBadges[0].set.item).toBeUndefined()
+    expect(onlyBadges.find((b) => b.condition.kind === 'scarf')?.speed).toBe(231)
+    expect(scarfFreeSet(only, only.representative.set).item).toBeUndefined()
+  })
+
+  it('스카프: 메가는 스카프 배지가 없다', () => {
     const mega = syntheticEntry(entryOf(bo1, 'charizardmegay'), { items: dist({ charizarditey: 0.5, choicescarf: 0.5 }) })
     expect(kinds(build({ view: viewWith(mega) }).badges)).not.toContain('scarf')
-    expect(scarfConditionOf(entryOf(bo1, 'garchomp'), 'choicescarf', 0.05)).toEqual({ kind: 'non-scarf', item: 'lifeorb', share: 0.1843 })
-    expect(scarfConditionOf(entryOf(bo1, 'pelipper'), 'sitrusberry', 0.06)).toBeNull()
+    expect(scarfConditionOf(mega, 0.05)).toBeNull()
+  })
+
+  it('스카프 필터를 끄면 래더·추가 배지 중 구애스카프 장착 세트가 하나도 없다', () => {
+    const m = build({ filters: { topN: 200, selected: [] }, added: [{ opponentId: 'garchomp', sp: 0, nature: 'minus' }, { opponentId: 'hydreigon', sp: 10, nature: 'neutral' }] })
+    expect(m.badges.some((b) => b.set.item === 'choicescarf')).toBe(true)
+    const shown = visibleBadges(m, { ...DEFAULT_SPEED_FILTERS, scarf: false, tailwind: true })
+    expect(shown.filter((b) => b.set.item === 'choicescarf')).toEqual([])
+    expect(shown.filter((b) => b.origin === 'added').map((b) => b.set.item)).toEqual(['lifeorb', 'chopleberry'])
   })
 
   it('날씨/필드: 특성 점유율 기준 경계, 내 구름보기·에어록이면 날씨 배지 없음', () => {
@@ -213,9 +243,8 @@ describe('조건 배지 생성(AC9)', () => {
     })
     const badges = build({ view: viewWith(klutz) }).badges
     expect(kinds(badges)).toEqual(['none', 'tailwind'])
-    expect(badges[0].set.item).toBe('choicescarf')
-    expect(badges[0].item).toBeNull()
-    expect(badges[0].speed).toBe(finalSpeed(game, { ...badges[0].set, item: 'leftovers' }))
+    expect(badges[0]).toMatchObject({ set: { item: 'leftovers' }, item: null })
+    expect(badges[0].speed).toBe(finalSpeed(game, { ...badges[0].set, item: 'choicescarf' }))
   })
 
   it('목록 밖 타겟: S 랭크업 기술·날씨/필드 특성이면 조건 배지, 스카프 배지는 없다', () => {
@@ -261,14 +290,14 @@ describe('순서 비교 불가(AC13)', () => {
     expect(m.unsupported).toEqual([{ opponentId: 'sableye', speciesId: 'sableye', origin: 'ladder', rejection: { kind: 'order', field: 'ability', id: 'stall' }, item: null }])
   })
 
-  it('조건 세트만 거부되면 그 조건 배지만 빠진다', () => {
+  it('대표 도구가 스카프면 거부 판정도 스카프 밖 최다 도구 세트로 한다', () => {
     const e = speciesEntry('garchomp', { ability: 'roughskin', item: 'choicescarf', nature: 'adamant', sp: { hp: 2, atk: 32, def: 0, spa: 0, spd: 0, spe: 32 } }, {
       spreads: spreads([['adamant:2/32/0/0/0/32', 0.5]]),
       items: dist({ choicescarf: 0.6, quickclaw: 0.3 }),
     })
     const m = build({ view: viewWith(e) })
-    expect(kinds(m.badges)).toEqual(['none', 'tailwind'])
-    expect(m.unsupported).toEqual([])
+    expect(m.badges).toEqual([])
+    expect(m.unsupported).toEqual([{ opponentId: 'garchomp', speciesId: 'garchomp', origin: 'ladder', rejection: { kind: 'order', field: 'item', id: 'quickclaw' }, item: 'quickclaw' }])
   })
 
   it('목록 밖 타겟 프리셋이 거부되면 그 프리셋만 unsupported다', () => {
@@ -326,13 +355,14 @@ describe('추가 배분(R15)', () => {
   it('묶음 목록은 스냅숏 전 묶음(점유율 내림차순)이고 차트에 있는 묶음을 표시한다', () => {
     const m = build({ added: [{ opponentId: 'garchomp', sp: 0, nature: 'minus' }] })
     expect(m.options.get('garchomp')).toEqual([
-      { sp: 32, nature: 'neutral', share: 0.3392, speed: 231, onChart: true },
-      { sp: 0, nature: 'minus', share: 0.1774, speed: 163, onChart: true },
-      { sp: 32, nature: 'plus', share: 0.1767, speed: 253, onChart: false },
-      { sp: 29, nature: 'neutral', share: 0.0619, speed: 226, onChart: false },
-      { sp: 28, nature: 'neutral', share: 0.0253, speed: 225, onChart: false },
-      { sp: 0, nature: 'neutral', share: 0.0114, speed: 183, onChart: false },
-      { sp: 10, nature: 'neutral', share: 0.011, speed: 198, onChart: false },
+      // 스카프 없는 세트(생명의구슬): 102족 기본 122 + SP, 보정 ×1.1·×0.9 내림
+      { sp: 32, nature: 'neutral', share: 0.3392, speed: 154, onChart: true },
+      { sp: 0, nature: 'minus', share: 0.1774, speed: 109, onChart: true },
+      { sp: 32, nature: 'plus', share: 0.1767, speed: 169, onChart: false },
+      { sp: 29, nature: 'neutral', share: 0.0619, speed: 151, onChart: false },
+      { sp: 28, nature: 'neutral', share: 0.0253, speed: 150, onChart: false },
+      { sp: 0, nature: 'neutral', share: 0.0114, speed: 122, onChart: false },
+      { sp: 10, nature: 'neutral', share: 0.011, speed: 132, onChart: false },
     ])
   })
 
@@ -349,30 +379,34 @@ describe('추가 배분(R15)', () => {
 })
 
 describe('경계 실수치(AC12)', () => {
+  // 스카프 지닌 상대 = 사용자가 도구를 구애스카프로 지정한 목록 밖 타겟(프리셋 1: 무보정 S32). 래더 상대는 기본 배지가 스카프 없는 세트다
+  const scarfTarget = (rosterId: string, moves: string[], ability?: string): Partial<SpeedChartInput> => ({
+    view: viewWith(),
+    customTargets: [{ rosterId, moves, edits: { [presetKey('speed', null, 0)]: ability === undefined ? { item: 'choicescarf' } : { item: 'choicescarf', ability } } }],
+  })
+  const preset0 = (badges: readonly SpeedBadge[], kind: SpeedBadge['condition']['kind']) => badges.find((b) => b.presetIndex === 0 && b.condition.kind === kind) as SpeedBadge
+
   it('스카프×순풍: 스카프 지닌 상대의 순풍 배지 = 154 × 1.5 × 2', () => {
-    const t = of(build().badges, 'garchomp').find((b) => b.condition.kind === 'tailwind')
-    expect(t?.speed).toBe(462)
-    expect(t?.speed).toBe(finalSpeed(game, (t as SpeedBadge).set, { attacker: { tailwind: true } }))
+    const t = preset0(build(scarfTarget('garchomp', ['earthquake'])).badges, 'tailwind')
+    expect(t.speed).toBe(462)
+    expect(t.speed).toBe(finalSpeed(game, t.set, { attacker: { tailwind: true } }))
   })
 
-  it('+1×스카프: 스카프 지닌 상대의 +1 배지 = floor(154 × 1.5) × 1.5 → 346.5 내림 346', () => {
-    const e = speciesEntry('garchomp', { ability: 'roughskin', item: 'choicescarf', nature: 'adamant', sp: { hp: 2, atk: 32, def: 0, spa: 0, spd: 0, spe: 32 } }, {
-      spreads: spreads([['adamant:2/32/0/0/0/32', 0.5]]),
-      moves: dist({ dragondance: 0.2 }),
-    })
-    const rank = build({ view: viewWith(e) }).badges.find((b) => b.condition.kind === 'rank') as SpeedBadge
-    expect(rank.speed).toBe(346)
+  it('+1×스카프: 스카프 지닌 애프룡(70족 S32 = 122)의 +1(용의춤) 배지 = floor(122 × 1.5) × 1.5 → 274.5 내림 274', () => {
+    const rank = preset0(build(scarfTarget('flapple', ['dragondance'])).badges, 'rank')
+    expect(rank).toMatchObject({ condition: { kind: 'rank', stage: 1 }, item: 'choicescarf', speed: 274 })
     expect(rank.speed).toBe(finalSpeed(game, { ...rank.set }))
   })
 
   it('날씨×스카프: 스카프 지닌 쓱쓱 상대의 비 배지 = 130 × 2 × 1.5', () => {
-    const e = speciesEntry('basculegion', { ability: 'adaptability', item: 'choicescarf', nature: 'adamant', sp: { hp: 2, atk: 32, def: 0, spa: 0, spd: 0, spe: 32 } }, {
-      spreads: spreads([['adamant:2/32/0/0/0/32', 0.5]]),
-      abilities: { adaptability: 0.8, swiftswim: 0.2 },
-    })
-    const field = build({ view: viewWith(e) }).badges.find((b) => b.condition.kind === 'field') as SpeedBadge
+    const field = preset0(build(scarfTarget('basculegion', ['wavecrash'], 'swiftswim')).badges, 'field')
     expect(field.speed).toBe(390)
     expect(field.speed).toBe(finalSpeed(game, field.set, { weather: 'Rain' }))
+  })
+
+  it('래더 상대 순풍 배지는 스카프 없는 기본 세트 기준: 가브리아스 154 × 2', () => {
+    const t = of(build().badges, 'garchomp').find((b) => b.condition.kind === 'tailwind') as SpeedBadge
+    expect(t).toMatchObject({ speed: 308, set: { item: 'lifeorb' } })
   })
 
   it('홀수 반올림: 펠리퍼 85 × 1.5 = 127.5 → 127', () => {
@@ -387,8 +421,8 @@ describe('경계 실수치(AC12)', () => {
         items: dist(shares),
       })
     const held = build({ view: viewWith(klutz('choicescarf', { choicescarf: 0.6, leftovers: 0.4 })) }).badges
-    expect(held[0]).toMatchObject({ speed: 172, set: { item: 'choicescarf' }, item: null })
-    expect(kinds(held)).not.toContain('non-scarf')
+    expect(held[0]).toMatchObject({ speed: 172, set: { item: 'leftovers' }, item: null })
+    expect(kinds(held)).not.toContain('scarf')
     expect(kinds(build({ view: viewWith(klutz('leftovers', { leftovers: 0.6, choicescarf: 0.4 })) }).badges)).not.toContain('scarf')
   })
 })

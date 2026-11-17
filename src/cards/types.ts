@@ -44,7 +44,7 @@ export interface CardFilters {
   /** 메타 항목 id. 비어 있으면 상위 N 보기 */
   selected: readonly string[]
 }
-export const DEFAULT_TOP_N = 30
+export const DEFAULT_TOP_N = 100
 
 /** 1타 확률 기준의 분모(16단계 난수, 코어 ROLL_DENOMINATOR). 화면 기준 입력은 1~ROLL_STEPS−1의 정수 n이다 */
 export const ROLL_STEPS = ROLL_DENOMINATOR

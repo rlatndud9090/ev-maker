@@ -59,6 +59,8 @@ describe('powerItemBoosts: 그 기술에 보정을 주는가', () => {
     expect(powerItemBoosts(game, 'hypervoice', 'lifeorb', plain, me)).toBe(true)
     expect(powerItemBoosts(game, 'swordsdance', 'lifeorb', plain, me)).toBe(false)
     expect(powerItemBoosts(game, 'seismictoss', 'lifeorb', plain, me)).toBe(false)
+    // 엔진이 계산하지 못하는 기술(비트업)은 대미지가 없어 보정도 없다
+    expect(powerItemBoosts(game, 'beatup', 'lifeorb', plain, me)).toBe(false)
     // 한카리아스는 전기 무효
     expect(powerItemBoosts(game, 'thunderbolt', 'lifeorb', plain, me)).toBe(false)
     // 서투름이면 도구 무효

@@ -14,8 +14,7 @@ export const STATUS_LABEL: Readonly<Record<SpeedStatus, string>> = { outspeeds: 
 export const STATUS_CLASS: Readonly<Record<SpeedStatus, string>> = { outspeeds: 'win', tie: 'tie', outsped: 'lose' }
 
 /**
- * 조건 태그 글자. 기본 배지는 undefined. 스카프 배지는 도구 아이콘이 그 조건을 보이므로 태그가 없고,
- * 스카프 아닌 최다 도구 배지는 배분 표기만 한다(스피드에 배수를 건 도구가 있을 때만 그 아이콘).
+ * 조건 태그 글자. 기본 배지는 undefined. 스카프 배지는 도구 아이콘이 그 조건을 보이므로 태그가 없다.
  */
 export function conditionTag(c: SpeedCondition): string | undefined {
   switch (c.kind) {
@@ -24,7 +23,6 @@ export function conditionTag(c: SpeedCondition): string | undefined {
     case 'rank':
       return `+${c.stage}`
     case 'scarf':
-    case 'non-scarf':
       return undefined
     case 'tailwind':
       return '순풍'

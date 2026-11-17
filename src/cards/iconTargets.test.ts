@@ -32,6 +32,12 @@ describe('iconTargets (R14 = 판정에 관여하는 도구)', () => {
     expect(t.has('charizarditey')).toBe(false)
   })
 
+  it('실데이터 메타 전체로도 반감열매·화력 도구·스피드 배수 도구 42종뿐이다(비교 불가 원인 도구 없음)', () => {
+    const t = iconTargets(game, [bo1.meta])
+    expect([...t.keys()].sort()).toEqual([...Object.keys(RESIST_BERRIES), ...POWER_ITEMS, 'choicescarf', 'ironball'].sort())
+    for (const s of t.values()) expect(s).not.toContain('speed-rejection')
+  })
+
   it('메가스톤은 실데이터 어디서도 대상이 아니다', () => {
     const t = iconTargets(game, [bo1.meta])
     for (const m of game.data.megas) expect(t.has(m.stone), m.stone).toBe(false)

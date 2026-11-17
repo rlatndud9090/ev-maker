@@ -11,7 +11,7 @@ const start = (): AppState => initialState('m-c')
 const run = (state: AppState, ...actions: AppAction[]): AppState => actions.reduce(reducer, state)
 
 describe('initialState', () => {
-  it('예시 세트·기본 메타·공격 탭·기본 기준·상위 30·세대 0', () => {
+  it('예시 세트·기본 메타·공격 탭·기본 기준·상위 DEFAULT_TOP_N·세대 0', () => {
     const s = start()
     expect(s.draft).toEqual(EXAMPLE_DRAFT)
     expect(s.meta).toBeNull()

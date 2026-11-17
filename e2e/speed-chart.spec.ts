@@ -4,6 +4,8 @@ import type { PokemonSet } from '../src/core/types'
 import type { MetaEntry } from '../src/data/meta-schema'
 import { loadMetaSnapshotSync, loadSnapshotSync } from '../src/data/testing'
 import { cards, combo, dragSlider, findOverlaps, mySet, openProduct, region, resultTab, selectTab, tabPanel, waitComplete } from './helpers'
+/** 상위 N 기본값(src/cards/types.ts DEFAULT_TOP_N과 같다) */
+const DEFAULT_TOP_N = 100
 
 // 스피드 차트(PRD R1~R15·AC1~AC26): 배치·겹침·상태·상세·필터·목록 밖 타겟·차트 배분 추가.
 // 기대값은 화면 코드가 아니라 스냅숏·메타 원자료와 코어 스피드 공식(finalSpeed)에서 따로 낸다.
@@ -34,6 +36,17 @@ function signOf(natureId: string): Sign {
 }
 
 const ZERO_SP = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }
+/** 래더 기본 배지 세트 = 스카프 없는 세트: 대표 도구가 구애스카프면 도구 분포에서 스카프 밖 최다 도구(동률 id 순, 없으면 도구 없음) */
+function baseSet(e: MetaEntry): PokemonSet {
+  const set = { ...e.representative.set }
+  if (set.item !== 'choicescarf') return set
+  const other = Object.entries(e.items.shares)
+    .filter(([k]) => k !== 'choicescarf')
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0]
+  if (other === undefined || other[0] === 'nothing') delete set.item
+  else set.item = other[0]
+  return set
+}
 function withSpeed(set: PokemonSet, sp: number, sign: Sign): PokemonSet {
   return { ...set, nature: SIGN_NATURE[sign], sp: { ...ZERO_SP, spe: sp } }
 }
@@ -50,7 +63,7 @@ function topBundle(e: MetaEntry): { sp: number; sign: Sign; share: number; speed
     cur.share = Math.round((cur.share + share) * 1e4) / 1e4
     by.set(k, cur)
   }
-  const list = [...by.values()].map((b) => ({ ...b, speed: finalSpeed(game, withSpeed(e.representative.set, b.sp, b.sign)) }))
+  const list = [...by.values()].map((b) => ({ ...b, speed: finalSpeed(game, withSpeed(baseSet(e), b.sp, b.sign)) }))
   list.sort((a, b) => b.share - a.share || b.speed - a.speed)
   return { ...list[0], tied: list.length > 1 && list[1].share === list[0].share }
 }
@@ -342,7 +355,7 @@ test.describe('스피드 차트 배치(AC1~AC4, AC24)', () => {
     const list = await readBadges(page)
     const base = list.filter((b) => b.origin === 'ladder' && b.condition === 'none')
     const opponents = new Set(list.filter((b) => b.origin === 'ladder').map((b) => b.opponent))
-    expect([...opponents].sort()).toEqual(ranking.slice(0, 30).map((e) => e.id).sort())
+    expect([...opponents].sort()).toEqual(ranking.slice(0, DEFAULT_TOP_N).map((e) => e.id).sort())
     let small = 0
     let tied = 0
     for (const id of opponents) {
@@ -639,7 +652,7 @@ test.describe('배지 상세(AC7, AC10)', () => {
     expect(rain, '비 배지').toBeDefined()
     expect(rain!.label.split(', ')[0]).toBe(`${speciesKo(e.id)} ${bundleSpoken(top.sp, top.sign)} 비`)
     await expect(badgeById(page, rain!.id).locator('.speed-tag')).toHaveText('비')
-    const want = finalSpeed(game, { ...withSpeed(e.representative.set, top.sp, top.sign), ability: 'swiftswim' }, { weather: 'Rain' })
+    const want = finalSpeed(game, { ...withSpeed(baseSet(e), top.sp, top.sign), ability: 'swiftswim' }, { weather: 'Rain' })
     expect(rain!.speed).toBe(want)
     expect(rain!.rowSpeed).toBe(want)
     await badgeById(page, rain!.id).click()
@@ -655,7 +668,7 @@ test.describe('도구 표시 = 스피드에 관여한 도구만(사용자 피드
   const SPEED_ITEMS = ['choicescarf', 'ironball']
   const expectedMark = (item: string | undefined, ability: string): string[] => (item !== undefined && SPEED_ITEMS.includes(item) && ability !== 'klutz' ? [item] : [])
 
-  test('래더 기본 배지는 대표 세트 도구가 스피드 배수 도구일 때만 아이콘, 생명의구슬·메가스톤 등은 표시 없음, 스카프 배지엔 구애스카프', async ({ page }) => {
+  test('래더 기본 배지는 스카프 없는 세트 도구가 스피드 배수 도구일 때만 아이콘, 생명의구슬·메가스톤 등은 표시 없음, 스카프 배지엔 구애스카프', async ({ page }) => {
     await openSpeed(page)
     const shown = await badges(page).evaluateAll((els) =>
       els.map((el) => ({
@@ -670,20 +683,21 @@ test.describe('도구 표시 = 스피드에 관여한 도구만(사용자 피드
     expect(base.length).toBeGreaterThan(10)
     const stones = new Set(game.data.megas.map((m) => m.stone))
     let orbOrStone = 0
+    let repScarf = 0
     for (const b of base) {
-      const set = entryOf(JSON.parse(b.id)[1] as string).representative.set
-      if (set.item === 'lifeorb' || (set.item !== undefined && stones.has(set.item))) orbOrStone++
-      expect(b.marks, `${b.id} ${set.item ?? '-'}`).toEqual(expectedMark(set.item, set.ability))
+      const id = JSON.parse(b.id)[1] as string
+      const set = entryOf(id).representative.set
+      if (set.item === 'choicescarf') repScarf++
+      const item = baseSet(entryOf(id)).item
+      if (item === 'lifeorb' || (item !== undefined && stones.has(item))) orbOrStone++
+      expect(b.marks, `${b.id} ${item ?? '-'}`).toEqual(expectedMark(item, set.ability))
+      expect(b.marks, `${b.id} 기본 배지에 구애스카프 없음`).not.toContain('choicescarf')
     }
     expect(orbOrStone, '생명의구슬·메가스톤 대표 세트가 있는 실데이터').toBeGreaterThan(0)
+    expect(repScarf, '대표 도구가 구애스카프인 실데이터').toBeGreaterThan(0)
     const scarf = shown.filter((b) => b.condition === 'scarf')
     expect(scarf.length).toBeGreaterThan(0)
     for (const b of scarf) expect(b.marks).toEqual(['choicescarf'])
-    // 스카프 아닌 최다 도구 배지: 배분 표기만("도구 없음" 태그 없음)
-    for (const b of shown.filter((x) => x.condition === 'non-scarf')) {
-      expect(b.text).not.toContain('도구 없음')
-      for (const m of b.marks) expect(SPEED_ITEMS).toContain(m)
-    }
     const panel = tabPanel(page)
     await expect(panel.locator('[data-item-glyph="mega"]')).toHaveCount(0)
     await expect(panel.locator('.speed-badge .item-mark[data-item-id="lifeorb"]')).toHaveCount(0)
@@ -725,12 +739,15 @@ test.describe('필터와 범위(AC11, AC13~AC16)', () => {
     await openSpeed(page)
     const pressed = async () => Object.fromEntries(await Promise.all(FILTERS.map(async (f) => [f, await chip(page, f).getAttribute('aria-pressed')])))
     expect(await pressed()).toEqual({ rank: 'true', scarf: 'true', tailwind: 'false', field: 'true' })
-    const KIND: Record<(typeof FILTERS)[number], string[]> = { rank: ['rank'], scarf: ['scarf', 'non-scarf'], tailwind: ['tailwind'], field: ['field'] }
+    const KIND: Record<(typeof FILTERS)[number], string[]> = { rank: ['rank'], scarf: ['scarf'], tailwind: ['tailwind'], field: ['field'] }
+    // 목록 밖 타겟이 없는 기본 상태: 구애스카프 장착 배지는 스카프 조건 배지뿐이다
+    const scarfMarks = page.locator('[data-testid="speed-badge"]:not([data-origin="preset"]) .item-mark[data-item-id="choicescarf"]')
     const counts = async () => {
       const l = await readBadges(page)
       return { base: l.filter((b) => b.condition === 'none').length, ...Object.fromEntries(FILTERS.map((f) => [f, l.filter((b) => KIND[f].includes(b.condition)).length])) } as Record<string, number>
     }
     const c0 = await counts()
+    expect(await scarfMarks.count()).toBe(c0.scarf)
     expect(c0.rank).toBeGreaterThan(0)
     expect(c0.scarf).toBeGreaterThan(0)
     expect(c0.field).toBeGreaterThan(0)
@@ -744,6 +761,7 @@ test.describe('필터와 범위(AC11, AC13~AC16)', () => {
       await chip(page, f).click()
       await expect(chip(page, f)).toHaveAttribute('aria-pressed', 'false')
       await expect.poll(async () => (await counts())[f]).toBe(0)
+      if (f === 'scarf') await expect(scarfMarks, '스카프 필터 끔 → 구애스카프 아이콘 래더 배지 0').toHaveCount(0)
       const c = await counts()
       for (const g of [...FILTERS, 'base']) if (g !== f) expect(c[g], `${f} 끔 → ${g}`).toBe(all[g])
       await chip(page, f).click()
@@ -929,7 +947,7 @@ test.describe('차트에서 배분 추가(AC26)', () => {
     expect(optSpoken).toBe(bundleSpoken(a.sp, a.sign))
     expect(optLabel).toBe(bundleText(a.sp, a.sign))
     expect(a.speed).toBe(optSpeed)
-    expect(a.speed).toBe(finalSpeed(game, withSpeed(entry.representative.set, a.sp, a.sign)))
+    expect(a.speed).toBe(finalSpeed(game, withSpeed(baseSet(entry), a.sp, a.sign)))
     expect(a.rowSpeed).toBe(a.speed)
     expect(a.condition).toBe('none')
     await expect(added.locator('.speed-mark.add')).toHaveText('추가')
@@ -957,7 +975,7 @@ test.describe('차트에서 배분 추가(AC26)', () => {
     await fillCustom(custom!.sp, custom!.sign)
     await expect(added).toHaveCount(2)
     const c = (await readBadges(page)).find((b) => b.origin === 'added' && b.sp === custom!.sp && b.sign === custom!.sign)!
-    expect(c.speed).toBe(finalSpeed(game, withSpeed(entry.representative.set, custom!.sp, custom!.sign)))
+    expect(c.speed).toBe(finalSpeed(game, withSpeed(baseSet(entry), custom!.sp, custom!.sign)))
     expect(c.rowSpeed).toBe(c.speed)
     await expect(detail(page)).toHaveAttribute('data-badge-id', c.id)
 
@@ -984,7 +1002,7 @@ test.describe('차트에서 배분 추가(AC26)', () => {
     // 상위 N으로 그 상대를 빼면 안 보이고, 되돌리면 다시 보인다
     await setTopN(page, entry.rank - 1)
     await expect(added).toHaveCount(0)
-    await setTopN(page, 30)
+    await setTopN(page, DEFAULT_TOP_N)
     await expect(added).toHaveCount(1)
     // 포켓몬 선택 필터로 다른 상대만 고르면 안 보이고, 비우면 다시 보인다
     const other = ranking.find((e) => e.id !== base.opponent)!
