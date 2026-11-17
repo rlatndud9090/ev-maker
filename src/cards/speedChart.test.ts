@@ -98,12 +98,13 @@ describe('기본 배지(1위 묶음)', () => {
     expect(bundleSpoken(0, 'minus')).toBe('S0 성격 하락')
   })
 
-  it('기본 배지는 가정 세트 도구를 그대로 쓰고, 메가 폼은 메가 폼 id와 메가스톤이다', () => {
+  it('기본 배지는 가정 세트 도구를 그대로 쓰고, 표시 도구(item)는 스피드 배수를 건 도구뿐이다(메가스톤 없음)', () => {
     const m = build()
     const chomp = of(m.badges, 'garchomp').find((b) => b.condition.kind === 'none')
-    expect(chomp?.item).toEqual({ id: 'choicescarf', negated: false })
+    expect(chomp?.set.item).toBe('choicescarf')
+    expect(chomp?.item).toBe('choicescarf')
     const zard = of(m.badges, 'charizardmegay').find((b) => b.condition.kind === 'none')
-    expect(zard).toMatchObject({ speciesId: 'charizardmegay', mega: true, item: { id: 'charizarditey', negated: false } })
+    expect(zard).toMatchObject({ speciesId: 'charizardmegay', mega: true, set: { item: 'charizarditey' }, item: null })
     expect(ladderBaseSet(game, entryOf(bo1, 'charizardmegay'))).toMatchObject({ speciesId: 'charizardmegay', mega: true })
   })
 })
@@ -148,7 +149,7 @@ describe('조건 배지 생성(AC9)', () => {
     expect(kinds(build({ view: viewWith(scarfEntry(0.049)) }).badges)).not.toContain('scarf')
     const lowered = build({ view: viewWith(scarfEntry(0.049)), criteria: { ...DEFAULT_CRITERIA, scarfShareMin: 0.04 } })
     const scarf = lowered.badges.find((b) => b.condition.kind === 'scarf')
-    expect(scarf).toMatchObject({ condition: { kind: 'scarf', share: 0.049 }, filterKind: 'scarf', item: { id: 'choicescarf', negated: false } })
+    expect(scarf).toMatchObject({ condition: { kind: 'scarf', share: 0.049 }, filterKind: 'scarf', item: 'choicescarf' })
   })
 
   it('스카프: 실데이터 펠리퍼(Bo1 5.52%)는 기본 기준에서 스카프 배지를 단다', () => {
@@ -158,7 +159,7 @@ describe('조건 배지 생성(AC9)', () => {
 
   it('스카프: 대표 도구가 스카프면 스카프 아닌 최다 도구 배지, 메가는 스카프 배지가 없다', () => {
     const chomp = of(build().badges, 'garchomp').find((b) => b.condition.kind === 'non-scarf')
-    expect(chomp).toMatchObject({ condition: { kind: 'non-scarf', item: 'lifeorb', share: 0.1843 }, filterKind: 'scarf', item: { id: 'lifeorb', negated: false } })
+    expect(chomp).toMatchObject({ condition: { kind: 'non-scarf', item: 'lifeorb', share: 0.1843 }, filterKind: 'scarf', set: { item: 'lifeorb' }, item: null })
     const mega = syntheticEntry(entryOf(bo1, 'charizardmegay'), { items: dist({ charizarditey: 0.5, choicescarf: 0.5 }) })
     expect(kinds(build({ view: viewWith(mega) }).badges)).not.toContain('scarf')
     expect(scarfConditionOf(entryOf(bo1, 'garchomp'), 'choicescarf', 0.05)).toEqual({ kind: 'non-scarf', item: 'lifeorb', share: 0.1843 })
@@ -212,7 +213,8 @@ describe('조건 배지 생성(AC9)', () => {
     })
     const badges = build({ view: viewWith(klutz) }).badges
     expect(kinds(badges)).toEqual(['none', 'tailwind'])
-    expect(badges[0].item).toEqual({ id: 'choicescarf', negated: true })
+    expect(badges[0].set.item).toBe('choicescarf')
+    expect(badges[0].item).toBeNull()
     expect(badges[0].speed).toBe(finalSpeed(game, { ...badges[0].set, item: 'leftovers' }))
   })
 
@@ -222,7 +224,7 @@ describe('조건 배지 생성(AC9)', () => {
     const presets = m.badges.filter((b) => b.origin === 'preset')
     expect(presets.map((b) => [b.presetIndex, b.condition.kind])).toEqual([0, 1, 2].flatMap((p) => [[p, 'none'], [p, 'rank'], [p, 'tailwind'], [p, 'field']]))
     for (const b of presets) expect(b).toMatchObject({ opponentId: 'raichualola', bundle: { share: null }, listed: false, addedOrder: 0 })
-    expect(presets[0].item).toEqual({ id: 'choicescarf', negated: false })
+    expect(presets[0].item).toBe('choicescarf')
     const field = presets.find((b) => b.condition.kind === 'field')
     expect(field?.condition).toEqual({ kind: 'field', ability: 'surgesurfer', field: { kind: 'terrain', terrain: 'Electric' } })
     const rank = presets.find((b) => b.condition.kind === 'rank')
@@ -249,6 +251,14 @@ describe('순서 비교 불가(AC13)', () => {
     expect(m.badges).toEqual([])
     expect(m.unsupported).toEqual([{ opponentId: 'incineroar', speciesId: 'incineroar', origin: 'ladder', rejection: { kind: 'order', field: 'item', id: 'quickclaw' }, item: 'quickclaw' }])
     expect(m.options.has('incineroar')).toBe(false)
+  })
+
+  it('거부 원인이 특성이면 unsupported 도구 표시가 없다(지닌 도구는 원인이 아님)', () => {
+    const stall = speciesEntry('sableye', { ability: 'stall', item: 'lifeorb', nature: 'careful', sp: { hp: 32, atk: 2, def: 0, spa: 0, spd: 32, spe: 0 } }, {
+      spreads: spreads([['careful:32/2/0/0/32/0', 0.5]]),
+    })
+    const m = build({ view: viewWith(stall) })
+    expect(m.unsupported).toEqual([{ opponentId: 'sableye', speciesId: 'sableye', origin: 'ladder', rejection: { kind: 'order', field: 'ability', id: 'stall' }, item: null }])
   })
 
   it('조건 세트만 거부되면 그 조건 배지만 빠진다', () => {
@@ -377,7 +387,7 @@ describe('경계 실수치(AC12)', () => {
         items: dist(shares),
       })
     const held = build({ view: viewWith(klutz('choicescarf', { choicescarf: 0.6, leftovers: 0.4 })) }).badges
-    expect(held[0]).toMatchObject({ speed: 172, item: { id: 'choicescarf', negated: true } })
+    expect(held[0]).toMatchObject({ speed: 172, set: { item: 'choicescarf' }, item: null })
     expect(kinds(held)).not.toContain('non-scarf')
     expect(kinds(build({ view: viewWith(klutz('leftovers', { leftovers: 0.6, choicescarf: 0.4 })) }).badges)).not.toContain('scarf')
   })

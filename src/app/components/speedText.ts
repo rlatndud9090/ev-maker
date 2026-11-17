@@ -14,8 +14,8 @@ export const STATUS_LABEL: Readonly<Record<SpeedStatus, string>> = { outspeeds: 
 export const STATUS_CLASS: Readonly<Record<SpeedStatus, string>> = { outspeeds: 'win', tie: 'tie', outsped: 'lose' }
 
 /**
- * 조건 태그 글자. 기본 배지는 undefined. 스카프·스카프 아닌 최다 도구 배지는 도구 아이콘이 그 조건을 보이므로 태그가 없다
- * (도구가 없는 "스카프 아님" 배지만 아이콘이 없어 "도구 없음" 태그).
+ * 조건 태그 글자. 기본 배지는 undefined. 스카프 배지는 도구 아이콘이 그 조건을 보이므로 태그가 없고,
+ * 스카프 아닌 최다 도구 배지는 배분 표기만 한다(스피드에 배수를 건 도구가 있을 때만 그 아이콘).
  */
 export function conditionTag(c: SpeedCondition): string | undefined {
   switch (c.kind) {
@@ -24,9 +24,8 @@ export function conditionTag(c: SpeedCondition): string | undefined {
     case 'rank':
       return `+${c.stage}`
     case 'scarf':
-      return undefined
     case 'non-scarf':
-      return c.item === null ? '도구 없음' : undefined
+      return undefined
     case 'tailwind':
       return '순풍'
     case 'field':
@@ -50,8 +49,7 @@ export function badgeLabel(game: Snapshot, b: Badge, status: SpeedStatus | null)
   const tag = conditionTag(b.condition)
   const parts = [`${names.species.label(b.speciesId)} ${bundleSpoken(b.bundle.sp, b.bundle.nature)}${tag === undefined ? '' : ` ${tag}`}`, `실수치 ${b.speed}`]
   if (status !== null) parts.push(STATUS_LABEL[status])
-  if (b.item !== null) parts.push(`${names.items.label(b.item.id)} 지님`)
-  if (b.item?.negated) parts.push('도구 효과 없음')
+  if (b.item !== null) parts.push(`${names.items.label(b.item)} 지님`)
   if (b.mega) parts.push('메가진화 폼')
   if (b.origin === 'added') parts.push('추가한 배분')
   const preset = presetMark(b)

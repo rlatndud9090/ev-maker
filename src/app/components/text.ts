@@ -94,11 +94,9 @@ export type CardHeldItem = ItemMarkItem
 const itemName = (game: Snapshot, item: string): string => game.data.items[item]?.name.ko ?? item
 
 /**
- * 카드 줄이 계산에 가정한 지닌 도구(R13): 도구 변형 줄은 그 도구(variant), 메가 폼 기본 줄은 그 메가스톤(mega), 그 밖은 없음.
- * 공격·방어 래더 기본 줄은 상대 도구를 지우므로 도구 아이콘이 없다.
+ * 카드 줄 판정에 효과를 준 지닌 도구(R13): 도구 변형 줄(반감열매·화력 도구)은 그 도구(variant), 그 밖은 없음.
+ * 공격·방어 기본 줄은 상대 도구를 지우므로(메가 폼의 메가스톤도 판정에 관여하지 않는다) 도구 아이콘이 없다.
  */
-export function cardItemOf(game: Snapshot, opponentId: string, variantItem: string | undefined): CardHeldItem | undefined {
-  if (variantItem !== undefined) return { id: variantItem, name: itemName(game, variantItem), role: 'variant' }
-  const mega = game.data.megas.find((m) => m.forme === opponentId)
-  return mega === undefined ? undefined : { id: mega.stone, name: itemName(game, mega.stone), role: 'mega' }
+export function cardItemOf(game: Snapshot, variantItem: string | undefined): CardHeldItem | undefined {
+  return variantItem === undefined ? undefined : { id: variantItem, name: itemName(game, variantItem), role: 'variant' }
 }

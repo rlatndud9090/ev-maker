@@ -2,10 +2,10 @@
 import {
   CoreError,
   CoreInputError,
-  ITEM_NEGATING_ABILITIES,
   SPEED_FIELD_ABILITIES,
   WEATHER_NEGATING_ABILITIES,
   finalSpeed,
+  speedItemApplies,
   speedSupport,
   validateSet,
   type BattleConditions,
@@ -63,8 +63,8 @@ export interface SpeedBadge {
   filterKind: SpeedConditionKind | null
   /** 그 배지 세트의 finalSpeed 단독 계산 결과 */
   speed: number
-  /** 계산에 쓴 지닌 도구. negated = 특성이 도구 효과를 지움 */
-  item: { id: string; negated: boolean } | null
+  /** 실수치에 배수를 건 지닌 도구(구애스카프·검은철구 등, 도구 무효 특성이면 null). 화면은 이 도구만 표시한다 */
+  item: string | null
   set: PokemonSet
   /** 래더 순위(1부터). 프리셋은 0 */
   usageRank: number
@@ -78,6 +78,7 @@ export interface SpeedUnsupported {
   origin: 'ladder' | 'preset'
   presetIndex?: PresetIndex
   rejection: SpeedRejection
+  /** 거부 원인이 도구면 그 도구, 특성이면 null */
   item: string | null
 }
 
@@ -136,8 +137,9 @@ function compute(game: Snapshot, set: PokemonSet, conditions?: BattleConditions)
   return { kind: 'ok', resolved, speed: finalSpeed(game, set, conditions) }
 }
 
-const heldItem = (set: PokemonSet, resolved: ResolvedSet): SpeedBadge['item'] =>
-  set.item === undefined ? null : { id: set.item, negated: ITEM_NEGATING_ABILITIES.includes(resolved.ability) }
+const speedItem = (set: PokemonSet, resolved: ResolvedSet): SpeedBadge['item'] => (speedItemApplies(set.item, resolved.ability) ? set.item : null)
+
+const rejectedItem = (r: SpeedRejection): string | null => (r.field === 'item' ? r.id : null)
 
 function withItem(set: PokemonSet, item: string | null): PokemonSet {
   const out = { ...set }
@@ -249,7 +251,7 @@ function makeBadge(s: Subject, bundle: SpeedBadge['bundle'], condition: SpeedCon
     condition,
     filterKind: FILTER_KIND[condition.kind],
     speed,
-    item: heldItem(set, resolved),
+    item: speedItem(set, resolved),
     set,
     usageRank: s.usageRank,
   }
@@ -353,7 +355,7 @@ export function buildSpeedChart(input: SpeedChartInput): SpeedChartModel {
     const rejected = computed.find((b) => b.c.kind === 'rejected')
     const ok = computed.flatMap((b) => (b.c.kind === 'ok' ? [{ ...b, resolved: b.c.resolved, speed: b.c.speed }] : []))
     if (ok.length === 0) {
-      if (rejected?.c.kind === 'rejected') unsupported.push({ opponentId: entry.id, speciesId, origin: 'ladder', rejection: rejected.c.rejection, item: rejected.set.item ?? null })
+      if (rejected?.c.kind === 'rejected') unsupported.push({ opponentId: entry.id, speciesId, origin: 'ladder', rejection: rejected.c.rejection, item: rejectedItem(rejected.c.rejection) })
       continue
     }
     const topShare = ok[0].share
@@ -395,7 +397,7 @@ export function buildSpeedChart(input: SpeedChartInput): SpeedChartModel {
       const c = compute(game, set)
       const speciesId = c.kind === 'ok' ? c.resolved.species.id : target.rosterId
       if (c.kind === 'rejected') {
-        unsupported.push({ opponentId: target.rosterId, speciesId, origin: 'preset', presetIndex, rejection: c.rejection, item: set.item ?? null })
+        unsupported.push({ opponentId: target.rosterId, speciesId, origin: 'preset', presetIndex, rejection: c.rejection, item: rejectedItem(c.rejection) })
         continue
       }
       if (c.kind !== 'ok') continue

@@ -28,6 +28,8 @@ export {
 export {
   ITEM_NEGATING_ABILITIES,
   SPEED_FIELD_ABILITIES,
+  SPEED_ITEM_MODIFIERS,
+  speedItemApplies,
   WEATHER_NEGATING_ABILITIES,
   finalSpeed,
   compareSpeed,

@@ -30,12 +30,12 @@ const conditionOf = (row: RowView): string => (row.basis === undefined ? 'base' 
  * 펼친 상세 머리: 포켓몬 이미지 · 도구 아이콘 · 도구 이름 글자를 나란히(겹치지 않음, 터치 화면용, 점유율 없음). 간단행 표지와 겹치지 않게
  * 아이콘은 장식(held)이고 읽기 이름은 이 글자가 담는다. 도구가 없으면 그리지 않는다.
  */
-export function DetailItem({ game, opponentId, item }: { game: Snapshot; opponentId: string; item: CardHeldItem | undefined }) {
+export function DetailItem({ opponentId, item }: { opponentId: string; item: CardHeldItem | undefined }) {
   if (item === undefined) return null
   return (
     <p className="detail-item" data-testid="detail-item" data-item-id={item.id} data-item-role={item.role}>
       <PokemonIcon speciesId={opponentId} size={40} />
-      <ItemMark item={{ ...item, role: 'held' }} size={28} game={game} />
+      <ItemMark item={{ ...item, role: 'held' }} size={28} />
       <span className="detail-item-name">{item.role === 'variant' ? `${item.name} 지닌 경우` : item.name}</span>
     </p>
   )

@@ -15,37 +15,26 @@ const entry = (id: string): MetaEntry => {
 const withItem = (base: MetaEntry, item: string, shares: Record<string, number>): MetaEntry =>
   syntheticEntry(base, { representative: { ...base.representative, set: { ...base.representative.set, item } }, items: { ...base.items, shares } })
 
-describe('iconTargets (R14 합집합)', () => {
-  it('메타가 없어도 기존 반감열매·화력 도구 전부와 구애스카프가 들어간다', () => {
+describe('iconTargets (R14 = 판정에 관여하는 도구)', () => {
+  it('메타가 없어도 반감열매·화력 도구 전부와 스피드 배수 도구(구애스카프·검은철구)가 들어간다', () => {
     const t = iconTargets(game, [])
     for (const id of [...Object.keys(RESIST_BERRIES), ...POWER_ITEMS]) expect(t.get(id), id).toContain('existing')
-    expect(t.get('choicescarf')).toContain('scarf')
+    expect(t.get('choicescarf')).toEqual(['speed-item'])
+    expect(t.get('ironball')).toEqual(['speed-item'])
   })
 
-  it('래더 가정 세트 도구를 넣는다(메가 항목은 종별 메가스톤)', () => {
-    const base = withItem(entry('sneasler'), 'quickclaw', { quickclaw: 0.9 })
-    const t = iconTargets(game, [{ ...bo1.meta, entries: [base, entry('charizardmegay')] }])
-    expect(t.get('quickclaw')).toContain('ladder-set')
-    expect(t.get('charizarditey')).toContain('ladder-set')
+  it('래더 가정 세트 도구는 순서 비교 불가의 원인일 때만 넣는다(먹다남은음식·메가스톤은 넣지 않는다)', () => {
+    const claw = withItem(entry('sneasler'), 'quickclaw', { quickclaw: 0.9 })
+    const left = withItem(entry('garchomp'), 'leftovers', { leftovers: 0.9 })
+    const t = iconTargets(game, [{ ...bo1.meta, entries: [claw, left, entry('charizardmegay')] }])
+    expect(t.get('quickclaw')).toEqual(['speed-rejection'])
+    expect(t.has('leftovers')).toBe(false)
+    expect(t.has('charizarditey')).toBe(false)
   })
 
-  it('대표 도구가 구애스카프면 그 밖 최다 도구(non-scarf)를 넣고, 기준값과 무관하다', () => {
-    const scarfer = withItem(entry('garchomp'), 'choicescarf', { choicescarf: 0.5, quickclaw: 0.3, lifeorb: 0.2 })
-    expect(iconTargets(game, [{ ...bo1.meta, entries: [scarfer] }]).get('quickclaw')).toEqual(['non-scarf'])
-  })
-
-  it('메가 항목은 스카프 규칙을 부르지 않는다(앱의 스카프 조건 생략과 같다)', () => {
-    const mega = entry('charizardmegay')
-    const fake = syntheticEntry(mega, { items: { ...mega.items, shares: { charizarditey: 0.5, quickclaw: 0.5 } } })
-    expect(iconTargets(game, [{ ...bo1.meta, entries: [fake] }]).has('quickclaw')).toBe(false)
-  })
-
-  it('목록 밖 타겟 프리셋 도구 = 메가 폼 타겟의 메가스톤(도구 없음 프리셋은 넣지 않는다)', () => {
-    const t = iconTargets(game, [])
-    const presetIds = [...t].filter(([, s]) => s.includes('preset')).map(([id]) => id)
-    const stones = new Set(game.data.megas.map((m) => m.stone))
-    expect(presetIds.length).toBeGreaterThan(0)
-    for (const id of presetIds) expect(stones.has(id), id).toBe(true)
+  it('메가스톤은 실데이터 어디서도 대상이 아니다', () => {
+    const t = iconTargets(game, [bo1.meta])
+    for (const m of game.data.megas) expect(t.has(m.stone), m.stone).toBe(false)
   })
 
   it('결과는 id 순 정렬이고 근거도 정렬돼 있다', () => {

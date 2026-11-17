@@ -539,7 +539,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
   const addable = ladder && card.bundle.stats.length > 0
   const spMax = addable ? game.manifest.rules.spMaxPerStat : undefined
   const result = resultBadge(tab, card, rollSteps)
-  const item = cardItemOf(game, card.opponent.id, group.berry?.item)
+  const item = cardItemOf(game, group.berry?.item)
   // 토글 버튼 이름은 포켓몬, 설명은 줄의 기술·결과·변동 가능(스크린 리더가 접힌 줄 판정을 함께 읽는다)
   const uid = useId()
   const headlineId = `${uid}-headline`
@@ -578,13 +578,13 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
       <div className="card-line" onClick={() => onToggle(group.key)}>
         <button type="button" className="card-toggle card-who" aria-expanded={expanded} aria-controls={detailId} aria-describedby={describedBy}>
           <PokemonIcon speciesId={card.opponent.id} size={32} lazy />
-          {/* 지닌 도구(변형 도구·메가스톤)는 이름 오른쪽 아이콘(포켓몬 이미지와 겹치지 않음) */}
+          {/* 판정에 효과를 준 도구(반감열매·화력 도구 변형 줄)만 이름 오른쪽 아이콘(포켓몬 이미지와 겹치지 않음) */}
           <span className="card-name">
             <SpeciesName label={names.species.label(card.opponent.id)} />
             {item !== undefined && (
               <>
                 {' '}
-                <ItemMark item={item} lazy game={game} />
+                <ItemMark item={item} lazy />
               </>
             )}
           </span>
@@ -632,7 +632,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
           // 상세는 판정만(배분·기술 선택은 간단행 배지에서, R9).
           <div className="detail-grid">
             <div role="region" className="bundle-panel" aria-label={`${bundleAria(card, isPinned(group, card))} 판정`} data-testid="bundle-panel">
-              <DetailItem game={game} opponentId={card.opponent.id} item={item} />
+              <DetailItem opponentId={card.opponent.id} item={item} />
               {card.state === 'error' && card.error && <p className="row-error">계산 불가: {koReason(game, card.error)}</p>}
               {card.rows.length > 0 && (
                 <ol className="rows">

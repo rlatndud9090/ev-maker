@@ -251,41 +251,29 @@ describe('R14 아이콘 대상 집합 대조(AC19)', () => {
     return { id: r.id, game, metas, targets: iconTargets(game, metas) }
   })
 
-  it('번들 메타가 있는 레귤레이션은 래더 가정 세트 도구를 집합에 넣는다', () => {
-    const withMeta = perRegulation.filter((r) => r.metas.length > 0)
-    expect(withMeta.length).toBeGreaterThan(0)
-    for (const r of withMeta) expect([...r.targets.values()].some((s) => s.includes('ladder-set')), r.id).toBe(true)
-  })
-
-  it('메가스톤 밖 대상 id는 전부 manifest 항목과 PNG가 있고 앱이 받은 그림으로 그린다', () => {
+  it('대상 id는 전부 manifest 항목과 PNG가 있고 앱이 받은 그림으로 그린다', () => {
     const missing: string[] = []
-    for (const { id: reg, game, targets } of perRegulation) {
-      const stones = new Set(game.data.megas.map((m) => m.stone))
+    for (const { id: reg, targets } of perRegulation) {
       for (const id of targets.keys()) {
-        if (stones.has(id)) continue
-        const ok = itemManifest.entries[id] !== undefined && existsSync(join(ITEM_DIR, `${id}.png`)) && itemGlyphOf(game, id).kind === 'img'
+        const ok = itemManifest.entries[id] !== undefined && existsSync(join(ITEM_DIR, `${id}.png`)) && itemGlyphOf(id).kind === 'img'
         if (!ok) missing.push(`${reg}:${id}`)
       }
     }
     expect(missing).toEqual([])
   })
 
-  it('대상 집합의 메가스톤은 스냅숏 megas stone이라 공통 메가스톤 표지로 그린다', () => {
+  it('대상 집합에 메가스톤이 없다(메가진화 문양·메가스톤 표시 없음)', () => {
     for (const { id: reg, game, targets } of perRegulation) {
-      const stones = new Set(game.data.megas.map((m) => m.stone))
-      const inSet = [...targets.keys()].filter((id) => stones.has(id))
-      if (perRegulation.find((r) => r.id === reg)?.metas.length) expect(inSet.length, reg).toBeGreaterThan(0)
-      for (const id of inSet) expect(itemGlyphOf(game, id), `${reg}:${id}`).toEqual({ kind: 'mega' })
+      for (const m of game.data.megas) expect(targets.has(m.stone), `${reg}:${m.stone}`).toBe(false)
     }
   })
 
-  it('집합 밖이고 받은 그림도 없는 임의 도구는 공통 가방 표지로 그린다', () => {
-    for (const { id: reg, game, targets } of perRegulation) {
-      const stones = new Set(game.data.megas.map((m) => m.stone))
-      const outside = Object.keys(game.data.items).filter((id) => !targets.has(id) && !stones.has(id) && itemIconUrl(id) === undefined)
+  it('받은 그림이 없는 임의 도구는 공통 가방 표지로 그린다', () => {
+    for (const { id: reg, game } of perRegulation) {
+      const outside = Object.keys(game.data.items).filter((id) => itemIconUrl(id) === undefined)
       expect(outside.length, reg).toBeGreaterThan(0)
-      for (const id of outside) expect(itemGlyphOf(game, id), `${reg}:${id}`).toEqual({ kind: 'bag' })
+      for (const id of outside) expect(itemGlyphOf(id), `${reg}:${id}`).toEqual({ kind: 'bag' })
     }
-    expect(itemGlyphOf(perRegulation[0].game, 'notanitem')).toEqual({ kind: 'bag' })
+    expect(itemGlyphOf('notanitem')).toEqual({ kind: 'bag' })
   })
 })

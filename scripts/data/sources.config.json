@@ -35,18 +35,6 @@
       "retrievedAt": "2026-11-12",
       "source": "https://archives.bulbagarden.net/wiki/Category:Champions_Bag_sprites",
       "usage": "반감열매 18종·화력 도구 22종·스피드 탭 도구 13종 도구 아이콘(화력 도구는 2026-11-14, 스피드 탭 도구는 2026-11-15 수집, 48px PNG 원본 그대로 정적 파일로 번들). 이미지 IP © Nintendo/Creatures/GAME FREAK(The Pokémon Company). 오픈 라이선스 아님, 비상업 팬 도구의 식별 목적"
-    },
-    {
-      "attributionOnly": true,
-      "copyright": "© Nintendo / Creatures Inc. / GAME FREAK inc.",
-      "dir": "src/assets/marks",
-      "id": "asset:mega-evolution-mark",
-      "license": "NOASSERTION",
-      "licenseFile": "src/assets/marks/LICENSE",
-      "name": "메가진화 문양(사용자 제공)",
-      "retrievedAt": "2026-11-16",
-      "source": "https://bulbapedia.bulbagarden.net/wiki/Mega_Evolution",
-      "usage": "메가스톤·메가진화 도구 겹침 표지(200px WebP 원본 그대로 정적 파일로 번들, 프로젝트 작성자가 제공한 고해상 사본, 원 문양 참고는 source). 이미지 IP © Nintendo/Creatures/GAME FREAK(The Pokémon Company). 오픈 라이선스 아님, 비상업 팬 도구의 식별 목적"
     }
   ],
   "default": "m-c",

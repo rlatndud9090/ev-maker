@@ -201,7 +201,6 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
               myTailwind={myTailwind}
               target={customTargets.find((t) => t.rosterId === detailBadge.opponentId)}
               dispatch={dispatch}
-              onClose={close}
               onAdded={(b) => {
                 pending.current = { kind: 'added', ...b }
               }}
@@ -257,7 +256,7 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
                 <li key={`${u.origin}:${u.opponentId}:${u.presetIndex ?? ''}`}>
                   <PokemonIcon speciesId={u.speciesId} size={28} lazy />
                   {names.species.label(u.speciesId)}
-                  {u.item !== null && <ItemMark item={{ id: u.item, name: names.items.label(u.item), role: 'held' }} lazy game={game} />}
+                  {u.item !== null && <ItemMark item={{ id: u.item, name: names.items.label(u.item), role: 'held' }} lazy />}
                   {u.presetIndex !== undefined && ` (프리셋 ${u.presetIndex + 1})`} · {r.reason} · {r.cause}
                 </li>
               )

@@ -8,11 +8,13 @@ import {
   CoreInputError,
   ITEM_NEGATING_ABILITIES,
   SPEED_FIELD_ABILITIES,
+  SPEED_ITEM_MODIFIERS,
   calcDamage,
   checkSpeedSupport,
   compareSpeed,
   finalSpeed,
   minSpToOutspeed,
+  speedItemApplies,
   speedSupport,
   sweepSpeed,
   validateSet,
@@ -432,5 +434,16 @@ describe('날씨·필드 ×2 특성 표(SPEED_FIELD_ABILITIES)', () => {
     expect(compareSpeed(MC, beartic, altaria, rain).attackerSpeed).toBe(70)
     // 자기 특성이 날씨부정이면 단독 계산에서도 날씨가 없다
     expect(finalSpeed(MC, altaria, rain)).toBe(finalSpeed(MC, altaria))
+  })
+})
+
+describe('스피드 배수 도구 판정(speedItemApplies)', () => {
+  it('구애스카프 ×1.5·검은철구 ×0.5만 배수 도구이고, 도구 무효 특성이면 걸리지 않는다', () => {
+    expect(SPEED_ITEM_MODIFIERS).toEqual({ choicescarf: 6144, ironball: 2048 })
+    expect(speedItemApplies('choicescarf', 'roughskin')).toBe(true)
+    expect(speedItemApplies('ironball', 'roughskin')).toBe(true)
+    expect(speedItemApplies('choicescarf', 'klutz')).toBe(false)
+    expect(speedItemApplies('lifeorb', 'roughskin')).toBe(false)
+    expect(speedItemApplies(undefined, 'roughskin')).toBe(false)
   })
 })

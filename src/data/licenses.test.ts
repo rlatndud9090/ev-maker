@@ -125,20 +125,6 @@ describe('buildLicenses 메타 출처', () => {
     expect(bag).toContain('오픈 라이선스가 아니다')
   })
 
-  it('메가진화 문양(사용자 제공, 출처 표기만)이 asset 항목·고지 원문으로 나온다', () => {
-    const { licenses, notices } = buildLicenses(PROJECT_ROOT, config, POKEAPI_TEXT, metaIndex)
-    expect(licenses.entries.find((e) => e.id === 'asset:mega-evolution-mark')).toMatchObject({
-      kind: 'asset',
-      license: 'NOASSERTION',
-      attributionOnly: true,
-      version: '2026-11-16 수집',
-    })
-    const mark = notices.split('\n### ').find((s) => s.startsWith('메가진화 문양'))
-    expect(mark).toContain('src/assets/marks')
-    expect(mark).toContain('© Nintendo / Creatures Inc. / GAME FREAK inc.')
-    expect(mark).toContain('mega.webp')
-  })
-
   it('attributionOnly 자산은 license NOASSERTION·수집일이 있어야 한다', () => {
     const assets = (config as { assets: { id: string }[] }).assets
     const bag = assets.find((a) => a.id === 'asset:bulbagarden-champions-bag')!

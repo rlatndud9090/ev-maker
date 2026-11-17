@@ -109,19 +109,13 @@ describe.each(['attack', 'defense'] as const)('%s 탭 카드 도구 아이콘(�
     expect(html).not.toContain('data-testid="detail-item"')
   })
 
-  it('메가 기본 줄: 이름 오른쪽에 메가진화 문양이 장식으로 놓이고 변형 표지가 아니다', () => {
+  it('메가 기본 줄: 메가스톤은 판정에 관여하지 않으므로 도구 아이콘·상세 도구 머리가 없다', () => {
     const group = groupsOf(tab).find((g) => g.berry === undefined && isMega(g))
     expect(group, '메가 상대가 있는 실데이터').toBeDefined()
-    const stone = game.data.megas.find((m) => m.forme === group!.opponent.id)!.stone
     const html = cardHtml(tab, group!)
-    const name = slice(whoOf(html), 'class="card-name"', '</button>')
-    const mark = openTag(name, 'class="item-mark"')
-    expect(attr(mark, 'data-item-role')).toBe('mega')
-    expect(attr(mark, 'aria-hidden')).toBe('true')
-    expect(attr(mark, 'title')).toBe(itemName(stone))
-    expect(name).toContain('data-item-glyph="mega"')
-    expect(html).not.toContain('data-testid="berry-badge"')
-    expect(detailOf(html)).toContain(`<span class="detail-item-name">${itemName(stone)}</span>`)
+    expect(html).not.toContain('class="item-mark"')
+    expect(html).not.toContain('data-item-glyph')
+    expect(html).not.toContain('data-testid="detail-item"')
   })
 
   it('접힌 줄은 상세를 그리지 않고, 토글 버튼 읽기 순서는 이름 → "OO 지닌 경우"다', () => {
@@ -137,11 +131,9 @@ describe.each(['attack', 'defense'] as const)('%s 탭 카드 도구 아이콘(�
 })
 
 describe('cardItemOf', () => {
-  it('변형 도구가 메가보다 앞서고, 둘 다 아니면 없음', () => {
-    const mega = game.data.megas[0]
-    expect(cardItemOf(game, mega.forme, 'colburberry')).toEqual({ id: 'colburberry', name: itemName('colburberry'), role: 'variant' })
-    expect(cardItemOf(game, mega.forme, undefined)).toEqual({ id: mega.stone, name: itemName(mega.stone), role: 'mega' })
-    expect(cardItemOf(game, mega.base, undefined)).toBeUndefined()
+  it('변형 도구만 표시 대상이고, 변형이 아니면 메가 폼이어도 없음', () => {
+    expect(cardItemOf(game, 'colburberry')).toEqual({ id: 'colburberry', name: itemName('colburberry'), role: 'variant' })
+    expect(cardItemOf(game, undefined)).toBeUndefined()
   })
 })
 

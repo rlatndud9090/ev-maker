@@ -4,7 +4,6 @@ import {
   useRef,
   useState,
   type Dispatch,
-  type Ref,
 } from "react";
 import {
   bundleLabel,
@@ -29,7 +28,6 @@ import type { AppAction } from "../state";
 import { Combobox } from "./Combobox";
 import { BundleText } from "./BundleText";
 import { ItemMark } from "./ItemMark";
-import { PokemonIcon } from "./PokemonIcon";
 import { NumberField } from "./NumberField";
 import {
   STATUS_CLASS,
@@ -56,11 +54,9 @@ interface Props {
   myTailwind: boolean;
   target: CustomTarget | undefined;
   dispatch: Dispatch<AppAction>;
-  onClose(): void;
   /** 추가 뒤 포커스할 배분 */
   onAdded(bundle: { opponentId: string; sp: number; nature: NatureSign }): void;
   onRemove(badge: Badge): void;
-  closeRef?: Ref<HTMLButtonElement>;
 }
 
 /**
@@ -78,10 +74,8 @@ export function SpeedBadgeDetail({
   myTailwind,
   target,
   dispatch,
-  onClose,
   onAdded,
   onRemove,
-  closeRef,
 }: Props) {
   const names = namesOf(game);
   const tag = conditionTag(b.condition);
@@ -100,7 +94,6 @@ export function SpeedBadgeDetail({
       <div
         className={`speed-detail-head ${status === null ? "neu" : STATUS_CLASS[status]}`}
       >
-        <PokemonIcon speciesId={b.speciesId} size={44} />
         <div className="speed-detail-title">
           <b data-testid="speed-detail-name">{name}</b>
           <span className="speed-detail-bundle">
@@ -112,12 +105,10 @@ export function SpeedBadgeDetail({
             {b.item !== null && (
               <ItemMark
                 item={{
-                  id: b.item.id,
-                  name: names.items.label(b.item.id),
+                  id: b.item,
+                  name: names.items.label(b.item),
                   role: "held",
                 }}
-                game={game}
-                className={b.item.negated ? "item-negated" : undefined}
               />
             )}
             {tag !== undefined && ` · ${tag}`} · 실수치{" "}
@@ -127,15 +118,6 @@ export function SpeedBadgeDetail({
             <span className="sr-only">{STATUS_LABEL[status]}</span>
           )}
         </div>
-        <button
-          type="button"
-          ref={closeRef}
-          className="speed-detail-close"
-          aria-label="상세 닫기"
-          onClick={onClose}
-        >
-          ×
-        </button>
       </div>
       <div className="speed-detail-goal" data-testid="speed-detail-min-sp">
         {baseline.kind === "rejected" ? (

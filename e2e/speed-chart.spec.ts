@@ -599,7 +599,7 @@ test.describe('배지 상세(AC7, AC10)', () => {
     await badgeById(page, mega.id).click()
     await expect(detail(page)).toHaveAttribute('data-badge-id', mega.id)
     await expect(detail(page).getByTestId('speed-detail-name')).toHaveText(speciesKo(mega.opponent))
-    // 메가 배지 버튼: 이름 글자·"메가" 태그 없이 배분 표기만, 이름은 툴팁(title)과 접근 이름 첫 덩어리, 메가 표지는 배분 표기 오른쪽 메가진화 문양
+    // 메가 배지 버튼: 이름 글자·"메가" 태그·메가진화 문양·메가스톤 아이콘 없이 배분 표기만(메가스톤은 스피드에 관여하지 않음), 이름은 툴팁(title)과 접근 이름 첫 덩어리
     const megaBadge = badgeById(page, mega.id)
     await expect(megaBadge.locator('.speed-badge-text')).toHaveText(new RegExp(`^${bundleText(mega.sp, mega.sign)}`))
     await expect(megaBadge.locator('.speed-badge-text')).not.toContainText('메가')
@@ -608,14 +608,9 @@ test.describe('배지 상세(AC7, AC10)', () => {
     expect(megaTitle.length).toBeGreaterThan(0)
     expect(megaTitle).toContain(speciesKo(mega.opponent))
     expect(((await megaBadge.getAttribute('aria-label')) ?? '').startsWith(`${megaTitle} `)).toBe(true)
-    const megaMark = megaBadge.locator('.speed-badge-text > .item-mark img[data-item-glyph="mega"]')
-    await expect(megaMark).toHaveCount(1)
-    const numBox = (await megaBadge.locator('.speed-badge-text .num').boundingBox())!
-    const markBox = (await megaBadge.locator('.item-mark').boundingBox())!
-    const iconBox = (await megaBadge.locator('[data-testid="mon-icon"]').boundingBox())!
-    expect(markBox.x, '메가 문양은 배분 표기 오른쪽').toBeGreaterThanOrEqual(numBox.x + numBox.width - 0.5)
-    expect(markBox.x, '메가 문양은 포켓몬 이미지와 겹치지 않음').toBeGreaterThanOrEqual(iconBox.x + iconBox.width - 0.5)
-    await expect.poll(() => megaMark.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(200)
+    await expect(megaBadge.locator('.item-mark')).toHaveCount(0)
+    await expect(megaBadge.locator('[data-item-glyph]')).toHaveCount(0)
+    await expect(detail(page).locator('.speed-detail-head .item-mark')).toHaveCount(0)
     // Esc
     await page.keyboard.press('Escape')
     await expect(detail(page)).toHaveCount(0)
@@ -652,6 +647,48 @@ test.describe('배지 상세(AC7, AC10)', () => {
     await expect(head).toContainText(`· 비 · 실수치 ${want}`)
     await expect(detail(page)).not.toContainText('파트너 날씨 가정')
     await expect(detail(page)).not.toContainText('미반영')
+  })
+})
+
+test.describe('도구 표시 = 스피드에 관여한 도구만(사용자 피드백 2026-11-17)', () => {
+  // 기대값: 구애스카프(×1.5)·검은철구(×0.5)만 스피드 배수를 걸고, 무딘손이면 도구 효과가 없다(게임 규칙에서 독립 도출)
+  const SPEED_ITEMS = ['choicescarf', 'ironball']
+  const expectedMark = (item: string | undefined, ability: string): string[] => (item !== undefined && SPEED_ITEMS.includes(item) && ability !== 'klutz' ? [item] : [])
+
+  test('래더 기본 배지는 대표 세트 도구가 스피드 배수 도구일 때만 아이콘, 생명의구슬·메가스톤 등은 표시 없음, 스카프 배지엔 구애스카프', async ({ page }) => {
+    await openSpeed(page)
+    const shown = await badges(page).evaluateAll((els) =>
+      els.map((el) => ({
+        id: (el as HTMLElement).dataset.badgeId ?? '',
+        origin: (el as HTMLElement).dataset.origin ?? '',
+        condition: (el as HTMLElement).dataset.condition ?? '',
+        marks: [...el.querySelectorAll<HTMLElement>('.item-mark')].map((m) => m.dataset.itemId ?? ''),
+        text: el.querySelector('.speed-badge-text')?.textContent ?? '',
+      })),
+    )
+    const base = shown.filter((b) => b.origin === 'ladder' && b.condition === 'none')
+    expect(base.length).toBeGreaterThan(10)
+    const stones = new Set(game.data.megas.map((m) => m.stone))
+    let orbOrStone = 0
+    for (const b of base) {
+      const set = entryOf(JSON.parse(b.id)[1] as string).representative.set
+      if (set.item === 'lifeorb' || (set.item !== undefined && stones.has(set.item))) orbOrStone++
+      expect(b.marks, `${b.id} ${set.item ?? '-'}`).toEqual(expectedMark(set.item, set.ability))
+    }
+    expect(orbOrStone, '생명의구슬·메가스톤 대표 세트가 있는 실데이터').toBeGreaterThan(0)
+    const scarf = shown.filter((b) => b.condition === 'scarf')
+    expect(scarf.length).toBeGreaterThan(0)
+    for (const b of scarf) expect(b.marks).toEqual(['choicescarf'])
+    // 스카프 아닌 최다 도구 배지: 배분 표기만("도구 없음" 태그 없음)
+    for (const b of shown.filter((x) => x.condition === 'non-scarf')) {
+      expect(b.text).not.toContain('도구 없음')
+      for (const m of b.marks) expect(SPEED_ITEMS).toContain(m)
+    }
+    const panel = tabPanel(page)
+    await expect(panel.locator('[data-item-glyph="mega"]')).toHaveCount(0)
+    await expect(panel.locator('.speed-badge .item-mark[data-item-id="lifeorb"]')).toHaveCount(0)
+    for (const stone of stones) await expect(panel.locator(`.speed-badge .item-mark[data-item-id="${stone}"]`)).toHaveCount(0)
+    await expect(panel).not.toContainText('도구 무효')
   })
 })
 
@@ -898,8 +935,8 @@ test.describe('차트에서 배분 추가(AC26)', () => {
     await expect(added.locator('.speed-mark.add')).toHaveText('추가')
     expect((await ofOpponent()).length).toBe(n0 + 1)
     expect(await total()).toBe(sum0 + 1)
-    const itemOf = (id: string) => badgeById(page, id).locator('.item-mark').getAttribute('data-item-id')
-    expect(await itemOf(a.id)).toBe(await itemOf(base.id))
+    const itemOf = (id: string) => badgeById(page, id).locator('.item-mark').evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.itemId))
+    expect(await itemOf(a.id)).toEqual(await itemOf(base.id))
     // 추가 배지 상세: 상태·최소 S, 같은 묶음은 다시 고를 수 없다
     await expect(detail(page)).toHaveAttribute('data-badge-id', a.id)
     await expect(detail(page)).toHaveAttribute('data-status', a.status)

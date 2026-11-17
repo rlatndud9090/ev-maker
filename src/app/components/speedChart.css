@@ -261,10 +261,6 @@
   background: rgba(127, 127, 140, 0.22);
 }
 
-.item-negated {
-  opacity: 0.6;
-}
-
 .speed-unsupported {
   margin-top: 0.75rem;
   padding-top: 0.5rem;

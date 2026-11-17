@@ -21,9 +21,15 @@ function fieldDoubles(ability: string, weather: Weather, terrain: Terrain): bool
   return f.kind === 'weather' ? f.weather === weather : f.terrain === terrain
 }
 const QUICK_FEET = 'quickfeet'
-const ITEM_MOD: Record<string, number> = { choicescarf: 6144, ironball: 2048 }
+/** 스피드 배수(4096 기준)를 거는 지닌 도구 */
+export const SPEED_ITEM_MODIFIERS: Readonly<Record<string, number>> = { choicescarf: 6144, ironball: 2048 }
 /** 지닌 도구 효과를 무효화하는 특성 */
 export const ITEM_NEGATING_ABILITIES: readonly string[] = ['klutz']
+
+/** 그 도구가 이 특성 아래에서 스피드 배수를 실제로 거는지(도구 무효 특성이면 false) */
+export function speedItemApplies(item: string | undefined, ability: string): item is string {
+  return item !== undefined && Object.hasOwn(SPEED_ITEM_MODIFIERS, item) && !ITEM_NEGATING_ABILITIES.includes(ability)
+}
 /** 필드의 날씨 효과를 무효화하는 특성 */
 export const WEATHER_NEGATING_ABILITIES: readonly string[] = ['cloudnine', 'airlock']
 /** 게임에서 스피드를 바꾸지만 이 모듈이 구현하지 않은 보정. 조용히 무시하지 않고 거부한다. */
@@ -64,7 +70,7 @@ export function speedOf(r: ResolvedSet, c: NormalizedConditions, side: 'attacker
   const quickFeet = r.ability === QUICK_FEET && r.status !== 'none'
   if (fieldDoubles(r.ability, c.weather, c.terrain)) mods.push(8192)
   else if (quickFeet) mods.push(6144)
-  if (r.item !== undefined && ITEM_MOD[r.item] !== undefined && !ITEM_NEGATING_ABILITIES.includes(r.ability)) mods.push(ITEM_MOD[r.item])
+  if (speedItemApplies(r.item, r.ability)) mods.push(SPEED_ITEM_MODIFIERS[r.item])
   speed = pokeRound((speed * chainMods(mods)) / 4096)
   if (r.status === 'par' && !quickFeet) speed = Math.floor((speed * 50) / 100)
   return speed
