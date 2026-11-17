@@ -969,7 +969,16 @@ test.describe('차트에서 배분 추가(AC26)', () => {
     const form = detail(page).locator('.speed-add-custom')
     const fillCustom = async (sp: number, sign: Sign) => {
       await form.getByRole('spinbutton', { name: 'S SP' }).fill(String(sp))
-      await form.locator('select').selectOption(sign)
+      // 성격 보정: 내 포켓몬 SP 행과 같은 ▲▼ 토글(하나만 켜짐, 둘 다 꺼짐 = 무보정)
+      const up = form.getByRole('button', { name: '스피드 성격 상승', exact: true })
+      const down = form.getByRole('button', { name: '스피드 성격 하락', exact: true })
+      const want = { plus: up, minus: down } as const
+      for (const [k, btn] of Object.entries(want)) {
+        const on = (await btn.getAttribute('aria-pressed')) === 'true'
+        if (on !== (sign === k)) await btn.click()
+      }
+      await expect(up).toHaveAttribute('aria-pressed', String(sign === 'plus'))
+      await expect(down).toHaveAttribute('aria-pressed', String(sign === 'minus'))
       await form.getByRole('button', { name: '추가', exact: true }).click()
     }
     await fillCustom(custom!.sp, custom!.sign)

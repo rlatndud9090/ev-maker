@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type Dispatch,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch } from "react";
 import {
   bundleLabel,
   checkSpeedAddition,
@@ -36,12 +30,6 @@ import {
   minSpText,
   rejectionText,
 } from "./speedText";
-
-const NATURE_OPTIONS: readonly { sign: NatureSign; label: string }[] = [
-  { sign: "plus", label: "상승" },
-  { sign: "neutral", label: "무보정" },
-  { sign: "minus", label: "하락" },
-];
 
 interface Props {
   id: string;
@@ -265,20 +253,32 @@ function AddBundle({
             max={spMax}
             step={1}
             onValue={setSp}
+            className="sp-field"
           />
-          <label>
-            성격
-            <select
-              value={nature}
-              onChange={(e) => setNature(e.target.value as NatureSign)}
+          <span className="nat-btns" role="group" aria-label="스피드 성격 보정">
+            <button
+              type="button"
+              className="nat-btn plus"
+              aria-pressed={nature === "plus"}
+              aria-label="스피드 성격 상승"
+              data-testid="speed-add-nat-plus"
+              onClick={() => setNature(nature === "plus" ? "neutral" : "plus")}
             >
-              {NATURE_OPTIONS.map((o) => (
-                <option key={o.sign} value={o.sign}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
+              ▲
+            </button>
+            <button
+              type="button"
+              className="nat-btn minus"
+              aria-pressed={nature === "minus"}
+              aria-label="스피드 성격 하락"
+              data-testid="speed-add-nat-minus"
+              onClick={() =>
+                setNature(nature === "minus" ? "neutral" : "minus")
+              }
+            >
+              ▼
+            </button>
+          </span>
           <button type="submit" data-testid="speed-add-custom">
             추가
           </button>

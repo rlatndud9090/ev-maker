@@ -203,6 +203,26 @@
   gap: 0.5rem;
 }
 
+/* 직접 입력: SP 칸은 두 자리 폭, 성격 보정은 내 포켓몬 SP 행과 같은 ▲▼ 토글 */
+.speed-add-custom {
+  align-items: center;
+}
+
+.speed-add-custom .num-field.sp-field {
+  width: auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.speed-add-custom .num-field.sp-field input {
+  width: 3.2rem;
+}
+
+.speed-add-custom .nat-btn {
+  padding-block: 0.25rem;
+}
+
 .speed-badge-item {
   list-style: none;
 }
