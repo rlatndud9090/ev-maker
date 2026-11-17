@@ -261,7 +261,7 @@ function AddBundle({
                 <b className="num">
                   <BundleText sp={o.sp} nature={o.nature} />
                 </b>
-                <span className="num">{shareText(o.share)}</span>
+                <span className="num bundle-share">{shareText(o.share)}</span>
                 <span className="num">{o.speed}</span>
                 <em>{o.onChart ? "차트에 있음" : "+ 추가"}</em>
               </button>
