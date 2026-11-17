@@ -157,27 +157,29 @@
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 8px;
+  color: var(--speed-ink);
+  background: var(--speed-neu);
+}
+
+/* 추월 상태는 머리 색(배지와 같은 면)과 접근 이름으로만 보인다 */
+.speed-detail-head.win {
+  background: var(--speed-win);
+}
+
+.speed-detail-head.tie {
+  background: var(--speed-tie);
+}
+
+.speed-detail-head.lose {
+  background: var(--speed-lose);
 }
 
 .speed-detail-title {
   display: grid;
   flex: 1 1 auto;
   min-width: 0;
-}
-
-.speed-detail-kv {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: 0.2rem 0.75rem;
-  margin: 0;
-}
-
-.speed-detail-kv dt {
-  color: var(--muted);
-}
-
-.speed-detail-kv dd {
-  margin: 0;
 }
 
 .speed-detail-goal small {
@@ -250,30 +252,13 @@
 }
 
 .speed-tag,
-.speed-mark,
-.speed-pill {
+.speed-mark {
   font-style: normal;
   font-size: 0.78em;
   padding: 0 0.35rem;
   border-radius: 4px;
   color: var(--speed-ink);
   background: rgba(127, 127, 140, 0.22);
-}
-
-.speed-pill {
-  justify-self: start;
-}
-
-.speed-pill.win {
-  background: var(--speed-win);
-}
-
-.speed-pill.tie {
-  background: var(--speed-tie);
-}
-
-.speed-pill.lose {
-  background: var(--speed-lose);
 }
 
 .item-negated {

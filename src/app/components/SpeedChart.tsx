@@ -20,11 +20,10 @@ import { ItemMark } from './ItemMark'
 import { PokemonIcon } from './PokemonIcon'
 import { SpeedBadge } from './SpeedBadge'
 import { SpeedBadgeDetail } from './SpeedBadgeDetail'
-import { rejectionText, type SpeedBadgeHandlers } from './speedText'
+import { rejectionText, toggleDetail, type SpeedBadgeHandlers } from './speedText'
 import './speedChart.css'
 
 const DETAIL_ID = 'speed-detail-panel'
-const HOVER_DELAY_MS = 250
 const NAV_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'] as const
 type NavKeyName = (typeof NAV_KEYS)[number]
 const isNavKey = (k: string): k is NavKeyName => (NAV_KEYS as readonly string[]).includes(k)
@@ -53,7 +52,6 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
   const byId = useMemo(() => new Map(badges.map((b) => [b.id, b])), [badges])
   const rowsRef = useRef(rows)
   const detailRef = useRef(detailId)
-  const hover = useRef<ReturnType<typeof setTimeout> | null>(null)
   const anchor = useRef<{ id: string; top: number } | null>(null)
   const pending = useRef<Pending | null>(null)
 
@@ -71,6 +69,7 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
     return null
   }, [])
 
+  /** 그 배지 상세를 연다(이미 열려 있으면 그대로) */
   const open = useCallback(
     (id: string) => {
       const btn = buttonOf(id)
@@ -84,18 +83,13 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
 
   const handlers = useMemo<SpeedBadgeHandlers>(
     () => ({
-      onOpen: open,
-      onHover(id) {
-        if (hover.current !== null) clearTimeout(hover.current)
-        hover.current = id === null ? null : setTimeout(() => open(id), HOVER_DELAY_MS)
+      onToggle(id) {
+        if (toggleDetail(detailRef.current, id) === null) {
+          setActiveId(id)
+          close()
+        } else open(id)
       },
       onKey(id, e: KeyboardEvent<HTMLButtonElement>) {
-        if (e.key === 'Escape') {
-          if (detailRef.current === null) return
-          e.preventDefault()
-          close()
-          return
-        }
         if (!isNavKey(e.key)) return
         e.preventDefault()
         const next = navigate(rowsRef.current, id, e.key)
@@ -104,13 +98,6 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
       },
     }),
     [open, close, buttonOf],
-  )
-
-  useEffect(
-    () => () => {
-      if (hover.current !== null) clearTimeout(hover.current)
-    },
-    [],
   )
 
   // 상세가 다른 줄로 옮겨 가도 포커스한 배지의 화면 위치를 유지한다
@@ -141,18 +128,34 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
     if (p === null) return
     const target = p.kind === 'id' ? byId.get(p.id) : badges.find((b) => b.origin === 'added' && b.opponentId === p.opponentId && b.bundle.sp === p.sp && b.bundle.nature === p.nature)
     if (p.kind === 'id' || target !== undefined) pending.current = null
-    if (target !== undefined) buttonOf(target.id)?.focus()
+    if (target === undefined) return
+    buttonOf(target.id)?.focus()
+    // 추가한 배지는 상세를 열어 결과(상태·최소 S·지우기)를 바로 보인다. 삭제 뒤 이웃 배지는 포커스만
+    if (p.kind === 'added') open(target.id)
   })
 
-  // 바깥 누름으로 닫는다(마우스가 떠나는 것만으로는 닫지 않는다)
+  // 바깥 누름·Esc로 닫는다. 상세 안에서 Esc면 포커스를 연 배지로 돌린다(콤보 목록 닫기 등 먼저 처리된 Esc는 건드리지 않음)
   useEffect(() => {
     if (detailId === null) return
     const onDown = (e: PointerEvent) => {
       if (e.target instanceof Element && e.target.closest('.speed-badge, .speed-detail') === null) setDetailId(null)
     }
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      e.preventDefault()
+      const inside = document.activeElement instanceof Element && document.activeElement.closest('.speed-detail') !== null
+      setDetailId(null)
+      if (!inside) return
+      setActiveId(detailId)
+      buttonOf(detailId)?.focus()
+    }
     document.addEventListener('pointerdown', onDown)
-    return () => document.removeEventListener('pointerdown', onDown)
-  }, [detailId])
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [detailId, buttonOf])
 
   const names = namesOf(game)
   const minSp = useMemo(

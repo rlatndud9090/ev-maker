@@ -177,7 +177,7 @@ function bruteMinSp(set: PokemonSet, target: number, tailwind: boolean): string 
   }
   const n = find('neutral')
   const p = find('plus')
-  return `추월: ${n === null ? '무보정 불가' : `최소 S${n}`} / ${p === null ? '상승 불가' : `S${p}+`}`
+  return `추월: ${n === null ? '무보정 불가' : `최소 S${n}`} / ${p === null ? '상승 불가' : `S${p}↑`}`
 }
 
 /** 화면 배지 상태 개수(배지 id 기준) */
@@ -545,15 +545,25 @@ test.describe('기준선과 상태(AC5, AC5b, AC6, AC8, AC25)', () => {
 // ---------- 상세 ----------
 
 test.describe('배지 상세(AC7, AC10)', () => {
-  test('AC7: 호버·클릭으로 열림, 이름·배분·실수치·점유율·조건 점유율·도구·최소 S, Esc·바깥 클릭으로 닫힘, 다른 배지 클릭이면 그 배지로', async ({ page }) => {
+  test('AC7: 클릭으로만 여닫음(호버로는 안 열림, 같은 배지 다시 클릭이면 닫힘), 이름·배분·실수치·상태 색·최소 S만, Esc·바깥 클릭으로 닫힘, 다른 배지 클릭이면 그 배지로', async ({ page }) => {
     await openSpeed(page)
     const list = await readBadges(page)
     const set = await mySetFromUi(page)
     const scarf = list.find((b) => b.condition === 'scarf')!
     expect(scarf).toBeDefined()
-    // 호버(지연 뒤 열림)
+    // 호버만으로는 열리지 않는다(예전 호버 지연보다 넉넉히 기다린다)
     await badgeById(page, scarf.id).scrollIntoViewIfNeeded()
     await badgeById(page, scarf.id).hover()
+    await page.waitForTimeout(600)
+    await expect(detail(page)).toHaveCount(0)
+    // 클릭 → 열림, 같은 배지 다시 클릭 → 닫힘, 또 클릭 → 열림
+    await badgeById(page, scarf.id).click()
+    await expect(detail(page)).toHaveAttribute('data-badge-id', scarf.id)
+    await expect(badgeById(page, scarf.id)).toHaveAttribute('aria-expanded', 'true')
+    await badgeById(page, scarf.id).click()
+    await expect(detail(page)).toHaveCount(0)
+    await expect(badgeById(page, scarf.id)).toHaveAttribute('aria-expanded', 'false')
+    await badgeById(page, scarf.id).click()
     await expect(detail(page)).toHaveAttribute('data-badge-id', scarf.id)
     const d = detail(page)
     await expect(d.getByTestId('speed-detail-name')).toHaveText(speciesKo(scarf.opponent))
@@ -571,15 +581,24 @@ test.describe('배지 상세(AC7, AC10)', () => {
     await expect(scarfBadge.locator('.speed-tag')).toHaveCount(0)
     await expect(scarfBadge.locator('.speed-badge-text')).not.toContainText('스카프')
     await expect(scarfBadge.locator('.speed-badge-text > .item-mark[data-item-id="choicescarf"]')).toHaveCount(1)
-    await expect(d.getByTestId('speed-detail-share')).toHaveText(/^\d+(\.\d+)?%$/)
-    await expect(d.getByTestId('speed-detail-condition')).toHaveText(/^구애스카프 점유율 \d+(\.\d+)?%$/)
-    await expect(d.getByTestId('speed-detail-item')).toHaveText('구애스카프')
+    // 상태는 머리 색(배지와 같은 면)으로만: 보이는 상태 글자 없음, 접근 이름(sr-only)에만
+    await expect(d).toHaveAttribute('data-status', scarf.status)
+    const headBg = await d.locator('.speed-detail-head').evaluate((el) => getComputedStyle(el).backgroundColor)
+    expect(headBg).toBe(await scarfBadge.evaluate((el) => getComputedStyle(el).backgroundColor))
+    if (scarf.status !== 'neutral') await expect(d.locator('.speed-detail-title > .sr-only')).toHaveText(STATUS_KO[scarf.status as keyof typeof STATUS_KO])
+    // 점유율·조건 점유율·도구 이름·안내 문구는 없다
+    for (const gone of ['speed-detail-share', 'speed-detail-condition', 'speed-detail-item']) await expect(d.getByTestId(gone)).toHaveCount(0)
+    await expect(d).not.toContainText('점유율')
+    // 점유율 숫자는 접힌 "다른 배분 추가" 목록에만(머리줄·최소 S에는 없음)
+    for (const part of [d.locator('.speed-detail-head'), d.getByTestId('speed-detail-min-sp')]) await expect(part).not.toContainText('%')
+    await expect(d).not.toContainText('구애스카프')
+    await expect(d).not.toContainText('도구 효과 없음')
     await expect(d.getByTestId('speed-detail-min-sp')).toContainText(bruteMinSp(set, scarf.speed, false))
     // 메가 배지: 메가 폼 이름
     const mega = list.find((b) => b.origin === 'ladder' && b.condition === 'none' && entryOf(b.opponent).mega !== undefined)!
     await badgeById(page, mega.id).click()
     await expect(detail(page)).toHaveAttribute('data-badge-id', mega.id)
-    await expect(detail(page).getByTestId('speed-detail-name')).toHaveText(`${speciesKo(mega.opponent)} (메가진화 폼)`)
+    await expect(detail(page).getByTestId('speed-detail-name')).toHaveText(speciesKo(mega.opponent))
     // 메가 배지 버튼: 이름 글자·"메가" 태그 없이 배분 표기만, 이름은 툴팁(title)과 접근 이름 첫 덩어리, 메가 표지는 배분 표기 오른쪽 메가진화 문양
     const megaBadge = badgeById(page, mega.id)
     await expect(megaBadge.locator('.speed-badge-text')).toHaveText(new RegExp(`^${bundleText(mega.sp, mega.sign)}`))
@@ -615,7 +634,7 @@ test.describe('배지 상세(AC7, AC10)', () => {
     await expect(detail(page)).toHaveAttribute('data-badge-id', other.id)
   })
 
-  test('AC10: 쓱쓱 상대(대쓰여너 암컷)의 "비" 배지 = 1위 묶음에 비를 넣은 코어 공식 값, 상세에 "파트너 날씨 가정"', async ({ page }) => {
+  test('AC10: 쓱쓱 상대(대쓰여너 암컷)의 "비" 배지 = 1위 묶음에 비를 넣은 코어 공식 값, 상세 머리줄에 "비" 태그(가정 안내 문구 없음)', async ({ page }) => {
     await openSpeed(page)
     const e = entryOf('basculegionf')
     expect(e.abilities.swiftswim ?? 0, '쓱쓱 점유율이 기본 기준 10% 이상').toBeGreaterThanOrEqual(0.1)
@@ -629,20 +648,34 @@ test.describe('배지 상세(AC7, AC10)', () => {
     expect(rain!.speed).toBe(want)
     expect(rain!.rowSpeed).toBe(want)
     await badgeById(page, rain!.id).click()
-    await expect(detail(page).getByTestId('speed-detail-condition')).toContainText('쓱쓱')
-    await expect(detail(page).getByTestId('speed-detail-condition')).toContainText('파트너 날씨 가정')
+    const head = detail(page).locator('.speed-detail-bundle')
+    await expect(head).toContainText(`· 비 · 실수치 ${want}`)
+    await expect(detail(page)).not.toContainText('파트너 날씨 가정')
+    await expect(detail(page)).not.toContainText('미반영')
   })
 })
 
 test.describe('AC7 터치(400px)', () => {
   test.use({ viewport: { width: 400, height: 800 }, hasTouch: true })
-  test('AC7: 터치로 배지를 탭하면 상세가 열리고 바깥 탭으로 닫힌다', async ({ page }) => {
+  test('AC7: 터치로 배지를 탭하면 상세가 열리고, 같은 배지 다시 탭이면 닫히고, 다른 배지 탭이면 전환, 바깥 탭으로 닫힌다', async ({ page }) => {
     await openSpeed(page)
     const first = badges(page).first()
     await first.scrollIntoViewIfNeeded()
     await first.tap()
     await expect(detail(page)).toBeVisible()
-    await expect(detail(page).getByTestId('speed-detail-item')).toBeVisible()
+    await expect(detail(page).getByTestId('speed-detail-min-sp')).toBeVisible()
+    // 400px에서 머리줄 글자·닫기 버튼이 서로 겹치지 않는다
+    expect(await findOverlaps(page, '.speed-detail-head > *, .speed-detail-title > b, .speed-detail-bundle')).toEqual([])
+    const firstId = (await first.getAttribute('data-badge-id'))!
+    await first.tap()
+    await expect(detail(page)).toHaveCount(0)
+    await first.tap()
+    await expect(detail(page)).toHaveAttribute('data-badge-id', firstId)
+    const second = badges(page).nth(1)
+    await second.scrollIntoViewIfNeeded()
+    await second.tap()
+    await expect(detail(page)).toHaveCount(1)
+    await expect(detail(page)).toHaveAttribute('data-badge-id', (await second.getAttribute('data-badge-id'))!)
     await page.locator('h1').tap()
     await expect(detail(page)).toHaveCount(0)
   })
@@ -869,7 +902,7 @@ test.describe('차트에서 배분 추가(AC26)', () => {
     expect(await itemOf(a.id)).toBe(await itemOf(base.id))
     // 추가 배지 상세: 상태·최소 S, 같은 묶음은 다시 고를 수 없다
     await expect(detail(page)).toHaveAttribute('data-badge-id', a.id)
-    await expect(detail(page).locator('.speed-pill')).toHaveText(STATUS_KO[a.status as keyof typeof STATUS_KO])
+    await expect(detail(page)).toHaveAttribute('data-status', a.status)
     await expect(detail(page).getByTestId('speed-detail-min-sp')).toContainText(bruteMinSp(set, a.speed, false))
     await detail(page).getByTestId('speed-add-toggle').click()
     await expect(detail(page).getByTestId('speed-add-option').filter({ has: page.locator('b .bundle-mark', { hasText: new RegExp(`^${optLabel}$`) }) })).toBeDisabled()
@@ -889,8 +922,7 @@ test.describe('차트에서 배분 추가(AC26)', () => {
     const c = (await readBadges(page)).find((b) => b.origin === 'added' && b.sp === custom!.sp && b.sign === custom!.sign)!
     expect(c.speed).toBe(finalSpeed(game, withSpeed(entry.representative.set, custom!.sp, custom!.sign)))
     expect(c.rowSpeed).toBe(c.speed)
-    await badgeById(page, c.id).click()
-    await expect(detail(page).getByTestId('speed-detail-share')).toHaveText('직접 입력')
+    await expect(detail(page)).toHaveAttribute('data-badge-id', c.id)
 
     // 이미 있음: 기본 묶음·추가한 배분과 같은 SP·성격
     const count = (await readBadges(page)).length

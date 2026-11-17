@@ -1,4 +1,4 @@
-import { memo, type FocusEvent, type MouseEvent, type PointerEvent, type Ref } from 'react'
+import { memo, type MouseEvent, type Ref } from 'react'
 import { bundleLabel, type SpeedBadge as Badge, type SpeedStatus } from '../../cards'
 import type { Snapshot } from '../../data/schema'
 import { namesOf } from '../../ui/names'
@@ -27,7 +27,6 @@ export const SpeedBadge = memo(function SpeedBadge({ game, badge: b, status, act
   const cls = ['speed-badge', status === null ? 'neu' : STATUS_CLASS[status], b.origin === 'preset' ? 'pre' : '', b.origin === 'added' ? 'add' : '', open ? 'on' : '']
     .filter(Boolean)
     .join(' ')
-  const open_ = () => handlers.onOpen(b.id)
   return (
     <li className="speed-badge-item">
       <button
@@ -47,16 +46,7 @@ export const SpeedBadge = memo(function SpeedBadge({ game, badge: b, status, act
         data-condition={b.condition.kind}
         onClick={(e: MouseEvent) => {
           e.stopPropagation()
-          open_()
-        }}
-        onFocus={(e: FocusEvent) => {
-          if (e.target === e.currentTarget) open_()
-        }}
-        onPointerEnter={(e: PointerEvent) => {
-          if (e.pointerType === 'mouse') handlers.onHover(b.id)
-        }}
-        onPointerLeave={(e: PointerEvent) => {
-          if (e.pointerType === 'mouse') handlers.onHover(null)
+          handlers.onToggle(b.id)
         }}
         onKeyDown={(e) => handlers.onKey(b.id, e)}
       >

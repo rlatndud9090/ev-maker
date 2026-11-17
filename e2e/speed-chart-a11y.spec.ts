@@ -252,19 +252,40 @@ test.describe('스피드 차트 접근성', () => {
     )
     expect(baselineFocusable).toBe(false)
 
-    // Enter 열기 · Esc 닫기 (포커스는 배지에 남는다)
+    // 포커스·화살표 이동만으로는 상세가 열리지 않는다. Enter/Space로 여닫고 Esc로 닫는다(포커스는 배지에 남는다)
     const focused = page.locator('[data-testid="speed-badge"]:focus')
-    await page.keyboard.press('Escape')
+    const panel = page.getByTestId('speed-detail')
+    await expect(panel).toHaveCount(0)
     await expect(focused).toHaveAttribute('aria-expanded', 'false')
     await page.keyboard.press('Enter')
     await expect(focused).toHaveAttribute('aria-expanded', 'true')
-    await page.keyboard.press('Escape')
+    await expect(panel).toHaveAttribute('data-badge-id', (await focused.getAttribute('data-badge-id'))!)
+    await page.keyboard.press('Enter')
+    await expect(focused).toHaveAttribute('aria-expanded', 'false')
+    await expect(panel).toHaveCount(0)
+    await page.keyboard.press(' ')
+    await expect(focused).toHaveAttribute('aria-expanded', 'true')
+    await page.keyboard.press(' ')
     await expect(focused).toHaveAttribute('aria-expanded', 'false')
     await page.keyboard.press(' ')
     await expect(focused).toHaveAttribute('aria-expanded', 'true')
+    await page.keyboard.press('Escape')
+    await expect(focused).toHaveAttribute('aria-expanded', 'false')
+    await expect(panel).toHaveCount(0)
+    // 열린 채 화살표로 옮겨도 상세는 그 자리(전환은 Enter/Space)
+    await page.keyboard.press('Enter')
+    const openedId = (await focused.getAttribute('data-badge-id'))!
+    await page.keyboard.press('Home')
+    await expect(panel).toHaveAttribute('data-badge-id', openedId)
+    // 상세 안에서 Esc → 닫히고 포커스는 연 배지로
+    await tabUntil(page, 'speed-add-toggle')
+    await page.keyboard.press('Escape')
+    await expect(panel).toHaveCount(0)
+    expect((await activeBadge(page))?.id).toBe(openedId)
 
     // 키보드로 추가: 래더 배지 상세 → "다른 배분 추가" → 첫 선택 가능 묶음
     await page.keyboard.press('Home')
+    await page.keyboard.press('Enter')
     await expect(page.getByTestId('speed-detail')).toBeVisible()
     const live = liveRegion(page)
     const liveBefore = await live.textContent()
@@ -352,7 +373,7 @@ async function measureContrast(page: Page, selectors: { kind: string; sel: strin
 const TAG_SELECTORS = [
   { kind: '조건 태그', sel: '[data-testid="speed-badge"] .speed-tag' },
   { kind: '표지', sel: '[data-testid="speed-badge"] .speed-mark' },
-  { kind: '상태 알약', sel: '[data-testid="speed-detail"] .speed-pill' },
+  { kind: '상세 머리', sel: '[data-testid="speed-detail"] .speed-detail-title > b' },
 ]
 
 interface ItemMarkSample {
@@ -444,17 +465,17 @@ function summarizeContrast(samples: ContrastSample[]) {
 }
 
 for (const scheme of ['light', 'dark'] as const) {
-  test(`대비·겹침(${scheme}): 상태·조건 태그 글자 4.5:1 이상, 도구 아이콘은 받침 없이 포켓몬 이미지와 겹치지 않고 글자 오른쪽(스피드·공격·방어)`, async ({ page }) => {
+  test(`대비·겹침(${scheme}): 상태 면 위 상세 머리·조건 태그 글자 4.5:1 이상, 도구 아이콘은 받침 없이 포켓몬 이미지와 겹치지 않고 글자 오른쪽(스피드·공격·방어)`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme })
     await openSpeed(page)
-    // 추가 표지와 상세 상태 알약까지 화면에 올린다
+    // 추가 표지와 상세 머리(상태 색 면)까지 화면에 올린다
     await badges(page).first().click()
     const detail = page.getByTestId('speed-detail')
     await detail.getByTestId('speed-add-toggle').click()
     await detail.getByTestId('speed-add-option').and(page.locator(':enabled')).first().click()
     await expect(page.locator('[data-testid="speed-badge"][data-origin="added"]')).toHaveCount(1)
     const speed = await measureContrast(page, TAG_SELECTORS)
-    for (const kind of ['조건 태그', '상태 알약']) expect(speed.some((s) => s.kind === kind), `${kind} 표본`).toBe(true)
+    for (const kind of ['조건 태그', '상세 머리']) expect(speed.some((s) => s.kind === kind), `${kind} 표본`).toBe(true)
     await checkItemMarks(page, '스피드')
 
     // 방어 탭 화력 도구 줄(대도각참 생명의구슬), 공격 탭 반감열매 줄(대도각참 → 대쓰여너 마코열매)
