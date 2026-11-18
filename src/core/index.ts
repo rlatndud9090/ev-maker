@@ -25,7 +25,18 @@ export {
   type KoLabel,
   type KoSide,
 } from './bands'
-export { WEATHER_NEGATING_ABILITIES, finalSpeed, compareSpeed, minSpToOutspeed, checkSpeedSupport } from './speed'
+export {
+  ITEM_NEGATING_ABILITIES,
+  SPEED_FIELD_ABILITIES,
+  SPEED_ITEM_MODIFIERS,
+  speedItemApplies,
+  WEATHER_NEGATING_ABILITIES,
+  finalSpeed,
+  compareSpeed,
+  minSpToOutspeed,
+  checkSpeedSupport,
+  speedSupport,
+} from './speed'
 export { sweep, sweepDamage, sweepSpeed, judgeDamage, judgeSpeed, type CellJudgement, type DamageCategoryOptions, type DamageSweepTarget } from './sweep'
 export { HELD_ITEM_POWER_MOVES, moveStatRefs } from './moveRefs'
 export { DEFENDER_ABILITY_IGNORING, defenderAbilityFactor, effectivenessAgainst, type EffectivenessDefender } from './effectiveness'

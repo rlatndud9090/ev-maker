@@ -10,8 +10,8 @@ const MIN = DEFAULT_CRITERIA.rankShareMin
 const sd = (share: number) => ({ means: { kind: 'move' as const, id: 'swordsdance' }, owner: 'opponent' as const, share })
 
 describe('탭별 수단 주인', () => {
-  it('공격 탭 = 나만, 방어 탭 = 상대만(내 방어 랭크업은 후속 별도 UI), 스피드 탭 = 양쪽', () => {
-    expect(TAB_MEANS_OWNERS).toEqual({ attack: ['me'], defense: ['opponent'], speed: ['opponent', 'me'] })
+  it('공격 탭 = 나만, 방어 탭 = 상대만(내 방어 랭크업은 후속 별도 UI), 스피드 탭 = 상대만', () => {
+    expect(TAB_MEANS_OWNERS).toEqual({ attack: ['me'], defense: ['opponent'], speed: ['opponent'] })
   })
 })
 
@@ -25,6 +25,13 @@ describe('ladderMeans: 능동 수단만', () => {
 
   it('대도각참: 칼춤(12.93%)만, 오기(반응 특성)는 아니다', () => {
     expect(ladderMeans(entryOf('kingambit'), MIN)).toEqual([{ means: { kind: 'move', id: 'swordsdance' }, owner: 'opponent', share: 0.1293 }])
+  })
+
+  it('랭크 기준 경계: 점유율과 같으면 포함, 기준을 올리면 빠진다', () => {
+    const share = entryOf('volcarona').moves.shares.quiverdance
+    const has = (rankShareMin: number) => ladderMeans(entryOf('volcarona'), rankShareMin).some((c) => c.means.id === 'quiverdance')
+    expect(has(share)).toBe(true)
+    expect(has(share + 0.0001)).toBe(false)
   })
 })
 

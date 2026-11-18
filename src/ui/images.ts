@@ -21,5 +21,13 @@ const ITEM_BY_ID = indexByFileId(ITEMS)
 export const pokemonIconUrl = (speciesId: string | undefined): string | undefined =>
   speciesId === undefined ? undefined : POKEMON_BY_ID.get(speciesId)
 
-/** 도구 id → 아이콘 URL. 없으면 undefined(화면은 텍스트 배지). */
+/** 도구 id → 받은 아이콘 URL. 없으면 undefined. 화면 표시는 itemGlyphOf를 쓴다. */
 export const itemIconUrl = (itemId: string | undefined): string | undefined => (itemId === undefined ? undefined : ITEM_BY_ID.get(itemId))
+
+/** 도구 아이콘 그림: 받은 PNG 또는 공통 가방 표지(깨진 이미지·텍스트 대체 없음). */
+export type ItemGlyphSpec = { kind: 'img'; url: string } | { kind: 'bag' }
+
+export function itemGlyphOf(itemId: string): ItemGlyphSpec {
+  const url = ITEM_BY_ID.get(itemId)
+  return url === undefined ? { kind: 'bag' } : { kind: 'img', url }
+}

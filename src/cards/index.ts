@@ -46,3 +46,35 @@ export { assembleTab, createTabAssembler, type TabAssembler } from './assemble'
 export { buildTabView } from './batch'
 export { cellLabel } from './target'
 export { bucketKey, resultBucket, sortByResult, type ResultBucket, type ResultSection, type SortMode } from './resultSort'
+export {
+  buildSpeedChart,
+  checkSpeedAddition,
+  ladderBaseSet,
+  scarfConditionOf,
+  type AddCheck,
+  type NatureSign,
+  type SpeedBadge,
+  type SpeedBadgeOrigin,
+  type SpeedBundleOption,
+  type SpeedChartInput,
+  type SpeedChartModel,
+  type SpeedCondition,
+  type SpeedUnsupported,
+} from './speedChart'
+export {
+  bundleLabel,
+  bundleSpoken,
+  compareInRow,
+  focusAfterRemove,
+  ladderRows,
+  minSpToPass,
+  navigate,
+  speedBaseline,
+  statusOf,
+  visibleBadges,
+  type LadderRow,
+  type MinSp,
+  type NavKey,
+  type SpeedBaseline,
+  type SpeedStatus,
+} from './speedLadder'

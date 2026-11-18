@@ -1,6 +1,6 @@
 // 테스트 전용: PRD 수용 기준 고정 입력(m-c, Bo1 2026-10 기본 메타). 앱 코드에서 import하지 않는다.
 // 각 상수의 주장은 acceptance.test.ts가 코어 직접 호출로 확인한다(데이터가 바뀌면 거기서 먼저 깨진다).
-import type { PokemonSet, RollTier, SpTable, SpeedOrder } from '../../core'
+import type { PokemonSet, RollTier, SpTable } from '../../core'
 import type { MetaEntry } from '../../data/meta-schema'
 import type { StatId } from '../../data/schema'
 import { observedSpreadAssumption } from '../../meta'
@@ -50,7 +50,7 @@ export const EXAMPLE_SET: PokemonSet = set({
   moves: ['earthquake', 'dragonclaw', 'rockslide', 'stompingtantrum'],
 })
 
-/** 세 탭 모두 표시 카드가 생기는 근거(예시 세트 기준 판정이 0~32 안에서 바뀌는 매치업). */
+/** 공격·방어 탭 모두 표시 카드가 생기는 근거(예시 세트 기준 판정이 0~32 안에서 바뀌는 매치업). 방어 탭은 F3.passing을 쓴다. */
 export const F9 = {
   attack: {
     opponent: { id: 'charizardmegay', spread: 'quiet:32/0/2/32/0/0' },
@@ -59,14 +59,6 @@ export const F9 = {
       { sp: 14, from: 'mid-roll-ohko', to: 'high-roll-ohko' },
       { sp: 17, from: 'high-roll-ohko', to: 'guaranteed-ohko' },
     ] as Boundary<RollTier>[],
-  },
-  // 방어 탭은 F3.passing, 스피드 탭은 F4.myTailwind의 상대(기본 행 0~32 판정 변화)를 쓴다.
-  speed: {
-    opponent: { id: 'basculegion', spread: 'adamant:2/32/0/0/0/32' },
-    boundaries: [
-      { sp: 8, from: 'second', to: 'tie' },
-      { sp: 9, from: 'tie', to: 'first' },
-    ] as Boundary<SpeedOrder>[],
   },
 } as const
 
@@ -332,40 +324,6 @@ export const F3 = {
   },
 } as const
 
-// ---------- F4 스피드 탭(AC 7) ----------
-
-/** 내 세트 = EXAMPLE_SET(S32). 상대는 점유율 최대 S 묶음 대표. */
-export const F4 = {
-  mySet: EXAMPLE_SET,
-  /** 구애스카프 ≥ 10%·대표 도구 스카프 아님 → 스카프 행 있음(스카프를 씌우면 0~32 전부 후공이라 변화 없음 요약으로 간다) */
-  scarf: {
-    opponent: { id: 'basculegion', spread: 'adamant:2/32/0/0/0/32' },
-    scarfShare: 0.1464,
-    item: 'focussash',
-    scarfOrder: 'second' as SpeedOrder,
-  },
-  /** 구애스카프 < 10% → 스카프 행 없음(기본 행은 0~32 안에서 바뀐다) */
-  noScarf: {
-    opponent: { id: 'gholdengo', spread: 'timid:2/0/0/32/0/32' },
-    scarfShare: 0.0422,
-    boundaries: [
-      { sp: 27, from: 'second', to: 'tie' },
-      { sp: 28, from: 'tie', to: 'first' },
-    ] as Boundary<SpeedOrder>[],
-  },
-  /** 대표 도구가 스카프 → 스카프 아닌 행(도구 = 스카프를 뺀 최다 도구) */
-  nonScarf: {
-    opponent: { id: 'garchomp', spread: 'adamant:2/32/0/0/0/32' },
-    item: 'lifeorb',
-    baseOrder: 'second' as SpeedOrder,
-    boundaries: [{ sp: 32, from: 'second', to: 'tie' }] as Boundary<SpeedOrder>[],
-  },
-  /** 현재 S32에서 내 순풍을 켜면 후공 → 선공 */
-  myTailwind: { opponent: { id: 'sneasler', spread: 'adamant:2/32/0/0/0/32' }, off: 'second' as SpeedOrder, on: 'first' as SpeedOrder },
-  /** 현재 S32에서 상대 순풍을 켜면 선공 → 후공 */
-  opponentTailwind: { opponent: { id: 'basculegion', spread: 'adamant:2/32/0/0/0/32' }, off: 'first' as SpeedOrder, on: 'second' as SpeedOrder },
-} as const
-
 // ---------- F5 랭크 행(AC 8) ----------
 
 const kingambit = (ability: string, moves: string[]): PokemonSet =>
@@ -416,7 +374,7 @@ export const F7 = {
   mySet: {
     /** 모든 탭: SP 합계 70 */
     spTotal: { set: { ...EXAMPLE_SET, sp: sp({ hp: 2, atk: 32, def: 4, spe: 32 }) }, code: 'SP_TOTAL_EXCEEDED' },
-    /** 스피드 탭만: 퀵드로(행동 순서 특성) */
+    /** 스피드 비교만 거부: 퀵드로(행동 순서 특성). 공격·방어 탭은 정상 */
     speedOnly: {
       set: set({ species: 'slowbrogalar', ability: 'quickdraw', nature: 'hardy', sp: { hp: 32, atk: 32 }, moves: ['psychic'] }),
       field: 'ability',

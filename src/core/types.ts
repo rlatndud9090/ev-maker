@@ -131,6 +131,18 @@ export type DamageResult = DamageResultOk | DamageResultStatus | DamageResultImm
 
 export type SpeedOrder = 'first' | 'tie' | 'second'
 
+/** 스피드 계산·순서 비교를 거부하는 원인. unsupported = 미구현 스피드 보정, order = 스피드와 별개로 행동 순서를 바꿈 */
+export interface SpeedRejection {
+  kind: 'unsupported' | 'order'
+  field: 'ability' | 'item'
+  id: string
+}
+
+/** 특성 스피드 ×2가 발동하는 날씨 또는 필드 */
+export type SpeedFieldCondition =
+  | { kind: 'weather'; weather: Exclude<Weather, 'none'> }
+  | { kind: 'terrain'; terrain: Exclude<Terrain, 'none'> }
+
 export interface SpeedResult {
   attackerSpeed: number
   defenderSpeed: number

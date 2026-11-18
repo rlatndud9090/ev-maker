@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BASE_CONDITION_ID, DEFAULT_CRITERIA, DEFAULT_ROLL_STEPS, DEFAULT_TOP_N, itemKey, type AddedBundle, type PinnedBundle } from '../cards'
+import { BASE_CONDITION_ID, DEFAULT_CRITERIA, DEFAULT_ROLL_STEPS, DEFAULT_SPEED_FILTERS, DEFAULT_TOP_N, itemKey, type AddedBundle, type PinnedBundle, type SpeedAddedBundle } from '../cards'
 import type { StatId } from '../data/schema'
 import { realData } from '../cards/testing'
 import { toPokemonSet } from '../ui/setDraft'
@@ -11,14 +11,16 @@ const start = (): AppState => initialState('m-c')
 const run = (state: AppState, ...actions: AppAction[]): AppState => actions.reduce(reducer, state)
 
 describe('initialState', () => {
-  it('예시 세트·기본 메타·공격 탭·기본 기준·상위 30·세대 0', () => {
+  it('예시 세트·기본 메타·공격 탭·기본 기준·상위 DEFAULT_TOP_N·세대 0', () => {
     const s = start()
     expect(s.draft).toEqual(EXAMPLE_DRAFT)
     expect(s.meta).toBeNull()
     expect(s.tab).toBe('attack')
     expect(s.criteria).toEqual(DEFAULT_CRITERIA)
     expect(s.filters).toEqual({ topN: DEFAULT_TOP_N, selected: [] })
-    expect(s.conditions).toEqual({ myTailwind: false, opponentTailwind: false })
+    expect(s.speedChart).toEqual({ filters: DEFAULT_SPEED_FILTERS, myTailwind: false, added: [] })
+    expect(DEFAULT_SPEED_FILTERS).toEqual({ rank: true, scarf: true, tailwind: false, field: true })
+    expect([s.criteria.scarfShareMin, s.criteria.weatherShareMin]).toEqual([0.05, 0.1])
     expect(s.customTargets).toEqual([])
     expect(s.addedBundles).toEqual([])
     expect(s.pinnedBundles).toEqual([])
@@ -49,13 +51,13 @@ describe('reducer', () => {
     expect(cleared.generation).toBe(2)
   })
 
-  it('표시 기준 변경은 세대를 올리고 범위 밖 값은 무시한다', () => {
+  it('공격·방어 표시 기준 변경은 세대를 올리고 범위 밖 값은 무시한다', () => {
     const s = start()
     const next = reducer(s, { type: 'set-criteria', criteria: { bundleShareMin: 0.1 } })
     expect(next.criteria).toEqual({ ...DEFAULT_CRITERIA, bundleShareMin: 0.1 })
-    expect(Object.keys(next.criteria).sort()).toEqual(['berryShareMin', 'bundleShareMin', 'powerItemShareMin', 'rankShareMin', 'scarfShareMin'])
+    expect(Object.keys(next.criteria).sort()).toEqual(['berryShareMin', 'bundleShareMin', 'powerItemShareMin', 'rankShareMin', 'scarfShareMin', 'weatherShareMin'])
     expect(next.generation).toBe(1)
-    for (const criteria of [{ bundleShareMin: NaN }, { bundleShareMin: 1.01 }, { rankShareMin: 1.5 }, { scarfShareMin: -0.1 }, { berryShareMin: 2 }, { powerItemShareMin: -0.01 }, { powerItemShareMin: NaN }]) {
+    for (const criteria of [{ bundleShareMin: NaN }, { bundleShareMin: 1.01 }, { rankShareMin: 1.5 }, { scarfShareMin: -0.1 }, { weatherShareMin: 1.2 }, { berryShareMin: 2 }, { powerItemShareMin: -0.01 }, { powerItemShareMin: NaN }]) {
       expect(reducer(next, { type: 'set-criteria', criteria })).toBe(next)
     }
     expect(reducer(next, { type: 'set-criteria', criteria: { bundleShareMin: 0.1 } })).toBe(next)
@@ -118,12 +120,8 @@ describe('reducer', () => {
     expect(reducer(next, { type: 'set-sort', mode: 'usage' }).sortMode).toBe('usage')
   })
 
-  it('순풍·세트 초안 변경', () => {
+  it('세트 초안 변경', () => {
     const s = start()
-    const wind = reducer(s, { type: 'set-tailwind', side: 'opponent', on: true })
-    expect(wind.conditions).toEqual({ myTailwind: false, opponentTailwind: true })
-    expect(wind.generation).toBe(1)
-    expect(reducer(wind, { type: 'set-tailwind', side: 'opponent', on: true })).toBe(wind)
     expect(reducer(s, { type: 'set-draft', draft: { ...EXAMPLE_DRAFT } })).toBe(s)
     expect(reducer(s, { type: 'set-draft', draft: { ...EXAMPLE_DRAFT, nature: 'jolly' } }).generation).toBe(1)
   })
@@ -343,6 +341,67 @@ describe('상대 기술 추가·직접 선택 해제', () => {
     const { game, bo1 } = realData()
     const s = reducer(start(), addMove('kingambit', 'thunderpunch'))
     expect(toCardInput(s, game, bo1).addedMoves).toEqual([{ opponentId: 'kingambit', moveId: 'thunderpunch' }])
+  })
+})
+
+describe('스피드 차트 상태', () => {
+  const b = (opponentId: string, sp: number, nature: SpeedAddedBundle['nature'] = 'neutral'): SpeedAddedBundle => ({ opponentId, sp, nature })
+
+  it('스카프·날씨 특성 기준 변경은 세대를 올리지 않고 값만 바꾼다, 공격·방어 기준이 함께 바뀌면 올린다', () => {
+    const s = start()
+    const scarf = reducer(s, { type: 'set-criteria', criteria: { scarfShareMin: 0.2 } })
+    expect([scarf.criteria.scarfShareMin, scarf.generation]).toEqual([0.2, s.generation])
+    const weather = reducer(scarf, { type: 'set-criteria', criteria: { weatherShareMin: 0.3 } })
+    expect([weather.criteria.weatherShareMin, weather.generation]).toEqual([0.3, s.generation])
+    expect(reducer(weather, { type: 'set-criteria', criteria: { weatherShareMin: 0.3 } })).toBe(weather)
+    const mixed = reducer(weather, { type: 'set-criteria', criteria: { scarfShareMin: 0.1, rankShareMin: 0.2 } })
+    expect(mixed.generation).toBe(s.generation + 1)
+  })
+
+  it('조건 필터·내 순풍은 세대 그대로, 같은 값·잘못된 종류는 상태 그대로', () => {
+    const s = start()
+    const tw = reducer(s, { type: 'set-speed-filter', kind: 'tailwind', on: true })
+    expect(tw.speedChart.filters).toEqual({ ...DEFAULT_SPEED_FILTERS, tailwind: true })
+    expect(tw.generation).toBe(s.generation)
+    expect(reducer(tw, { type: 'set-speed-filter', kind: 'tailwind', on: true })).toBe(tw)
+    expect(reducer(s, { type: 'set-speed-filter', kind: 'bogus' as 'rank', on: false })).toBe(s)
+    const off = reducer(tw, { type: 'set-speed-filter', kind: 'rank', on: false })
+    expect(off.speedChart.filters.rank).toBe(false)
+    const mine = reducer(s, { type: 'set-my-tailwind', on: true })
+    expect([mine.speedChart.myTailwind, mine.generation]).toEqual([true, s.generation])
+    expect(reducer(mine, { type: 'set-my-tailwind', on: true })).toBe(mine)
+    expect(reducer(mine, { type: 'set-my-tailwind', on: false }).speedChart.myTailwind).toBe(false)
+  })
+
+  it('배분 추가·삭제: 세대 그대로, 추가 순 유지, 형식 밖·중복은 무시, 없는 것 삭제는 그대로', () => {
+    const s = start()
+    const one = reducer(s, { type: 'add-speed-bundle', bundle: b('garchomp', 20, 'plus'), spMax: 32 })
+    const two = reducer(one, { type: 'add-speed-bundle', bundle: b('garchomp', 20, 'neutral'), spMax: 32 })
+    expect(two.speedChart.added).toEqual([b('garchomp', 20, 'plus'), b('garchomp', 20, 'neutral')])
+    expect(two.generation).toBe(s.generation)
+    expect(reducer(two, { type: 'add-speed-bundle', bundle: b('garchomp', 20, 'plus'), spMax: 32 })).toBe(two)
+    for (const bad of [b('', 1), b('x', -1), b('x', 33), b('x', 1.5), b('x', NaN), b('x', 1, 'up' as 'plus')]) {
+      expect(reducer(two, { type: 'add-speed-bundle', bundle: bad, spMax: 32 })).toBe(two)
+    }
+    const removed = reducer(two, { type: 'remove-speed-bundle', bundle: b('garchomp', 20, 'plus') })
+    expect(removed.speedChart.added).toEqual([b('garchomp', 20, 'neutral')])
+    expect(removed.generation).toBe(s.generation)
+    expect(reducer(removed, { type: 'remove-speed-bundle', bundle: b('garchomp', 20, 'plus') })).toBe(removed)
+  })
+
+  it('공격·방어 직접 추가·고정과 섞이지 않는다', () => {
+    const s = start()
+    const atk: AddedBundle = { tab: 'attack', opponentId: 'garchomp', category: 'physical', sp: { hp: 32, def: 0 } }
+    const withAtk = reducer(s, { type: 'add-bundle', bundle: atk, keyStats: ['hp', 'def'], spMax: 32 })
+    const both = reducer(withAtk, { type: 'add-speed-bundle', bundle: b('garchomp', 32), spMax: 32 })
+    expect(both.addedBundles).toEqual(withAtk.addedBundles)
+    expect(both.pinnedBundles).toEqual(withAtk.pinnedBundles)
+    expect(both.generation).toBe(withAtk.generation)
+    const cleared = reducer(both, { type: 'remove-bundle', bundle: atk })
+    expect(cleared.speedChart.added).toEqual([b('garchomp', 32)])
+    expect(reducer(both, { type: 'remove-speed-bundle', bundle: b('garchomp', 32) }).addedBundles).toEqual(withAtk.addedBundles)
+    const { game, bo1 } = realData()
+    expect(toCardInput(both, game, bo1).addedBundles).toEqual([atk])
   })
 })
 

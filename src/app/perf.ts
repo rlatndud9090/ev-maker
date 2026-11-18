@@ -1,5 +1,5 @@
 // 브라우저 성능 측정 훅(window.__perf). 진입(제품·dev)과 무관하게 설치되고 e2e가 호출한다. 코어 공개 API를 그대로 부른다.
-// 제품 반응성은 여기 없고 e2e/product-perf.spec.ts가 페이지 계측으로 잰다.
+// 제품 반응성은 e2e/product-perf.spec.ts가 페이지 계측으로 잰다. 여기에는 스피드 차트가 남기는 표식 이름만 둔다.
 import type { Snapshot, StatTable } from '../data/schema'
 import { calcDamage, sweepDamage, type PokemonSet } from '../core'
 import { loadSnapshot } from '../data/loader'
@@ -8,6 +8,15 @@ import type { MetaSnapshot } from '../data/meta-schema'
 import { createMetaView, topAssumptions } from '../meta'
 
 const ZERO: StatTable = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }
+
+/** 스피드 차트 표식(performance.mark, detail.generation). 첫 표시 = 커밋 직후·그리기 전, 완료 = 그 다음 프레임 */
+export const SPEED_CHART_FIRST_MARK = 'speed-chart:first'
+export const SPEED_CHART_COMPLETE_MARK = 'speed-chart:complete'
+
+export function markSpeedChart(name: typeof SPEED_CHART_FIRST_MARK | typeof SPEED_CHART_COMPLETE_MARK, generation: number): void {
+  if (typeof performance === 'undefined' || typeof performance.mark !== 'function') return
+  performance.mark(name, { detail: { generation } })
+}
 
 export interface PerfStats {
   median: number

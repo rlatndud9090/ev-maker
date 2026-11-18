@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { TABS, assembleTab, buildTabView, computeRowTask, createLruCache, nextStage, pendingTasks, planTab, primaryCardIds, taskCardId, taskKey } from '../cards'
-import type { CardInput, JudgementCache, RowTaskResult, Tab, TabView } from '../cards'
+import { DAMAGE_TABS, TABS, assembleTab, buildTabView, computeRowTask, createLruCache, nextStage, pendingTasks, planTab, primaryCardIds, taskCardId, taskKey } from '../cards'
+import type { CardInput, DamageTab, JudgementCache, RowTaskResult, Tab, TabView } from '../cards'
 import { cardInput, realData } from '../cards/testing'
 import type { PokemonSet, SpTable } from '../core'
 import { createExecutor } from './executor'
@@ -80,7 +80,7 @@ function viewOf(s: TabViewState): TabView {
  * 실행기 최종 뷰 = batch 뷰(진행률 제외). 조각 경계에서 대기열을 다시 만들면 이미 변동으로 정해진 항목의 나머지 결정용 행(극단 필터 뒤 B/D 행 양 끝)을
  * 건너뛸 수 있어 끝난 작업 수만 batch 이하로 달라질 수 있다(판정·표시는 같다).
  */
-function expectSameAsBatch(s: TabViewState, input: CardInput, tab: Tab): void {
+function expectSameAsBatch(s: TabViewState, input: CardInput, tab: DamageTab): void {
   const got = viewOf(s)
   const want = buildTabView(input, tab)
   expect({ ...got, progress: null }).toEqual({ ...want, progress: null })
@@ -94,7 +94,7 @@ async function runToEnd(m: ReturnType<typeof manualScheduler>, onStep?: (n: numb
   return n
 }
 
-function runAll(input: CardInput, tab: Tab): { plan: ReturnType<typeof planTab>; results: Map<string, RowTaskResult> } {
+function runAll(input: CardInput, tab: DamageTab): { plan: ReturnType<typeof planTab>; results: Map<string, RowTaskResult> } {
   const plan = planTab(input, tab)
   const results = new Map<string, RowTaskResult>()
   for (;;) {
@@ -105,7 +105,7 @@ function runAll(input: CardInput, tab: Tab): { plan: ReturnType<typeof planTab>;
 }
 
 /** 1·2단계를 다 끝낸 뒤에도 3단계 작업이 남는지. */
-function hasStage3(input: CardInput, tab: Tab): boolean {
+function hasStage3(input: CardInput, tab: DamageTab): boolean {
   const plan = planTab(input, tab)
   const results = new Map<string, RowTaskResult>()
   for (;;) {
@@ -123,19 +123,60 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+describe('createExecutor: 스피드 탭은 계산하지 않는다', () => {
+  it('스피드 탭이 활성이어도 speed는 idle이고 공격·방어 탭은 끝까지 계산한다', async () => {
+    const m = manualScheduler()
+    executor = createExecutor({ scheduler: m.scheduler, sliceMs: 5, now: tickingClock() })
+    executor.setActiveTab('speed')
+    executor.setInput(inputA, 1)
+    await runToEnd(m, () => expect(executor!.getSnapshot().tabs.speed).toEqual({ kind: 'idle' }))
+    const snap = executor.getSnapshot()
+    expect(snap.activeTab).toBe('speed')
+    for (const tab of DAMAGE_TABS) expect(viewOf(snap.tabs[tab])).toEqual(buildTabView(inputA, tab))
+    expect(new Set(vi.mocked(computeRowTask).mock.calls.map(([p]) => p.tab as string))).toEqual(new Set(DAMAGE_TABS))
+  })
+
+  it('스피드 비교만 거부하는 내 세트(선제공격손톱)에서도 speed 스냅숏에 my-set-error가 없고 공격·방어는 ok', async () => {
+    const m = manualScheduler()
+    executor = createExecutor({ scheduler: m.scheduler, sliceMs: 5, now: tickingClock() })
+    executor.setInput(cardInput({ mySet: { ...garchomp, item: 'quickclaw' }, filters: { topN: 2, selected: [] } }), 1)
+    await runToEnd(m)
+    const snap = executor.getSnapshot()
+    expect(snap.tabs.speed).toEqual({ kind: 'idle' })
+    for (const tab of DAMAGE_TABS) expect(viewOf(snap.tabs[tab]).status).toEqual({ kind: 'ok' })
+  })
+
+  it('스피드 탭이 활성일 때 표시용 SP·기술 선택·메뉴는 공격·방어 뷰를 바꾸지 않는다', async () => {
+    const m = manualScheduler()
+    executor = createExecutor({ scheduler: m.scheduler, sliceMs: 5, now: tickingClock() })
+    executor.setInput(inputA, 1)
+    await runToEnd(m)
+    executor.setActiveTab('speed')
+    const before = executor.getSnapshot()
+    executor.setDisplaySp({ ...garchomp.sp, spe: 0 })
+    executor.setSelections('speed', new Map([['x', 'y']]))
+    executor.setMenuCards('speed', ['z'])
+    const after = executor.getSnapshot()
+    expect(after.tabs).toBe(before.tabs)
+    expect(m.waiting()).toBe(0)
+  })
+})
+
 describe('createExecutor', () => {
-  it('최종 뷰는 탭마다 buildTabView와 같고, 끝나면 더 양보하지 않는다', async () => {
+  it('최종 뷰는 공격·방어 탭마다 buildTabView와 같고 스피드 탭은 idle, 끝나면 더 양보하지 않는다', async () => {
     const m = manualScheduler()
     executor = createExecutor({ scheduler: m.scheduler, sliceMs: 5, now: tickingClock() })
     executor.setInput(inputA, 1)
     await runToEnd(m)
     const snap = executor.getSnapshot()
     expect(snap.generation).toBe(1)
-    for (const tab of TABS) {
+    for (const tab of DAMAGE_TABS) {
       const s = snap.tabs[tab]
       expect(s).toMatchObject({ kind: 'view', generation: 1, superseded: false })
       expect(viewOf(s)).toEqual(buildTabView(inputA, tab))
     }
+    expect(Object.keys(snap.tabs).sort()).toEqual([...TABS].sort())
+    expect(snap.tabs.speed).toEqual({ kind: 'idle' })
     expect(m.waiting()).toBe(0)
   })
 
@@ -150,8 +191,8 @@ describe('createExecutor', () => {
   })
 
   it('우선순위: 활성 탭 1·2단계 → 나머지 탭 1·2단계 → 3단계', async () => {
-    const active: Tab = 'attack'
-    const others = TABS.filter((t) => t !== active)
+    const active: DamageTab = 'attack'
+    const others = DAMAGE_TABS.filter((t) => t !== active)
     expect(hasStage3(inputA, active)).toBe(true)
     const m = manualScheduler()
     executor = createExecutor({ scheduler: m.scheduler, sliceMs: 1, now: tickingClock() })
@@ -163,7 +204,7 @@ describe('createExecutor', () => {
     }
     await runToEnd(m, (n) => {
       const snap = executor!.getSnapshot()
-      for (const tab of TABS) {
+      for (const tab of DAMAGE_TABS) {
         const s = snap.tabs[tab]
         if (s.kind !== 'view') continue
         note(`${tab}:view`, n)
@@ -209,20 +250,20 @@ describe('createExecutor', () => {
     executor.setInput(inputA, 1)
     await m.step()
     await m.step()
-    executor.setActiveTab('speed')
-    expect(executor.getSnapshot().activeTab).toBe('speed')
-    let speedFirst = false
+    executor.setActiveTab('defense')
+    expect(executor.getSnapshot().activeTab).toBe('defense')
+    let defenseFirst = false
     let decided = false
     await runToEnd(m, () => {
       if (decided) return
       const tabs = executor!.getSnapshot().tabs
-      const done = (t: Tab) => tabs[t].kind === 'view' && viewOf(tabs[t]).stage12Done
-      if (done('speed') || done('attack')) {
+      const done = (t: DamageTab) => tabs[t].kind === 'view' && viewOf(tabs[t]).stage12Done
+      if (done('defense') || done('attack')) {
         decided = true
-        speedFirst = done('speed') && !done('attack')
+        defenseFirst = done('defense') && !done('attack')
       }
     })
-    expect(speedFirst).toBe(true)
+    expect(defenseFirst).toBe(true)
   })
 
   it('시간 예산을 넘기면 조각을 끝내고 양보한다', async () => {
@@ -250,10 +291,11 @@ describe('createExecutor', () => {
     executor.setInput(inputB, 2)
     const snap = executor.getSnapshot()
     expect(snap.generation).toBe(2)
-    for (const tab of TABS) expect(snap.tabs[tab]).toMatchObject({ kind: 'view', generation: 1, superseded: true })
+    for (const tab of DAMAGE_TABS) expect(snap.tabs[tab]).toMatchObject({ kind: 'view', generation: 1, superseded: true })
+    expect(snap.tabs.speed).toEqual({ kind: 'idle' })
 
     const check = (s: ExecutorSnapshot) => {
-      for (const tab of TABS) {
+      for (const tab of DAMAGE_TABS) {
         const t = s.tabs[tab]
         if (t.kind !== 'view') throw new Error(`${tab}: ${t.kind}`)
         if (t.generation === 1) expect(t.superseded).toBe(true)
@@ -265,7 +307,7 @@ describe('createExecutor', () => {
       }
     }
     await runToEnd(m, () => check(executor!.getSnapshot()))
-    for (const tab of TABS) {
+    for (const tab of DAMAGE_TABS) {
       const s = executor.getSnapshot().tabs[tab]
       expect(s).toMatchObject({ generation: 2, superseded: false })
       expectSameAsBatch(s, inputB, tab)
@@ -279,7 +321,7 @@ describe('createExecutor', () => {
     for (let i = 0; i < 6; i++) await m.step()
     executor.setInput(inputB, 2)
     await runToEnd(m)
-    for (const tab of TABS) expectSameAsBatch(executor.getSnapshot().tabs[tab], inputB, tab)
+    for (const tab of DAMAGE_TABS) expectSameAsBatch(executor.getSnapshot().tabs[tab], inputB, tab)
   })
 
   it('같은 세대 setInput은 무시한다', async () => {
@@ -396,7 +438,8 @@ describe('createExecutor', () => {
     await runToEnd(m)
     const snap = executor.getSnapshot()
     expect(snap.tabs.attack).toEqual({ kind: 'fatal', message: 'boom', generation: 1 })
-    for (const tab of ['defense', 'speed'] as const) expect(viewOf(snap.tabs[tab])).toEqual(buildTabView(inputA, tab))
+    expect(viewOf(snap.tabs.defense)).toEqual(buildTabView(inputA, 'defense'))
+    expect(snap.tabs.speed).toEqual({ kind: 'idle' })
     expect(error).toHaveBeenCalledTimes(1)
   })
 
@@ -408,7 +451,7 @@ describe('createExecutor', () => {
     executor.setInput(inputA, 1)
     await new Promise((r) => setTimeout(r, 0))
     const snap = executor.getSnapshot()
-    expect(TABS.map((t) => snap.tabs[t].kind)).toEqual(['fatal', 'fatal', 'fatal'])
+    expect(TABS.map((t) => snap.tabs[t].kind)).toEqual(['fatal', 'fatal', 'idle'])
     expect(error).toHaveBeenCalledTimes(1)
   })
 

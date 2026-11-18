@@ -1,5 +1,5 @@
 // 포켓몬·도구 이미지 생성: npm run gen:images [-- --force] [--cache-dir <dir>]
-//   현재 스냅샷 로스터(src/data/regulations/*/data.json 종 + 메타 등장 종)의 Champions 메뉴 아이콘과 반감열매 Bag 스프라이트를
+//   현재 스냅샷 로스터(src/data/regulations/*/data.json 종 + 메타 등장 종)의 Champions 메뉴 아이콘과 도구(lib/images.mjs ITEM_ICON_IDS) Bag 스프라이트를
 //   1회 내려받아 src/assets/pokemon-icons/{speciesId}.png, src/assets/item-icons/{itemId}.png로 저장한다(앱은 같은 출처 정적 파일만 쓴다).
 //   --force      이미 받은 파일도 다시 받는다. 내용이 직전 매니페스트 sha256과 다르면 WARNING.
 //   --cache-dir  PokeAPI CSV 캐시(기본: <root>/.cache, gen:snapshot과 같은 sha256 검증).
@@ -7,7 +7,7 @@
 //   디스크 내용이 매니페스트 sha256과 다르면 다시 받는다. 그 밖은 건너뛴다.
 // 도구(Bulbagarden)는 Special:FilePath가 늘 최신 판이라 imageinfo API로 현재 판의 올린 시각·sha1을 받아 매니페스트에 기록하고,
 //   받은 바이트의 sha1이 그 판과 같은지 확인한다(판이 바뀌면 다시 받고 WARNING).
-// 매니페스트(manifest.json)는 디스크에 있는 파일만 기록한다. 실패·매핑 실패는 manifest.missing과 콘솔에 남는다.
+// 매니페스트(manifest.json)는 디스크에 있는 파일만 기록하고, ITEM_ICON_IDS 밖 도구 PNG는 지운다. 실패·매핑 실패는 manifest.missing과 콘솔에 남는다.
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -165,10 +165,15 @@ async function itemIcons(snapshots) {
     if (!en) missing.push({ id, reason: '스냅샷에 도구 없음' })
     else files[id] = bagSpriteFile(en)
   }
-  const infoJson = await fetchBytes(bulbaImageInfoUrl(Object.values(files)), { delay: 1500 })
-  if (!infoJson) throw new Error('Bulbagarden imageinfo API 404')
-  const info = parseBulbaImageInfo(JSON.parse(infoJson.toString('utf8')))
-  await sleep(1200)
+  const info = {}
+  const names = Object.values(files)
+  // imageinfo API는 한 번에 제목 50개까지
+  for (let i = 0; i < names.length; i += 50) {
+    const infoJson = await fetchBytes(bulbaImageInfoUrl(names.slice(i, i + 50)), { delay: 1500 })
+    if (!infoJson) throw new Error('Bulbagarden imageinfo API 404')
+    Object.assign(info, parseBulbaImageInfo(JSON.parse(infoJson.toString('utf8'))))
+    await sleep(1200)
+  }
   let downloaded = 0
   for (const [id, name] of Object.entries(files)) {
     const ii = info[name]
@@ -203,6 +208,9 @@ async function itemIcons(snapshots) {
     entries[id] = { file: name, uploadedAt: info[name].timestamp, sha1: info[name].sha1, sha256: sha256(png), ...pngSize(png) }
   }
   for (const m of missing) rmSync(join(ITEM_DIR, `${m.id}.png`), { force: true })
+  // 대상 목록에서 빠진 도구의 옛 PNG도 지운다(매니페스트·디스크가 ITEM_ICON_IDS와 같게)
+  const wanted = new Set(ITEM_ICON_IDS)
+  for (const f of readdirSync(ITEM_DIR)) if (f.endsWith('.png') && !wanted.has(f.slice(0, -4))) rmSync(join(ITEM_DIR, f))
   const manifest = {
     source: {
       site: 'Bulbagarden Archives',

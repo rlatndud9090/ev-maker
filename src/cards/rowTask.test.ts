@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { judgeDamage, judgeSpeed, moveStatRefs, sweepDamage, sweepSpeed } from '../core'
+import { judgeDamage, moveStatRefs, sweepDamage } from '../core'
 import type { PokemonSet, SpTable } from '../core'
 import { createLruCache } from './cache'
 import { judgementKey } from './key'
@@ -37,11 +37,9 @@ function attackPlan(over: Partial<RowSpec> = {}): TabPlan {
     ...over,
   }
   if (r.moveId !== undefined && game.data.moves[r.moveId]?.category !== 'Status') r.refs = moveStatRefs(game, r.moveId)
-  const sr: RowSpec = { ...row({ id: 's', cardId: 'A', order: 1, stat: 'spe' }), judge: 'speed', attacker: kingambit, defender: delphox }
-  delete sr.moveId
   return plan({
-    cards: [card({ id: 'A', rowIds: ['r', 's'], fixedIds: ['x'] })],
-    rows: [r, sr],
+    cards: [card({ id: 'A', rowIds: ['r'], fixedIds: ['x'] })],
+    rows: [r],
     fixed: [{ ...fixed('x', 'A'), attacker: kingambit, defender: delphox }],
     mySp: kingambit.sp,
   })
@@ -104,17 +102,6 @@ describe('computeRowTask: 코어 판정 그대로', () => {
     )
     const neutral = computeRowTask(p, { kind: 'variant', rowId: 'r', nature: 'neutral' })
     expect(neutral).toEqual({ ...computeRowTask(p, { kind: 'sweep', rowId: 'r', stage: 2 }), kind: 'variant', nature: 'neutral' })
-  })
-
-  it('speed: 양 끝·스윕이 judgeSpeed·sweepSpeed와 같고 내 쪽/상대 스피드를 담는다', () => {
-    const e = computeRowTask(p, { kind: 'ends', rowId: 's' })
-    if (e.kind !== 'ends') throw new Error(e.kind)
-    const hi = judgeSpeed(game, { ...kingambit, sp: { ...kingambit.sp, spe: 32 } }, delphox, {}, IGNORE)
-    expect(e.high).toEqual({ sp: 32, category: hi.category, mySpeed: hi.value.attackerSpeed, opponentSpeed: hi.value.defenderSpeed })
-    const s = computeRowTask(p, { kind: 'sweep', rowId: 's', stage: 3 })
-    if (s.kind !== 'sweep') throw new Error(s.kind)
-    const direct = sweepSpeed(game, kingambit, delphox, {}, OVER)
-    expect(s.cells.map((c) => c.category)).toEqual(direct.cells.map((c) => (c.kind === 'ok' ? c.category : 'x')))
   })
 
   it('extreme: 낮은 극단 = H0·B0·무보정, 높은 극단 = H32·B32·B 상승 성격의 방어측 판정', () => {
@@ -184,8 +171,6 @@ describe('캐시·judgementKey', () => {
   const tasks: RowTask[] = [
     { kind: 'ends', rowId: 'r' },
     { kind: 'sweep', rowId: 'r', stage: 2 },
-    { kind: 'ends', rowId: 's' },
-    { kind: 'sweep', rowId: 's', stage: 3 },
     { kind: 'fixed', fixedId: 'x' },
     { kind: 'variant', rowId: 'r', nature: 'plus' },
   ]
@@ -237,17 +222,5 @@ describe('캐시·judgementKey', () => {
     const e = defensePlan()
     e.filters.f.natures = { stat: 'def', neutral: 'hardy', plus: 'impish' }
     expect(judgementKey(e, { kind: 'extreme', filterId: 'f' })).not.toBe(judgementKey(d, { kind: 'extreme', filterId: 'f' }))
-    // 스피드 판정은 rollSteps와 무관
-    const s: RowTask = { kind: 'sweep', rowId: 's', stage: 2 }
-    expect(judgementKey({ ...base, rollSteps: 3 }, s)).toBe(judgementKey(base, s))
-  })
-
-  it('스피드 키는 양쪽 spe만 SP로 쓴다', () => {
-    const t: RowTask = { kind: 'sweep', rowId: 's', stage: 2 }
-    const p = attackPlan()
-    const q = { ...p, rows: { ...p.rows, s: { ...p.rows.s, defender: { ...delphox, sp: { ...delphox.sp, hp: 30, atk: 9 } } } } }
-    expect(judgementKey(q, t)).toBe(judgementKey(p, t))
-    const r = { ...p, rows: { ...p.rows, s: { ...p.rows.s, defender: { ...delphox, sp: { ...delphox.sp, spe: 9 } } } } }
-    expect(judgementKey(r, t)).not.toBe(judgementKey(p, t))
   })
 })

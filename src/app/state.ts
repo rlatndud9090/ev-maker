@@ -4,6 +4,8 @@ import type { MatchType } from '../data/meta-schema'
 import {
   DEFAULT_CRITERIA,
   DEFAULT_ROLL_STEPS,
+  DEFAULT_SPEED_FILTERS,
+  SPEED_CONDITION_KINDS,
   ROLL_STEPS,
   DEFAULT_TOP_N,
   MAX_CUSTOM_MOVES,
@@ -14,13 +16,15 @@ import {
   samePin,
   type AddedBundle,
   type AddedMove,
-  type CardConditions,
   type CardFilters,
   type CustomTarget,
   type DisplayCriteria,
   type PinnedBundle,
   type PresetEdit,
   type SortMode,
+  type SpeedAddedBundle,
+  type SpeedConditionFilters,
+  type SpeedConditionKind,
   type Tab,
 } from '../cards'
 import type { SetDraft } from '../ui/setDraft'
@@ -32,7 +36,11 @@ export interface AppState {
   meta: { match: MatchType; month: string } | null
   /** 확정된 내 세트 초안(status 'none'·boosts 0 고정) */
   draft: SetDraft
-  conditions: CardConditions
+  /**
+   * 스피드 차트 화면 상태(메모리에만 둔다). 계산 입력이 아니라 세대를 올리지 않는다(차트가 실행기 밖에서 동기로 계산한다).
+   * added = 사용자가 더한 래더 상대 배분(추가 순). 기존 addedBundles·pinnedBundles는 공격·방어 탭 전용이다
+   */
+  speedChart: { filters: SpeedConditionFilters; myTailwind: boolean; added: readonly SpeedAddedBundle[] }
   /** 고난수 기준 n(1~ROLL_STEPS−1 정수). 공격 "고난수 1타"·방어 "고난수 견딤"이 같은 값을 공유한다 */
   rollSteps: number
   tab: Tab
@@ -97,8 +105,19 @@ export type AppAction =
   | { type: 'set-meta'; meta: { match: MatchType; month: string } }
   | { type: 'set-tab'; tab: Tab }
   | { type: 'set-sort'; mode: SortMode }
-  | { type: 'set-tailwind'; side: 'me' | 'opponent'; on: boolean }
+  /** 공격·방어 계산에 쓰는 기준이 바뀔 때만 세대 +1(스카프·날씨 특성 기준은 스피드 차트만 쓴다). 0~1 밖 값이 있으면 무시 */
   | { type: 'set-criteria'; criteria: Partial<DisplayCriteria> }
+  /** 스피드 차트 조건 필터 켜기·끄기. 세대 그대로 */
+  | { type: 'set-speed-filter'; kind: SpeedConditionKind; on: boolean }
+  /** 스피드 차트 내 순풍. 세대 그대로 */
+  | { type: 'set-my-tailwind'; on: boolean }
+  /**
+   * 스피드 차트 배분 추가(맨 뒤). 형식(상대 id 비어 있지 않음, sp = 0~spMax 정수, 성격 부호)과 같은 (상대, SP, 부호) 중복만 거른다.
+   * 차트에 이미 있는 배분인지의 최종 판정은 cards checkSpeedAddition이 한다. 세대 그대로
+   */
+  | { type: 'add-speed-bundle'; bundle: SpeedAddedBundle; spMax: number }
+  /** 같은 (상대, SP, 부호)를 지운다. 없으면 무시. 세대 그대로 */
+  | { type: 'remove-speed-bundle'; bundle: SpeedAddedBundle }
   /** steps가 1~ROLL_STEPS−1 정수가 아니면 무시 */
   | { type: 'set-roll-steps'; steps: number }
   | { type: 'set-top-n'; topN: number }
@@ -142,7 +161,7 @@ export function initialState(regulation: string): AppState {
     regulation,
     meta: null,
     draft: EXAMPLE_DRAFT,
-    conditions: { myTailwind: false, opponentTailwind: false },
+    speedChart: { filters: DEFAULT_SPEED_FILTERS, myTailwind: false, added: [] },
     rollSteps: DEFAULT_ROLL_STEPS,
     tab: 'attack',
     criteria: { ...DEFAULT_CRITERIA },
@@ -175,9 +194,35 @@ function validCriteria(c: Partial<DisplayCriteria>): boolean {
   if (c.bundleShareMin !== undefined && !isRatio(c.bundleShareMin)) return false
   if (c.rankShareMin !== undefined && !isRatio(c.rankShareMin)) return false
   if (c.scarfShareMin !== undefined && !isRatio(c.scarfShareMin)) return false
+  if (c.weatherShareMin !== undefined && !isRatio(c.weatherShareMin)) return false
   if (c.berryShareMin !== undefined && !isRatio(c.berryShareMin)) return false
   if (c.powerItemShareMin !== undefined && !isRatio(c.powerItemShareMin)) return false
   return true
+}
+
+/** 공격·방어 계획이 읽는 기준(planTab). 나머지 기준은 스피드 차트만 쓴다 */
+const DAMAGE_CRITERIA_KEYS = ['bundleShareMin', 'rankShareMin', 'berryShareMin', 'powerItemShareMin'] as const satisfies readonly (keyof DisplayCriteria)[]
+
+function setCriteria(state: AppState, patch: Partial<DisplayCriteria>): AppState {
+  const criteria = { ...state.criteria, ...patch }
+  if (same(criteria, state.criteria)) return state
+  const damage = DAMAGE_CRITERIA_KEYS.some((k) => criteria[k] !== state.criteria[k])
+  return { ...state, criteria, generation: damage ? state.generation + 1 : state.generation }
+}
+
+const SPEED_NATURE_SIGNS: readonly SpeedAddedBundle['nature'][] = ['plus', 'neutral', 'minus']
+const sameSpeedBundle = (a: SpeedAddedBundle, b: SpeedAddedBundle): boolean => a.opponentId === b.opponentId && a.sp === b.sp && a.nature === b.nature
+const validSpeedBundle = (b: SpeedAddedBundle, spMax: number): boolean =>
+  typeof b.opponentId === 'string' &&
+  b.opponentId !== '' &&
+  Number.isInteger(b.sp) &&
+  b.sp >= 0 &&
+  b.sp <= spMax &&
+  SPEED_NATURE_SIGNS.includes(b.nature)
+
+function updateSpeedChart(state: AppState, patch: Partial<AppState['speedChart']>): AppState {
+  const next = { ...state.speedChart, ...patch }
+  return same(next, state.speedChart) ? state : { ...state, speedChart: next }
 }
 
 const validMoves = (moves: readonly string[]): boolean =>
@@ -255,13 +300,24 @@ export function reducer(state: AppState, action: AppAction): AppState {
     case 'set-sort':
       if (action.mode !== 'usage' && action.mode !== 'result') return state
       return state.sortMode === action.mode ? state : { ...state, sortMode: action.mode }
-    case 'set-tailwind':
-      return bump(state, {
-        conditions: action.side === 'me' ? { ...state.conditions, myTailwind: action.on } : { ...state.conditions, opponentTailwind: action.on },
-      })
     case 'set-criteria':
       if (!validCriteria(action.criteria)) return state
-      return bump(state, { criteria: { ...state.criteria, ...action.criteria } })
+      return setCriteria(state, action.criteria)
+    case 'set-speed-filter':
+      if (!SPEED_CONDITION_KINDS.includes(action.kind) || typeof action.on !== 'boolean') return state
+      return updateSpeedChart(state, { filters: { ...state.speedChart.filters, [action.kind]: action.on } })
+    case 'set-my-tailwind':
+      if (typeof action.on !== 'boolean') return state
+      return updateSpeedChart(state, { myTailwind: action.on })
+    case 'add-speed-bundle': {
+      const b = action.bundle
+      if (!validSpeedBundle(b, action.spMax) || state.speedChart.added.some((x) => sameSpeedBundle(x, b))) return state
+      return updateSpeedChart(state, { added: [...state.speedChart.added, { opponentId: b.opponentId, sp: b.sp, nature: b.nature }] })
+    }
+    case 'remove-speed-bundle': {
+      const added = state.speedChart.added.filter((x) => !sameSpeedBundle(x, action.bundle))
+      return added.length === state.speedChart.added.length ? state : updateSpeedChart(state, { added })
+    }
     case 'set-roll-steps':
       if (!isRollSteps(action.steps)) return state
       return bump(state, { rollSteps: action.steps })

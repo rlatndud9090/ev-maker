@@ -1,0 +1,370 @@
+/* 스피드 차트: 상태 면·태그 글자 대비는 라이트·다크 모두 4.5:1 이상(면 위 글자는 --speed-ink) */
+:root {
+  --speed-win: #d1ebd6;
+  --speed-tie: #f4e7b0;
+  --speed-lose: #f2ccc8;
+  --speed-neu: #ececef;
+  --speed-ink: #2b2b30;
+  --speed-ink-muted: #4a4a52;
+  --speed-band: #e3dcf5;
+  --speed-band-ink: #1e1633;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --speed-win: #24442d;
+    --speed-tie: #4a4122;
+    --speed-lose: #4d2926;
+    --speed-neu: #2c2c31;
+    --speed-ink: #f1f1f3;
+    --speed-ink-muted: #d0d0d6;
+    --speed-band: #3a3158;
+    --speed-band-ink: #f1ecff;
+  }
+}
+
+.speed-tab {
+  min-height: 14rem;
+}
+
+.speed-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem 0;
+}
+
+.speed-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+}
+
+.speed-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.speed-chips-label {
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
+.product .speed-chip {
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  background: var(--card);
+}
+
+.product .speed-chip[aria-pressed='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text-strong);
+}
+
+.speed-chip-sep {
+  width: 1px;
+  height: 1.2rem;
+  background: var(--border);
+}
+
+.speed-reject,
+.speed-empty {
+  margin: 0.5rem 0.75rem 0;
+}
+
+.speed-frame {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* 세로 여백은 프레임 padding이 아니라 내용 쪽에 둔다: 띠가 프레임 끝에 틈 없이 붙어 뒤로 지나가는 줄이 비치지 않게 */
+  padding: 0 0.75rem;
+  /* 기준선 띠 높이(SpeedChart가 --speed-band-h로 잰다): 포커스·펼친 상세가 끝에 붙은 띠 뒤로 숨지 않게 한다 */
+  scroll-padding-block: calc(var(--speed-band-h, 2.4rem) + 0.25rem);
+}
+
+.speed-frame > :first-child {
+  margin-top: 0.5rem;
+}
+
+.speed-frame > :last-child {
+  margin-bottom: 0.75rem;
+}
+
+.speed-rows,
+.speed-badges,
+.speed-unsupported ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.speed-row {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  align-items: start;
+  gap: 0.25rem 0.4rem;
+  padding-block: 0.2rem;
+}
+
+.speed-row-speed {
+  font-weight: 700;
+  color: var(--text-strong);
+  text-align: right;
+  padding-top: 0.35rem;
+}
+
+.speed-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.speed-baseline {
+  position: sticky;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 8px;
+  background: var(--speed-band);
+  color: var(--speed-band-ink);
+  font-weight: 600;
+  box-shadow: var(--shadow-card);
+}
+
+.speed-detail {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+}
+
+.speed-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 8px;
+  color: var(--speed-ink);
+  background: var(--speed-neu);
+}
+
+/* 추월 상태는 머리 색(배지와 같은 면)과 접근 이름으로만 보인다 */
+.speed-detail-head.win {
+  background: var(--speed-win);
+}
+
+.speed-detail-head.tie {
+  background: var(--speed-tie);
+}
+
+.speed-detail-head.lose {
+  background: var(--speed-lose);
+}
+
+.speed-detail-title {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.speed-detail-goal small {
+  display: block;
+  color: var(--muted);
+}
+
+.speed-add-list {
+  list-style: none;
+  margin: 0 0 0.4rem;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.speed-add-custom,
+.speed-preset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.5rem;
+}
+
+/* 직접 입력: SP 칸은 두 자리 폭, 성격 보정은 내 포켓몬 SP 행과 같은 ▲▼ 토글 */
+.speed-add-custom {
+  align-items: center;
+}
+
+.speed-add-custom .num-field.sp-field {
+  width: auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.speed-add-custom .num-field.sp-field input {
+  width: 3.2rem;
+}
+
+.speed-add-custom .nat-btn {
+  padding-block: 0.25rem;
+}
+
+.speed-badge-item {
+  list-style: none;
+}
+
+.product .speed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  padding: 0.2rem 0.5rem 0.2rem 0.25rem;
+  border-radius: 8px;
+  color: var(--speed-ink);
+  background: var(--speed-neu);
+}
+
+.speed-badge.win {
+  background: var(--speed-win);
+}
+
+.speed-badge.tie {
+  background: var(--speed-tie);
+}
+
+.speed-badge.lose {
+  background: var(--speed-lose);
+}
+
+.speed-badge.pre {
+  border-style: dashed;
+  border-color: var(--control-border);
+}
+
+.speed-badge.add {
+  border-color: var(--accent);
+}
+
+.speed-badge.on {
+  outline: 2px solid var(--accent);
+}
+
+.speed-badge-text {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.speed-tag,
+.speed-mark {
+  font-style: normal;
+  font-size: 0.78em;
+  padding: 0 0.35rem;
+  border-radius: 4px;
+  color: var(--speed-ink);
+  background: rgba(127, 127, 140, 0.22);
+}
+
+.speed-unsupported {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.speed-unsupported h3 {
+  margin: 0 0 0.3rem;
+  font-size: 0.95em;
+}
+
+@media (max-width: 30rem) {
+  .speed-row {
+    grid-template-columns: 2.5rem minmax(0, 1fr);
+  }
+}
+
+/* "포켓몬 추가"는 DOM에서 차트 머리보다 앞(칩에서 Tab 한 번이 배지로 이어지게)이고 화면에서는 오른쪽 끝 */
+.speed-top .custom-add-btn {
+  order: 2;
+  margin-left: auto;
+}
+
+/* 기준선 띠 = 내 실수치 줄: 라벨 · 동속 배지가 한 흐름(서로 가리지 않음) */
+.speed-baseline {
+  flex-wrap: wrap;
+  gap: 0.3rem 0.6rem;
+}
+
+.speed-baseline-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.speed-baseline-bundle {
+  font-weight: 600;
+}
+
+.speed-band-detail {
+  display: block;
+}
+
+/* 목록 밖 타겟: 상태 면 위에 빗금 무늬를 겹쳐 래더 배지와 배경으로 구분(R10) */
+.product .speed-badge.pre {
+  background-image: repeating-linear-gradient(135deg, rgba(127, 127, 140, 0.18) 0 4px, transparent 4px 8px);
+}
+
+.speed-unsupported li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* 상세 머리 배분 줄: 배분 표기 오른쪽 도구 아이콘 */
+.speed-detail-bundle {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 0.3rem;
+}
+
+/* "다른 배분 추가" 묶음 목록: 배분 표기 · 점유율 · 실수치 · 상태를 칸으로 나눠 숫자가 붙어 읽히지 않게 */
+.product .speed-add-op {
+  display: grid;
+  grid-template-columns: 3.5rem 4rem 2.5rem auto;
+  align-items: baseline;
+  column-gap: 0.75rem;
+  width: 100%;
+  max-width: 22rem;
+  text-align: left;
+}
+
+.speed-add-op em {
+  font-style: normal;
+}
+
+/* 데스크톱: 상세는 배지 칸 시작선에 맞춰 들여 쓴다(400px은 들여쓰기 없음, ADR 결정 1) */
+@media (min-width: 60rem) {
+  .speed-row > .speed-detail {
+    grid-column: 2 / -1;
+  }
+  .speed-band-detail {
+    padding-left: calc(3rem + 0.4rem);
+  }
+}

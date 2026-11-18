@@ -12,12 +12,14 @@ import { Errors } from '../ui/Errors'
 import { Licenses } from '../ui/Licenses'
 import { toPokemonSet } from '../ui/setDraft'
 import { toCardInput } from './input'
+import { createDisplaySpStore } from './displaySp'
 import { initialState, moveSelections, reducer } from './state'
 import { useExecutor } from './useExecutor'
 import { CustomTargetPanel } from './components/CustomTargetPanel'
 import { MySetPanel } from './components/MySetPanel'
 import { ResultBox } from './components/ResultBox'
 import { ResultPanel } from './components/ResultPanel'
+import { SpeedTab } from './components/SpeedTab'
 import { Toolbar } from './components/Toolbar'
 
 interface Boot {
@@ -159,7 +161,14 @@ function Workspace({ boot }: { boot: Boot }) {
     for (const t of TABS) executor.setSelections(t, moveSelections(state.moveChoices, t))
   }, [executor, state.moveChoices])
 
-  const onDisplaySp = useCallback((sp: SpTable | null) => executor.setDisplaySp(sp), [executor])
+  const [displaySp] = useState(createDisplaySpStore)
+  const onDisplaySp = useCallback(
+    (sp: SpTable | null) => {
+      displaySp.set(sp)
+      executor.setDisplaySp(sp)
+    },
+    [executor, displaySp],
+  )
   // 기술 선택 목록을 연 줄의 항목 변동 판정도 계산 입력이 아니라 수요다.
   const onMenuCards = useCallback((t: Tab, cardIds: readonly string[]) => executor.setMenuCards(t, cardIds), [executor])
 
@@ -213,6 +222,38 @@ function Workspace({ boot }: { boot: Boot }) {
           panelId={panelId}
         />
         {metaError && <Errors title="메타 통계를 불러오지 못했습니다" lines={metaError} />}
+        {tab === 'speed' ? (
+          <SpeedTab
+            game={game}
+            view={meta.view}
+            state={state}
+            mySet={mySet}
+            displaySp={displaySp}
+            dispatch={dispatch}
+            tabId={tabIdOf(tab)}
+            panelId={panelId}
+            generation={generation}
+            customOpen={customOpen}
+            onToggleCustom={() => (customOpen ? closeCustom() : setCustomOpen(true))}
+            customButtonRef={customButton}
+            customPanelId={customPanelId}
+            customPanel={
+              customOpen && (
+                <CustomTargetPanel
+                  id={customPanelId}
+                  game={game}
+                  view={meta.view}
+                  customTargets={customTargets}
+                  onCancel={closeCustom}
+                  onAdd={(rosterId, moves) => {
+                    dispatch({ type: 'add-custom-target', rosterId, moves })
+                    closeCustom()
+                  }}
+                />
+              )
+            }
+          />
+        ) : (
         <ResultBox hold={recomputing} holdKey={tab}>
           <ResultPanel
             game={game}
@@ -250,6 +291,7 @@ function Workspace({ boot }: { boot: Boot }) {
             }
           />
         </ResultBox>
+        )}
       </div>
     </div>
   )

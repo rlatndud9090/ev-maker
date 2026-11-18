@@ -1,19 +1,19 @@
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
-import { addedBundleCardId, defaultOption, isPinned, pinOf, type AddedBundle, type CardGroup, type CardView, type CustomTarget, type GroupItem, type RowView, type Tab } from '../../cards'
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type Dispatch, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { addedBundleCardId, defaultOption, isDamageTab, isPinned, pinOf, type AddedBundle, type CardGroup, type CardView, type CustomTarget, type GroupItem, type RowView, type Tab } from '../../cards'
 import type { Snapshot, StatId } from '../../data/schema'
 import { namesOf } from '../../ui/names'
-import { itemIconUrl } from '../../ui/images'
-import { STAT_SHORT, bundleText, categoryBadge, fixedText, koBadge, orderBadge, shareText, type KoBadge } from '../../ui/format'
+import { STAT_SHORT, bundleText, categoryBadge, fixedText, koBadge, shareText, type KoBadge } from '../../ui/format'
 import { STAT_LABEL } from '../../ui/labels'
 import { koReason } from '../../ui/koErrors'
 import type { AppAction } from '../state'
 import { CustomEditor } from './CustomEditor'
-import { PairDetail, RowDetail } from './RowDetail'
+import { DetailItem, PairDetail, RowDetail } from './RowDetail'
+import { ItemMark } from './ItemMark'
 import { PokemonIcon } from './PokemonIcon'
 import { MoveLabel, VariableTag } from './MoveLabel'
 import { MoveMenu, type MoveAdding } from './MoveMenu'
 import { Caret } from './Caret'
-import { itemKeyLabel, moveNoticeText, rowTitle } from './text'
+import { cardItemOf, moveNoticeText, rowTitle } from './text'
 
 interface Props {
   game: Snapshot
@@ -32,7 +32,7 @@ interface Props {
   dispatch: Dispatch<AppAction>
   /** 계산결과순일 때 이 행이 든 그룹 제목 id(행 토글 버튼 설명에 붙여 소속을 전한다) */
   groupLabelId?: string
-  /** 포켓몬 한 줄의 기술 선택 항목(공격·방어 탭, groupItems). 스피드 탭은 빈 배열 */
+  /** 포켓몬 한 줄의 기술 선택 항목(groupItems) */
   items: readonly GroupItem[]
   /** 항목을 직접 고름(다른 분류 항목이면 그 분류 기본 배분으로 전환까지) */
   onChooseItem: (group: CardGroup, card: CardView, item: GroupItem) => void
@@ -51,21 +51,14 @@ function badgeRow(card: CardView): RowView | undefined {
 }
 
 /**
- * 공격·방어는 1타 확률 결과 배지, 스피드는 행동 순서 배지. 기준 칸 = 그 행의 현재 칸(스윕 행), 내 SP 무관 판정 칸(고정 판정 행),
+ * 1타 확률 결과 배지. 기준 칸 = 그 행의 현재 칸(스윕 행), 내 SP 무관 판정 칸(고정 판정 행),
  * 칸이 없는 극단 필터 행은 범주만(확률 없음).
  */
-function resultBadge(tab: Tab, card: CardView, rollSteps: number): { kind: 'ko' | 'order'; badge: KoBadge } | undefined {
+function resultBadge(tab: Tab, card: CardView, rollSteps: number): KoBadge | undefined {
   const row = badgeRow(card)
-  if (row === undefined) return undefined
+  if (row === undefined || !isDamageTab(tab)) return undefined
   const cell = row.cells.find((c) => c.sp === row.current.sp) ?? row.fixedCell
-  const category = row.current.category
-  const badge =
-    tab === 'speed'
-      ? orderBadge(cell ?? (category === undefined ? undefined : { category }))
-      : cell !== undefined
-        ? koBadge(tab, cell, rollSteps)
-        : categoryBadge(category)
-  return badge === undefined ? undefined : { kind: tab === 'speed' ? 'order' : 'ko', badge }
+  return cell !== undefined ? koBadge(tab, cell, rollSteps) : categoryBadge(row.current.category)
 }
 
 const isUser = (card: CardView): boolean => card.bundle.userAdded !== undefined
@@ -93,7 +86,7 @@ function BundleLabel({ card, pinned }: { card: CardView; pinned: boolean }) {
 }
 
 /**
- * 배분 선택지 한 항목의 내용: 배분·비중 라벨 + 결과 배지 + 변동 가능 표시(드롭다운·상세 왼쪽 목록 공용).
+ * 배분 선택지 한 항목의 내용: 배분·비중 라벨 + 결과 배지 + 변동 가능 표시.
  * 같은 목록에 변동 가능 항목이 하나라도 있으면 변동 표시가 없는 항목에도 같은 폭 빈 칸을 둬 결과 배지 오른쪽 끝이 세로로 맞는다.
  */
 function BundleOptionContent({ tab, option, rollSteps, pinned, reserveVariable }: { tab: Tab; option: CardView; rollSteps: number; pinned: boolean; reserveVariable: boolean }) {
@@ -105,7 +98,7 @@ function BundleOptionContent({ tab, option, rollSteps, pinned, reserveVariable }
       </span>
       <span className="bundle-opt-result">
         {option.state === 'error' && <span className="badge-error">계산 불가</span>}
-        {r !== undefined && <span className={`ko-badge ko-${r.badge.tone} ko-small`}>{r.badge.label}</span>}
+        {r !== undefined && <span className={`ko-badge ko-${r.tone} ko-small`}>{r.label}</span>}
         {option.variable ? (
           <VariableTag compact testId="variable-mark" />
         ) : (
@@ -167,13 +160,6 @@ function Headline({ game, tab, card, badge }: { game: Snapshot; tab: Tab; card: 
   return (
     <span className="headline row-headline">
       <span className="hl-move">
-        {row.basis !== undefined && row.basis.kind !== 'rank' && (
-          <>
-            <span className="basis-tag" data-testid="headline-basis" data-row-kind={row.kind}>
-              {itemKeyLabel(game, row.basis.item)}
-            </span>{' '}
-          </>
-        )}
         <MoveLabel game={game} tab={tab} row={row} />
       </span>
     </span>
@@ -193,28 +179,6 @@ function SpeciesName({ label }: { label: string }) {
 }
 
 const stop = (e: MouseEvent) => e.stopPropagation()
-
-/** 도구 한국어 이름(스냅샷에 없으면 id) */
-const itemName = (game: Snapshot, item: string): string => game.data.items[item]?.name.ko ?? item
-
-/**
- * 도구 변형 행 이름 옆 배지: 도구 이미지(Champions 가방 스프라이트, 툴팁 = 도구 이름). 이미지가 없으면 열매 이름에서 "열매"를 뗀 "(마코)".
- * 보이는 그림·글자는 스크린 리더에서 숨기고 "마코열매 지닌 경우"로 읽힌다(점유율은 적지 않는다, 사용자 결정 2026-11-14). data-item-id는 도구 id.
- */
-function ItemVariantBadge({ game, item }: { game: Snapshot; item: string }) {
-  const name = itemName(game, item)
-  const url = itemIconUrl(item)
-  return (
-    <span className={`berry-badge${url === undefined ? '' : ' berry-badge-img'}`} data-testid="berry-badge" data-item-id={item} title={url === undefined ? `${name} 지닌 경우` : name}>
-      {url === undefined ? (
-        <span aria-hidden="true">({name.replace(/열매$/, '')})</span>
-      ) : (
-        <img className="item-icon" src={url} alt="" width={22} height={22} loading="lazy" decoding="async" draggable={false} data-item-icon={item} />
-      )}
-      <span className="sr-only">{name} 지닌 경우</span>
-    </span>
-  )
-}
 
 const SP_TEXT = /^\d+$/
 
@@ -299,7 +263,7 @@ function rememberFocusReturn(key: string) {
 type ActionProps = Pick<Props, 'tab' | 'group' | 'card' | 'onSelect' | 'dispatch'>
 
 /**
- * 배분 직접 추가·고정 토글(드롭다운·스피드 탭 상세 목록 공용). 추가: 같은 키 배분이 이미 선택지면 그걸 고르고(관측 배분이면 고정한다), 아니면 상태에
+ * 배분 직접 추가·고정 토글. 추가: 같은 키 배분이 이미 선택지면 그걸 고르고(관측 배분이면 고정한다), 아니면 상태에
  * 추가(추가와 함께 고정)하고 그 카드를 미리 고른다(계산이 끝나면 맨 위에 보인다). 고정 토글: 관측 배분은 고정만 바꾸고(재계산 없음),
  * 직접 추가 배분의 고정 해제는 삭제다. 추가·삭제 뒤 재계산 중 포커스를 잃으면 그 행의 배분 버튼으로 돌려준다.
  */
@@ -517,127 +481,6 @@ function bundleAria(card: CardView, pinned: boolean): string {
   return bundle.share !== undefined ? `${stats} ${shareText(bundle.share)}` : stats
 }
 
-interface ListProps extends PickerProps {
-  /** 항목 id(오른쪽 판정 영역이 선택 항목을 이름으로 가리킨다) */
-  optionId: (i: number) => string
-}
-
-/**
- * 스피드 탭 상세 왼쪽 열: 드롭다운과 같은 배분 목록을 세로로 고정(래더는 맨 위 직접 추가 폼, 항목마다 오른쪽 끝 핀).
- * 선택은 radiogroup(↑↓·←→ 이동 즉시 선택, Home/End). 핀은 선택 항목 것만 Tab 순서(radio 다음)에 들어오고, 고정 항목 radio에서
- * Delete·Backspace 키도 고정 해제다(직접 추가 배분은 삭제). 고정 항목은 다른 면 색.
- */
-function BundleList({ tab, group, card, rollSteps, onSelect, dispatch, spMax, optionId, unpinHintId }: ListProps & { unpinHintId: string }) {
-  const listRef = useRef<HTMLDivElement>(null)
-  const { add, togglePin } = bundleActions({ tab, group, card, onSelect, dispatch }, spMax)
-  const anySelected = group.options.some((o) => o.id === card.id)
-  const ladder = card.opponent.source === 'ladder'
-  const reserveVariable = group.options.some((o) => o.variable)
-
-  useEffect(() => {
-    // 선택 항목이 목록 스크롤 밖이면 보이게 옮긴다(목록 박스 안에서만, 페이지는 건드리지 않는다).
-    const list = listRef.current
-    const item = list?.querySelector<HTMLElement>('[aria-checked="true"]')
-    if (!list || !item) return
-    const top = item.offsetTop - list.offsetTop
-    if (top < list.scrollTop) list.scrollTop = top
-    else if (top + item.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = top + item.offsetHeight - list.clientHeight
-  }, [card.id])
-
-  const focusOption = (id: string) =>
-    requestAnimationFrame(() => listRef.current?.querySelector<HTMLElement>(`[role="radio"][data-card-id="${CSS.escape(id)}"]`)?.focus())
-
-  const onKey = (e: KeyboardEvent) => {
-    const focused = e.target as HTMLElement
-    if (focused.getAttribute('role') !== 'radio') return
-    const n = group.options.length
-    const at = group.options.findIndex((o) => o.id === focused.dataset.cardId)
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      const o = group.options[at]
-      if (o === undefined || !isPinned(group, o)) return
-      e.preventDefault()
-      if (!togglePin(o)) focusOption(o.id)
-      return
-    }
-    let to: number
-    if (e.key === 'ArrowDown' || e.key === 'ArrowRight') to = (at + 1) % n
-    else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') to = (at - 1 + n) % n
-    else if (e.key === 'Home') to = 0
-    else if (e.key === 'End') to = n - 1
-    else return
-    e.preventDefault()
-    const next = group.options[to]
-    onSelect(group.key, next.id)
-    focusOption(next.id)
-  }
-
-  return (
-    <div className="bundle-side" data-testid="bundle-list" ref={listRef}>
-      {spMax !== undefined && card.bundle.stats.length > 0 && <BundleAddForm key={card.id} card={card} spMax={spMax} onAdd={(sp) => add(sp)} />}
-      {/* 선택(radiogroup)과 핀(group)을 형제 열로 둔다 — radiogroup 안에는 radio만(스크린 리더가 radio 수·위치를 바르게 읽는다).
-          두 열은 같은 줄(subgrid)을 공유해 항목과 그 핀이 같은 높이로 맞는다. */}
-      <div className="bundle-rows" style={{ '--bundle-rows': group.options.length } as CSSProperties}>
-        <div className="bundle-radios" role="radiogroup" aria-label="노력치 배분" onKeyDown={onKey}>
-          {group.options.map((o, i) => {
-            const selected = o.id === card.id
-            const pinned = isPinned(group, o)
-            // 선택 항목(없으면 첫 항목)만 Tab으로 들어온다(roving tabindex). 그 항목의 핀이 다음 Tab.
-            const tabbable = selected || (!anySelected && i === 0)
-            return (
-              <button
-                key={o.id}
-                type="button"
-                role="radio"
-                id={optionId(i)}
-                aria-checked={selected}
-                tabIndex={tabbable ? 0 : -1}
-                aria-keyshortcuts={pinned ? 'Delete' : undefined}
-                aria-describedby={pinned ? unpinHintId : undefined}
-                className={`bundle-opt${pinClass(pinned)}`}
-                {...optionData(group, o)}
-                onClick={() => onSelect(group.key, o.id)}
-              >
-                <BundleOptionContent tab={tab} option={o} rollSteps={rollSteps} pinned={pinned} reserveVariable={reserveVariable} />
-              </button>
-            )
-          })}
-        </div>
-        <div className="bundle-pins" role={ladder ? 'group' : undefined} aria-label={ladder ? PIN_LABEL : undefined} aria-hidden={ladder ? undefined : true}>
-          {group.options.map((o, i) => {
-            if (!ladder) return <PinSlot key={o.id} />
-            const pinned = isPinned(group, o)
-            const tabbable = o.id === card.id || (!anySelected && i === 0)
-            return (
-              <button
-                key={o.id}
-                type="button"
-                className="bundle-pin"
-                aria-label={PIN_LABEL}
-                aria-pressed={pinned}
-                title={pinTitle(pinned, isUser(o))}
-                tabIndex={tabbable ? 0 : -1}
-                data-pin-for={o.id}
-                data-testid="bundle-pin"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (!togglePin(o)) refocusPin(listRef.current, o.id)
-                }}
-              >
-                <PinIcon filled={pinned} />
-              </button>
-            )
-          })}
-        </div>
-      </div>
-      {group.pinned.length > 0 && (
-        <span id={unpinHintId} className="sr-only">
-          Delete 키로 고정 해제(직접 추가 배분은 삭제)
-        </span>
-      )}
-    </div>
-  )
-}
-
 /** 간단행의 보이는 항목 기술 선택 버튼. 보이는 항목이 목록에 없으면 null */
 function ShownMove({
   game,
@@ -690,27 +533,25 @@ function ShownMove({
 export const CardItem = memo(function CardItem({ game, tab, group, card, rollSteps, expanded, onToggle, onSelect, target, dispatch, groupLabelId, items, onChooseItem, onResetItem, onMenuCards }: Props) {
   const names = namesOf(game)
   const ladder = card.opponent.source === 'ladder'
-  const speed = tab === 'speed'
   const detailId = `card-detail-${encodeURIComponent(group.key)}`
   const multi = group.options.length > 1
   // 래더 행은 직접 추가 폼 때문에 배분이 하나여도 늘 고를 수 있는 배지다(관련 SP가 없으면 추가할 것이 없다).
   const addable = ladder && card.bundle.stats.length > 0
   const spMax = addable ? game.manifest.rules.spMaxPerStat : undefined
   const result = resultBadge(tab, card, rollSteps)
+  const item = cardItemOf(game, group.berry?.item)
   // 토글 버튼 이름은 포켓몬, 설명은 줄의 기술·결과·변동 가능(스크린 리더가 접힌 줄 판정을 함께 읽는다)
   const uid = useId()
   const headlineId = `${uid}-headline`
   const resultId = `${uid}-result`
   const variableId = `${uid}-variable`
-  const optionId = (i: number) => `${uid}-option-${i}`
-  const selectedIndex = group.options.findIndex((o) => o.id === card.id)
   const describedBy = [headlineId, ...(result === undefined ? [] : [resultId]), ...(card.variable ? [variableId] : []), ...(groupLabelId === undefined ? [] : [groupLabelId])].join(' ')
   let resultBody: ReactNode = null
   if (result !== undefined) {
     resultBody = (
-      <span className={`ko-badge ko-${result.badge.tone}`} data-testid={result.kind === 'ko' ? 'ko-badge' : 'order-badge'} data-tone={result.badge.tone} id={resultId}>
-        {result.badge.label}
-        {result.badge.chance !== undefined && <small className="ko-chance num"> {result.badge.chance}</small>}
+      <span className={`ko-badge ko-${result.tone}`} data-testid="ko-badge" data-tone={result.tone} id={resultId}>
+        {result.label}
+        {result.chance !== undefined && <small className="ko-chance num"> {result.chance}</small>}
       </span>
     )
   }
@@ -737,12 +578,13 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
       <div className="card-line" onClick={() => onToggle(group.key)}>
         <button type="button" className="card-toggle card-who" aria-expanded={expanded} aria-controls={detailId} aria-describedby={describedBy}>
           <PokemonIcon speciesId={card.opponent.id} size={32} lazy />
+          {/* 판정에 효과를 준 도구(반감열매·화력 도구 변형 줄)만 이름 오른쪽 아이콘(포켓몬 이미지와 겹치지 않음) */}
           <span className="card-name">
             <SpeciesName label={names.species.label(card.opponent.id)} />
-            {group.berry !== undefined && (
+            {item !== undefined && (
               <>
                 {' '}
-                <ItemVariantBadge game={game} item={group.berry.item} />
+                <ItemMark item={item} lazy />
               </>
             )}
           </span>
@@ -787,29 +629,10 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
       ))}
       <div id={detailId} className="card-detail" hidden={!expanded}>
         {expanded && (
-          // 공격·방어 탭 상세는 판정만(배분·기술 선택은 간단행 배지에서, R9). 스피드 탭은 왼쪽 배분 목록을 그대로 둔다.
-          <div className={`detail-grid${speed ? '' : ' single'}`}>
-            {speed && (
-              <BundleList
-                tab={tab}
-                group={group}
-                card={card}
-                rollSteps={rollSteps}
-                onSelect={onSelect}
-                dispatch={dispatch}
-                spMax={spMax}
-                optionId={optionId}
-                unpinHintId={`${uid}-unpin-hint`}
-              />
-            )}
-            {/* 판정 영역 이름 = 선택 배분 항목(스피드 탭 목록), 그 밖은 배분 문구 */}
-            <div
-              role="region"
-              className="bundle-panel"
-              aria-labelledby={speed && selectedIndex >= 0 ? optionId(selectedIndex) : undefined}
-              aria-label={speed && selectedIndex >= 0 ? undefined : `${bundleAria(card, isPinned(group, card))} 판정`}
-              data-testid="bundle-panel"
-            >
+          // 상세는 판정만(배분·기술 선택은 간단행 배지에서, R9).
+          <div className="detail-grid">
+            <div role="region" className="bundle-panel" aria-label={`${bundleAria(card, isPinned(group, card))} 판정`} data-testid="bundle-panel">
+              <DetailItem opponentId={card.opponent.id} item={item} />
               {card.state === 'error' && card.error && <p className="row-error">계산 불가: {koReason(game, card.error)}</p>}
               {card.rows.length > 0 && (
                 <ol className="rows">

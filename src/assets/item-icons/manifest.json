@@ -48,6 +48,14 @@
       "uploadedAt": "2026-04-08T04:35:08Z",
       "width": 48
     },
+    "choicescarf": {
+      "file": "Bag_Choice_Scarf_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "a091110f879ee09ae1b6a536f198b19e69dfe697",
+      "sha256": "68c53759b7971583544b3531d546a08288642eb5246987313d0a12feab7ee760",
+      "uploadedAt": "2026-04-08T05:27:06Z",
+      "width": 48
+    },
     "chopleberry": {
       "file": "Bag_Chople_Berry_Champs_Sprite.png",
       "height": 48,
@@ -110,6 +118,14 @@
       "sha1": "6cf4ec1387ca05b9167e776a0ca4d4089ba5a51d",
       "sha256": "1ceda3f4cb6a41009dbe79bc9df3133a0c87df1789f82596cfb544f154484c41",
       "uploadedAt": "2026-04-08T05:20:11Z",
+      "width": 48
+    },
+    "ironball": {
+      "file": "Bag_Iron_Ball_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "47c4b5cb684d86dd77082fccac38b95a040b3557",
+      "sha256": "6ccefeb31694f51c6da0544c7fcbdf2f8d2fbfff3ec4754ee843e8a340bac41c",
+      "uploadedAt": "2026-06-17T18:18:03Z",
       "width": 48
     },
     "kasibberry": {

@@ -59,10 +59,10 @@ export const isPowerItem = (item: string): boolean => POWER_ITEMS.includes(item)
  * user가 item을 지니고 moveId로 target(나)을 칠 때 그 도구가 대미지 보정을 주는지. 기술 타입은 공격측 특성·공격측 특성 날씨·필드로 바뀐 타입
  * (R13, 어느 쪽이든 구름보기·에어록이면 날씨 없음). 생명의구슬 = 위력으로 대미지가 정해지는 기술이면 항상(고정 대미지·일격필살·반사 기술 제외), 달인의띠 = 바뀐 타입 상성 > 1(방어측 특성 반감과 무관, 엔진 규칙),
  * 힘의머리띠 = 물리, 박식안경 = 특수, 타입 강화 = 바뀐 타입 일치. 나에게 무효(effectivenessAgainst = 0)거나, 화력 도구가 아니거나, user가 서투름이거나,
- * 스냅샷에 없는 기술·변화기·엔진 타입표에 없는 타입이면 false.
+ * 스냅샷에 없는 기술·엔진 미지원 기술(대미지를 계산할 수 없다)·변화기·엔진 타입표에 없는 타입이면 false.
  */
 export function powerItemBoosts(game: Snapshot, moveId: string, item: string, user: MoveUser, target: EffectivenessDefender): boolean {
-  if (!isPowerItem(item) || ITEM_DISABLING_ABILITIES.includes(user.ability) || !own(game.data.moves, moveId)) return false
+  if (!isPowerItem(item) || ITEM_DISABLING_ABILITIES.includes(user.ability) || !own(game.data.moves, moveId) || game.manifest.engineUnsupported.moves.includes(moveId)) return false
   const move = game.data.moves[moveId]
   if (move.category === 'Status' || UNBOOSTED_MOVES.includes(moveId) || ITEM_WEAKENED_MOVES.includes(moveId)) return false
   const negated = WEATHER_NEGATING_ABILITIES.some((a) => a === user.ability || a === target.ability)

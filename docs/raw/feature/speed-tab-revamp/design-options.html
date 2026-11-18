@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>디자인 대안 비교 · 스피드 탭 개편 화면 배치</title>
+<!--
+  하네스 design-options 템플릿 (adr-helper 디자인 결정 레인).
+  - Claude 아티팩트가 아니다. 이 파일을 docs/raw/<type>/<slug>/design-options.html로
+    떨구고, 사용자가 브라우저에서 직접 연다(자기완결: 외부 CSS/JS/폰트/이미지 참조 없음).
+  - 이 파일을 그대로 cp로 목적지에 복사한 뒤, 채우기 구역만 Edit한다. 파일 전체를 Write로
+    다시 쓰지 않는다 — 고정된 CSS/JS/패널 스캐폴딩 재출력은 순수 출력 토큰 낭비다.
+  - 에이전트가 채우는 곳은 <section class="option"> 카드 안의 .mockup 영역과 data-label·라디오
+    value·.name(대안 이름으로 함께 일치)뿐이다. 카드를 복제/삭제해 대안 수(2개 이상)를 맞춘다.
+  - 사용자는 대안을 나란히 비교 → 베이스 라디오 선택 → 세부 수정 요구사항 작성 →
+    "요약 생성" → "복사"해서 에이전트에게 붙여넣는다(정적 파일이라 서버로 전송 불가 →
+    붙여넣기로 루프를 닫는다). 에이전트는 그 요약을 ADR 선택지/결정/선택 근거로 흡수한다.
+-->
+<style>
+  :root{
+    --bg:#f7f7f8; --fg:#1a1a1e; --muted:#5c5c66; --line:#d9d9e0; --card:#ffffff;
+    --accent:#3b5bdb; --accent-soft:#e7ecfb; --shadow:0 1px 3px rgba(0,0,0,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#16161a; --fg:#ececf0; --muted:#9a9aa5; --line:#2c2c34; --card:#1e1e24;
+      --accent:#7a93f5; --accent-soft:#22283d; --shadow:0 1px 3px rgba(0,0,0,.4); }
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; padding:24px; background:var(--bg); color:var(--fg);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif; }
+  header{ max-width:1200px; margin:0 auto 20px; }
+  h1{ font-size:20px; margin:0 0 6px; }
+  .lead{ color:var(--muted); margin:0 0 12px; }
+  .how{ background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:12px 16px; box-shadow:var(--shadow); }
+  .how ol{ margin:6px 0 0; padding-left:20px; } .how li{ margin:2px 0; }
+  .grid{ max-width:1200px; margin:0 auto; display:grid; gap:16px;
+    grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
+  .option{ background:var(--card); border:1px solid var(--line); border-radius:12px;
+    box-shadow:var(--shadow); display:flex; flex-direction:column; overflow:hidden; }
+  .option.selected{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft),var(--shadow); }
+  .option > header{ display:flex; align-items:center; gap:10px; padding:12px 14px;
+    border-bottom:1px solid var(--line); margin:0; }
+  .option > header label{ font-weight:600; cursor:pointer; display:flex; align-items:center; gap:8px; }
+  .option .name{ font-size:15px; }
+  .mockup{ padding:14px; min-height:160px; overflow-x:auto; }
+  /* 목업 안에서 쓰기 좋은 중립 프리미티브(원하면 무시하고 자유 HTML/CSS로 그려도 됨) */
+  .mockup .box{ border:1px dashed var(--line); border-radius:8px; padding:10px; margin:6px 0;
+    color:var(--muted); }
+  .mockup .bar{ height:12px; border-radius:6px; background:var(--line); margin:6px 0; }
+  .notes{ padding:12px 14px; border-top:1px solid var(--line); }
+  .notes label{ display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  textarea{ width:100%; min-height:64px; resize:vertical; border:1px solid var(--line);
+    border-radius:8px; padding:8px; background:var(--bg); color:var(--fg); font:inherit; }
+  .panel{ max-width:1200px; margin:18px auto 0; background:var(--card); border:1px solid var(--line);
+    border-radius:12px; padding:16px; box-shadow:var(--shadow); }
+  .panel label{ display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  button{ font:inherit; font-weight:600; border:1px solid var(--accent); background:var(--accent);
+    color:#fff; border-radius:8px; padding:8px 16px; cursor:pointer; }
+  button.secondary{ background:transparent; color:var(--accent); }
+  button:disabled{ opacity:.5; cursor:not-allowed; }
+  #summary{ width:100%; min-height:150px; margin-top:12px; white-space:pre; font-family:ui-monospace,
+    SFMono-Regular,Menlo,monospace; font-size:13px; }
+  .hint{ color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>디자인 대안 비교 — 스피드 탭 개편 화면 배치</h1>
+  <p class="lead">아래 대안을 비교하고, <b>베이스로 삼을 안 하나를 라디오로 선택</b>한 뒤,
+    <b>세부 수정 요구사항</b>을 적어 주세요.</p>
+  <div class="how">
+    <b>사용법</b>
+    <ol>
+      <li>각 대안을 나란히 비교합니다.</li>
+      <li>가장 마음에 드는 안의 <b>◉ 라디오</b>를 선택합니다(베이스 = 이 안을 출발점으로 발전).</li>
+      <li>대안별 칸과 아래 "전체 수정 요구사항"에 원하는 변경을 구체적으로 적습니다.</li>
+      <li><b>"요약 생성"</b>을 누르고 <b>"복사"</b>해서 에이전트에게 붙여넣습니다(이 파일은 정적이라
+        직접 전송되지 않습니다 — 붙여넣기로 전달).</li>
+    </ol>
+  </div>
+</header>
+
+<!-- ▼▼▼ 에이전트가 채우는 영역: 대안 카드(최소 2개). cp한 복사본에서 이 구역만 Edit한다.
+     카드를 복제/삭제해 개수를 맞추고, data-label·라디오 value·.name·.mockup을 이번 유닛의
+     실제 화면 배치로 채운다(value·data-label·.name은 대안 이름으로 함께 일치). ▼▼▼ -->
+<div class="grid" id="grid">
+
+  <style>
+    .option:has(.sx-wrap){ grid-column:1/-1; }
+    .sx-legend{ grid-column:1/-1; background:var(--card); border:1px solid var(--line); border-radius:12px;
+      padding:12px 14px; font-size:13px; box-shadow:var(--shadow); }
+    .sx-legend p{ margin:4px 0; color:var(--muted); }
+    .sx-lgrow{ display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; margin-top:6px; }
+    .sx-lgrow > span{ display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); }
+    .sx-wrap{ display:flex; flex-wrap:wrap; gap:18px; align-items:flex-start; font-size:13px; }
+    .sx-fig{ flex:1 1 620px; min-width:0; max-width:840px; }
+    .sx-side{ flex:1 1 280px; display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start; min-width:0; }
+    .sx-cap{ font-size:11px; color:var(--muted); margin:0 0 4px; }
+    .sx-wrap button{ font:inherit; font-weight:500; border:1px solid var(--line); background:var(--card);
+      color:var(--fg); border-radius:6px; padding:2px 8px; line-height:1.3; }
+    .sx-app{ border:1px solid var(--line); border-radius:10px; background:var(--bg); padding:10px; position:relative; }
+    .sx-tabs{ display:flex; gap:2px; align-items:center; margin-bottom:6px; font-size:12px; flex-wrap:wrap;
+      border-bottom:1px solid var(--line); }
+    .sx-tabs > span{ padding:3px 10px; border-bottom:2px solid transparent; color:var(--muted); }
+    .sx-tabs > span.on{ color:var(--fg); font-weight:700; border-color:#6a4fb0; }
+    .sx-tabs > .sx-tbx{ margin-left:auto; font-size:11px; border:0; }
+    .sx-tb{ display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
+    .sx-fl{ font-size:11px; color:var(--muted); font-weight:600; white-space:nowrap; flex:none; }
+    .sx-sep{ width:1px; align-self:stretch; background:var(--line); margin:0 3px; }
+    .sx-wrap .sx-chip{ border-radius:999px; padding:2px 10px; font-size:12px; color:var(--muted); white-space:nowrap; }
+    .sx-wrap .sx-chip[aria-pressed="true"]{ background:var(--accent-soft); border-color:var(--accent); color:var(--accent); font-weight:700; }
+    .sx-wrap .sx-chip[aria-pressed="true"]::before{ content:"✓ "; }
+    .sx-sum{ display:flex; gap:4px; align-items:center; flex-wrap:wrap; font-weight:700; }
+    .sx-sum i, .lsum i{ font-style:normal; color:var(--muted); }
+    .sp{ display:inline-block; padding:1px 8px; border-radius:999px; font-weight:700; font-size:12px; color:#2b2b30; white-space:nowrap; }
+    .sp.win{ background:#d1ebd6; } .sp.tie{ background:#f4e7b0; } .sp.lose{ background:#f2ccc8; }
+    .sx-vp{ position:relative; }
+    .sx-fr{ position:relative; overflow:auto; max-height:520px; border-radius:8px; }
+    .sx-head{ position:sticky; top:0; z-index:5; background:var(--bg); padding:2px 0 8px; display:flex;
+      flex-direction:column; gap:6px; border-bottom:1px solid var(--line); margin-bottom:8px; }
+    .sx-ch{ background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 8px 8px 0; }
+    .sx-row{ display:grid; grid-template-columns:46px 1fr; gap:6px; align-items:stretch; }
+    .sx-val{ display:flex; align-items:center; justify-content:flex-end; padding-right:5px; border-right:2px solid var(--line);
+      font:700 12px ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--muted); }
+    .sx-bs{ display:flex; flex-wrap:wrap; gap:4px; align-items:center; padding:2px 0; min-width:0; }
+    .sx-brk{ margin:5px 0 5px 46px; height:16px; border-radius:4px; display:flex; align-items:center; justify-content:center;
+      background:repeating-linear-gradient(-45deg,transparent 0 5px,var(--line) 5px 6px); }
+    .sx-brk span{ background:var(--card); padding:0 6px; font-size:10px; color:var(--muted); }
+    .sx-base{ background:rgba(123,100,194,.13); border-top:2px solid #6a4fb0; border-bottom:2px solid #6a4fb0; }
+    .sx-base .sx-val{ color:var(--fg); border-right-color:#6a4fb0; }
+    .sx-me{ background:#6a4fb0; color:#fff; font-weight:700; border-radius:999px; padding:2px 9px; font-size:12px;
+      white-space:nowrap; margin-left:auto; }
+    .sx-zl{ font-size:10.5px; color:var(--muted); text-align:right; padding:1px 4px 1px 0; line-height:1.3; }
+    /* 배지 */
+    .sx-wrap .b, .sx-legend .b{ display:inline-flex; align-items:center; gap:5px; padding:2px 7px 2px 3px; border-radius:7px;
+      border:1px solid var(--bbd); border-left:4px solid var(--stc); background:var(--bbg); color:#2b2b30;
+      font:600 12px/1.2 system-ui,-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif; min-height:30px; cursor:pointer; }
+    .b.win{ --stc:#3f9a57; --bbg:#e6f3e9; --bbd:#b9dcc2; }
+    .b.lose{ --stc:#c9473b; --bbg:#f8e3e0; --bbd:#e8b8b2; }
+    .b.tie{ --stc:#b8901a; --bbg:#f6ebbd; --bbd:#dcc77a; }
+    .b.neu{ --stc:#8a8a90; --bbg:#efeff1; --bbd:#d4d4d8; cursor:default; }
+    .b.pre{ --bbg:#e6dff7; --bbd:#b3a6e4; }
+    .b.add{ border-style:dashed; border-left-style:solid; }
+    .b.on, .b:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+    .pk{ position:relative; width:28px; height:28px; flex:none; display:block; }
+    .pk > img{ width:100%; height:100%; object-fit:contain; display:block; }
+    .it{ position:absolute; right:-3px; bottom:-3px; width:12px; height:12px; border-radius:50%; background:#fff;
+      border:1px solid #64646b; display:grid; place-items:center; overflow:hidden; font:700 7px/1 system-ui,sans-serif;
+      color:#2b2b30; font-style:normal; }
+    .it img{ width:11px; height:11px; }
+    .it.fb{ background:#fde7c6; border-color:#8a5a12; }
+    .pk.big{ width:44px; height:44px; } .pk.big .it{ width:18px; height:18px; font-size:10px; } .pk.big .it img{ width:16px; height:16px; }
+    .tx{ display:flex; align-items:center; gap:3px; white-space:nowrap; }
+    .tag{ font-style:normal; font-size:10px; font-weight:700; padding:0 4px; border-radius:4px; background:#2b2b30; color:#fff; }
+    .mk{ font-size:10px; font-weight:700; padding:0 4px; border-radius:4px; border:1px solid currentColor; background:#fff; }
+    .mk.tie{ color:#6e5400; } .mk.add{ color:#3d3d44; } .mk.pre{ color:#5a43a0; }
+    .mk.mega{ color:#8a2d6b; } .mk.off{ color:#6b6b72; border-style:dashed; }
+    .it.off{ opacity:.55; } .it.off::after{ content:""; position:absolute; left:-1px; right:-1px; top:50%; border-top:1.5px solid #c0392b; transform:rotate(-40deg); }
+    .nm{ font-size:11px; font-weight:500; color:#55555d; }
+    /* 상세 */
+    .sx-pop{ position:absolute; z-index:6; background:var(--card); border:1px solid var(--fg); border-radius:10px;
+      box-shadow:0 8px 24px rgba(0,0,0,.2); padding:10px; }
+    .dt{ font-size:12px; color:var(--fg); }
+    .dt-h{ display:flex; gap:8px; align-items:center; }
+    .dt-t{ display:flex; flex-direction:column; gap:2px; flex:1; min-width:0; align-items:flex-start; }
+    .dt-t > span:not(.sp){ color:var(--muted); }
+    .sx-wrap .dt-x{ align-self:flex-start; padding:0 7px; font-size:14px; }
+    .dt-kv{ display:grid; grid-template-columns:auto 1fr; gap:2px 10px; margin:8px 0; }
+    .dt-kv dt{ color:var(--muted); } .dt-kv dd{ margin:0; }
+    .dt-goal{ background:var(--accent-soft); border:1px solid var(--accent); border-radius:6px; padding:6px 8px; font-weight:700; }
+    .dt-goal small{ display:block; font-weight:400; color:var(--muted); font-size:10px; }
+    .sx-wrap .dt-btn{ margin-top:8px; width:100%; text-align:left; font-weight:600; }
+    .sx-wrap .dt-btn.sm{ width:auto; margin:0; }
+    .dt-list{ display:flex; flex-direction:column; gap:3px; margin-top:4px; }
+    .sx-wrap .dt-op{ display:grid; grid-template-columns:50px 44px 32px 1fr; gap:4px; text-align:left; font-size:11px; }
+    .dt-op em{ font-style:normal; color:var(--muted); font-size:10px; }
+    .dt-cus{ display:flex; gap:4px; align-items:center; margin-top:4px; flex-wrap:wrap; font-size:11px; }
+    .dt-cus input{ width:46px; font:inherit; } .dt-cus select{ font:inherit; }
+    .dt-msg{ color:#c0392b; margin:2px 0 0; font-size:11px; }
+    .dt-empty{ color:var(--muted); font-size:12px; margin:0; }
+    .sx-nc{ margin:12px 0 0 8px; border-top:1px dashed var(--line); padding-top:8px; }
+    .sx-nch{ font-weight:700; font-size:12px; margin-bottom:4px; } .sx-nch span{ font-weight:400; color:var(--muted); }
+    .sx-wrap .sx-go{ position:absolute; right:14px; bottom:14px; z-index:7; background:#6a4fb0; color:#fff; border-color:#6a4fb0;
+      border-radius:999px; padding:4px 12px; font-weight:700; box-shadow:0 3px 10px rgba(0,0,0,.25); }
+    /* B */
+    .sx-2c{ display:grid; grid-template-columns:minmax(0,1fr) 270px; gap:10px; align-items:start; }
+    @media (max-width:980px){ .sx-2c{ grid-template-columns:1fr; } }
+    .sx-pan{ background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px; display:flex;
+      flex-direction:column; gap:10px; position:sticky; top:0; }
+    .sx-pan-h{ font-size:11px; color:var(--muted); font-weight:700; margin:0 0 3px; }
+    .sx-pan .sx-nc{ margin:0; }
+    .sx-sheet{ position:absolute; left:0; right:0; bottom:0; max-height:46%; overflow:auto; background:var(--card);
+      border-top:1px solid var(--fg); border-radius:14px 14px 0 0; box-shadow:0 -6px 20px rgba(0,0,0,.22); padding:6px 10px 10px; z-index:8; }
+    .sx-sheet::before{ content:""; display:block; width:36px; height:4px; border-radius:2px; background:var(--line); margin:0 auto 6px; }
+    /* C */
+    .sx-lad .sx-ch{ padding:0; overflow:visible; }
+    .lr{ display:grid; grid-template-columns:46px 36px 1fr; align-items:center; border-bottom:1px solid var(--line);
+      min-height:38px; padding:3px 8px 3px 0; }
+    .lv{ text-align:right; font:700 13px ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .ld{ font-size:10px; color:var(--muted); text-align:center; }
+    .lb{ display:flex; flex-wrap:wrap; gap:4px; align-items:center; min-width:0; }
+    .lband{ position:sticky; top:0; bottom:0; z-index:3; background:#6a4fb0; color:#fff; border-bottom-color:#6a4fb0;
+      box-shadow:0 2px 10px rgba(0,0,0,.22); }
+    .lband .ld, .lband .lsum i{ color:#e6defa; }
+    .lband .sx-me{ margin-left:0; background:#fff; color:#4b3590; }
+    .lsum{ margin-left:auto; display:flex; gap:4px; align-items:center; flex-wrap:wrap; }
+    .lexp{ padding:8px 10px 10px 82px; border-bottom:1px solid var(--line); background:var(--bg); }
+    .lexp .dt{ display:flex; flex-wrap:wrap; gap:6px 18px; align-items:flex-start; }
+    .lexp .dt > *{ flex:1 1 200px; margin:0; }
+    .lexp .dt > .dt-btn, .lexp .dt > .dt-list{ flex-basis:100%; }
+    .sx-lad .sx-nc{ margin:10px 8px 10px; }
+    /* 400px 폰 */
+    .sx-ph{ width:272px; height:580px; flex:none; border:1px solid var(--line); border-radius:18px; background:var(--bg);
+      padding:8px; display:flex; flex-direction:column; gap:6px; overflow:hidden; position:relative; font-size:11px; }
+    .sx-ph .sx-vp{ flex:1; min-height:0; display:flex; flex-direction:column; }
+    .sx-ph .sx-fr{ flex:1; max-height:none; min-height:0; }
+    .sx-ph .sx-tb{ flex-wrap:wrap; gap:3px 4px; }
+    .sx-ph .sx-chip{ font-size:10.5px; padding:1px 7px; }
+    .sx-ph .sx-tabs{ font-size:10.5px; } .sx-ph .sx-tabs > span{ padding:2px 6px; }
+    .sx-ph .b{ font-size:10.5px; min-height:24px; padding:1px 5px 1px 2px; gap:3px; }
+    .sx-ph .pk{ width:20px; height:20px; } .sx-ph .it{ width:9px; height:9px; right:-2px; bottom:-2px; font-size:5.5px; }
+    .sx-ph .it img{ width:8px; height:8px; } .sx-ph .pk.big{ width:36px; height:36px; }
+    .sx-ph .pk.big .it{ width:15px; height:15px; font-size:8px; } .sx-ph .pk.big .it img{ width:13px; height:13px; }
+    .sx-ph .tag, .sx-ph .mk{ font-size:9px; padding:0 3px; }
+    .sx-ph .sx-row{ grid-template-columns:34px 1fr; gap:4px; } .sx-ph .sx-val{ font-size:10px; padding-right:3px; }
+    .sx-ph .sx-brk{ margin-left:34px; }
+    .sx-ph .sx-me{ font-size:10px; padding:1px 7px; } .sx-ph .sp{ font-size:10.5px; padding:1px 6px; }
+    .sx-ph .lr{ grid-template-columns:32px 26px 1fr; min-height:30px; } .sx-ph .lv{ font-size:11px; }
+    .sx-ph .lexp{ padding:6px 8px 8px; }
+    .sx-ph .dt{ font-size:11px; }
+    .sx-note{ flex:1 1 220px; min-width:0; margin:0; font-size:12.5px; }
+    .sx-note dt{ font-weight:700; margin-top:7px; } .sx-note dt:first-child{ margin-top:0; }
+    .sx-note dd{ margin:0; color:var(--muted); }
+  </style>
+
+  <div class="sx-legend">
+    <b>공통 전제와 범례</b>
+    <p>세 시안 모두 같은 데이터다. 내 포켓몬은 종족값 98 가정, 현재 배분 <b>S20 = · 실수치 138</b>. 상위 30 중 일부 상대와 프리셋 1개,
+      기본 필터(랭크업·스카프·날씨/필드 켜짐, 순풍 꺼짐). 배지·필터·"내 순풍"·"다른 배분 추가"는 실제로 눌러 볼 수 있다.</p>
+    <p>이미지는 레포의 <code>src/assets/</code>를 상대경로로 불러오므로 <b>이 파일은 레포 안 원위치(docs/raw/feature/speed-tab-revamp/)에서만 열 것</b>. 옮기면 이미지가 깨진다.
+      키보드는 Tab 포커스·Esc 닫기만 흉내 냈다. 화살표(위아래 = 실수치 줄, 좌우 = 같은 줄 배지)·Home/End 이동은 ADR에서 정한다.</p>
+    <div class="sx-lgrow" data-legend></div>
+  </div>
+
+  <!-- ===================== 대안 A ===================== -->
+  <section class="option" data-label="대안 A — 단일 열 압축 차트 + 팝오버">
+    <header>
+      <label><input type="radio" name="base" value="대안 A — 단일 열 압축 차트 + 팝오버" /><span class="name">대안 A — 단일 열 압축 차트 + 팝오버</span></label>
+    </header>
+    <div class="mockup">
+      <div class="sx-wrap">
+        <div class="sx-fig">
+          <p class="sx-cap">데스크톱 · 프레임 높이 = 화면 높이 흉내(안에서 스크롤해 보세요)</p>
+          <div class="sx-app" data-m="a">
+            <div class="sx-tabs"><span>공격</span><span>방어</span><span class="on">스피드</span><span class="sx-tbx">상위 30 · 선택 필터 없음</span></div>
+            <div class="sx-vp">
+              <div class="sx-fr" data-fr>
+                <div class="sx-head">
+                  <div class="sx-sum" data-sum></div>
+                  <div class="sx-tb" data-flt></div>
+                </div>
+                <div class="sx-ch" data-ch></div>
+                <div class="sx-pop" data-det hidden></div>
+              </div>
+              <button type="button" class="sx-go" data-go hidden>내 위치로</button>
+            </div>
+          </div>
+        </div>
+        <div class="sx-side">
+          <div>
+            <p class="sx-cap">400px 폭(축소 표시) · 팝오버가 배지 아래 폭 전체로</p>
+            <div class="sx-ph" data-m="ap">
+              <div class="sx-tabs"><span>공격</span><span>방어</span><span class="on">스피드</span></div>
+              <div class="sx-vp">
+                <div class="sx-fr" data-fr>
+                  <div class="sx-head"><div class="sx-sum" data-sum></div><div class="sx-tb" data-flt></div></div>
+                  <div class="sx-ch" data-ch></div>
+                  <div class="sx-pop" data-det hidden></div>
+                </div>
+                <button type="button" class="sx-go" data-go hidden>내 위치로</button>
+              </div>
+            </div>
+          </div>
+          <dl class="sx-note">
+            <dt>정보 우선순위</dt><dd>고정 머리(요약·조건 필터) &gt; 기준선 띠 &gt; 배지(이미지·배분 표기) &gt; 상세. 배지 안 이름 텍스트 없음.</dd>
+            <dt>축</dt><dd>실수치 1 차이 ≈ 1.1px 비례, 24 넘는 간격은 "빈 구간" 빗금 띠로 압축. 줄 사이 최소 간격 보장.</dd>
+            <dt>상호작용</dt><dd>호버 250ms 지연·포커스·탭 → 배지 오른쪽 팝오버(공간 없으면 아래). 팝오버는 <b>기준선 반대쪽</b>으로 자란다(기준선 위 배지는 위로, 아래 배지는 아래로) — 기준선·동속 줄을 덮지 않게. 기준선이 화면 밖이면 "내 위치로" 버튼이 뜬다.</dd>
+            <dt>트레이드오프</dt><dd>폭을 배지에 다 써 같은 줄 줄바꿈이 적다. 대신 팝오버가 이웃 배지를 가린다 — 기준선 반대쪽으로 열어도 기준선 바로 옆 줄을 고르면 동속 줄 배지를 가릴 수 있다(차트 끝에서 공간이 모자랄 때). 기준선은 스크롤과 함께 사라져 버튼에 의존한다.</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <label>대안 A 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="예: CTA를 상단으로, 배지는 우측 정렬…"></textarea>
+    </div>
+  </section>
+
+  <!-- ===================== 대안 B ===================== -->
+  <section class="option" data-label="대안 B — 2단 차트 + 고정 상세 패널">
+    <header>
+      <label><input type="radio" name="base" value="대안 B — 2단 차트 + 고정 상세 패널" /><span class="name">대안 B — 2단 차트 + 고정 상세 패널</span></label>
+    </header>
+    <div class="mockup">
+      <div class="sx-wrap">
+        <div class="sx-fig">
+          <p class="sx-cap">데스크톱 · 왼쪽 차트만 안에서 스크롤, 오른쪽 패널 고정</p>
+          <div class="sx-app" data-m="b">
+            <div class="sx-tabs"><span>공격</span><span>방어</span><span class="on">스피드</span><span class="sx-tbx">상위 30 · 선택 필터 없음</span></div>
+            <div class="sx-tb" data-flt style="margin-bottom:8px"></div>
+            <div class="sx-2c">
+              <div class="sx-vp">
+                <div class="sx-fr" data-fr style="max-height:470px"><div class="sx-ch" data-ch></div></div>
+                <button type="button" class="sx-go" data-go hidden>내 위치로</button>
+              </div>
+              <aside class="sx-pan">
+                <div><p class="sx-pan-h">현재 요약 (표시 중 배지 수)</p><div class="sx-sum" data-sum></div></div>
+                <div><p class="sx-pan-h">배지 상세</p><div data-det></div></div>
+                <div data-nc></div>
+              </aside>
+            </div>
+          </div>
+        </div>
+        <div class="sx-side">
+          <div>
+            <p class="sx-cap">400px 폭(축소 표시) · 패널이 아래쪽 시트로(처음엔 닫힘, 배지를 누르면 화면 절반 이하 높이로)</p>
+            <div class="sx-ph" data-m="bp">
+              <div class="sx-tabs"><span>공격</span><span>방어</span><span class="on">스피드</span></div>
+              <div class="sx-sum" data-sum></div>
+              <div class="sx-tb" data-flt></div>
+              <div class="sx-vp">
+                <div class="sx-fr" data-fr><div class="sx-ch" data-ch></div></div>
+                <button type="button" class="sx-go" data-go hidden>내 위치로</button>
+              </div>
+              <div class="sx-sheet" data-det hidden></div>
+            </div>
+          </div>
+          <dl class="sx-note">
+            <dt>정보 우선순위</dt><dd>차트와 상세·요약을 동시에 본다. 상세가 고정 패널이라 다른 배지로 옮겨 가며 비교해도 사라지지 않는다.</dd>
+            <dt>축</dt><dd>완전 비례(1 차이 ≈ 0.9px). 간격이 그대로 "얼마나 차이 나는가"라서 차트가 길어지고, 차트만 내부 스크롤.</dd>
+            <dt>상호작용</dt><dd>"내 순풍"·SP를 바꾸면 차트가 기준선으로 자동 스크롤. 직접 스크롤해 벗어나면 "내 위치로". 순서 비교 불가는 패널 아래.</dd>
+            <dt>트레이드오프</dt><dd>차트 폭이 줄어 같은 실수치 줄이 빨리 줄바꿈된다. 데스크톱 패널·모바일 시트로 상세 형태가 두 벌이다.</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <label>대안 B 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="이 안에 대한 수정 요구사항…"></textarea>
+    </div>
+  </section>
+
+  <!-- ===================== 대안 C ===================== -->
+  <section class="option" data-label="대안 C — 실수치 사다리 + 따라오는 기준선 띠">
+    <header>
+      <label><input type="radio" name="base" value="대안 C — 실수치 사다리 + 따라오는 기준선 띠" /><span class="name">대안 C — 실수치 사다리 + 따라오는 기준선 띠</span></label>
+    </header>
+    <div class="mockup">
+      <div class="sx-wrap">
+        <div class="sx-fig">
+          <p class="sx-cap">데스크톱 · 위아래로 스크롤하면 보라 기준선 띠가 위/아래 끝에 붙어 따라온다</p>
+          <div class="sx-app" data-m="c">
+            <div class="sx-tabs"><span>공격</span><span>방어</span><span class="on">스피드</span><span class="sx-tbx">상위 30 · 선택 필터 없음</span></div>
+            <div class="sx-tb" data-flt style="margin-bottom:8px"></div>
+            <div class="sx-vp">
+              <div class="sx-fr sx-lad" data-fr style="max-height:470px"><div class="sx-ch" data-ch></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="sx-side">
+          <div>
+            <p class="sx-cap">400px 폭(축소 표시) · 처음 위치: 띠가 아래 끝에 붙음</p>
+            <div class="sx-ph" data-m="cp">
+              <div class="sx-tabs"><span>공격</span><span>방어</span><span class="on">스피드</span></div>
+              <div class="sx-tb" data-flt></div>
+              <div class="sx-vp">
+                <div class="sx-fr sx-lad" data-fr><div class="sx-ch" data-ch></div></div>
+              </div>
+            </div>
+          </div>
+          <dl class="sx-note">
+            <dt>정보 우선순위</dt><dd>순서 &gt; 간격. 실수치마다 같은 높이 한 줄, 간격은 "윗줄과 차이(−22)" 숫자로 대신. 줄 폭 여유로 배지 안에 이름 텍스트를 둔다.</dd>
+            <dt>기준선</dt><dd>기준선 띠 = 내 줄(동속 배지 포함)이며 요약을 품고 sticky로 늘 보인다 → "내 위치로" 불필요.</dd>
+            <dt>상호작용</dt><dd>배지를 가리키거나 누르면 그 줄 바로 아래에 상세가 펼쳐진다. 팝오버·시트가 없어 400px도 같은 구조.</dd>
+            <dt>트레이드오프</dt><dd>비례가 없어 "아슬아슬 / 크게 차이"를 숫자로만 읽는다. 호버로 펼치면 아래 줄이 밀린다(지연으로 완화).</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <label>대안 C 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="이 안에 대한 수정 요구사항…"></textarea>
+    </div>
+  </section>
+
+  <script>
+  (function(){
+    var P='../../../../src/assets/pokemon-icons/', I='../../../../src/assets/item-icons/';
+    var ME={s:'S20 =', b:98, sp:20, m:1};
+    var F={rank:true, scarf:true, tw:false, wx:true, mytw:false};
+    var uid=0;
+    var D=[
+      {id:'exs',v:308,p:'excadrill',n:'몰드류',b:88,s:'S32+',tag:'모래바람',it:'softsand',itn:'부드러운모래',sh:'44.0%',csh:'모래헤치기 62%'},
+      {id:'bar',v:286,p:'basculegion',n:'대쓰여너',b:78,s:'S32+',tag:'비',it:'mysticwater',itn:'신비의물방울',sh:'38.5%',csh:'쓱쓱 71%'},
+      {id:'gas',v:253,p:'garchomp',n:'한카리아스',b:102,s:'S32+',tag:'스카프',it:'FB:구',itn:'구애스카프',sh:'41.2%',csh:'구애스카프 12.0%'},
+      {id:'gen',v:200,p:'gengarmega',n:'메가팬텀',b:130,s:'S32+',it:'FB:메',itn:'팬텀나이트(메가스톤 · 아이콘 없음 → 대체 표지)',sh:'18.4%',mega:true},
+      {id:'dra',v:213,p:'dragapult',n:'드래펄트',b:142,s:'S32+',it:'lifeorb',itn:'생명의구슬',sh:'63.0%'},
+      {id:'meo',v:192,p:'meowscarada',n:'마스카나',b:123,s:'S32+',it:'miracleseed',itn:'기적의씨',sh:'58.1%'},
+      {id:'sne',v:189,p:'sneasler',n:'포푸니크',b:120,s:'S32+',it:'poisonbarb',itn:'독바늘',sh:'66.7%'},
+      {id:'whi',v:184,p:'whimsicott',n:'엘풍',b:116,s:'S32+',it:'fairyfeather',itn:'요정의깃털',sh:'49.3%'},
+      {id:'lop',v:157,p:'lopunny',n:'이어롭',b:105,s:'S32 =',it:'FB:구',itn:'구애스카프(무딘손 · 도구 효과 없음, 스피드 ×1)',sh:'14.2%',noeff:true},
+      {id:'gar',v:169,p:'garchomp',n:'한카리아스',b:102,s:'S32+',it:'yacheberry',itn:'리샘열매',sh:'41.2%'},
+      {id:'exc',v:154,p:'excadrill',n:'몰드류',b:88,s:'S32+',it:'softsand',itn:'부드러운모래',sh:'44.0%'},
+      {id:'gaa',v:154,p:'garchomp',n:'한카리아스',b:102,s:'S32 =',it:'yacheberry',itn:'리샘열매',sh:'21.0%',k:'add'},
+      {id:'dr1',v:150,p:'dragonite',n:'망나뇽',b:80,s:'S0 =',tag:'+1',it:'silkscarf',itn:'실크스카프',sh:'35.0%',csh:'용의춤 27%'},
+      {id:'bas',v:143,p:'basculegion',n:'대쓰여너',b:78,s:'S32+',it:'mysticwater',itn:'신비의물방울',sh:'38.5%'},
+      {id:'rot',v:138,p:'rotomwash',n:'워시로토무',b:86,s:'S32 =',it:'magnet',itn:'자석',sh:'29.4%'},
+      {id:'gho',v:136,p:'gholdengo',n:'타부자고',b:84,s:'S32 =',it:'shucaberry',itn:'슈캔열매',sh:'33.0%'},
+      {id:'pes',v:127,p:'pelipper',n:'펠리커',b:65,s:'S0 =',tag:'스카프',it:'FB:구',itn:'구애스카프',sh:'52.0%',csh:'구애스카프 5.5%'},
+      {id:'arc',v:105,p:'archaludon',n:'브리두라스',b:85,s:'S0 =',it:'FB:돌',itn:'돌격조끼(아이콘 없음 → 대체 표지)',sh:'47.5%'},
+      {id:'drg',v:100,p:'dragonite',n:'망나뇽',b:80,s:'S0 =',it:'silkscarf',itn:'실크스카프',sh:'35.0%'},
+      {id:'pel',v:85,p:'pelipper',n:'펠리커',b:65,s:'S0 =',it:'wacanberry',itn:'초나열매',sh:'52.0%'},
+      {id:'tyr',v:81,p:'tyranitar',n:'마기라스',b:61,s:'S0 =',it:'chopleberry',itn:'로플열매',k:'pre',pre:'프리셋 1'},
+      {id:'inc',v:72,p:'incineroar',n:'어흥염',b:60,s:'S0 −',sh:'61.2%'},
+      {id:'kin',v:70,p:'kingambit',n:'대도각참',b:50,s:'S0 =',it:'blackglasses',itn:'검은안경',sh:'40.8%'},
+      {id:'tor',v:36,p:'torkoal',n:'코터스',b:20,s:'S0 −',it:'charcoal',itn:'목탄',sh:'70.3%'}
+    ];
+    var NC=[
+      {p:'farigiraf',n:'키키링',r:'행동 순서 변경',why:'만복향로',it:'FB:만',itn:'만복향로'},
+      {p:'sinistcha',n:'그우린차',r:'계산 불가',why:'교정깁스',it:'FB:교',itn:'교정깁스'}
+    ];
+    var SPS=[['S32+',32,1.1],['S32 =',32,1],['S20 =',20,1],['S0 =',0,1],['S0 −',0,0.9]];
+    var FAKE=['21.0%','12.4%','6.1%','2.0%'];
+    var SN={win:'추월',tie:'동속',lose:'추월당함'};
+    var CFG={
+      a:{mode:'cmp',k:1.1,kind:'pop',open:'bas',more:true,nc:true,go:true},
+      ap:{mode:'cmp',k:0.7,kind:'pop',compact:true,open:'bas',nc:true,go:true},
+      b:{mode:'prop',k:0.9,kind:'panel',open:'bas',more:true,go:true,follow:true},
+      bp:{mode:'prop',k:0.55,kind:'sheet',compact:true,open:null,nc:true,go:true,follow:true},
+      c:{mode:'lad',kind:'inline',names:true,open:'bas',more:true,nc:true},
+      cp:{mode:'lad',kind:'inline',compact:true,open:null,nc:true}
+    };
+
+    function stat(b,sp,m){ return Math.floor((b+20+sp)*m); }
+    function my(sp,m){ var x=stat(ME.b,sp,m); return F.mytw?x*2:x; }
+    function myV(){ return my(ME.sp,ME.m); }
+    function st(v){ var m=myV(); return v>m?'lose':v===m?'tie':'win'; }
+    function minS(v){ var n=null,p=null; for(var s=0;s<=32;s++){ if(n===null&&my(s,1)>v)n=s; if(p===null&&my(s,1.1)>v)p=s; }
+      return '추월: '+(n===null?'무보정 불가':'최소 S'+n)+' / '+(p===null?'상승 불가':'S'+p+'+'); }
+    function kind(d){ if(!d.tag)return null; if(d.tag==='스카프')return 'scarf'; if(/^\+/.test(d.tag))return 'rank'; if(d.tag==='순풍')return 'tw'; return 'wx'; }
+    function shown(){
+      var a=D.filter(function(d){ var k=kind(d); return !k||F[k]; });
+      if(F.tw) a=a.concat(D.filter(function(d){ return !d.tag&&d.k!=='add'; }).map(function(d){
+        return Object.assign({},d,{id:d.id+'-tw',v:d.v*2,tag:'순풍',csh:'파트너 순풍 가정(×2)',k:d.k==='pre'?'pre':undefined}); }));
+      return a;
+    }
+    function rk(d){ return d.k==='pre'?2:(d.sh?0:1); }
+    function shn(d){ return d.sh?parseFloat(d.sh):-1; }
+    function ord(x,y){ return rk(x)-rk(y) || shn(y)-shn(x) || (x.tag?1:0)-(y.tag?1:0) || x.n.localeCompare(y.n,'ko'); }
+    function counts(a){ var c={win:0,tie:0,lose:0}; a.forEach(function(d){ c[st(d.v)]++; }); return c; }
+    function sumH(c){ return '<span class="sp win">추월 '+c.win+'</span><i>·</i><span class="sp tie">동속 '+c.tie+'</span><i>·</i><span class="sp lose">추월당함 '+c.lose+'</span>'; }
+    function itH(d){ if(!d.it)return ''; if(d.it.indexOf('FB:')===0) return '<i class="it fb'+(d.noeff?' off':'')+'" title="'+d.itn+'">'+d.it.slice(3)+'</i>';
+      return '<i class="it'+(d.noeff?' off':'')+'" title="'+d.itn+'"><img src="'+I+d.it+'.png" alt=""></i>'; }
+    function pkH(d,cls){ return '<span class="pk '+(cls||'')+'"><img src="'+P+d.p+'.png" alt="">'+itH(d)+'</span>'; }
+    function bH(d,mk){ var s=st(d.v);
+      var lab=d.n+' '+d.s+(d.tag?' '+d.tag:'')+', 실수치 '+d.v+', '+SN[s]+(d.itn?', '+d.itn.replace(/\(.*\)/,'')+' 지님':'')+(d.mega?', 메가진화 폼':'')+(d.noeff?', 도구 효과 없음':'')+(d.k==='add'?', 추가한 배분':'')+(d.k==='pre'?', '+d.pre:'');
+      return '<button type="button" class="b '+s+' '+(d.k||'')+'" data-id="'+d.id+'" aria-label="'+lab+'" title="'+lab+'">'+pkH(d)+
+        '<span class="tx">'+(mk.names?'<span class="nm">'+d.n+'</span>':'')+'<b>'+d.s+'</b>'+(d.tag?'<em class="tag">'+d.tag+'</em>':'')+
+        (d.mega?'<span class="mk mega">메가</span>':'')+(d.noeff?'<span class="mk off">도구 무효</span>':'')+(s==='tie'?'<span class="mk tie">동속</span>':'')+(d.k==='add'?'<span class="mk add">추가</span>':'')+(d.k==='pre'?'<span class="mk pre">'+d.pre+'</span>':'')+'</span></button>'; }
+    function meH(){ return '<span class="sx-me">나 · '+ME.s+(F.mytw?' · 순풍':'')+' · '+myV()+'</span>'; }
+    function rowsH(a,mk){
+      var m=myV(), c=counts(a), g={}, h='', prev=null;
+      a.forEach(function(d){ (g[d.v]=g[d.v]||[]).push(d); }); if(!g[m]) g[m]=[];
+      Object.keys(g).map(Number).sort(function(x,y){ return y-x; }).forEach(function(v){
+        var bs=g[v].sort(ord).map(function(d){ return bH(d,mk); }).join(''), diff=prev===null?0:prev-v; prev=v;
+        if(mk.mode==='lad'){
+          var ds=diff?'−'+diff:'';
+          if(v===m) h+='<div class="lr lband" data-base><div class="lv">'+v+'</div><div class="ld">'+ds+'</div><div class="lb">'+meH()+bs+'<span class="lsum">'+sumH(c)+'</span></div></div>';
+          else h+='<div class="lr"><div class="lv">'+v+'</div><div class="ld">'+ds+'</div><div class="lb">'+bs+'</div></div>';
+          return;
+        }
+        var mt=0;
+        if(diff){ if(mk.mode==='cmp'){ if(diff>24) h+='<div class="sx-brk"><span>빈 구간 · '+diff+' 차이</span></div>'; else mt=Math.round(diff*mk.k); }
+                  else mt=Math.round(diff*mk.k); }
+        if(v===m) h+='<div class="sx-zl" style="margin-top:'+mt+'px">▲ 위쪽 추월당함 '+c.lose+'</div><div class="sx-row sx-base" data-base><div class="sx-val">'+v+'</div><div class="sx-bs">'+bs+meH()+'</div></div><div class="sx-zl">▼ 아래쪽 추월 '+c.win+'</div>';
+        else h+='<div class="sx-row" style="margin-top:'+mt+'px"><div class="sx-val">'+v+'</div><div class="sx-bs">'+bs+'</div></div>';
+      });
+      return h;
+    }
+    function ncH(){ return '<div class="sx-nc"><div class="sx-nch">순서 비교 불가 <span>· 스피드 축에 놓지 않음</span></div><div class="sx-bs">'+
+      NC.map(function(d){ return '<span class="b neu" tabindex="0" aria-label="'+d.n+', '+d.r+', 원인 '+d.why+'" title="'+d.n+' · '+d.why+'">'+pkH(d)+
+        '<span class="tx"><b>'+d.r+'</b><span class="nm">'+d.n+' · '+d.why+'</span></span></span>'; }).join('')+'</div></div>'; }
+    function primary(p){ return D.filter(function(x){ return x.p===p&&!x.tag&&x.k!=='add'; })[0]; }
+    function shareOf(p,s){ var pr=primary(p), fi=0, r=null; SPS.forEach(function(o){ var sh=o[0]===pr.s?pr.sh:FAKE[fi++]; if(o[0]===s) r=sh; }); return r; }
+    function spH(d){
+      var ex=D.filter(function(x){ return x.p===d.p&&!x.tag; }).map(function(x){ return x.s; }), pr=primary(d.p);
+      return SPS.map(function(o){ var has=ex.indexOf(o[0])>=0;
+        return '<button type="button" class="dt-op" data-add="'+d.p+'|'+o[0]+'"'+(has?' disabled':'')+'><b>'+o[0]+'</b><span>'+shareOf(d.p,o[0])+'</span><span>'+stat(pr.b,o[1],o[2])+'</span>'+(has?'<em>차트에 있음</em>':'<em>+ 추가</em>')+'</button>'; }).join('')+
+        '<div class="dt-cus">직접 입력 <label>SP <input type="number" min="0" max="32" value="12" data-sp></label><select data-nat aria-label="성격"><option value="+">상승</option><option value="=" selected>무보정</option><option value="−">하락</option></select><button type="button" class="dt-btn sm" data-cus="'+d.p+'">추가</button></div><p class="dt-msg" aria-live="polite"></p>';
+    }
+    function det(d,mk){
+      var s=st(d.v), k=kind(d), add='';
+      if(d.k==='add') add='<button type="button" class="dt-btn" data-del="'+d.id+'">이 배지 지우기</button>';
+      else if(d.k!=='pre') add='<button type="button" class="dt-btn" data-more aria-expanded="'+!!mk.more+'">다른 배분 추가 '+(mk.more?'▴':'▾')+'</button><div class="dt-list"'+(mk.more?'':' hidden')+'>'+spH(d)+'</div>';
+      return '<div class="dt"><div class="dt-h">'+pkH(d,'big')+'<div class="dt-t"><b>'+d.n+'</b><span>'+d.s+(d.tag?' · '+d.tag:'')+' · 실수치 <b>'+d.v+'</b></span><span class="sp '+s+'">'+SN[s]+'</span></div><button type="button" class="dt-x" aria-label="상세 닫기">×</button></div>'+
+        '<dl class="dt-kv"><dt>배분 점유율</dt><dd>'+(d.k==='pre'?'목록 밖 타겟 · '+d.pre:(d.sh||'직접 입력'))+'</dd>'+
+        (d.csh?'<dt>조건</dt><dd>'+d.csh+(k==='wx'?' · 파트너 날씨 가정':'')+'</dd>':'')+'<dt>도구</dt><dd>'+(d.itn||'없음')+'</dd></dl>'+
+        '<div class="dt-goal">'+minS(d.v)+'<small>성격 무보정 / 상승 · 내 도구·특성'+(F.mytw?'·순풍':'')+' 기준</small></div>'+add+'</div>';
+    }
+    function fltH(){ return '<span class="sx-fl">조건 배지</span>'+[['rank','랭크업'],['scarf','스카프'],['tw','순풍'],['wx','날씨/필드']].map(function(o){
+      return '<button type="button" class="sx-chip" data-f="'+o[0]+'" aria-pressed="'+F[o[0]]+'">'+o[1]+'</button>'; }).join('')+
+      '<span class="sx-sep"></span><button type="button" class="sx-chip" data-f="mytw" aria-pressed="'+F.mytw+'">내 순풍</button>'; }
+
+    var M={};
+    document.querySelectorAll('[data-m]').forEach(function(r){ var id=r.getAttribute('data-m');
+      M[id]=Object.assign({id:id,root:r,ch:r.querySelector('[data-ch]'),fr:r.querySelector('[data-fr]'),det:r.querySelector('[data-det]'),go:r.querySelector('[data-go]')},CFG[id]);
+      r.querySelectorAll('[data-flt]').forEach(function(e){ e.innerHTML=fltH(); });
+      if(M[id].fr) M[id].fr.addEventListener('scroll',function(){ goCheck(M[id]); });
+    });
+
+    function render(mk){
+      var a=shown();
+      mk.ch.innerHTML=rowsH(a,mk)+(mk.nc?ncH():'');
+      if(!mk.nc) mk.root.querySelectorAll('[data-nc]').forEach(function(e){ e.innerHTML=ncH(); });
+      mk.root.querySelectorAll('[data-sum]').forEach(function(e){ e.innerHTML=sumH(counts(a)); });
+      mk.root.querySelectorAll('[data-f]').forEach(function(b){ b.setAttribute('aria-pressed',String(F[b.getAttribute('data-f')])); });
+      if(mk.open && !a.some(function(d){ return d.id===mk.open; })) mk.open=null;
+      showDet(mk); goCheck(mk);
+    }
+    function showDet(mk){
+      var d=shown().filter(function(x){ return x.id===mk.open; })[0];
+      mk.ch.querySelectorAll('.b.on').forEach(function(e){ e.classList.remove('on'); });
+      var b=d?mk.ch.querySelector('[data-id="'+d.id+'"]'):null; if(b) b.classList.add('on');
+      if(mk.kind==='inline'){ mk.ch.querySelectorAll('.lexp').forEach(function(e){ e.remove(); });
+        if(b) b.closest('.lr').insertAdjacentHTML('afterend','<div class="lexp">'+det(d,mk)+'</div>'); return; }
+      if(!d){ if(mk.kind==='panel') mk.det.innerHTML='<p class="dt-empty">배지를 가리키거나 누르면 상세가 여기 고정돼 보입니다.</p>'; else mk.det.hidden=true; return; }
+      mk.det.innerHTML=det(d,mk); mk.det.hidden=false;
+      if(mk.kind==='pop'&&b){
+        var fr=mk.fr, R=b.getBoundingClientRect(), Fr=fr.getBoundingClientRect(), w=mk.compact?fr.clientWidth-12:256;
+        w=Math.min(w,fr.clientWidth-12); mk.det.style.width=w+'px';
+        var up=st(d.v)==='lose', h=mk.det.offsetHeight, bt=R.top-Fr.top+fr.scrollTop, top, left=R.right-Fr.left+8, side=!mk.compact&&left+w<=fr.clientWidth-6;
+        /* 기준선 반대쪽으로 자란다: 위쪽(추월당함) 배지는 위로, 그 외는 아래로 */
+        if(side){ top=up?bt+R.height-h:bt; }
+        else { left=mk.compact?6:Math.max(6,Math.min(R.left-Fr.left,fr.clientWidth-w-6)); top=up?bt-h-6:bt+R.height+6; }
+        top=Math.max(2,top);
+        mk.det.style.top=top+'px'; mk.det.style.left=left+'px';
+      }
+    }
+    function baseY(mk){ var b=mk.ch.querySelector('[data-base]'); if(!b) return 0;
+      if(mk.mode==='lad'){ var pv=b.previousElementSibling; return pv?pv.offsetTop+pv.offsetHeight:0; } return b.offsetTop; }
+    function toBase(mk,smooth){ if(!mk.fr) return; mk.fr.scrollTo({top:Math.max(0,baseY(mk)-mk.fr.clientHeight/2+20),behavior:smooth?'smooth':'auto'}); }
+    function goCheck(mk){ if(!mk.go) return; var b=mk.ch.querySelector('[data-base]'), fr=mk.fr; if(!b) return;
+      var y=baseY(mk), vis=y+b.offsetHeight>fr.scrollTop && y<fr.scrollTop+fr.clientHeight;
+      mk.go.hidden=vis; mk.go.textContent=y<fr.scrollTop?'내 위치로 ↑':'내 위치로 ↓'; }
+    function renderAll(){ Object.keys(M).forEach(function(k){ render(M[k]); }); }
+    function openB(r,id){ var mk=M[r.getAttribute('data-m')]; if(!mk||mk.open===id) return; mk.open=id; mk.more=false; showDet(mk); }
+    function addSpread(p,s,sp,m){
+      if(D.some(function(x){ return x.p===p&&!x.tag&&x.s===s; })) return null;
+      var pr=primary(p), id='u'+(++uid);
+      D.push({id:id,v:stat(pr.b,sp,m),p:p,n:pr.n,b:pr.b,s:s,it:pr.it,itn:pr.itn,sh:shareOf(p,s),k:'add'}); return id;
+    }
+
+    var hov=null;
+    document.addEventListener('mouseover',function(e){ var b=e.target.closest&&e.target.closest('.sx-wrap .b[data-id]'); if(!b) return;
+      clearTimeout(hov); hov=setTimeout(function(){ openB(b.closest('[data-m]'),b.getAttribute('data-id')); },250); });
+    document.addEventListener('mouseout',function(e){ if(e.target.closest&&e.target.closest('.b[data-id]')) clearTimeout(hov); });
+    document.addEventListener('focusin',function(e){ var b=e.target.closest&&e.target.closest('.sx-wrap .b[data-id]'); if(b) openB(b.closest('[data-m]'),b.getAttribute('data-id')); });
+    document.addEventListener('keydown',function(e){ if(e.key==='Escape') Object.keys(M).forEach(function(k){ if(M[k].open){ M[k].open=null; showDet(M[k]); } }); });
+    document.addEventListener('click',function(e){
+      var t=e.target, r=t.closest('[data-m]'); if(!r) return; var mk=M[r.getAttribute('data-m')];
+      var f=t.closest('[data-f]');
+      if(f){ var key=f.getAttribute('data-f'); F[key]=!F[key]; renderAll();
+        if(key==='mytw') Object.keys(M).forEach(function(k){ if(M[k].follow) toBase(M[k],true); });
+        return; }
+      var b=t.closest('.b[data-id]'); if(b){ clearTimeout(hov); openB(r,b.getAttribute('data-id')); return; }
+      if(t.closest('.dt-x')){ mk.open=null; showDet(mk); return; }
+      if(t.closest('[data-more]')){ mk.more=!mk.more; showDet(mk); return; }
+      var ad=t.closest('[data-add]');
+      if(ad){ var ps=ad.getAttribute('data-add').split('|'), o=SPS.filter(function(x){ return x[0]===ps[1]; })[0]; addSpread(ps[0],ps[1],o[1],o[2]); renderAll(); return; }
+      var cu=t.closest('[data-cus]');
+      if(cu){ var box=cu.closest('.dt'), sp=Math.max(0,Math.min(32,parseInt(box.querySelector('[data-sp]').value,10)||0)),
+          nat=box.querySelector('[data-nat]').value, s='S'+sp+(nat==='+'?'+':nat==='='?' =':' −'), m=nat==='+'?1.1:nat==='='?1:0.9;
+        if(!addSpread(cu.getAttribute('data-cus'),s,sp,m)){ box.querySelector('.dt-msg').textContent='이미 있음 — '+s+' 배지가 차트에 있습니다.'; return; }
+        renderAll(); return; }
+      var dl=t.closest('[data-del]'); if(dl){ var did=dl.getAttribute('data-del'); D=D.filter(function(x){ return x.id!==did; }); mk.open=null; renderAll(); return; }
+      if(t.closest('[data-go]')){ toBase(mk,true); return; }
+      if(t.closest('.dt,[data-det],input,select,label,.sx-tb')) return;
+      if(mk.open){ mk.open=null; showDet(mk); }
+    });
+
+    var lg=document.querySelector('[data-legend]'), L={names:false};
+    function pick(id){ return D.filter(function(x){ return x.id===id; })[0]; }
+    lg.innerHTML=[['gho','추월(기준선 아래)'],['rot','동속 — 화면에 "동속" 표지'],['dra','추월당함(기준선 위)'],['gas','조건 배지 + 태그 · 아이콘 없는 도구는 첫 글자 대체 표지'],['gaa','직접 추가한 배분'],['tyr','목록 밖 타겟(보라 배경)'],['gen','메가 폼 — 폼 이미지 + 메가스톤 겹침 + "메가" 표지'],['lop','도구 효과 없음(무딘손) — 도구에 빗금 + "도구 무효"']]
+      .map(function(o){ return '<span>'+bH(pick(o[0]),L).replace('<button','<span').replace('</button>','</span>')+o[1]+'</span>'; }).join('')+
+      '<span>오른쪽 아래 작은 원 = 그 배지 계산에 쓴 지닌 도구(이미지 너비의 약 0.43배)</span>';
+
+    renderAll();
+    requestAnimationFrame(function(){
+      Object.keys(M).forEach(function(k){ var mk=M[k]; if(k==='cp') mk.fr.scrollTop=0; else toBase(mk,false); showDet(mk); goCheck(mk); });
+    });
+  })();
+  </script>
+
+</div>
+<!-- ▲▲▲ 에이전트가 채우는 영역 끝 ▲▲▲ -->
+
+<div class="panel">
+  <label for="overall">전체 수정 요구사항 (선택한 베이스를 어떻게 발전시킬지 · 공통 사항)</label>
+  <textarea id="overall" placeholder="예: 모바일 320px에서 컨트롤이 겹치지 않게, 결과 위계를 점수 > 순위 > 상세 순으로…"></textarea>
+  <div class="row">
+    <button id="gen">요약 생성</button>
+    <button id="copy" class="secondary" disabled>복사</button>
+    <span class="hint">요약을 복사해 에이전트 대화창에 붙여넣으세요.</span>
+  </div>
+  <textarea id="summary" readonly placeholder="여기에 붙여넣을 요약이 생성됩니다."></textarea>
+</div>
+
+<script>
+  (function(){
+    var grid = document.getElementById('grid');
+    grid.addEventListener('change', function(e){
+      if (e.target && e.target.name === 'base') {
+        document.querySelectorAll('.option').forEach(function(o){ o.classList.remove('selected'); });
+        var card = e.target.closest('.option');
+        if (card) card.classList.add('selected');
+      }
+    });
+
+    function build(){
+      var checked = document.querySelector('input[name="base"]:checked');
+      var base = checked ? checked.value : '(아직 선택 안 함)';
+      var overall = document.getElementById('overall').value.trim() || '(없음)';
+      var lines = [];
+      lines.push('=== 디자인 선택 요약 (에이전트에게 붙여넣기) ===');
+      lines.push('베이스로 선택: ' + base);
+      lines.push('전체 수정 요구사항:');
+      lines.push(overall);
+      lines.push('');
+      lines.push('대안별 메모:');
+      document.querySelectorAll('.option').forEach(function(o){
+        var label = o.getAttribute('data-label') || '(무명)';
+        var ta = o.querySelector('textarea[data-notes]');
+        var note = (ta && ta.value.trim()) ? ta.value.trim() : '(없음)';
+        lines.push('- ' + label + ': ' + note);
+      });
+      return lines.join('\n');
+    }
+
+    document.getElementById('gen').addEventListener('click', function(){
+      var out = document.getElementById('summary');
+      out.value = build();
+      document.getElementById('copy').disabled = false;
+    });
+
+    document.getElementById('copy').addEventListener('click', function(){
+      var out = document.getElementById('summary');
+      out.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(out.value).then(function(){}, function(){});
+      }
+      this.textContent = ok ? '복사됨 ✓' : '직접 선택해 복사(Ctrl/Cmd+C)';
+      var b = this; setTimeout(function(){ b.textContent = '복사'; }, 1800);
+    });
+  })();
+</script>
+</body>
+</html>

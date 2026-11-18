@@ -43,7 +43,11 @@ test('방어 탭: 대도각참 기본 행 뒤에 생명의구슬 행(표지), �
   await expect(badge).toHaveAttribute('data-item-id', 'lifeorb')
   await expect(badge.locator('img[data-item-icon="lifeorb"]')).toHaveCount(1)
   // 표지는 이름 옆 도구 아이콘뿐(점유율·도구 이름 줄 없음 — 줄 높이를 다른 행과 같게, 사용자 결정 2026-11-14). 접근 가능한 이름은 "생명의구슬 지닌 경우"까지
-  await expect(orb.getByTestId('berry-badge').locator('img[data-item-icon="lifeorb"]')).toHaveCount(1)
+  await expect(orb.locator('.card-name [data-testid="berry-badge"] img[data-item-icon="lifeorb"]')).toHaveCount(1)
+  // 포켓몬 이미지와 겹치지 않는다(대도각참·생명의구슬처럼 색이 겹쳐도 각자 보인다)
+  const mon = (await orb.locator('.card-who > [data-testid="mon-icon"]').boundingBox())!
+  const mark = (await badge.boundingBox())!
+  expect(mark.x).toBeGreaterThan(mon.x + mon.width)
   await expect(orb.locator('.card-meta')).toHaveCount(0)
   const height = async (row: typeof base) => (await row.locator('.card-line').boundingBox())!.height
   expect(Math.abs((await height(orb)) - (await height(base)))).toBeLessThanOrEqual(1)

@@ -17,8 +17,11 @@ import {
 } from '../../scripts/data/lib/images.mjs'
 import { PROJECT_ROOT, readProjectJson } from '../../scripts/data/lib/pipeline.mjs'
 import { RESIST_BERRIES } from '../cards/berries'
+import { iconTargets } from '../cards/iconTargets'
 import { POWER_ITEMS } from '../cards/powerItems'
-import { indexByFileId, itemIconUrl, pokemonIconUrl } from './images'
+import { loadMetaSnapshotSync, loadSnapshotSync } from '../data/testing'
+import type { MatchType } from '../data/meta-schema'
+import { indexByFileId, itemGlyphOf, itemIconUrl, pokemonIconUrl } from './images'
 
 const sha256 = (buf: Buffer) => createHash('sha256').update(buf).digest('hex')
 const POKEMON_DIR = join(PROJECT_ROOT, 'src/assets/pokemon-icons')
@@ -43,7 +46,7 @@ const pngIds = (dir: string) =>
 const regulations = (readProjectJson('src/data/regulations/index.json') as { regulations: { id: string }[] }).regulations
 const snapshots = regulations.map((r) => readProjectJson(`src/data/regulations/${r.id}/data.json`) as Parameters<typeof rosterOf>[0][number])
 // gen:images와 같은 방식으로 메타(사용률) 등장 종 id를 모은다
-const metaIndex = readProjectJson('src/data/meta/index.json') as { regulations: Record<string, { file: string }[]> }
+const metaIndex = readProjectJson('src/data/meta/index.json') as { regulations: Record<string, { file: string; month: string; match: MatchType }[]> }
 const metaIds = Object.values(metaIndex.regulations).flatMap((items) =>
   items.flatMap((it) => (readProjectJson(`src/data/meta/${it.file}`) as { entries: { id: string }[] }).entries.map((e) => e.id)),
 )
@@ -202,8 +205,8 @@ describe('생성 매니페스트·번들 이미지', () => {
     for (const k of Object.keys(HAND_POKEAPI_IDS)) expect(pokemonManifest.entries[k]?.via, k).toBe('hand')
   })
 
-  it('도구 아이콘 대상 = 반감열매 18종 + 화력 도구 22종(R14), 전부 받았고 앱에서 해석된다', () => {
-    expect([...ITEM_ICON_IDS].sort()).toEqual([...Object.keys(RESIST_BERRIES), ...POWER_ITEMS].sort())
+  it('도구 아이콘 대상 = 반감열매 18종 + 화력 도구 22종 + 스피드 배수 도구 2종(R14), 전부 받았고 앱에서 해석된다', () => {
+    expect([...ITEM_ICON_IDS].sort()).toEqual([...Object.keys(RESIST_BERRIES), ...POWER_ITEMS, 'choicescarf', 'ironball'].sort())
     expect(itemManifest.missing).toEqual([])
     expect(Object.keys(itemManifest.entries).sort()).toEqual(pngIds(ITEM_DIR))
     for (const id of ITEM_ICON_IDS) {
@@ -218,10 +221,10 @@ describe('생성 매니페스트·번들 이미지', () => {
     }
   })
 
-  it('없는 id·undefined는 undefined(화면은 빈 자리·텍스트 배지 폴백)', () => {
+  it('없는 id·undefined는 undefined(화면은 빈 자리·가방 표지 폴백)', () => {
     expect(pokemonIconUrl('notapokemon')).toBeUndefined()
     expect(pokemonIconUrl(undefined)).toBeUndefined()
-    expect(itemIconUrl('leftovers')).toBeUndefined()
+    expect(itemIconUrl('quickclaw')).toBeUndefined()
     expect(itemIconUrl(undefined)).toBeUndefined()
   })
 
@@ -235,5 +238,56 @@ describe('생성 매니페스트·번들 이미지', () => {
       expect(existsSync(join(PROJECT_ROOT, 'src/assets', f)), f).toBe(true)
     }
     expect(readFileSync(join(POKEMON_DIR, 'README.md'), 'utf8')).toContain('ba403973fdf9d0ac59175813861e6a1f8ed5020c')
+  })
+})
+
+describe('R14 아이콘 대상 집합 대조(AC19)', () => {
+  // 레귤레이션마다 번들된 모든 메타 선택(월·매치 방식). 메타가 없는 레귤레이션은 기존·스카프·프리셋만 본다
+  const metaList = Object.entries(metaIndex.regulations)
+  const perRegulation = regulations.map((r) => {
+    const game = loadSnapshotSync(r.id)
+    const items = metaList.find(([reg]) => reg === r.id)?.[1] ?? []
+    const metas = items.map((it) => loadMetaSnapshotSync({ regulation: r.id, month: it.month, match: it.match }))
+    return { id: r.id, game, metas, targets: iconTargets(game, metas) }
+  })
+
+  it('대상 id는 전부 manifest 항목과 PNG가 있고 앱이 받은 그림으로 그린다', () => {
+    const missing: string[] = []
+    for (const { id: reg, targets } of perRegulation) {
+      for (const id of targets.keys()) {
+        const ok = itemManifest.entries[id] !== undefined && existsSync(join(ITEM_DIR, `${id}.png`)) && itemGlyphOf(id).kind === 'img'
+        if (!ok) missing.push(`${reg}:${id}`)
+      }
+    }
+    expect(missing).toEqual([])
+  })
+
+  it('받는 목록(ITEM_ICON_IDS)은 전 레귤레이션 대상 집합의 합집합과 같다(표시하지 않는 도구는 받지 않는다)', () => {
+    const union = new Set(perRegulation.flatMap(({ targets }) => [...targets.keys()]))
+    expect([...ITEM_ICON_IDS].sort()).toEqual([...union].sort())
+    expect(Object.keys(itemManifest.entries).sort()).toEqual([...union].sort())
+  })
+
+  it('판정에 관여하지 않는 도구(먹다남은음식·기합의띠 등)는 받지 않고 가방 표지로 그린다', () => {
+    for (const id of ['leftovers', 'focussash', 'sitrusberry', 'lightclay', 'damprock', 'widelens', 'whiteherb', 'rockyhelmet']) {
+      expect(ITEM_ICON_IDS, id).not.toContain(id)
+      expect(existsSync(join(ITEM_DIR, `${id}.png`)), id).toBe(false)
+      expect(itemGlyphOf(id), id).toEqual({ kind: 'bag' })
+    }
+  })
+
+  it('대상 집합에 메가스톤이 없다(메가진화 문양·메가스톤 표시 없음)', () => {
+    for (const { id: reg, game, targets } of perRegulation) {
+      for (const m of game.data.megas) expect(targets.has(m.stone), `${reg}:${m.stone}`).toBe(false)
+    }
+  })
+
+  it('받은 그림이 없는 임의 도구는 공통 가방 표지로 그린다', () => {
+    for (const { id: reg, game } of perRegulation) {
+      const outside = Object.keys(game.data.items).filter((id) => itemIconUrl(id) === undefined)
+      expect(outside.length, reg).toBeGreaterThan(0)
+      for (const id of outside) expect(itemGlyphOf(id), `${reg}:${id}`).toEqual({ kind: 'bag' })
+    }
+    expect(itemGlyphOf('notanitem')).toEqual({ kind: 'bag' })
   })
 })

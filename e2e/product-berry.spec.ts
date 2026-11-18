@@ -1,8 +1,8 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { cards, combo, mySet, openProduct, selectTab, tabPanel, waitComplete } from './helpers'
+import { cards, combo, mySet, openProduct, tabPanel, waitComplete } from './helpers'
 
 // 공격 탭 상대 도구(사용자 피드백 2026-11-12): 기합의띠는 고려하지 않고(기본 행 = 도구 없음), 도구 통계에 유의미한 반감열매는
-// 그 열매가 가장 센 기술에 발동할 때만 별도 행 "대쓰여너 (마코)". 순풍은 스피드 탭 전용 토글 버튼.
+// 그 열매가 가장 센 기술에 발동할 때만 별도 행 "대쓰여너 (마코)".
 
 const groupRow = (page: Page, key: readonly string[]) => cards(page).and(page.locator(`[data-group-key='${JSON.stringify(key)}']`))
 const BASCULEGION = ['ladder', 'basculegion'] as const
@@ -58,12 +58,18 @@ test.describe('공격 탭 상대 도구: 기합의띠 없음 · 반감열매 별
     const base = groupRow(page, BASCULEGION)
     await expect(base).toHaveCount(1)
     await expect(base.getByTestId('berry-badge')).toHaveCount(0)
+    await expect(base.locator('.item-mark')).toHaveCount(0)
+    // 메가 폼 기본 행: 메가스톤은 판정에 관여하지 않으므로 이름 옆 도구 아이콘·메가진화 문양이 없다(사용자 피드백 2026-11-17)
+    const megaRows = cards(page).and(page.locator('[data-opponent="charizardmegay"]:not([data-berry])'))
+    await expect(megaRows.first()).toBeVisible()
+    await expect(megaRows.locator('.item-mark')).toHaveCount(0)
+    await expect(tabPanel(page).locator('[data-item-glyph="mega"]')).toHaveCount(0)
     // 기본 행: 기합의띠를 고려하지 않아 생명의구슬 도각참 칸이 모두 확정견딤은 아니다(띠면 전부 확정견딤)
     const baseCats = await kowtowCategories(base)
     expect(baseCats.length).toBeGreaterThan(0)
     expect(baseCats.every((c) => c === 'guaranteed-survive' || /확정견딤/.test(c))).toBe(false)
 
-    // 열매 행: 이름 옆 배지 "(마코)", data-item-id, 접근 이름 "… 마코열매 지닌 경우"
+    // 열매 행: 이름 오른쪽 열매 아이콘(포켓몬 이미지와 겹치지 않음), data-item-id, 접근 이름 "… 마코열매 지닌 경우"
     const berry = groupRow(page, COLBUR)
     await expect(berry).toHaveCount(1)
     await expect(berry).toHaveAttribute('data-berry', 'colburberry')
@@ -76,6 +82,21 @@ test.describe('공격 탭 상대 도구: 기합의띠 없음 · 반감열매 별
     await expect(badge).not.toContainText('(마코)')
     await expect.poll(() => icon.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(48)
     await expect(berry.locator('.card-name')).toContainText('대쓰여너')
+    // 자리: 이름 칸 안, 이름 글자 오른쪽, 포켓몬 이미지와 겹치지 않고 크기는 이름 옆 아이콘(22px)
+    await expect(berry.locator('.card-name [data-testid="berry-badge"]')).toHaveCount(1)
+    const geo = await berry.locator('.card-who').evaluate((who) => {
+      const name = who.querySelector('.card-name')!
+      const mark = name.querySelector<HTMLElement>('[data-testid="berry-badge"]')!.getBoundingClientRect()
+      const mon = who.querySelector('[data-testid="mon-icon"]')!.getBoundingClientRect()
+      const range = document.createRange()
+      range.selectNodeContents(name)
+      range.setEndBefore(name.querySelector('[data-testid="berry-badge"]')!)
+      const text = range.getBoundingClientRect()
+      return { markLeft: mark.left, textRight: text.right, monRight: mon.right, size: [Math.round(mark.width), Math.round(mark.height)] }
+    })
+    expect(geo.markLeft).toBeGreaterThanOrEqual(geo.textRight - 0.5)
+    expect(geo.markLeft).toBeGreaterThan(geo.monRight)
+    expect(geo.size).toEqual([22, 22])
     await expect(berry.locator('.card-toggle')).toHaveAccessibleName(/^대쓰여너.*마코열매 지닌 경우/)
     // 사용률 순: 원래 행 바로 뒤
     const keys = await cards(page).evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.groupKey))
@@ -125,68 +146,16 @@ test.describe('공격 탭 상대 도구: 기합의띠 없음 · 반감열매 별
   })
 })
 
-test('통계 설정 줄: 1280에서 형식·기준 월·최소(%) 다섯 칸이 한 줄이다(반감열매·화력 도구 칸이 혼자 다음 줄로 내려가지 않는다)', async ({ page }) => {
+test('통계 설정 줄: 1280에서 형식·기준 월·최소(%) 여섯 칸이 한 줄이다(반감열매·화력 도구 칸이 혼자 다음 줄로 내려가지 않는다)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 })
   await openProduct(page)
   const stats = page.getByRole('group', { name: '통계 설정', exact: true })
   const controls = stats.locator('select, input')
-  await expect(controls).toHaveCount(7)
+  await expect(controls).toHaveCount(8)
   const bottoms = await controls.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().bottom)))
   expect(new Set(bottoms).size, JSON.stringify(bottoms)).toBe(1)
-  for (const name of ['SP 배분', '랭크업 기술', '구애스카프', '반감열매', '화력 도구']) {
+  for (const name of ['SP 배분', '랭크업 기술', '구애스카프', '날씨 특성', '반감열매', '화력 도구']) {
     const box = await stats.getByRole('spinbutton', { name: `${name} 최소(%)`, exact: true }).boundingBox()
     expect(box?.width ?? 0, name).toBeLessThan(110)
   }
-})
-
-test.describe('순풍 토글(스피드 탭 전용)', () => {
-  test('공격·방어 탭에는 없고, 스피드 탭에서 aria-pressed 토글로 다시 계산하며, 탭을 오가도 값이 남는다', async ({ page }) => {
-    await openProduct(page)
-    await waitComplete(page)
-    const display = page.getByRole('group', { name: '표시 설정', exact: true })
-    await expect(display.getByTestId('tailwind-toggles')).toHaveCount(0)
-    await expect(display.getByRole('checkbox')).toHaveCount(0)
-    await expect(page.getByTestId('roll-threshold')).toBeVisible()
-    await selectTab(page, '방어')
-    await expect(display.getByTestId('tailwind-toggles')).toHaveCount(0)
-    await expect(page.getByTestId('roll-threshold')).toBeVisible()
-
-    await selectTab(page, '스피드')
-    await waitComplete(page)
-    await expect(page.getByTestId('roll-threshold')).toHaveCount(0)
-    const group = display.getByRole('group', { name: '순풍', exact: true })
-    const mine = group.getByRole('button', { name: '내 순풍', exact: true })
-    const theirs = group.getByRole('button', { name: '상대 순풍', exact: true })
-    await expect(mine).toHaveAttribute('aria-pressed', 'false')
-    await expect(theirs).toHaveAttribute('aria-pressed', 'false')
-    // 정렬 토글과 같은 스타일 계열(segmented)
-    await expect(group).toHaveClass(/segmented/)
-    // 정렬 토글처럼 위에 보이는 묶음 라벨 "순풍"이 있고, 그 라벨이 묶음 이름이다
-    const caption = display.locator('.sort-field').filter({ has: page.getByTestId('tailwind-toggles') }).locator('.sort-label')
-    await expect(caption).toHaveText('순풍')
-    await expect(caption).toBeVisible()
-    expect(await group.getAttribute('aria-labelledby')).toBe(await caption.getAttribute('id'))
-
-    const orders = () => cards(page).evaluateAll((els) => els.map((e) => e.querySelector('[data-testid="order-badge"]')?.textContent ?? ''))
-    const before = await orders()
-    const gen = Number(await tabPanel(page).getAttribute('data-generation'))
-    await mine.click()
-    await expect(mine).toHaveAttribute('aria-pressed', 'true')
-    await expect.poll(async () => Number(await tabPanel(page).getAttribute('data-generation'))).toBeGreaterThan(gen)
-    await waitComplete(page)
-    const after = await orders()
-    expect(after).not.toEqual(before)
-    // 내 순풍이면 스피드가 2배라 후공이 줄어든다(판정이 내 쪽으로만 움직인다)
-    expect(after.filter((t) => t.startsWith('후공')).length).toBeLessThan(before.filter((t) => t.startsWith('후공')).length)
-
-    // 다른 탭에서는 숨길 뿐 값은 유지
-    await selectTab(page, '공격')
-    await expect(display.getByTestId('tailwind-toggles')).toHaveCount(0)
-    await selectTab(page, '스피드')
-    await expect(group.getByRole('button', { name: '내 순풍', exact: true })).toHaveAttribute('aria-pressed', 'true')
-    await group.getByRole('button', { name: '내 순풍', exact: true }).click()
-    await expect(group.getByRole('button', { name: '내 순풍', exact: true })).toHaveAttribute('aria-pressed', 'false')
-    await waitComplete(page)
-    expect(await orders()).toEqual(before)
-  })
 })

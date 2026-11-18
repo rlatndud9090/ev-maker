@@ -1,0 +1,75 @@
+---
+title: "스피드 탭 개편"
+date: "2026-11-15"
+stage: approved
+prd_status: approved
+adr_status: accepted
+---
+
+# 작업 단계 원장: 스피드 탭 개편
+
+이 파일은 이 작업 단위의 **단계 체크포인트**이자 **승인 증거**다. 새 세션이나
+새 에이전트가 작업을 이어받을 때 **가장 먼저 이 파일을 읽어** 지금 어느 단계인지,
+사전 승인(빌드 진입)·최종 확정(PR)을 이미 받았는지 판단한다. 채팅 히스토리가 아니라
+이 원장이 단일 진실원이다.
+
+규칙:
+
+- **승인은 2단계다.** ① **사전 승인(pre-approval)** — 빌드(feature-develop) 진입 게이트로
+  PRD를 `pre-approved`, ADR을 `pre-accepted`로 올린다(`## 승인 이벤트`에 `PREAPPROVAL`로 기록).
+  ② **최종 확정(final approval)** — `$make-pr`에서 PR 직전에 PRD를 `approved`, ADR을 `accepted`로
+  올린다(`APPROVAL`로 기록). 두 전환 모두 오직 `npm run harness:approve`(최종은 `--final`)로만 한다.
+- `stage`와 `prd_status`/`adr_status`를 **손으로 승인 상태(pre-approved/approved/pre-accepted/
+  accepted)로 바꾸지 않는다.** 각 상태는 대응하는 승인 이벤트가 기록되기 전에는 둘 수 없다
+  (`harness:check`가 막는다): 사전 승인 이벤트 없이는 빌드에 못 들어가고, 최종 승인 이벤트 없이는
+  PR을 만들 수 없다.
+- **빌드 중 개정:** `pre-approved`인 동안 feature-develop 피드백으로 PRD/ADR을 고칠 수 있다.
+  단 **사용자에게 개정 여부를 확인받은** 경우에만 고치고, 무엇을 왜 바꿨는지 `## 단계 로그`에 한
+  줄 남긴다(상태는 `pre-approved`/`pre-accepted` 그대로). 최종 확정은 `$make-pr`에서 전체를 다시
+  확인받아 이뤄진다.
+- 단계가 바뀌면 `## 단계 로그`에 한 줄 append 하고 `stage`를 갱신한다.
+- **`adr.md`는 `stage`가 `adr-draft` 이상으로 올라간 뒤에만 편집한다.** `$prd-helper`
+  단계(`kickoff`/`prd-draft`/`prd-review`)에서는 `adr.md`를 스켈레톤 그대로 두고, ADR
+  필요 여부·이유는 PRD `## ADR 필요 여부`에 남긴다(런타임 가드와 `harness:check`가 강제).
+- 단계 순서: `kickoff` → `prd-draft` → `prd-review` → (ADR 필요 시 `adr-draft` →
+  `adr-review`) → `pre-approved` → `implementing` → (`$make-pr`) `approved` → `integrated`.
+  ADR이 불필요하면 ADR 단계를 건너뛰고 PRD 단독 **사전 승인**으로 `pre-approved`에 진입한다.
+- 이 unit이 속한 **area(영역)**는 이 원장이 아니라 `prd.md`(feature)/`bugfix.md`(bugfix)
+  frontmatter의 `area:`에 산다. wiki는 그 area의 `### 헤딩` 아래 시간순으로 이 unit을 잇고,
+  `harness:check`가 선언한 area와 렌더된 헤딩의 일치를 강제한다.
+
+## 단계 로그 (append-only)
+
+- 2026-11-15 kickoff: raw 골격 생성
+- 2026-11-15 prd-draft: 사용자 인터뷰(세로 스피드 차트·조건별 배지·전 탭 도구 겹침 표시) 후 PRD 초안 작성 시작
+- 2026-11-15 prd-review: 리서치 2갈래·3관점 리뷰(MAJOR 18·MINOR 25) 반영 후 PRD review 전환, 열린 질문 15건 사용자 확인 대기, ADR 필요 판정
+- 2026-11-15 adr-draft: $adr-helper 진입, ADR 6결정 작성 시작(결정 1 화면 배치는 디자인 레인 시안 비교)
+- 2026-11-15 adr-review: 결정 1 사용자 선택(시안 C 실수치 사다리)·날씨 특성 기준 툴바 신설(10%)·공통 메가스톤 아이콘 반영, 독립 검증 7건 반영(PRD 정합 정정 포함). PRD·ADR 통합 사전 승인 대기
+- 2026-11-15 pre-approved: 사용자 명시 사전 승인 (harness:approve)
+- 2026-11-15 pre-approved 표기 수정: ADR 결정 3 데이터 표 표기의 중괄호를 하네스 템플릿 토큰 검사 통과용으로 풀어 씀(의미 변경 없음)
+- 2026-11-15 implementing: $feature-develop 진입(Phase 1 설계·구현 계획부터)
+- 2026-11-16 implementing: 구현 완료(웨이브 5개·리뷰 3관점 반영·스피드 차트 e2e 22건·시각 검증 스크린샷 수정). harness:gate 통과, 전체 e2e 135/135(단독 실행). $make-pr 대기
+- 2026-11-16 빌드 중 개정(사용자 확인): 앱 확인 피드백 — 메가 표지를 사용자 제공 메가진화 문양으로 교체, 스피드 배지 이름 텍스트·"메가" 태그 제거(이름은 호버 툴팁), 도구 겹침 받침 제거·너비 0.5배. PRD R3·R13·R14·AC17~AC20, ADR 결정 1·4·5 본문 개정(status 유지). 출처 고지는 비공개 저장소 링크 대신 공개 참고 페이지로
+- 2026-11-16 빌드 중 개정 2차(사용자 확인): 도구 겹침 원복(공격·방어 이름 오른쪽, 스피드 배지 배분 표기 오른쪽), 성격 화살표 표기(무보정 기호 없음), 사다리 차이 숫자·띠 요약·스카프/도구명/동속 태그 제거. PRD R2·R3·R5·R7·R13·R14·AC, ADR 결정 1·4·5·6 본문 개정. 상세 클릭 여닫기·단순화는 다음 개정
+- 2026-11-17 빌드 중 개정 3차(사용자 확인): 스피드 배지 상세를 클릭으로만 여닫기(호버 열기 제거), 내용을 이름·배분 표기·도구 이미지·조건 태그·실수치·추월 최소 S·다른 배분 추가/지우기로 축소(점유율·도구 이름·안내 문구 제거). PRD R3·R6·R7·R13·R15·AC7·AC10·AC20·AC26, ADR 결정 1·3~6 본문 개정
+- 2026-11-17 빌드 중 개정 4·5차(사용자 확인): 공·방·스 전 탭에서 판정 계산에 관여한 도구만 표시(메가 문양 포함 제거, mega.webp 자산·고지 삭제, 스피드는 core 스피드 도구 배수 적용 도구만), 스피드 상세 닫기(×) 버튼 제거. PRD R3·R7·R13·R14·AC18·AC19·AC26, ADR 결정 1·3~6 본문 개정
+- 2026-11-17 빌드 중 개정 6·7차(사용자 확인): 상위 N 기본 30→100, 성능 완료 예산 3초→5초(상위 100 기준), 스카프 규칙(기본 배지는 늘 스카프 없는 세트, 스카프는 기준 이상이면 조건 배지, "스카프 아님" 배지 삭제). 부수: 집단구타 등 엔진 미지원 기술을 화력 도구 근거에서 제외(버그 수정), 미사용 도구 아이콘 11종 삭제(42종). 게이트·단위 1235·e2e 136/136 통과
+- 2026-11-17 구현 마무리: 다른 배분 추가 직접 입력을 SP 칸 축소·▲▼ 성격 토글(내 포켓몬 패널과 동일)로 정리. 사용자 "여기까지만 하면 make-pr 해도 될듯". 후속 후보 3건(공·방 사다리 뷰, 컷 고정, 포켓몬 추가 UX) notes 기록
+- 2026-11-17 approved: 사용자 명시 최종 승인 (harness:approve --final)
+## 승인 이벤트
+
+- APPROVAL prd 2026-11-17 make-pr :: 여기까지만 하면 이제 이번 작업은 make-pr 해도 될듯.
+- APPROVAL adr 2026-11-17 make-pr :: 여기까지만 하면 이제 이번 작업은 make-pr 해도 될듯.
+
+<!-- 이 블록은 `npm run harness:approve`만 기록한다. 사용자의 명시 승인 발화가
+     verbatim으로 남는다. 두 종류: `PREAPPROVAL`(사전 승인 — 빌드 진입 게이트)과
+     `APPROVAL`(최종 확정 — $make-pr, PR 직전). harness:check가 이 이벤트와 PRD/ADR
+     status의 정합성을 교차검증한다. 손으로 위조하면 여러 아티팩트를 동시에 조작해야
+     하며 감사에 드러난다. -->
+
+- PREAPPROVAL prd 2026-11-15 harness:approve :: 사전 승인
+- PREAPPROVAL adr 2026-11-15 harness:approve :: 사전 승인
+
+## 지식 기록
+
+- KNOWLEDGE 2026-11-17 invariants=INV-261117-relevant-item-only,INV-261117-speed-base-scarf-free,INV-261117-speed-weather-opponent-only gotchas=G-261117-power-item-engine-unsupported via=make-pr

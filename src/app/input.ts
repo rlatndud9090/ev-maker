@@ -10,7 +10,6 @@ export function toCardInput(state: AppState, game: Snapshot, view: MetaView): Ca
     game,
     view,
     mySet: toPokemonSet(game, state.draft).set,
-    conditions: state.conditions,
     rollSteps: state.rollSteps,
     criteria: state.criteria,
     filters: state.filters,
