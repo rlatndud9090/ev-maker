@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent } from 'react'
 import {
   focusAfterRemove,
   minSpToPass,
@@ -23,6 +23,7 @@ import { ItemMark } from './ItemMark'
 import { PokemonIcon } from './PokemonIcon'
 import { SpeedBadge } from './SpeedBadge'
 import { SpeedBadgeDetail } from './SpeedBadgeDetail'
+import { Popover } from './Popover'
 import { rejectionText, toggleDetail, type SpeedBadgeHandlers } from './speedText'
 import './speedChart.css'
 
@@ -53,7 +54,7 @@ interface Props {
 
 type Pending = { kind: 'id'; id: string } | { kind: 'added'; source: TargetSource; opponentId: string; sp: number; nature: NatureSign }
 
-/** 실수치 내림차순 줄 목록(기준선 띠 포함)과 줄 아래 인라인 상세, 순서 비교 불가 영역 */
+/** 실수치 내림차순 줄 목록(기준선 띠 포함)과 배지에 붙는 상세 팝오버, 순서 비교 불가 영역 */
 export function SpeedChart({ game, model, input, bundleShareMin, badges, rows, baseline, shownSet, myTailwind, customTargets, dispatch, empty, reveal, onRevealed }: Props) {
   const frame = useRef<HTMLDivElement>(null)
   const [detailId, setDetailId] = useState<string | null>(null)
@@ -61,7 +62,6 @@ export function SpeedChart({ game, model, input, bundleShareMin, badges, rows, b
   const byId = useMemo(() => new Map(badges.map((b) => [b.id, b])), [badges])
   const rowsRef = useRef(rows)
   const detailRef = useRef(detailId)
-  const anchor = useRef<{ id: string; top: number } | null>(null)
   const pending = useRef<Pending | null>(null)
 
   useLayoutEffect(() => {
@@ -79,15 +79,12 @@ export function SpeedChart({ game, model, input, bundleShareMin, badges, rows, b
   }, [])
 
   /** 그 배지 상세를 연다(이미 열려 있으면 그대로) */
-  const open = useCallback(
-    (id: string) => {
-      const btn = buttonOf(id)
-      if (btn !== null && detailRef.current !== id) anchor.current = { id, top: btn.getBoundingClientRect().top }
-      setActiveId(id)
-      setDetailId(id)
-    },
-    [buttonOf],
-  )
+  const open = useCallback((id: string) => {
+    // 다음 커밋 전에 오는 이전 팝오버의 닫기(dismiss)가 새로 연 상세를 닫지 않게 바로 바꾼다
+    detailRef.current = id
+    setActiveId(id)
+    setDetailId(id)
+  }, [])
   const close = useCallback(() => setDetailId(null), [])
 
   const handlers = useMemo<SpeedBadgeHandlers>(
@@ -109,17 +106,7 @@ export function SpeedChart({ game, model, input, bundleShareMin, badges, rows, b
     [open, close, buttonOf],
   )
 
-  // 상세가 다른 줄로 옮겨 가도 포커스한 배지의 화면 위치를 유지한다
-  useLayoutEffect(() => {
-    const a = anchor.current
-    anchor.current = null
-    const el = frame.current
-    if (a === null || el === null || a.id !== detailId) return
-    const btn = buttonOf(a.id)
-    if (btn !== null) el.scrollTop += btn.getBoundingClientRect().top - a.top
-  }, [detailId, buttonOf])
-
-  // 프레임 위·아래 스크롤 여백 = 기준선 띠 높이(포커스·펼친 상세가 끝에 붙은 띠 뒤로 숨지 않게, ADR 결정 1)
+  // 프레임 위·아래 스크롤 여백 = 기준선 띠 높이(포커스한 배지가 끝에 붙은 띠 뒤로 숨지 않게)
   useLayoutEffect(() => {
     const el = frame.current
     const bandEl = el?.querySelector<HTMLElement>('[data-testid="speed-baseline"]')
@@ -153,28 +140,13 @@ export function SpeedChart({ game, model, input, bundleShareMin, badges, rows, b
     if (p.kind === 'added') open(target.id)
   })
 
-  // 바깥 누름·Esc로 닫는다. 상세 안에서 Esc면 포커스를 연 배지로 돌린다(콤보 목록 닫기 등 먼저 처리된 Esc는 건드리지 않음)
-  useEffect(() => {
-    if (detailId === null) return
-    const onDown = (e: PointerEvent) => {
-      if (e.target instanceof Element && e.target.closest('.speed-badge, .speed-detail') === null) setDetailId(null)
-    }
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key !== 'Escape' || e.defaultPrevented) return
-      e.preventDefault()
-      const inside = document.activeElement instanceof Element && document.activeElement.closest('.speed-detail') !== null
-      setDetailId(null)
-      if (!inside) return
-      setActiveId(detailId)
-      buttonOf(detailId)?.focus()
-    }
-    document.addEventListener('pointerdown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('pointerdown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [detailId, buttonOf])
+  // 팝오버 닫기(Esc·바깥 누름·배지가 스크롤로 가려짐): 로빙 자리는 연 배지에 둔다(포커스 복귀는 팝오버가 한다).
+  // 이미 다른 배지로 바뀐 뒤 늦게 온 이전 팝오버의 닫기는 무시한다
+  const dismiss = useCallback((id: string) => {
+    if (detailRef.current !== id) return
+    setActiveId(id)
+    setDetailId(null)
+  }, [])
 
   const names = namesOf(game)
   const minSp = useMemo(
@@ -183,61 +155,35 @@ export function SpeedChart({ game, model, input, bundleShareMin, badges, rows, b
   )
 
   return (
-    <div className="speed-frame" ref={frame} data-testid="speed-frame">
-      <ul className="speed-rows" aria-label="스피드 실수치 내림차순">
-        {rows.map((row) => {
-          const band = row.baseline && baseline.kind === 'ok'
-          const hasDetail = detailBadge !== undefined && row.badgeIds.includes(detailBadge.id)
-          const badgeList = row.badgeIds.length > 0 && (
-            <ul className="speed-badges" aria-label={`실수치 ${row.speed}`}>
-              {row.badgeIds.map((id) => {
-                const b = byId.get(id)
-                if (b === undefined) return null
-                return (
-                  <SpeedBadge
-                    key={id}
-                    game={game}
-                    badge={b}
-                    status={statusOf(b.speed, baseline)}
-                    active={id === active}
-                    open={id === detailId}
-                    detailId={DETAIL_ID}
-                    handlers={handlers}
-                  />
-                )
-              })}
-            </ul>
-          )
-          const detail = hasDetail && detailBadge !== undefined && (
-            <SpeedBadgeDetail
-              id={DETAIL_ID}
-              game={game}
-              model={model}
-              input={input}
-              bundleShareMin={bundleShareMin}
-              badge={detailBadge}
-              status={statusOf(detailBadge.speed, baseline)}
-              baseline={baseline}
-              minSp={minSp}
-              myTailwind={myTailwind}
-              target={detailBadge.source === 'custom' ? customTargets.find((t) => t.rosterId === detailBadge.opponentId) : undefined}
-              dispatch={dispatch}
-              onAdded={(b) => {
-                pending.current = { kind: 'added', ...b }
-              }}
-              onRemove={(b) => {
-                const next = focusAfterRemove(rowsRef.current, b.id)
-                pending.current = next === null ? null : { kind: 'id', id: next }
-                setDetailId(null)
-                dispatch({ type: 'remove-speed-bundle', bundle: { source: b.source, opponentId: b.opponentId, sp: b.bundle.sp, nature: b.bundle.nature } })
-              }}
-            />
-          )
-          if (band) {
-            // 기준선 띠 = 내 실수치 줄: 구분 텍스트 → 동속 배지. 동속 배지 상세는 띠 바로 아래 항목(띠와 함께 끝에 붙지 않게)
-            return (
-              <Fragment key={row.speed}>
-                <li className="speed-baseline" data-testid="speed-baseline" data-speed={row.speed}>
+    <>
+      <div className="speed-frame" ref={frame} data-testid="speed-frame">
+        <ul className="speed-rows" aria-label="스피드 실수치 내림차순">
+          {rows.map((row) => {
+            const band = row.baseline && baseline.kind === 'ok'
+            const badgeList = row.badgeIds.length > 0 && (
+              <ul className="speed-badges" aria-label={`실수치 ${row.speed}`}>
+                {row.badgeIds.map((id) => {
+                  const b = byId.get(id)
+                  if (b === undefined) return null
+                  return (
+                    <SpeedBadge
+                      key={id}
+                      game={game}
+                      badge={b}
+                      status={statusOf(b.speed, baseline)}
+                      active={id === active}
+                      open={id === detailId}
+                      detailId={DETAIL_ID}
+                      handlers={handlers}
+                    />
+                  )
+                })}
+              </ul>
+            )
+            if (band) {
+              // 기준선 띠 = 내 실수치 줄: 구분 텍스트 → 동속 배지
+              return (
+                <li key={row.speed} className="speed-baseline" data-testid="speed-baseline" data-speed={row.speed}>
                   <span className="speed-baseline-label">
                     내 스피드 <b className="num">{baseline.speed}</b>
                     <span className="speed-baseline-bundle num" data-testid="speed-baseline-bundle">
@@ -248,43 +194,76 @@ export function SpeedChart({ game, model, input, bundleShareMin, badges, rows, b
                   <span className="sr-only">. {baseline.speed}과 같으면 동속, 그보다 아래는 추월</span>
                   {badgeList}
                 </li>
-                {detail && <li className="speed-row speed-band-detail">{detail}</li>}
-              </Fragment>
-            )
-          }
-          if (row.badgeIds.length === 0) return null
-          return (
-            <li key={row.speed} className="speed-row" data-speed={row.speed}>
-              <span className="speed-row-speed num">{row.speed}</span>
-              {badgeList}
-              {detail}
-            </li>
-          )
-        })}
-      </ul>
-      {empty && (
-        <p className="empty speed-empty" data-testid="speed-empty">
-          표시할 상대가 없습니다. 사용률 상위 수나 선택 필터를 바꿔 보세요.
-        </p>
-      )}
-      {model.unsupported.length > 0 && (
-        <section className="speed-unsupported" data-testid="speed-unsupported" aria-labelledby="speed-unsupported-h">
-          <h3 id="speed-unsupported-h">순서 비교 불가</h3>
-          <ul>
-            {model.unsupported.map((u) => {
-              const r = rejectionText(game, u.rejection, 'opponent')
-              return (
-                <li key={`${u.origin}:${u.opponentId}:${u.presetIndex ?? ''}`}>
-                  <PokemonIcon speciesId={u.speciesId} size={28} lazy />
-                  {names.species.label(u.speciesId)}
-                  {u.item !== null && <ItemMark item={{ id: u.item, name: names.items.label(u.item), role: 'held' }} lazy />}
-                  {u.presetIndex !== undefined && ` (프리셋 ${u.presetIndex + 1})`} · {r.reason} · {r.cause}
-                </li>
               )
-            })}
-          </ul>
-        </section>
+            }
+            if (row.badgeIds.length === 0) return null
+            return (
+              <li key={row.speed} className="speed-row" data-speed={row.speed}>
+                <span className="speed-row-speed num">{row.speed}</span>
+                {badgeList}
+              </li>
+            )
+          })}
+        </ul>
+        {empty && (
+          <p className="empty speed-empty" data-testid="speed-empty">
+            표시할 상대가 없습니다. 사용률 상위 수나 선택 필터를 바꿔 보세요.
+          </p>
+        )}
+        {model.unsupported.length > 0 && (
+          <section className="speed-unsupported" data-testid="speed-unsupported" aria-labelledby="speed-unsupported-h">
+            <h3 id="speed-unsupported-h">순서 비교 불가</h3>
+            <ul>
+              {model.unsupported.map((u) => {
+                const r = rejectionText(game, u.rejection, 'opponent')
+                return (
+                  <li key={`${u.origin}:${u.opponentId}:${u.presetIndex ?? ''}`}>
+                    <PokemonIcon speciesId={u.speciesId} size={28} lazy />
+                    {names.species.label(u.speciesId)}
+                    {u.item !== null && <ItemMark item={{ id: u.item, name: names.items.label(u.item), role: 'held' }} lazy />}
+                    {u.presetIndex !== undefined && ` (프리셋 ${u.presetIndex + 1})`} · {r.reason} · {r.cause}
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        )}
+      </div>
+      {/* 상세는 프레임 밖 고정 배치 팝오버: 줄을 밀지 않고, DOM은 프레임 바로 뒤라 배지에서 Tab 한 번에 들어간다 */}
+      {detailBadge !== undefined && (
+        <Popover
+          key={detailBadge.id}
+          id={DETAIL_ID}
+          label={`${names.species.label(detailBadge.speciesId)} 상세`}
+          getAnchor={() => buttonOf(detailBadge.id)}
+          onDismiss={() => dismiss(detailBadge.id)}
+          closeWhenAnchorHidden
+          ignoreOutside=".speed-badge"
+        >
+          <SpeedBadgeDetail
+            game={game}
+            model={model}
+            input={input}
+            bundleShareMin={bundleShareMin}
+            badge={detailBadge}
+            status={statusOf(detailBadge.speed, baseline)}
+            baseline={baseline}
+            minSp={minSp}
+            myTailwind={myTailwind}
+            target={detailBadge.source === 'custom' ? customTargets.find((t) => t.rosterId === detailBadge.opponentId) : undefined}
+            dispatch={dispatch}
+            onAdded={(b) => {
+              pending.current = { kind: 'added', ...b }
+            }}
+            onRemove={(b) => {
+              const next = focusAfterRemove(rowsRef.current, b.id)
+              pending.current = next === null ? null : { kind: 'id', id: next }
+              setDetailId(null)
+              dispatch({ type: 'remove-speed-bundle', bundle: { source: b.source, opponentId: b.opponentId, sp: b.bundle.sp, nature: b.bundle.nature } })
+            }}
+          />
+        </Popover>
       )}
-    </div>
+    </>
   )
 }

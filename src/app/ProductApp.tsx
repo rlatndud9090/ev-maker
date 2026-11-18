@@ -18,6 +18,7 @@ import type { Reveal, RevealRequest } from './reveal'
 import { initialState, moveSelections, reducer } from './state'
 import { useExecutor } from './useExecutor'
 import { CustomTargetPanel } from './components/CustomTargetPanel'
+import { Popover } from './components/Popover'
 import { MySetPanel } from './components/MySetPanel'
 import { ResultBox } from './components/ResultBox'
 import { ResultPanel } from './components/ResultPanel'
@@ -91,6 +92,9 @@ export function ProductApp() {
     </>
   )
 }
+
+/** 탭을 바꿔도 '포켓몬 추가'는 열린 채 고른 포켓몬을 유지한다(탭 누름은 바깥 누름이 아니다) */
+const KEEP_OPEN_ON = '[role="tab"]'
 
 function Workspace({ boot }: { boot: Boot }) {
   const { game } = boot
@@ -230,9 +234,12 @@ function Workspace({ boot }: { boot: Boot }) {
     // 포커스는 버튼으로 돌리지 않고 새 배분(reveal)으로 옮긴다
     setAddPanel({ open: false, rosterId: null, autoFocus: false })
   }
+  const dismissCustom = useCallback(() => setAddPanel({ open: false, rosterId: null, autoFocus: false }), [])
+  const customAnchor = useCallback(() => customButton.current, [])
   const customPanel = customOpen && (
+    <Popover id={customPanelId} labelledBy={`${customPanelId}-h`} getAnchor={customAnchor} onDismiss={dismissCustom} ignoreOutside={KEEP_OPEN_ON}>
     <CustomTargetPanel
-      id={customPanelId}
+      headingId={`${customPanelId}-h`}
       game={game}
       view={meta.view}
       tab={tab}
@@ -250,6 +257,7 @@ function Workspace({ boot }: { boot: Boot }) {
       onAdded={onAdded}
       onCancel={closeCustom}
     />
+    </Popover>
   )
 
   return (

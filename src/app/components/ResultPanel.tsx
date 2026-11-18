@@ -232,11 +232,6 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
       live.textContent = `${names.species.label(g.group.opponent.id)}${berry}: ${bucketText(to.bucket)} 그룹으로 옮겼습니다.`
     }
   }, [sections, sortMode, tab, names, game])
-  // 추가 패널을 열면(패널의 포커스 이동보다 먼저) 목록 스크롤을 맨 위로: 패널이 고정된 진행 줄 밑에 숨지 않는다.
-  const hasCustomPanel = Boolean(customPanel)
-  useLayoutEffect(() => {
-    if (hasCustomPanel) panelRef.current?.closest('.result-scroll')?.scrollTo({ top: 0 })
-  }, [hasCustomPanel])
   const onFocus = (e: FocusEvent<HTMLDivElement>) => {
     lastFocus.current = e.target
   }
@@ -333,6 +328,7 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
           type="button"
           className="custom-add-btn"
           ref={customButtonRef}
+          aria-haspopup="dialog"
           aria-expanded={customOpen}
           aria-controls={customOpen ? customPanelId : undefined}
           onClick={onToggleCustom}

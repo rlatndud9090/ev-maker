@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { cards, combo, findOverlaps, mySet, openProduct, region, selectTab, tabPanel, waitComplete, type ProductTab } from './helpers'
+import { addPanel, cards, combo, findOverlaps, mySet, openProduct, selectTab, tabPanel, waitComplete, type ProductTab } from './helpers'
 
 // 목록 위 설정 개편(사용자 요청 2026-11-12): 통계 설정 → 표시 설정 → 포켓몬 찾기 3줄, 정렬 토글(사용률/계산결과순),
 // 계산결과순 그룹 라벨, "포켓몬 추가"는 진행 줄 오른쪽 끝.
@@ -428,16 +428,18 @@ test.describe('포켓몬 추가 버튼', () => {
 
     await expect(button).toHaveAttribute('aria-expanded', 'false')
     await button.click()
-    const panel = region(page, '포켓몬 추가')
+    const panel = addPanel(page)
     await expect(panel).toBeVisible()
     await expect(button).toHaveAttribute('aria-expanded', 'true')
+    await expect(button).toHaveAttribute('aria-haspopup', 'dialog')
     await expect(button).toHaveAttribute('aria-controls', (await panel.getAttribute('id'))!)
     await expect(combo(panel, '추가할 포켓몬')).toBeFocused()
-    // 패널은 진행 줄 바로 아래(목록 위): 열린 후보 목록이 버튼을 가리지 않는다
+    // 팝오버는 버튼 바로 아래에 붙고 오른쪽 끝을 버튼에 맞춘다(열린 후보 목록이 버튼을 가리지 않는다)
     const panelBox = (await panel.boundingBox())!
-    const statusNow = (await status.boundingBox())!
-    expect(panelBox.y).toBeGreaterThanOrEqual(statusNow.y + statusNow.height - 1)
-    expect(panelBox.y - (statusNow.y + statusNow.height)).toBeLessThan(24)
+    const buttonNow = (await button.boundingBox())!
+    expect(panelBox.y).toBeGreaterThanOrEqual(buttonNow.y + buttonNow.height - 1)
+    expect(panelBox.y - (buttonNow.y + buttonNow.height)).toBeLessThan(16)
+    expect(Math.abs(panelBox.x + panelBox.width - (buttonNow.x + buttonNow.width))).toBeLessThanOrEqual(2)
     // 열린 후보 목록을 Escape로 닫은 뒤 [취소]
     await page.keyboard.press('Escape')
     await panel.getByRole('button', { name: '취소', exact: true }).click()
@@ -488,7 +490,7 @@ for (const width of [400, 1280]) {
       const button = page.getByTestId('panel-status').getByRole('button', { name: '포켓몬 추가', exact: true })
       await button.scrollIntoViewIfNeeded()
       await button.click()
-      const panel = region(page, '포켓몬 추가')
+      const panel = addPanel(page)
       const input = combo(panel, '추가할 포켓몬')
       await expect(input).toBeFocused()
       await input.fill('로토무')

@@ -91,6 +91,7 @@ export function SpeedTab({ game, input, state, mySet, displaySp, dispatch, tabId
           type="button"
           className="custom-add-btn"
           ref={customButtonRef}
+          aria-haspopup="dialog"
           aria-expanded={customOpen}
           aria-controls={customOpen ? customPanelId : undefined}
           onClick={onToggleCustom}

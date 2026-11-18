@@ -7,7 +7,8 @@ const listScroll = (page: Page) => page.getByTestId('result-scroll')
 
 // AC18: 폭 400px·1280px에서 본문 가로 스크롤 없음, 라벨·컨트롤 겹침 없음. 0~32 띠는 상세 오른쪽 열 폭에 맞춰 줄어들어 스크롤이 없다
 // (사용자 피드백 2026-11-12: 칸 안 숫자·기호 없이 색만, 칸 사이 틈은 유지).
-const CONTROLS = 'main[data-app="product"] :is(label, h1, h2, legend, button, [role="tab"], select, input, [data-testid="meta-source"], [data-testid="sp-remaining"])'
+// '포켓몬 추가'는 뒤 화면 위에 겹쳐 뜨는 팝오버라 그 안의 컨트롤은 따로(팝오버 안끼리) 본다
+const CONTROLS = 'main[data-app="product"] :is(label, h1, h2, legend, button, [role="tab"], select, input, [data-testid="meta-source"], [data-testid="sp-remaining"]):not([role="dialog"] *)'
 
 for (const width of [400, 1280]) {
   test.describe(`제품 화면 ${width}px`, () => {
@@ -54,6 +55,7 @@ for (const width of [400, 1280]) {
       const leaks = await page.evaluate(() => [...document.querySelectorAll('.band')].filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1).length)
       expect(leaks).toBe(0)
       expect(await findOverlaps(page, CONTROLS)).toEqual([])
+      expect(await findOverlaps(page, '[role="dialog"] :is(label, h2, button, input)')).toEqual([])
       // 접힌 줄: 기술 선택 버튼과 결과(배지 + 변동 가능)가 겹치지 않고, 이름(폼 꼬리 포함)은 1280px에서 한 줄.
       const lineIssues = await page.evaluate((wide) => {
         const out: string[] = []

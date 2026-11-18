@@ -39,7 +39,6 @@ import {
 } from "./speedText";
 
 interface Props {
-  id: string;
   game: Snapshot;
   model: SpeedChartModel;
   /** 차트 모델 입력(추가 판정 질의가 같은 입력을 쓴다) */
@@ -58,11 +57,10 @@ interface Props {
 }
 
 /**
- * 배지 줄 바로 아래 인라인 상세: 머리줄(이름·배분·조건 태그·실수치, 상태는 머리 색·접근 이름), 추월 최소 S, 다른 배분 추가·지우기.
+ * 배지에 붙은 팝오버 안 상세: 머리줄(이름·배분·조건 태그·실수치, 상태는 머리 색·접근 이름), 추월 최소 S, 다른 배분 추가·지우기.
  * 열 때마다 "다른 배분 추가"는 접힌 채 시작한다(배지 id로 key)
  */
 export function SpeedBadgeDetail({
-  id,
   game,
   model,
   input,
@@ -83,10 +81,7 @@ export function SpeedBadgeDetail({
   const name = names.species.label(b.speciesId);
   return (
     <div
-      id={id}
       className="speed-detail"
-      role="region"
-      aria-label={`${name} 상세`}
       data-testid="speed-detail"
       data-badge-id={b.id}
       data-status={status ?? "neutral"}

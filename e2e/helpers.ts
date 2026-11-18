@@ -135,7 +135,7 @@ export async function dragSlider(page: Page, slider: Locator, target: number): P
 
 // ---------- '포켓몬 추가' 패널 ----------
 
-export const addPanel = (page: Page) => region(page, '포켓몬 추가')
+export const addPanel = (page: Page) => page.getByRole('dialog', { name: '포켓몬 추가', exact: true })
 export const addPanelButton = (page: Page) => page.getByRole('button', { name: '포켓몬 추가', exact: true })
 
 export async function openAddPanel(page: Page): Promise<Locator> {

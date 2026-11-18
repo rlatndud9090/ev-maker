@@ -40,8 +40,8 @@ import { NatureToggle } from './NatureToggle'
 import { NumberField } from './NumberField'
 
 interface Props {
-  /** 여는 버튼의 aria-controls 대상 */
-  id?: string
+  /** 제목 id(팝오버 접근 이름) */
+  headingId: string
   game: Snapshot
   /** 화면에 보이는 메타(질의 입력과 같은 view) */
   view: MetaView
@@ -86,10 +86,9 @@ const FOCUSABLE = 'input:not([disabled]), button:not([disabled])'
  * 배분 판정·문구는 스피드 배지 상세·카드 메뉴 '직접 추가'와 같은 질의·판정을 쓴다.
  */
 export function CustomTargetPanel(p: Props) {
-  const { id, game, view, tab, filters, customTargets, speedInput, damageInput, bundleShareMin, rosterId, onPick, autoFocus, onAutoFocused, onCancel } = p
-  const uid = useId()
+  const { headingId, game, view, tab, filters, customTargets, speedInput, damageInput, bundleShareMin, rosterId, onPick, autoFocus, onAutoFocused, onCancel } = p
   const names = namesOf(game)
-  const sectionRef = useRef<HTMLElement>(null)
+  const sectionRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   /** 칩·검색창이 바뀐 뒤 옮길 포커스(검색창이 언마운트되는 선택, 칩이 언마운트되는 다시 검색) */
   const focusNext = useRef<'body' | 'search' | null>(null)
@@ -157,17 +156,8 @@ export function CustomTargetPanel(p: Props) {
 
   const tag = status === null ? undefined : STATUS_TAG[status]
   return (
-    <section
-      ref={sectionRef}
-      id={id}
-      className="custom-panel"
-      role="region"
-      aria-labelledby={`${uid}-h`}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape' && !e.defaultPrevented) onCancel()
-      }}
-    >
-      <h2 id={`${uid}-h`}>포켓몬 추가</h2>
+    <div ref={sectionRef} className="custom-panel">
+      <h2 id={headingId}>포켓몬 추가</h2>
       <p className="hint">
         메타 목록에 있거나 이미 추가한 포켓몬은 이 탭의 새 배분을, 목록에 없는 포켓몬은 사용자 지정 가정으로 추가합니다. 새 포켓몬은 기술을 직접 1~{MAX_CUSTOM_MOVES}개 고릅니다.
       </p>
@@ -204,7 +194,7 @@ export function CustomTargetPanel(p: Props) {
         </div>
       )}
       {rosterId === null ? actions(false, () => undefined) : <div ref={bodyRef} className="add-body">{body}</div>}
-    </section>
+    </div>
   )
 }
 
