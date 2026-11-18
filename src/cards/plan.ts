@@ -29,6 +29,8 @@ import { powerItemBoosts, powerItemsOf } from './powerItems'
 import { bundleStats, bundlesOf, natureSign } from './bundles'
 import { LAST_RESPECTS, LAST_RESPECTS_FAINTS, addedBundleKey, addedCardId, faintConditionId, cardId as makeCardId, presetKey, rowId } from './ids'
 import { presetAssumption } from './presets'
+import { isInRange, ladderOpponents, type LadderOpponent } from './range'
+import { isSpValue } from './spValue'
 import { trimSp } from './spTrim'
 import { TAB_MEANS_OWNERS, ladderMeans, rankMoveAllowed, rankVariants, setMeansCandidates, type CardRefStats, type MeansCandidate } from './rank'
 import type { BoostStat } from './rankMeans'
@@ -56,6 +58,7 @@ import {
   type RowSpec,
   type DamageTab,
   type TabPlan,
+  type TargetSource,
 } from './types'
 
 /** 방어 탭 래더 상대 기본 후보의 사용률 하한 */
@@ -199,7 +202,8 @@ class PlanBuilder {
     return out
   }
 
-  ladderSeeds(entry: MetaEntry, category: Category | null, keyStats: readonly StatId[]): CardSeed[] {
+  /** 래더 관측 씨앗(점유율 기준 이상 묶음, 없으면 대표 가정 하나). 범위 밖 상대도 사용자 추가의 기준 가정으로 쓴다 */
+  ladderObserved(entry: MetaEntry, category: Category | null, keyStats: readonly StatId[]): CardSeed[] {
     const { game, input } = this
     const bundles = bundlesOf(game, entry, keyStats, input.criteria)
     let observed: CardSeed[]
@@ -214,27 +218,25 @@ class PlanBuilder {
         return this.seed(category, bundle, observedSpreadAssumption(input.view, entry.id, idx))
       })
     }
-    return [...observed, ...this.userSeeds(entry, category, keyStats, observed)]
+    return observed
   }
 
   /**
-   * 사용자 추가 배분(이 탭·상대·분류, 추가 순). 가정 세트 = 대표(최고 점유율) 묶음 가정에서 키 능력치 SP만 바꾸고,
-   * 대표 성격이 키 능력치에 보정을 주면 무보정 성격으로 바꾼다. SP 합이 상한을 넘으면 키가 아닌 능력치(큰 것부터)에서 덜어 낸다.
-   * 키 능력치 집합이 다르거나 SP가 0~최대 정수가 아니면 받지 않고, 관측 묶음·앞선 추가와 키가 같으면 새 카드를 만들지 않는다.
+   * 사용자 추가 배분(이 탭·출처·상대·분류, 추가 순). 가정 세트 = base(래더 = 최고 점유율 묶음 가정, 목록 밖 = 프리셋 1 편집 반영)에서 키 능력치 SP만 바꾸고,
+   * 그 성격이 키 능력치에 보정을 주면 무보정 성격으로 바꾼다. SP 합이 상한을 넘으면 키가 아닌 능력치(큰 것부터)에서 덜어 낸다.
+   * 키 능력치 집합이 다르거나 SP가 0~최대 정수가 아니면 받지 않고, seen(이미 표시하는 묶음 키)·앞선 추가와 키가 같으면 새 카드를 만들지 않는다.
    */
-  userSeeds(entry: MetaEntry, category: Category | null, keyStats: readonly StatId[], observed: readonly CardSeed[]): CardSeed[] {
+  userSeeds(opp: Opponent, category: Category | null, keyStats: readonly StatId[], base: Assumption | undefined, seen: Set<string>): CardSeed[] {
     const { game, input } = this
-    const base = observed[0]?.assumption
     if (base === undefined) return []
     const { spTotal, spMaxPerStat } = game.manifest.rules
     const keys = new Set(keyStats)
-    const seen = new Set(observed.map((s) => s.bundle.key))
     const out: CardSeed[] = []
     ;(input.addedBundles ?? []).forEach((added, index) => {
-      if (added.tab !== this.tab || added.opponentId !== entry.id || added.category !== category) return
+      if (added.tab !== this.tab || added.source !== opp.header.source || added.opponentId !== opp.header.id || added.category !== category) return
       const given = Object.keys(added.sp) as StatId[]
       if (given.length !== keys.size || !given.every((s) => keys.has(s))) return
-      if (!given.every((s) => isSp(added.sp[s], spMaxPerStat))) return
+      if (!given.every((s) => isSpValue(added.sp[s], spMaxPerStat))) return
       const stats = STAT_IDS.filter((s) => keys.has(s)).map((stat) => ({ stat, sp: added.sp[stat] as number, nature: 'neutral' as const }))
       const key = addedBundleKey(stats)
       if (seen.has(key)) return
@@ -306,6 +308,26 @@ class PlanBuilder {
     return out
   }
 
+  /**
+   * 기본 카드 씨앗(도구 변형 전). observed = 래더 관측 씨앗·목록 밖 프리셋 3개, cards = 카드를 만드는 씨앗.
+   * 래더 = 관측 + 사용자 추가(addedOnly면 사용자 추가만), 목록 밖 = 프리셋 + 사용자 추가.
+   */
+  seedSets(opp: Opponent, category: Category | null, keyStats: readonly StatId[]): { observed: CardSeed[]; cards: CardSeed[] } {
+    let observed: CardSeed[]
+    if (opp.custom) observed = this.customSeeds(opp.custom, category, keyStats)
+    else if (opp.entry !== undefined) observed = this.ladderObserved(opp.entry, category, keyStats)
+    else return { observed: [], cards: [] }
+    const addedOnly = opp.header.addedOnly === true
+    // 추가분만 상대는 관측 키로 시작하지 않는다: 1위·관측 묶음과 같은 SP의 추가도 카드가 된다
+    const seen = new Set(addedOnly ? [] : observed.map((s) => s.bundle.key))
+    const user = this.userSeeds(opp, category, keyStats, observed[0]?.assumption, seen)
+    return { observed, cards: addedOnly ? user : [...observed, ...user] }
+  }
+
+  seedsOf(opp: Opponent, category: Category | null, keyStats: readonly StatId[]): CardSeed[] {
+    return this.seedSets(opp, category, keyStats).cards
+  }
+
   seed(category: Category | null, bundle: BundleSpec, assumption: Assumption): CardSeed {
     const r = resolveAssumption(this.game, assumption)
     if (!r.usable) return { category, bundle, assumption, error: errorReasons(r.error)[0] }
@@ -326,7 +348,7 @@ class PlanBuilder {
       id:
         seed.bundle.userAdded === undefined
           ? makeCardId(berry === undefined ? parts : [...parts, 'berry', berry.item])
-          : addedCardId(this.tab, opp.header.id, seed.category, seed.bundle.key, berry?.item),
+          : addedCardId(this.tab, opp.header.source, opp.header.id, seed.category, seed.bundle.key, berry?.item),
       order: this.cards.length,
       opponent: opp.header,
       category: seed.category,
@@ -676,7 +698,6 @@ function withAdded(base: readonly string[], added: ReadonlySet<string>, entry: M
   const share = (id: string): number => entry.moves.shares[id] ?? 0
   return unique([...base, ...added]).sort((a, b) => share(b) - share(a) || byString(a, b))
 }
-const isSp = (v: unknown, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= max
 
 /** 보정 없는 성격(스냅샷 성격 id 정렬 순 첫 번째). 없으면 원래 성격. */
 function neutralNature(game: Snapshot, fallback: string): string {
@@ -708,11 +729,22 @@ function planHead(input: CardInput, tab: DamageTab, mySp: SpTable) {
 /** 공격·방어 판정은 순풍 없음(자이로볼 등 스피드 의존 위력도 순풍 없음 가정). 나머지 조건은 코어 기본값 */
 const DAMAGE_CONDITIONS: BattleConditions = { attacker: { tailwind: false }, defender: { tailwind: false } }
 
-/** 상위 N 또는 선택 종(사용률 순) + 목록 밖 타겟(추가 순). 목록 안 종 타겟은 충돌로 돌린다. */
-function opponentsOf(input: CardInput): { ladder: MetaEntry[]; custom: CustomTarget[]; conflicts: string[] } {
-  const { view, filters, customTargets } = input
-  const selected = new Set(filters.selected)
-  const ladder = selected.size > 0 ? view.ranking.filter((e) => selected.has(e.id)) : view.ranking.slice(0, filters.topN)
+/** 래더 상대(사용률 순: 범위 안 + 그 탭에 래더 추가 배분이 있는 범위 밖) + 목록 밖 타겟(추가 순). 목록 안 종 타겟은 충돌로 돌린다. */
+function opponentsOf(input: CardInput, tab: DamageTab): { ladder: LadderOpponent[]; custom: CustomTarget[]; conflicts: string[] } {
+  const added = input.addedBundles ?? []
+  const hasAdded = (id: string) => added.some((a) => a.tab === tab && a.source === 'ladder' && a.opponentId === id)
+  return { ladder: ladderOpponents(input.view, input.filters, hasAdded), ...customTargetsOf(input) }
+}
+
+const ladderOpponent = (entry: MetaEntry, addedOnly: boolean): Opponent => {
+  const header: OpponentHeader = { id: entry.id, source: 'ladder', rank: entry.rank, usage: entry.usage }
+  if (addedOnly) header.addedOnly = true
+  return { header, entry }
+}
+
+/** 목록 밖 타겟(추가 순): 메타 목록 안 종은 충돌, 기술 없음·같은 rosterId 반복은 뺀다 */
+function customTargetsOf(input: CardInput): { custom: CustomTarget[]; conflicts: string[] } {
+  const { view, customTargets } = input
   const custom: CustomTarget[] = []
   const conflicts: string[] = []
   const seen = new Set<string>()
@@ -725,7 +757,7 @@ function opponentsOf(input: CardInput): { ladder: MetaEntry[]; custom: CustomTar
     seen.add(t.rosterId)
     custom.push(t)
   }
-  return { ladder, custom, conflicts }
+  return { custom, conflicts }
 }
 
 const isStatus = (game: Snapshot, moveId: string): boolean => hasMove(game, moveId) && game.data.moves[moveId].category === 'Status'
@@ -769,79 +801,99 @@ function representativeAbility(input: CardInput, entry: MetaEntry): string {
   return r.usable ? r.resolved.ability : a.set.ability
 }
 
-export function planTab(input: CardInput, tab: DamageTab): TabPlan {
-  const { game } = input
-  const raw = input.mySet as unknown
-  const mySp = (isPlainObject(raw) && isPlainObject(raw.sp) ? { ...raw.sp } : {}) as SpTable
-  const { ladder, custom, conflicts } = opponentsOf(input)
+interface CategoryKey {
+  category: Category
+  keyStats: readonly StatId[]
+}
 
+/** 내 세트 검증(boosts는 0으로)과 계획 빌더 생성 */
+function startPlan(input: CardInput, tab: DamageTab): { kind: 'ok'; b: PlanBuilder } | { kind: 'my-set-error'; reasons: ErrorReason[] } {
+  const raw = input.mySet as unknown
   const mySet = isPlainObject(raw) ? withBoosts(input.mySet, {}) : input.mySet
   let me: ResolvedSet
   try {
-    me = validateSet(game, mySet)
+    me = validateSet(input.game, mySet)
   } catch (e) {
-    return emptyPlan(input, tab, mySp, { kind: 'my-set-error', reasons: errorReasons(e) }, conflicts)
+    return { kind: 'my-set-error', reasons: errorReasons(e) }
   }
+  return { kind: 'ok', b: new PlanBuilder(input, tab, me, mySet, DAMAGE_CONDITIONS, setMeansCandidates(me, 'me')) }
+}
 
-  const b = new PlanBuilder(input, tab, me, mySet, DAMAGE_CONDITIONS, setMeansCandidates(me, 'me'))
+/** 공격 탭 분류: 내 공격기가 있는 분류(CATEGORY_ORDER 순), 키 능력치 = H + 그 분류 방어 능력치 */
+function attackCategories(slots: readonly MoveSlot[]): CategoryKey[] {
+  return CATEGORY_ORDER.filter((c) => slots.some((s) => s.refs?.defense === defenseStatOf(c))).map((category) => ({ category, keyStats: ['hp', defenseStatOf(category)] }))
+}
+
+/** 방어 탭 상대 후보 기술(사용률 순)과 사용자 추가 표시 대상(기본 후보에 없는 추가 기술) */
+function defenseMoves(b: PlanBuilder, opp: Opponent): { moveIds: readonly string[]; added: Set<string> } {
+  const entry = opp.entry
+  if (opp.custom || entry === undefined) return { moveIds: opp.custom?.moves ?? [], added: new Set<string>() }
+  const { input, me } = b
+  const myDefender: EffectivenessDefender = { types: me.species.types, ability: me.ability, item: me.item }
+  const base = defenseMoveIds(input.game, entry, myDefender, representativeAbility(input, entry))
+  // 기본 후보에 이미 있는 기술은 추가 표시(×)를 달지 않는다: 지워도 후보에서 빠지지 않으므로
+  const added = new Set(addedMoveIds(input, entry.id).filter((id) => !base.includes(id)))
+  return { moveIds: withAdded(base, added, entry), added }
+}
+
+/** 방어 탭 분류: 상대 기술이 있는 분류(CATEGORY_ORDER 순). 계산 가능한 기술 없이 오류 기술만 있으면 물리 하나 */
+function defenseCategories(ok: readonly MoveSlot[], errors: readonly MoveSlot[]): CategoryKey[] {
+  let categories = CATEGORY_ORDER.filter((c) => ok.some((s) => s.refs?.defense === defenseStatOf(c)))
+  if (categories.length === 0 && errors.length > 0) categories = ['physical']
+  return categories.map((category) => {
+    const inCategory = ok.filter((s) => s.refs?.defense === defenseStatOf(category))
+    // 스피드 의존 기술의 S는 묶음 대표 S로 계산하고 키에 넣지 않는다(목숨걸기 H 같은 나머지 의존은 넣는다).
+    const used = new Set<StatId>(
+      inCategory.filter((s) => s.refs?.offense?.owner === 'self').flatMap((s) => (s.refs as MoveStatRefs).attackerStats.filter((stat) => stat !== 'spe')),
+    )
+    // 키 능력치는 STAT_IDS 순: 묶음 키·카드 id·입력 칸 순서가 기술 순서에 따라 달라지지 않는다
+    const keyStats = STAT_IDS.filter((stat) => used.has(stat))
+    return { category, keyStats }
+  })
+}
+
+const stripItem = (b: PlanBuilder, opp: Opponent, seeds: CardSeed[]): CardSeed[] => {
+  const strip = opp.entry !== undefined && opp.entry.mega === undefined
+  return strip ? seeds.map((s) => (s.assumption.set.item === undefined ? s : b.withItem(s, undefined))) : seeds
+}
+
+export function planTab(input: CardInput, tab: DamageTab): TabPlan {
+  const raw = input.mySet as unknown
+  const mySp = (isPlainObject(raw) && isPlainObject(raw.sp) ? { ...raw.sp } : {}) as SpTable
+  const { ladder, custom, conflicts } = opponentsOf(input, tab)
+
+  const started = startPlan(input, tab)
+  if (started.kind === 'my-set-error') return emptyPlan(input, tab, mySp, { kind: 'my-set-error', reasons: started.reasons }, conflicts)
+  const { b } = started
   const tabNotices: MoveNotice[] = []
   const opponents: Opponent[] = [
     ...custom.map((t): Opponent => ({ header: { id: t.rosterId, source: 'custom' }, custom: t })),
-    ...ladder.map((e): Opponent => ({ header: { id: e.id, source: 'ladder', rank: e.rank, usage: e.usage }, entry: e })),
+    ...ladder.map((l) => ladderOpponent(l.entry, l.addedOnly)),
   ]
-  const seedsOf = (opp: Opponent, category: Category | null, keyStats: readonly StatId[]) =>
-    opp.custom ? b.customSeeds(opp.custom, category, keyStats) : b.ladderSeeds(opp.entry as MetaEntry, category, keyStats)
 
   if (tab === 'attack') {
     const slots = b.myAttackSlots(tabNotices)
-    const categories = CATEGORY_ORDER.filter((c) => slots.some((s) => s.refs?.defense === defenseStatOf(c)))
+    const categories = attackCategories(slots)
     for (const opp of opponents) {
-      // 상대(맞는 쪽) 도구 중 내 대미지·1타 판정에 관여하는 건 반감열매·기합의띠뿐이고 기합의띠는 고려하지 않는다(사용자 피드백 2026-11-12):
+      // 상대(맞는 쪽) 도구 중 내 대미지·1타 판정에 관여하는 건 반감열매·기합의띠뿐이고 기합의띠는 고려하지 않는다:
       // 래더 기본 카드는 도구 없음(메가 항목은 메가스톤 유지), 반감열매는 점유율 기준을 넘는 것마다 별도 변형 카드(원래 카드 바로 뒤).
       // 목록 밖 타겟은 사용자가 고른 프리셋 도구 그대로다.
-      const strip = opp.entry !== undefined && opp.entry.mega === undefined
-      const seeds = categories.map((category) => {
-        const raw = seedsOf(opp, category, ['hp', defenseStatOf(category)])
-        return strip ? raw.map((s) => (s.assumption.set.item === undefined ? s : b.withItem(s, undefined))) : raw
-      })
+      const seeds = categories.map(({ category, keyStats }) => stripItem(b, opp, b.seedsOf(opp, category, keyStats)))
       seeds.forEach((list) => list.forEach((seed) => b.attackCard(opp, seed, slots)))
       for (const berry of b.berryVariants(opp, seeds.flat(), slots)) {
         seeds.forEach((list) => list.forEach((seed) => b.attackCard(opp, b.withItem(seed, berry.item), slots, berry)))
       }
     }
   } else {
-    const myDefender: EffectivenessDefender = { types: me.species.types, ability: me.ability, item: me.item }
     for (const opp of opponents) {
       const notices: MoveNotice[] = []
-      let moveIds: readonly string[]
-      let added = new Set<string>()
-      if (opp.custom) moveIds = opp.custom.moves
-      else {
-        const entry = opp.entry as MetaEntry
-        const base = defenseMoveIds(game, entry, myDefender, representativeAbility(input, entry))
-        // 기본 후보에 이미 있는 기술은 추가 표시(×)를 달지 않는다: 지워도 후보에서 빠지지 않으므로
-        added = new Set(addedMoveIds(input, entry.id).filter((id) => !base.includes(id)))
-        moveIds = withAdded(base, added, entry)
-      }
+      const { moveIds, added } = defenseMoves(b, opp)
       const all = b.opponentSlots(moveIds, notices)
       const ok = all.filter((s) => s.refs)
       const errors = all.filter((s) => s.error)
-      let categories = CATEGORY_ORDER.filter((c) => ok.some((s) => s.refs?.defense === defenseStatOf(c)))
-      if (categories.length === 0 && errors.length > 0) categories = ['physical']
       // 래더 기본 카드는 상대 도구 없음(메가 항목은 메가스톤 유지), 화력 도구는 점유율 기준 이상마다 별도 변형 카드(원래 카드 바로 뒤, R14).
       // 목록 밖 타겟은 사용자가 고른 프리셋 도구 그대로다.
-      const strip = opp.entry !== undefined && opp.entry.mega === undefined
-      const seeds = categories.map((category) => {
-        const inCategory = ok.filter((s) => s.refs?.defense === defenseStatOf(category))
-        // 스피드 의존 기술의 S는 묶음 대표 S로 계산하고 키에 넣지 않는다(목숨걸기 H 같은 나머지 의존은 넣는다).
-        const keyStats = unique(
-          inCategory
-            .filter((s) => s.refs?.offense?.owner === 'self')
-            .flatMap((s) => (s.refs as MoveStatRefs).attackerStats.filter((stat) => stat !== 'spe')),
-        )
-        const raw = seedsOf(opp, category, keyStats)
-        return strip ? raw.map((s) => (s.assumption.set.item === undefined ? s : b.withItem(s, undefined))) : raw
-      })
+      const seeds = defenseCategories(ok, errors).map(({ category, keyStats }) => stripItem(b, opp, b.seedsOf(opp, category, keyStats)))
       seeds.forEach((list) => list.forEach((seed) => b.defenseCard(opp, seed, ok, errors, notices, added)))
       for (const power of b.powerItemVariants(opp, seeds.flat(), ok)) {
         seeds.forEach((list) => list.forEach((seed) => b.defenseCard(opp, b.withItem(seed, power.item), ok, errors, notices, added, power)))
@@ -859,4 +911,53 @@ export function planTab(input: CardInput, tab: DamageTab): TabPlan {
     customTargetConflicts: conflicts,
     notices: tabNotices,
   }
+}
+
+export interface OpponentCategorySeeds {
+  category: Category
+  keyStats: readonly StatId[]
+  /** 관측 묶음: 래더 = 점유율 기준 이상(minority 아님)만(추가분만 상대도 같다), 목록 밖 = 프리셋 3개 */
+  observed: readonly BundleSpec[]
+  /** planTab이 이 상대·분류에서 만드는 기본 카드(도구 변형 제외)의 묶음 전부(minority·대표 가정·사용자 추가 포함) */
+  cards: readonly BundleSpec[]
+  /** 입력 기본값 원천: 래더 = 첫 관측 씨앗 가정 SP, 목록 밖 = 프리셋 1(편집 반영) SP */
+  baseSp: SpTable
+}
+
+export type OpponentSeedsResult = { kind: 'ok'; categories: readonly OpponentCategorySeeds[] } | { kind: 'my-set-error' } | { kind: 'not-found' }
+
+/** 상대 한 마리의 분류별 씨앗. planTab과 같은 분류·키 능력치·씨앗 규칙을 쓰고 카드는 만들지 않는다. 범위 밖 래더 상대는 추가분만 규칙을 따른다 */
+export function opponentSeeds(input: CardInput, tab: DamageTab, target: { source: TargetSource; id: string }): OpponentSeedsResult {
+  const opp = targetOpponent(input, target)
+  if (opp === undefined) return { kind: 'not-found' }
+  const started = startPlan(input, tab)
+  if (started.kind === 'my-set-error') return { kind: 'my-set-error' }
+  const { b } = started
+  let categories: CategoryKey[]
+  if (tab === 'attack') categories = attackCategories(b.myAttackSlots([]))
+  else {
+    const all = b.opponentSlots(defenseMoves(b, opp).moveIds, [])
+    categories = defenseCategories(
+      all.filter((s) => s.refs),
+      all.filter((s) => s.error),
+    )
+  }
+  const out: OpponentCategorySeeds[] = []
+  for (const { category, keyStats } of categories) {
+    const seeds = b.seedSets(opp, category, keyStats)
+    const first = seeds.observed[0]
+    if (first === undefined) continue
+    const observed = seeds.observed.filter((s) => opp.custom !== undefined || !s.bundle.minority).map((s) => s.bundle)
+    out.push({ category, keyStats, observed, cards: seeds.cards.map((s) => s.bundle), baseSp: { ...first.assumption.set.sp } })
+  }
+  return { kind: 'ok', categories: out }
+}
+
+function targetOpponent(input: CardInput, target: { source: TargetSource; id: string }): Opponent | undefined {
+  if (target.source === 'ladder') {
+    const e = input.view.entry(target.id)
+    return e === undefined ? undefined : ladderOpponent(e, !isInRange(input.view, input.filters, e.id))
+  }
+  const t = customTargetsOf(input).custom.find((c) => c.rosterId === target.id)
+  return t === undefined ? undefined : { header: { id: t.rosterId, source: 'custom' }, custom: t }
 }

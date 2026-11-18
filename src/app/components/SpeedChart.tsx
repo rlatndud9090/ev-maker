@@ -9,11 +9,14 @@ import {
   type NatureSign,
   type SpeedBadge as Badge,
   type SpeedBaseline,
+  type SpeedChartInput,
   type SpeedChartModel,
+  type TargetSource,
 } from '../../cards'
 import type { PokemonSet } from '../../core'
 import type { Snapshot } from '../../data/schema'
 import { namesOf } from '../../ui/names'
+import type { SpeedReveal } from '../reveal'
 import type { AppAction } from '../state'
 import { BundleText } from './BundleText'
 import { ItemMark } from './ItemMark'
@@ -31,6 +34,9 @@ const isNavKey = (k: string): k is NavKeyName => (NAV_KEYS as readonly string[])
 interface Props {
   game: Snapshot
   model: SpeedChartModel
+  /** 차트 모델 입력(배지 상세 추가 판정이 같은 입력을 쓴다) */
+  input: SpeedChartInput
+  bundleShareMin: number
   badges: readonly Badge[]
   rows: readonly LadderRow[]
   baseline: SpeedBaseline
@@ -40,12 +46,15 @@ interface Props {
   dispatch: Dispatch<AppAction>
   /** 표시할 배지가 없음: 띠 아래 빈 상태 안내 */
   empty: boolean
+  /** 패널에서 추가한 배분: 그 배지로 포커스하고 상세를 연다 */
+  reveal: SpeedReveal | null
+  onRevealed: () => void
 }
 
-type Pending = { kind: 'id'; id: string } | { kind: 'added'; opponentId: string; sp: number; nature: NatureSign }
+type Pending = { kind: 'id'; id: string } | { kind: 'added'; source: TargetSource; opponentId: string; sp: number; nature: NatureSign }
 
 /** 실수치 내림차순 줄 목록(기준선 띠 포함)과 줄 아래 인라인 상세, 순서 비교 불가 영역 */
-export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTailwind, customTargets, dispatch, empty }: Props) {
+export function SpeedChart({ game, model, input, bundleShareMin, badges, rows, baseline, shownSet, myTailwind, customTargets, dispatch, empty, reveal, onRevealed }: Props) {
   const frame = useRef<HTMLDivElement>(null)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -122,12 +131,22 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
     return () => ro.disconnect()
   }, [baseline.kind, rows])
 
-  // 추가·삭제 뒤 포커스
+  // 패널 추가 요청은 배지 상세 추가와 같은 경로(아래 포커스 효과)로 넘긴다. 이 효과가 먼저 돌아야 같은 커밋에서 포커스한다.
+  useEffect(() => {
+    if (reveal === null) return
+    pending.current = { kind: 'added', source: reveal.source, opponentId: reveal.opponentId, sp: reveal.sp, nature: reveal.nature }
+    onRevealed()
+  }, [reveal, onRevealed])
+
+  // 추가·삭제 뒤 포커스. 차트 모델은 동기 계산이라 요청 뒤 첫 커밋에 대상이 없으면 생기지 않은 것이다(요청을 버린다).
   useEffect(() => {
     const p = pending.current
     if (p === null) return
-    const target = p.kind === 'id' ? byId.get(p.id) : badges.find((b) => b.origin === 'added' && b.opponentId === p.opponentId && b.bundle.sp === p.sp && b.bundle.nature === p.nature)
-    if (p.kind === 'id' || target !== undefined) pending.current = null
+    pending.current = null
+    const target =
+      p.kind === 'id'
+        ? byId.get(p.id)
+        : badges.find((b) => b.origin === 'added' && b.source === p.source && b.opponentId === p.opponentId && b.bundle.sp === p.sp && b.bundle.nature === p.nature)
     if (target === undefined) return
     buttonOf(target.id)?.focus()
     // 추가한 배지는 상세를 열어 결과(상태·최소 S·지우기)를 바로 보인다. 삭제 뒤 이웃 배지는 포커스만
@@ -194,12 +213,14 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
               id={DETAIL_ID}
               game={game}
               model={model}
+              input={input}
+              bundleShareMin={bundleShareMin}
               badge={detailBadge}
               status={statusOf(detailBadge.speed, baseline)}
               baseline={baseline}
               minSp={minSp}
               myTailwind={myTailwind}
-              target={customTargets.find((t) => t.rosterId === detailBadge.opponentId)}
+              target={detailBadge.source === 'custom' ? customTargets.find((t) => t.rosterId === detailBadge.opponentId) : undefined}
               dispatch={dispatch}
               onAdded={(b) => {
                 pending.current = { kind: 'added', ...b }
@@ -208,7 +229,7 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
                 const next = focusAfterRemove(rowsRef.current, b.id)
                 pending.current = next === null ? null : { kind: 'id', id: next }
                 setDetailId(null)
-                dispatch({ type: 'remove-speed-bundle', bundle: { opponentId: b.opponentId, sp: b.bundle.sp, nature: b.bundle.nature } })
+                dispatch({ type: 'remove-speed-bundle', bundle: { source: b.source, opponentId: b.opponentId, sp: b.bundle.sp, nature: b.bundle.nature } })
               }}
             />
           )

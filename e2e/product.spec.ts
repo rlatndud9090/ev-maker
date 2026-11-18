@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { cards, combo, mySet, openProduct, region, resultTab, selectTab, tabPanel, waitComplete } from './helpers'
+import { addCustomTarget, addPanel, addOption, cards, combo, mySet, openProduct, region, resultTab, selectTab, tabPanel, waitComplete } from './helpers'
 /** 상위 N 기본값(src/cards/types.ts DEFAULT_TOP_N과 같다) */
 const DEFAULT_TOP_N = 100
 
@@ -12,7 +12,7 @@ const NEED = '( \\(다른 능력치에서 \\d+ 필요\\))?'
 const targetPattern = (sps: string, label = TIER): string => `${label}: (?!무보정 불가 / 상승 불가)(최소 ${sps}${NEED}|무보정 불가) / (${sps}\\+${NEED}|상승 불가)`
 
 const toolbarSpin = (page: Page, name: string) => page.getByRole('spinbutton', { name, exact: true })
-const customPanel = (page: Page) => region(page, '목록 밖 포켓몬 추가')
+const customPanel = addPanel
 // 래더 상대 행. 방어 탭 화력 도구 행(PRD R14)만 뺀다(공격 탭 반감열매 행은 이전처럼 포함)
 const ladderCards = (page: Page) => cards(page).and(page.locator('[data-origin="ladder"]:not([data-power-item])'))
 const customCards = (page: Page) => cards(page).and(page.locator('[data-origin="custom"]'))
@@ -56,22 +56,6 @@ async function ladderRanks(page: Page): Promise<{ opponent: string; rank: number
   return ladderCards(page).evaluateAll((els) =>
     els.map((el) => ({ opponent: (el as HTMLElement).dataset.opponent ?? '', rank: Number((el as HTMLElement).dataset.rank) })),
   )
-}
-
-/** 목록 밖 타겟 추가 패널에서 종·기술을 고르고 [추가]. */
-async function addCustomTarget(page: Page, species: string, moves: string[]) {
-  await page.getByRole('button', { name: '포켓몬 추가', exact: true }).click()
-  const panel = customPanel(page)
-  await expect(panel).toBeVisible()
-  await combo(panel, '추가할 포켓몬').fill(species)
-  await combo(panel, '추가할 포켓몬').press('Enter')
-  const group = panel.getByRole('group', { name: /^기술/ })
-  for (const m of moves) {
-    await combo(group, '기술 검색').fill(m)
-    await group.getByRole('checkbox', { name: m, exact: true }).check()
-  }
-  await panel.getByRole('button', { name: '추가', exact: true }).click()
-  await expect(panel).toHaveCount(0)
 }
 
 test.describe('제품 화면', () => {
@@ -549,7 +533,7 @@ test.describe('제품 화면', () => {
     const add = panel.getByRole('button', { name: '추가', exact: true })
     await expect(add).toBeDisabled()
     await combo(panel, '추가할 포켓몬').fill('워시로토무')
-    await combo(panel, '추가할 포켓몬').press('Enter')
+    await addOption(page, '워시로토무', null).click()
     await expect(panel.getByRole('group', { name: /^기술/ })).toBeVisible()
     await expect(add).toBeDisabled()
     await panel.getByRole('button', { name: '취소', exact: true }).click()
@@ -1320,12 +1304,14 @@ test.describe('배분 직접 추가·고정(사용자 피드백 2026-11-12)', ()
     for (const bad of ['33', '-1', '1.5', '']) {
       await spInput(row, 'HP').fill(bad)
       await expect(addButton(row), bad).toBeDisabled()
-      await expect(hint, bad).toHaveText('SP는 0~32 정수만 넣을 수 있습니다')
+      await expect(hint, bad).toHaveText('SP는 0~32 정수로 입력해 주세요.')
       await expect(spInput(row, 'HP')).toHaveAttribute('aria-invalid', 'true')
+      await expect(spInput(row, 'HP')).toHaveAttribute('aria-describedby', (await hint.getAttribute('id'))!)
     }
     await spInput(row, 'HP').fill('32')
     await expect(addButton(row)).toBeEnabled()
-    await expect(hint).toHaveCount(0)
+    await expect(hint).toHaveText('')
+    await expect(spInput(row, 'HP')).toHaveAttribute('aria-invalid', 'false')
     await spInput(row, 'HP').fill('0')
     await expect(addButton(row)).toBeEnabled()
 
@@ -1549,35 +1535,40 @@ test.describe('배분 직접 추가·고정(사용자 피드백 2026-11-12)', ()
     await expect(row.getByTestId('bundle-list')).toHaveCount(0)
   })
 
-  test('관측 배분과 같은 값을 추가하면 새 항목 없이 그 배분을 고르고 고정한다', async ({ page }) => {
+  test('무보정 관측 배분과 같은 값을 직접 추가하면 "이미 존재합니다 — H.. B.."만 보이고 선택지·선택·고정은 그대로', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     const row = await firstRow(page)
+    const selected = await row.getAttribute('data-card-id')
+    const pinned = await row.getAttribute('data-pinned')
+    const generation = await tabPanel(page).getAttribute('data-generation')
     await bundleButton(row).click()
     const items = bundleMenu(row).getByRole('menuitemradio')
     const texts = await items.locator('.bundle-opt-label').allTextContents()
+    const ids = await items.evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.cardId))
     // 성격 보정 없는 두 번째 이후 관측 배분(직접 추가는 늘 무보정)
     const at = texts.findIndex((t, i) => i > 0 && /^H\d+ B\d+ /.test(t))
     expect(at, texts.join(' | ')).toBeGreaterThan(0)
     const [, h, b] = /^H(\d+) B(\d+) /.exec(texts[at])!
-    const target = await items.nth(at).getAttribute('data-card-id')
     await spInput(row, 'HP').fill(h)
     await spInput(row, '방어').fill(b)
     await addButton(row).click()
-    await expect(row).toHaveAttribute('data-card-id', target!)
-    await expect(row.getByTestId('card-bundle')).toHaveText(`H${h} B${b} 고정됨`)
-    await expect(row).toHaveAttribute('data-pinned', 'true')
-    await expect(row).not.toHaveAttribute('data-user-added', 'true')
-    await expect(tabPanel(page)).not.toHaveAttribute('data-superseded', 'true')
-    await bundleButton(row).click()
+    const hint = addForm(row).locator('.bundle-add-hint')
+    await expect(hint).toHaveText(`이미 존재합니다 — H${h} B${b}`)
+    await expect(hint).toHaveAttribute('role', 'status')
+    await expect(spInput(row, 'HP')).toHaveAttribute('aria-describedby', (await hint.getAttribute('id'))!)
+    // 메뉴는 연 채, 선택지 수·순서·선택·고정·세대가 그대로
+    await expect(bundleMenu(row)).toBeVisible()
+    await expect(items).toHaveCount(texts.length)
+    expect(await items.evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.cardId))).toEqual(ids)
     await expect(bundleMenu(row).locator('[data-user-added="true"]')).toHaveCount(0)
-    await expect(bundleMenu(row).getByRole('menuitemradio')).toHaveCount(texts.length)
-    await expect(items.first()).toHaveAttribute('data-card-id', target!)
-    // 핀 해제 → 관측 배분이라 삭제되지 않고 원래 자리·비중으로
-    await menuPin(row, target!).click()
-    await expect(items.nth(at)).toHaveAttribute('data-card-id', target!)
-    await expect(items.nth(at).locator('.bundle-opt-label')).toHaveText(texts[at])
-    await expect(bundleMenu(row).getByRole('menuitemradio')).toHaveCount(texts.length)
+    await expect(row).toHaveAttribute('data-card-id', selected!)
+    if (pinned === null) await expect(row).not.toHaveAttribute('data-pinned', /.*/)
+    else await expect(row).toHaveAttribute('data-pinned', pinned)
+    await expect(tabPanel(page)).toHaveAttribute('data-generation', generation!)
+    // 입력을 바꾸면 안내가 지워진다
+    await spInput(row, 'HP').fill(String((Number(h) + 1) % 33))
+    await expect(hint).toHaveText('')
   })
 
   test('목록 밖 타겟 행: 프리셋 항목에는 핀이 없고 같은 폭 빈 칸으로 결과 배지가 맞는다', async ({ page }) => {

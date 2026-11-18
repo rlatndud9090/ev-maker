@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { TABS, type ErrorReason, type MetaSourceView, type Tab } from '../cards'
+import { TABS, type ErrorReason, type MetaSourceView, type SpeedChartInput, type Tab } from '../cards'
 import type { SpTable } from '../core'
 import type { RegulationIndex, Snapshot } from '../data/schema'
 import type { MetaIndex, MetaSnapshot } from '../data/meta-schema'
@@ -13,6 +13,8 @@ import { Licenses } from '../ui/Licenses'
 import { toPokemonSet } from '../ui/setDraft'
 import { toCardInput } from './input'
 import { createDisplaySpStore } from './displaySp'
+import { abilityOf } from './myAbility'
+import type { Reveal, RevealRequest } from './reveal'
 import { initialState, moveSelections, reducer } from './state'
 import { useExecutor } from './useExecutor'
 import { CustomTargetPanel } from './components/CustomTargetPanel'
@@ -95,7 +97,11 @@ function Workspace({ boot }: { boot: Boot }) {
   const regulation = game.manifest.regulation.id
   const [state, dispatch] = useReducer(reducer, regulation, initialState)
   const { executor, snapshot } = useExecutor()
-  const [customOpen, setCustomOpen] = useState(false)
+  // 패널은 탭마다 다른 트리에 다시 그려지므로 열림·고른 포켓몬을 여기 둔다. autoFocus = 이번 열기에서 아직 검색창에 포커스하지 않음
+  const [addPanel, setAddPanel] = useState<{ open: boolean; rosterId: string | null; autoFocus: boolean }>({ open: false, rosterId: null, autoFocus: false })
+  const customOpen = addPanel.open
+  const [reveal, setReveal] = useState<Reveal | null>(null)
+  const revealNonce = useRef(0)
   const customButton = useRef<HTMLButtonElement>(null)
   const results = useRef<HTMLDivElement>(null)
 
@@ -190,6 +196,15 @@ function Workspace({ boot }: { boot: Boot }) {
   }, [snapshot, generation])
 
   const mySet = useMemo(() => toPokemonSet(game, draft).set, [game, draft])
+  const myAbility = useMemo(() => abilityOf(game, mySet), [game, mySet])
+  const { added: speedAdded } = state.speedChart
+  // 스피드 차트와 '포켓몬 추가' 스피드 판정이 같은 입력(화면 메타)을 쓴다
+  const speedInput = useMemo(
+    (): SpeedChartInput => ({ game, view: meta.view, myAbility, criteria: state.criteria, filters: state.filters, customTargets, added: speedAdded }),
+    [game, meta.view, myAbility, state.criteria, state.filters, customTargets, speedAdded],
+  )
+  // 공·방 추가 판정 입력: 메타를 불러오는 중에도 화면에 보이는 메타 기준(계산 입력 input은 그동안 없다)
+  const addInput = useMemo(() => toCardInput(state, game, meta.view), [state, game, meta.view])
   const active = snapshot.tabs[tab]
   // 재계산으로 카드가 잠시 숨는 동안(이전 세대 뷰 표시·새 세대 기본 항목 미확정)만 목록 박스가 높이를 붙잡아 스크롤 위치를 지킨다.
   // 이후 단계(스윕·변형)까지 붙잡으면 그 사이 카드를 접어도 빈 공간이 남는다.
@@ -200,9 +215,42 @@ function Workspace({ boot }: { boot: Boot }) {
   const customPanelId = 'custom-target-panel'
 
   const closeCustom = () => {
-    setCustomOpen(false)
+    setAddPanel({ open: false, rosterId: null, autoFocus: false })
     customButton.current?.focus()
   }
+  const toggleCustom = () => (customOpen ? closeCustom() : setAddPanel({ open: true, rosterId: null, autoFocus: true }))
+  const onAutoFocused = useCallback(() => setAddPanel((cur) => (cur.autoFocus ? { ...cur, autoFocus: false } : cur)), [])
+  const onPick = useCallback((rosterId: string | null) => setAddPanel((cur) => ({ ...cur, rosterId })), [])
+  const onRevealed = useCallback(() => setReveal(null), [])
+  // 다른 탭으로 옮기면 이전 탭의 요청은 버린다(돌아왔을 때 포커스를 가로채지 않게)
+  if (reveal !== null && reveal.tab !== tab) setReveal(null)
+  const onAdded = (request: RevealRequest) => {
+    revealNonce.current += 1
+    setReveal({ ...request, nonce: revealNonce.current })
+    // 포커스는 버튼으로 돌리지 않고 새 배분(reveal)으로 옮긴다
+    setAddPanel({ open: false, rosterId: null, autoFocus: false })
+  }
+  const customPanel = customOpen && (
+    <CustomTargetPanel
+      id={customPanelId}
+      game={game}
+      view={meta.view}
+      tab={tab}
+      filters={state.filters}
+      customTargets={customTargets}
+      speedInput={speedInput}
+      damageInput={addInput}
+      bundleShareMin={state.criteria.bundleShareMin}
+      rosterId={addPanel.rosterId}
+      onPick={onPick}
+      autoFocus={addPanel.autoFocus}
+      onAutoFocused={onAutoFocused}
+      dispatch={dispatch}
+      onAddedTarget={closeCustom}
+      onAdded={onAdded}
+      onCancel={closeCustom}
+    />
+  )
 
   return (
     <div className="product-layout">
@@ -225,7 +273,7 @@ function Workspace({ boot }: { boot: Boot }) {
         {tab === 'speed' ? (
           <SpeedTab
             game={game}
-            view={meta.view}
+            input={speedInput}
             state={state}
             mySet={mySet}
             displaySp={displaySp}
@@ -234,24 +282,12 @@ function Workspace({ boot }: { boot: Boot }) {
             panelId={panelId}
             generation={generation}
             customOpen={customOpen}
-            onToggleCustom={() => (customOpen ? closeCustom() : setCustomOpen(true))}
+            onToggleCustom={toggleCustom}
             customButtonRef={customButton}
             customPanelId={customPanelId}
-            customPanel={
-              customOpen && (
-                <CustomTargetPanel
-                  id={customPanelId}
-                  game={game}
-                  view={meta.view}
-                  customTargets={customTargets}
-                  onCancel={closeCustom}
-                  onAdd={(rosterId, moves) => {
-                    dispatch({ type: 'add-custom-target', rosterId, moves })
-                    closeCustom()
-                  }}
-                />
-              )
-            }
+            customPanel={customPanel}
+            reveal={reveal?.tab === 'speed' ? reveal : null}
+            onRevealed={onRevealed}
           />
         ) : (
         <ResultBox hold={recomputing} holdKey={tab}>
@@ -271,24 +307,13 @@ function Workspace({ boot }: { boot: Boot }) {
             onMenuCards={onMenuCards}
             dispatch={dispatch}
             customOpen={customOpen}
-            onToggleCustom={() => (customOpen ? closeCustom() : setCustomOpen(true))}
+            onToggleCustom={toggleCustom}
             customButtonRef={customButton}
             customPanelId={customPanelId}
-            customPanel={
-              customOpen && (
-                <CustomTargetPanel
-                  id={customPanelId}
-                  game={game}
-                  view={meta.view}
-                  customTargets={customTargets}
-                  onCancel={closeCustom}
-                  onAdd={(rosterId, moves) => {
-                    dispatch({ type: 'add-custom-target', rosterId, moves })
-                    closeCustom()
-                  }}
-                />
-              )
-            }
+            customPanel={customPanel}
+            addInput={addInput}
+            reveal={reveal !== null && reveal.tab !== 'speed' ? reveal : null}
+            onRevealed={onRevealed}
           />
         </ResultBox>
         )}

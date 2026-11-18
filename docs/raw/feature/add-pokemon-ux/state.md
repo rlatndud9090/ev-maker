@@ -1,7 +1,7 @@
 ---
 title: "포켓몬 추가 UI/UX 개선"
 date: "2026-11-18"
-stage: pre-approved
+stage: implementing
 prd_status: pre-approved
 adr_status: pre-accepted
 ---
@@ -44,6 +44,7 @@ adr_status: pre-accepted
 - 2026-11-18 prd-review: PRD를 review로 작성했다(사용자 인터뷰 3라운드, 코드 조사, 3렌즈 리뷰와 반박 검증 반영). ADR 필요로 판정해 $adr-helper로 넘긴다(결정 1 데이터 모델·판정 경계, 결정 2 패널 화면 배치).
 - 2026-11-18 adr-review: ADR을 proposed로 작성했다. 결정 1은 파생 질의안(출처 판별자, 범위 밖 파생, 순수 판정 모듈)이고 결정 2는 패널 배치 대안 A(한 줄 스텝)로, 둘 다 사용자가 선택했다. PRD R7·열린 질문을 확정했고, 2렌즈 ADR 리뷰에서 반박 검증을 통과한 5건을 반영했다.
 - 2026-11-18 pre-approved: 사용자 명시 사전 승인 (harness:approve)
+- 2026-11-18 implementing: ADR 순서 S1~S6(판별자·추출·판정 모듈·범위 밖 노출·패널/진입점·e2e)을 구현했다. 자체 코드리뷰에서 확정 결함 4건을 수정했고 harness:gate를 통과했다(PRD·ADR 개정 없음).
 ## 승인 이벤트
 
 <!-- 이 블록은 `npm run harness:approve`만 기록한다. 사용자의 명시 승인 발화가

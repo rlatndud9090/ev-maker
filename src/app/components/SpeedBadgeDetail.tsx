@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type Dispatch } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type Dispatch } from "react";
 import {
   bundleLabel,
-  checkSpeedAddition,
+  judgeSpeedAddition,
   presetAssumption,
   presetKey,
   type CustomTarget,
@@ -9,8 +9,12 @@ import {
   type NatureSign,
   type PresetEdit,
   type PresetIndex,
+  type SpeedAddedBundle,
+  speedAdditionQuery,
+  type AdditionTarget,
   type SpeedBadge as Badge,
   type SpeedBaseline,
+  type SpeedChartInput,
   type SpeedChartModel,
   type SpeedStatus,
 } from "../../cards";
@@ -18,10 +22,13 @@ import type { Snapshot } from "../../data/schema";
 import { shareText, STAT_SHORT } from "../../ui/format";
 import { heldItemIds, namesOf } from "../../ui/names";
 import { searchIndexOf } from "../../ui/search";
+import { OBSERVED_STATE_TEXT, additionMessage } from "../additionText";
 import type { AppAction } from "../state";
+import { useAnnounce } from "../useAnnounce";
 import { Combobox } from "./Combobox";
 import { BundleText } from "./BundleText";
 import { ItemMark } from "./ItemMark";
+import { NatureToggle } from "./NatureToggle";
 import { NumberField } from "./NumberField";
 import {
   STATUS_CLASS,
@@ -35,6 +42,9 @@ interface Props {
   id: string;
   game: Snapshot;
   model: SpeedChartModel;
+  /** 차트 모델 입력(추가 판정 질의가 같은 입력을 쓴다) */
+  input: SpeedChartInput;
+  bundleShareMin: number;
   badge: Badge;
   status: SpeedStatus | null;
   baseline: SpeedBaseline;
@@ -43,7 +53,7 @@ interface Props {
   target: CustomTarget | undefined;
   dispatch: Dispatch<AppAction>;
   /** 추가 뒤 포커스할 배분 */
-  onAdded(bundle: { opponentId: string; sp: number; nature: NatureSign }): void;
+  onAdded(bundle: SpeedAddedBundle): void;
   onRemove(badge: Badge): void;
 }
 
@@ -55,6 +65,8 @@ export function SpeedBadgeDetail({
   id,
   game,
   model,
+  input,
+  bundleShareMin,
   badge: b,
   status,
   baseline,
@@ -138,7 +150,9 @@ export function SpeedBadgeDetail({
         <AddBundle
           game={game}
           model={model}
-          opponentId={b.opponentId}
+          input={input}
+          bundleShareMin={bundleShareMin}
+          target={{ source: b.source, id: b.opponentId }}
           dispatch={dispatch}
           onAdded={onAdded}
         />
@@ -160,46 +174,49 @@ export function SpeedBadgeDetail({
 function AddBundle({
   game,
   model,
-  opponentId,
+  input,
+  bundleShareMin,
+  target,
   dispatch,
   onAdded,
 }: {
   game: Snapshot;
   model: SpeedChartModel;
-  opponentId: string;
+  input: SpeedChartInput;
+  bundleShareMin: number;
+  target: AdditionTarget;
   dispatch: Dispatch<AppAction>;
   onAdded: Props["onAdded"];
 }) {
   const [expanded, setExpanded] = useState(false);
   const [sp, setSp] = useState(0);
   const [nature, setNature] = useState<NatureSign>("neutral");
-  const [message, setMessage] = useState("");
+  const [message, announce, clearMessage] = useAnnounce();
+  const msgId = useId();
   const spMax = game.manifest.rules.spMaxPerStat;
-  const options = model.options.get(opponentId) ?? [];
+  // 목록 밖 상대는 관측 묶음이 없어 직접 입력만 둔다
+  const options =
+    target.source === "ladder" ? (model.options.get(target.id) ?? []) : [];
   const add = (bundle: { sp: number; nature: NatureSign }) => {
-    const check = checkSpeedAddition(
-      model,
-      opponentId,
-      bundle.sp,
-      bundle.nature,
-      spMax,
-    );
-    if (check.kind === "duplicate") {
-      setMessage(
-        `이미 있음 — ${bundleLabel(bundle.sp, bundle.nature)} 배지가 차트에 있습니다.`,
+    const query = speedAdditionQuery(input, bundleShareMin, target);
+    const verdict = judgeSpeedAddition(query, bundle.sp, bundle.nature, spMax);
+    if (verdict.kind !== "ok") {
+      announce(
+        additionMessage(verdict, bundleLabel(bundle.sp, bundle.nature), spMax),
       );
       return;
     }
-    if (check.kind === "invalid") {
-      setMessage(`SP는 0~${spMax} 정수로 입력해 주세요.`);
-      return;
-    }
-    setMessage("");
-    const b = { opponentId, sp: bundle.sp, nature: bundle.nature };
+    clearMessage();
+    const b: SpeedAddedBundle = {
+      source: target.source,
+      opponentId: target.id,
+      sp: bundle.sp,
+      nature: bundle.nature,
+    };
     dispatch({ type: "add-speed-bundle", bundle: b, spMax });
     onAdded(b);
   };
-  const listId = `${opponentId}-add-list`;
+  const listId = `${target.source}-${target.id}-add-list`;
   const body = useRef<HTMLDivElement>(null);
   // 펼친 목록이 프레임 끝에 붙은 기준선 띠 뒤로 숨지 않게 보이는 곳까지 스크롤(프레임 scroll-padding = 띠 높이)
   useEffect(() => {
@@ -218,6 +235,7 @@ function AddBundle({
         다른 배분 추가 {expanded ? "▴" : "▾"}
       </button>
       <div id={listId} ref={body} className="speed-add-body" hidden={!expanded}>
+        {options.length > 0 && (
         <ul className="speed-add-list" aria-label="S 배분 묶음">
           {options.map((o) => (
             <li key={JSON.stringify([o.sp, o.nature])}>
@@ -233,13 +251,15 @@ function AddBundle({
                 </b>
                 <span className="num bundle-share">{shareText(o.share)}</span>
                 <span className="num">{o.speed}</span>
-                <em>{o.onChart ? "차트에 있음" : "+ 추가"}</em>
+                <em>{o.onChart ? OBSERVED_STATE_TEXT.shown : "+ 추가"}</em>
               </button>
             </li>
           ))}
         </ul>
+        )}
         <form
           className="speed-add-custom"
+          noValidate
           onSubmit={(e) => {
             e.preventDefault();
             add({ sp, nature });
@@ -252,39 +272,29 @@ function AddBundle({
             min={0}
             max={spMax}
             step={1}
-            onValue={setSp}
+            describedBy={msgId}
+            onValue={(v) => {
+              setSp(v);
+              clearMessage();
+            }}
             className="sp-field"
           />
-          <span className="nat-btns" role="group" aria-label="스피드 성격 보정">
-            <button
-              type="button"
-              className="nat-btn plus"
-              aria-pressed={nature === "plus"}
-              aria-label="스피드 성격 상승"
-              data-testid="speed-add-nat-plus"
-              onClick={() => setNature(nature === "plus" ? "neutral" : "plus")}
-            >
-              ▲
-            </button>
-            <button
-              type="button"
-              className="nat-btn minus"
-              aria-pressed={nature === "minus"}
-              aria-label="스피드 성격 하락"
-              data-testid="speed-add-nat-minus"
-              onClick={() =>
-                setNature(nature === "minus" ? "neutral" : "minus")
-              }
-            >
-              ▼
-            </button>
-          </span>
+          <NatureToggle
+            value={nature}
+            onChange={(v) => {
+              setNature(v);
+              clearMessage();
+            }}
+            testIdPrefix="speed-add-nat"
+          />
           <button type="submit" data-testid="speed-add-custom">
             추가
           </button>
         </form>
         <p
+          id={msgId}
           className="speed-add-msg"
+          role="status"
           aria-live="polite"
           data-testid="speed-add-msg"
         >

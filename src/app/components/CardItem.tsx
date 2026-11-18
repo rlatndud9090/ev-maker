@@ -1,11 +1,13 @@
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type Dispatch, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
-import { addedBundleCardId, defaultOption, isDamageTab, isPinned, pinOf, type AddedBundle, type CardGroup, type CardView, type CustomTarget, type GroupItem, type RowView, type Tab } from '../../cards'
+import { addedBundleCardId, defaultOption, isDamageTab, isPinned, isSpValue, pinOf, type AddedBundle, type AdditionTarget, type AdditionVerdict, type CardGroup, type CardView, type Category, type CustomTarget, type GroupItem, type RowView, type Tab } from '../../cards'
 import type { Snapshot, StatId } from '../../data/schema'
 import { namesOf } from '../../ui/names'
 import { STAT_SHORT, bundleText, categoryBadge, fixedText, koBadge, shareText, type KoBadge } from '../../ui/format'
 import { STAT_LABEL } from '../../ui/labels'
 import { koReason } from '../../ui/koErrors'
+import { additionMessage } from '../additionText'
 import type { AppAction } from '../state'
+import { useAnnounce } from '../useAnnounce'
 import { CustomEditor } from './CustomEditor'
 import { DetailItem, PairDetail, RowDetail } from './RowDetail'
 import { ItemMark } from './ItemMark'
@@ -40,6 +42,14 @@ interface Props {
   onResetItem: (group: CardGroup) => void
   /** 기술 선택 목록을 연 줄의 항목 카드 id(분류 기본 배분들), 닫으면 빈 목록 */
   onMenuCards: (cardIds: readonly string[]) => void
+  /** 직접 추가 판정(패널·스피드 배지 상세와 같은 질의·판정). 참조가 바뀌면 모든 행이 다시 그려진다 */
+  judgeAdd: (target: AdditionTarget, category: Category | null, stats: readonly AddStat[]) => AdditionVerdict
+}
+
+/** 직접 추가 입력 한 칸(키 능력치, 그 SP) */
+export interface AddStat {
+  stat: StatId
+  sp: number
 }
 
 /** 카드 줄 배지의 기준 행: 대표 행. 대표로 세울 행이 없는 카드(no-change)는 범주가 있는 첫 행. */
@@ -67,17 +77,17 @@ const pinClass = (pinned: boolean): string => (pinned ? ' pinned-bundle' : '')
 
 /** 화면 배분 카드 → 상태의 사용자 추가 배분 */
 function addedOf(tab: Tab, card: CardView): AddedBundle {
-  return { tab, opponentId: card.opponent.id, category: card.category, sp: Object.fromEntries(card.bundle.stats.map((s) => [s.stat, s.sp])) }
+  return { tab, source: card.opponent.source, opponentId: card.opponent.id, category: card.category, sp: Object.fromEntries(card.bundle.stats.map((s) => [s.stat, s.sp])) }
 }
 
-/** 배분 라벨 "A32↑ 56.3%": 묶음(본문색)과 비중(래더)·소수 배분·고정됨·프리셋(커스텀)은 작은 회색 글씨. 고정 배분은 비중 대신 "고정됨". */
+/** 배분 라벨 "A32↑ 56.3%": 묶음(본문색)과 비중(래더)·소수 배분·고정됨·프리셋(커스텀)은 작은 회색 글씨. 고정 배분(목록 밖 직접 추가 포함)은 비중 대신 "고정됨". */
 function BundleLabel({ card, pinned }: { card: CardView; pinned: boolean }) {
   const { bundle } = card
   const ladder = card.opponent.source === 'ladder'
   return (
     <>
       <span className="bundle-stats">{bundle.stats.length > 0 ? bundleText(bundle.stats) : '관련 SP 없음'}</span>
-      {ladder && pinned && <> <span className="bundle-share">고정됨</span></>}
+      {(ladder || isUser(card)) && pinned && <> <span className="bundle-share">고정됨</span></>}
       {ladder && !pinned && bundle.share !== undefined && !bundle.minority && <> <span className="bundle-share">{shareText(bundle.share)}</span></>}
       {ladder && !pinned && bundle.minority && <> <span className="bundle-share">소수 배분</span></>}
       {!ladder && bundle.presetIndex !== undefined && <> <span className="bundle-share">프리셋 {bundle.presetIndex + 1}</span></>}
@@ -132,7 +142,7 @@ function PinIcon({ filled }: { filled: boolean }) {
 const PIN_LABEL = '배분 고정'
 const pinTitle = (pinned: boolean, user: boolean) => (pinned ? (user ? '고정 해제(직접 추가 배분 삭제)' : '고정 해제') : '배분 고정')
 
-/** 핀이 없는 항목(목록 밖 타겟 프리셋)의 같은 폭 빈 칸: 결과 배지 정렬을 지킨다 */
+/** 핀이 없는 항목(목록 밖 타겟 프리셋, 지울 수 없다)의 같은 폭 빈 칸: 결과 배지 정렬을 지킨다 */
 const PinSlot = () => <span className="bundle-pin pin-slot" aria-hidden="true" />
 
 /** 배분 선택지 항목의 공용 data 속성(e2e 계약) */
@@ -180,18 +190,22 @@ function SpeciesName({ label }: { label: string }) {
 
 const stop = (e: MouseEvent) => e.stopPropagation()
 
-const SP_TEXT = /^\d+$/
+const parseSp = (text: string): number => (text.trim() === '' ? NaN : Number(text))
 
 /**
  * 직접 추가 폼 "H [ ] B [ ] [추가]"(한 줄): 현재 배분의 키 능력치 순, 기본값은 현재 SP.
- * 0~spMax 정수가 아니거나 빈칸이면 [추가]를 막고 안내한다. Enter로 추가. 키 입력은 바깥 키보드 처리(메뉴·목록)로 올리지 않는다.
+ * 0~spMax 정수가 아니거나 빈칸이면 [추가]를 막고 안내한다. Enter로 추가하고, 판정이 ok가 아니면(이미 존재 등) 안내만 하고 메뉴를 연 채 둔다.
+ * 키 입력은 바깥 키보드 처리(메뉴·목록)로 올리지 않는다.
  */
-function BundleAddForm({ card, spMax, onAdd }: { card: CardView; spMax: number; onAdd: (sp: Record<StatId, number>) => void }) {
+function BundleAddForm({ card, spMax, judge, onAdd }: { card: CardView; spMax: number; judge: (stats: readonly AddStat[]) => AdditionVerdict; onAdd: (stats: readonly AddStat[]) => void }) {
   const stats = card.bundle.stats
   const [values, setValues] = useState<readonly string[]>(() => stats.map((s) => String(s.sp)))
+  const [message, announce, clearMessage] = useAnnounce()
   const uid = useId()
-  const valid = values.map((v) => SP_TEXT.test(v.trim()) && Number(v) <= spMax)
+  const nums = values.map(parseSp)
+  const valid = nums.map((n) => isSpValue(n, spMax))
   const ok = valid.every(Boolean)
+  const hint = ok ? message : additionMessage({ kind: 'invalid' }, '', spMax)
   const hintId = `${uid}-hint`
   return (
     <form
@@ -205,7 +219,14 @@ function BundleAddForm({ card, spMax, onAdd }: { card: CardView; spMax: number; 
       onSubmit={(e) => {
         e.preventDefault()
         if (!ok) return
-        onAdd(Object.fromEntries(stats.map((s, i) => [s.stat, Number(values[i])])) as Record<StatId, number>)
+        const input = stats.map((s, i) => ({ stat: s.stat, sp: nums[i] }))
+        const verdict = judge(input)
+        if (verdict.kind === 'ok') {
+          clearMessage()
+          onAdd(input)
+          return
+        }
+        announce(additionMessage(verdict, bundleText(input.map((s) => ({ ...s, nature: 'neutral' }))), spMax))
       }}
     >
       <span className="bundle-add-fields">
@@ -221,12 +242,13 @@ function BundleAddForm({ card, spMax, onAdd }: { card: CardView; spMax: number; 
               step={1}
               aria-label={`직접 추가 SP ${STAT_LABEL[s.stat]}`}
               aria-invalid={!valid[i]}
-              aria-describedby={ok ? undefined : hintId}
+              aria-describedby={hintId}
               value={values[i]}
               onChange={(e) => {
                 const next = [...values]
                 next[i] = e.target.value
                 setValues(next)
+                clearMessage()
               }}
             />
           </label>
@@ -235,11 +257,9 @@ function BundleAddForm({ card, spMax, onAdd }: { card: CardView; spMax: number; 
           추가
         </button>
       </span>
-      {!ok && (
-        <span className="bundle-add-hint" id={hintId} role="status">
-          SP는 0~{spMax} 정수만 넣을 수 있습니다
-        </span>
-      )}
+      <span className="bundle-add-hint" id={hintId} role="status">
+        {hint}
+      </span>
     </form>
   )
 }
@@ -263,28 +283,19 @@ function rememberFocusReturn(key: string) {
 type ActionProps = Pick<Props, 'tab' | 'group' | 'card' | 'onSelect' | 'dispatch'>
 
 /**
- * 배분 직접 추가·고정 토글. 추가: 같은 키 배분이 이미 선택지면 그걸 고르고(관측 배분이면 고정한다), 아니면 상태에
- * 추가(추가와 함께 고정)하고 그 카드를 미리 고른다(계산이 끝나면 맨 위에 보인다). 고정 토글: 관측 배분은 고정만 바꾸고(재계산 없음),
- * 직접 추가 배분의 고정 해제는 삭제다. 추가·삭제 뒤 재계산 중 포커스를 잃으면 그 행의 배분 버튼으로 돌려준다.
+ * 배분 직접 추가·고정 토글. 추가: 판정이 ok일 때만 부르며, 상태에 추가(추가와 함께 고정)하고 그 카드를 미리 고른다(계산이 끝나면 맨 위에 보인다).
+ * 고정 토글: 관측 배분은 고정만 바꾸고(재계산 없음), 직접 추가 배분의 고정 해제는 삭제다. 추가·삭제 뒤 재계산 중 포커스를 잃으면 그 행의 배분 버튼으로 돌려준다.
  */
 function bundleActions({ tab, group, card, onSelect, dispatch }: ActionProps, spMax: number | undefined) {
   const returnKey = JSON.stringify([tab, group.key])
   /** done: 선택을 반영한 뒤(포커스 복귀 기억 전) 부를 마무리(메뉴 닫기 등) */
-  const add = (sp: Record<StatId, number>, done?: () => void) => {
-    const stats = card.bundle.stats.map((s) => ({ stat: s.stat, sp: sp[s.stat] }))
-    const same = (o: CardView) =>
-      o.bundle.stats.length === stats.length && o.bundle.stats.every((s, i) => s.stat === stats[i].stat && s.sp === stats[i].sp && s.nature === 'neutral')
-    const existing = group.options.find((o) => !isUser(o) && same(o)) ?? group.options.find((o) => isUser(o) && same(o))
-    if (existing !== undefined) {
-      if (!isPinned(group, existing)) dispatch({ type: 'pin-bundle', pin: pinOf(tab, existing) })
-      onSelect(group.key, existing.id)
-    } else if (spMax !== undefined) {
-      const added: AddedBundle = { tab, opponentId: card.opponent.id, category: card.category, sp }
-      dispatch({ type: 'add-bundle', bundle: added, keyStats: stats.map((s) => s.stat), spMax })
-      onSelect(group.key, addedBundleCardId(added, stats, card.berry?.item))
-    }
+  const add = (stats: readonly AddStat[], done?: () => void) => {
+    if (spMax === undefined) return
+    const added: AddedBundle = { tab, source: card.opponent.source, opponentId: card.opponent.id, category: card.category, sp: Object.fromEntries(stats.map((s) => [s.stat, s.sp])) }
+    dispatch({ type: 'add-bundle', bundle: added, keyStats: stats.map((s) => s.stat), spMax })
+    onSelect(group.key, addedBundleCardId(added, stats, card.berry?.item))
     done?.()
-    if (existing === undefined) rememberFocusReturn(returnKey)
+    rememberFocusReturn(returnKey)
   }
   /** 고정 토글. 직접 추가 배분의 해제(삭제)면 true, removed 뒤 done을 부른다 */
   const togglePin = (o: CardView, done?: () => void): boolean => {
@@ -305,8 +316,8 @@ function bundleActions({ tab, group, card, onSelect, dispatch }: ActionProps, sp
   return { add, togglePin, returnKey }
 }
 
-interface PickerProps extends Pick<Props, 'tab' | 'group' | 'card' | 'rollSteps' | 'onSelect' | 'dispatch'> {
-  /** 래더 행: 직접 추가 폼 */
+interface PickerProps extends Pick<Props, 'tab' | 'group' | 'card' | 'rollSteps' | 'onSelect' | 'dispatch' | 'judgeAdd'> {
+  /** 키 능력치가 있는 행: 직접 추가 폼 */
   spMax?: number
 }
 
@@ -315,8 +326,8 @@ function refocusPin(root: HTMLElement | null, cardId: string) {
   requestAnimationFrame(() => root?.querySelector<HTMLElement>(`[data-pin-for="${CSS.escape(cardId)}"]`)?.focus())
 }
 
-/** 행의 배분 배지: 아래로 여는 배분 선택 메뉴(래더 행은 직접 추가 폼 + 항목마다 오른쪽 끝 핀). */
-function BundlePicker({ tab, group, card, rollSteps, onSelect, dispatch, spMax }: PickerProps) {
+/** 행의 배분 배지: 아래로 여는 배분 선택 메뉴(직접 추가 폼 + 래더·직접 추가 항목 오른쪽 끝 핀, 목록 밖 프리셋은 빈 칸). */
+function BundlePicker({ tab, group, card, rollSteps, onSelect, dispatch, judgeAdd, spMax }: PickerProps) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLSpanElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
@@ -423,7 +434,15 @@ function BundlePicker({ tab, group, card, rollSteps, onSelect, dispatch, spMax }
           }}
           data-testid="bundle-menu"
         >
-          {spMax !== undefined && card.bundle.stats.length > 0 && <BundleAddForm key={card.id} card={card} spMax={spMax} onAdd={(sp) => add(sp, close)} />}
+          {spMax !== undefined && card.bundle.stats.length > 0 && (
+            <BundleAddForm
+              key={card.id}
+              card={card}
+              spMax={spMax}
+              judge={(stats) => judgeAdd({ source: card.opponent.source, id: card.opponent.id }, card.category, stats)}
+              onAdd={(stats) => add(stats, close)}
+            />
+          )}
           {group.options.map((o) => {
             const pinned = isPinned(group, o)
             return (
@@ -441,7 +460,7 @@ function BundlePicker({ tab, group, card, rollSteps, onSelect, dispatch, spMax }
                 >
                   <BundleOptionContent tab={tab} option={o} rollSteps={rollSteps} pinned={pinned} reserveVariable={reserveVariable} />
                 </button>
-                {ladder ? (
+                {ladder || isUser(o) ? (
                   <button
                     type="button"
                     role="menuitemcheckbox"
@@ -475,8 +494,8 @@ function BundlePicker({ tab, group, card, rollSteps, onSelect, dispatch, spMax }
 function bundleAria(card: CardView, pinned: boolean): string {
   const { bundle } = card
   const stats = bundle.stats.length > 0 ? bundleText(bundle.stats) : '관련 SP 없음'
+  if (pinned && (card.opponent.source === 'ladder' || isUser(card))) return `${stats} 고정됨`
   if (card.opponent.source === 'custom') return bundle.presetIndex !== undefined ? `${stats} 프리셋 ${bundle.presetIndex + 1}` : stats
-  if (pinned) return `${stats} 고정됨`
   if (bundle.minority) return `${stats} 소수 배분`
   return bundle.share !== undefined ? `${stats} ${shareText(bundle.share)}` : stats
 }
@@ -530,13 +549,13 @@ function ShownMove({
   )
 }
 
-export const CardItem = memo(function CardItem({ game, tab, group, card, rollSteps, expanded, onToggle, onSelect, target, dispatch, groupLabelId, items, onChooseItem, onResetItem, onMenuCards }: Props) {
+export const CardItem = memo(function CardItem({ game, tab, group, card, rollSteps, expanded, onToggle, onSelect, target, dispatch, groupLabelId, items, onChooseItem, onResetItem, onMenuCards, judgeAdd }: Props) {
   const names = namesOf(game)
   const ladder = card.opponent.source === 'ladder'
   const detailId = `card-detail-${encodeURIComponent(group.key)}`
   const multi = group.options.length > 1
-  // 래더 행은 직접 추가 폼 때문에 배분이 하나여도 늘 고를 수 있는 배지다(관련 SP가 없으면 추가할 것이 없다).
-  const addable = ladder && card.bundle.stats.length > 0
+  // 직접 추가 폼 때문에 배분이 하나여도 늘 고를 수 있는 배지다(관련 SP가 없으면 추가할 것이 없다). 출처와 무관하다.
+  const addable = card.bundle.stats.length > 0
   const spMax = addable ? game.manifest.rules.spMaxPerStat : undefined
   const result = resultBadge(tab, card, rollSteps)
   const item = cardItemOf(game, group.berry?.item)
@@ -566,6 +585,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
       data-power-item={tab === 'defense' ? group.berry?.item : undefined}
       data-category={card.category ?? 'none'}
       data-origin={ladder ? 'ladder' : 'custom'}
+      data-added-only={card.opponent.addedOnly ? 'true' : undefined}
       data-rank={ladder ? card.opponent.rank : undefined}
       data-state={card.state}
       data-headline={card.headline.kind}
@@ -595,7 +615,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
           )}
         </button>
         {multi || addable ? (
-          <BundlePicker tab={tab} group={group} card={card} rollSteps={rollSteps} onSelect={onSelect} dispatch={dispatch} spMax={spMax} />
+          <BundlePicker tab={tab} group={group} card={card} rollSteps={rollSteps} onSelect={onSelect} dispatch={dispatch} judgeAdd={judgeAdd} spMax={spMax} />
         ) : (
           <span className="bundle-cell">
             <span className="card-bundle num" data-testid="card-bundle">
@@ -655,7 +675,7 @@ export const CardItem = memo(function CardItem({ game, tab, group, card, rollSte
 function sameProps(a: Props, b: Props): boolean {
   if (a.game !== b.game || a.tab !== b.tab || a.card !== b.card || a.rollSteps !== b.rollSteps || a.expanded !== b.expanded) return false
   if (a.onToggle !== b.onToggle || a.onSelect !== b.onSelect || a.target !== b.target || a.dispatch !== b.dispatch || a.groupLabelId !== b.groupLabelId) return false
-  if (a.onChooseItem !== b.onChooseItem || a.onResetItem !== b.onResetItem || a.onMenuCards !== b.onMenuCards) return false
+  if (a.onChooseItem !== b.onChooseItem || a.onResetItem !== b.onResetItem || a.onMenuCards !== b.onMenuCards || a.judgeAdd !== b.judgeAdd) return false
   if (a.items.length !== b.items.length || !a.items.every((g, i) => g.item === b.items[i].item && g.card === b.items[i].card)) return false
   if (a.group === b.group) return true
   if (a.group.key !== b.group.key || a.group.opponent !== b.group.opponent || a.group.berry?.item !== b.group.berry?.item || a.group.options.length !== b.group.options.length)

@@ -132,3 +132,43 @@ export async function dragSlider(page: Page, slider: Locator, target: number): P
   await page.mouse.up()
   return cur
 }
+
+// ---------- '포켓몬 추가' 패널 ----------
+
+export const addPanel = (page: Page) => region(page, '포켓몬 추가')
+export const addPanelButton = (page: Page) => page.getByRole('button', { name: '포켓몬 추가', exact: true })
+
+export async function openAddPanel(page: Page): Promise<Locator> {
+  await addPanelButton(page).click()
+  await expect(addPanel(page)).toBeVisible()
+  return addPanel(page)
+}
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** 패널 검색 후보 중 이름이 label인 것. tag가 있으면 그 상태 태그 후보, null이면 태그 없는(새) 후보. */
+export function addOption(page: Page, label: string, tag: string | null): Locator {
+  const option = addPanel(page).getByRole('option', { name: new RegExp(`^${escapeRe(label)}(\\s|$)`) })
+  return tag === null ? option.filter({ hasNot: page.locator('.combo-tag') }) : option.filter({ has: page.locator('.combo-tag', { hasText: tag }) })
+}
+
+/** 열린 패널에서 label을 검색해 그 후보를 누른다. 고른 포켓몬 칩이 보일 때까지 기다린다. */
+export async function pickAddTarget(page: Page, label: string, tag: string | null) {
+  const panel = addPanel(page)
+  await combo(panel, '추가할 포켓몬').fill(label)
+  await addOption(page, label, tag).click()
+  await expect(panel.getByTestId('add-chip').locator('b')).toHaveText(label)
+}
+
+/** 새 목록 밖 포켓몬을 기술과 함께 추가한다. */
+export async function addCustomTarget(page: Page, species: string, moves: string[]) {
+  const panel = await openAddPanel(page)
+  await pickAddTarget(page, species, null)
+  const group = panel.getByRole('group', { name: /^기술/ })
+  for (const m of moves) {
+    await combo(group, '기술 검색').fill(m)
+    await group.getByRole('checkbox', { name: m, exact: true }).check()
+  }
+  await panel.getByRole('button', { name: '추가', exact: true }).click()
+  await expect(panel).toHaveCount(0)
+}

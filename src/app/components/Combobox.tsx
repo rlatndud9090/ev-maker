@@ -21,6 +21,8 @@ interface Props {
   disabled?: boolean
   /** 입력의 aria-describedby(접근명은 label 그대로) */
   describedBy?: string
+  /** 후보 옆 상태 태그(후보 글자와 함께 접근명으로 읽힌다). undefined면 태그 없음 */
+  tagOf?: (id: string) => string | undefined
 }
 
 /** 한국어 부분 일치 후보가 붙은 입력. IME 조합 중 Enter는 확정으로 보지 않는다. */
@@ -99,7 +101,9 @@ export function Combobox(p: Props) {
         />
       </label>
       <ul id={listId} role="listbox" aria-label={`${p.label} 후보`} className="combo-list" hidden={!open || ids.length === 0}>
-        {ids.map((id, i) => (
+        {ids.map((id, i) => {
+          const tag = p.tagOf?.(id)
+          return (
           <li
             key={id}
             id={`${uid}-o${i}`}
@@ -112,8 +116,15 @@ export function Combobox(p: Props) {
             }}
           >
             {p.labelOf(id)}
+            {tag !== undefined && (
+              <>
+                {' '}
+                <span className="combo-tag">{tag}</span>
+              </>
+            )}
           </li>
-        ))}
+          )
+        })}
       </ul>
     </div>
   )

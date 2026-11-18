@@ -1,13 +1,34 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type FocusEvent, type ReactNode, type Ref } from 'react'
 import type { PokemonSet } from '../../core'
-import { chosenOption, groupCards, groupItems, sortByResult, type CardGroup, type CardView, type CustomTarget, type GroupItem, type PinnedBundle, type ResultBucket, type SortMode, type Tab } from '../../cards'
+import {
+  chosenOption,
+  damageAdditionQuery,
+  groupCards,
+  groupItems,
+  isDamageTab,
+  judgeDamageAddition,
+  sortByResult,
+  type AdditionTarget,
+  type AdditionVerdict,
+  type CardGroup,
+  type CardInput,
+  type CardView,
+  type Category,
+  type CustomTarget,
+  type GroupItem,
+  type PinnedBundle,
+  type ResultBucket,
+  type SortMode,
+  type Tab,
+} from '../../cards'
 import type { Snapshot } from '../../data/schema'
 import { namesOf } from '../../ui/names'
 import { categoryBadge, progressText } from '../../ui/format'
 import { josa, koReason } from '../../ui/koErrors'
 import type { TabViewState } from '../executor'
+import type { DamageReveal } from '../reveal'
 import type { AppAction, MoveChoice } from '../state'
-import { CardItem } from './CardItem'
+import { CardItem, type AddStat } from './CardItem'
 import { moveNoticeText } from './text'
 
 interface Props {
@@ -41,6 +62,11 @@ interface Props {
   customPanel?: ReactNode
   /** 기술 선택 목록을 연 줄의 항목 카드 id(닫으면 빈 목록). 계산 입력이 아니라 실행기 수요다 */
   onMenuCards: (tab: Tab, cardIds: readonly string[]) => void
+  /** 카드 '직접 추가' 판정 입력: '포켓몬 추가' 패널과 같은 화면 메타 기준 */
+  addInput: CardInput
+  /** 패널에서 추가한 배분: 그 줄을 그 배분으로 고르고, 새 계산에 나타나면 스크롤·포커스한다 */
+  reveal: DamageReveal | null
+  onRevealed: () => void
 }
 
 /** 계산결과순 그룹 이름(글자): 판정 그룹은 "<배지 문구>까지 가능" */
@@ -84,7 +110,7 @@ interface Expanded {
 const expandedNow = (e: Expanded, shownGeneration: number, speciesGeneration: number): ReadonlySet<string> =>
   shownGeneration >= speciesGeneration && e.at < speciesGeneration ? NONE : e.ids
 
-export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySet, customTargets, pinnedBundles, sortMode, moveChoices, speciesGeneration, dispatch, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel, onMenuCards }: Props) {
+export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySet, customTargets, pinnedBundles, sortMode, moveChoices, speciesGeneration, dispatch, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel, onMenuCards, addInput, reveal, onRevealed }: Props) {
   const names = namesOf(game)
   // 펼침·배분 선택은 탭마다 따로(같은 포켓몬이라도 탭이 다르면 다른 행), 배분을 바꿔도 펼침이 유지되게 그룹 키로 둔다.
   const scoped = (groupKey: string) => JSON.stringify([tab, groupKey])
@@ -119,6 +145,31 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
     },
     [tab],
   )
+
+  // 행 콜백은 입력이 바뀌어도 참조가 같아야 한다(CardItem sameProps). 판정은 부를 때의 최신 입력으로 한다.
+  const addInputRef = useRef(addInput)
+  useLayoutEffect(() => {
+    addInputRef.current = addInput
+  }, [addInput])
+  const judgeAdd = useCallback(
+    (target: AdditionTarget, category: Category | null, stats: readonly AddStat[]): AdditionVerdict => {
+      if (!isDamageTab(tab)) return { kind: 'unavailable', reason: 'not-found' }
+      const q = damageAdditionQuery(addInputRef.current, tab, target)
+      if (q.kind === 'unavailable') return { kind: 'unavailable', reason: q.reason }
+      const c = q.categories.find((x) => x.category === category)
+      if (c === undefined) return { kind: 'unavailable', reason: 'no-key-stats' }
+      return judgeDamageAddition(c, Object.fromEntries(stats.map((s) => [s.stat, s.sp])), addInputRef.current.game.manifest.rules.spMaxPerStat)
+    },
+    [tab],
+  )
+
+  // 추가 요청을 받으면 그리기 전에 그 줄의 선택을 새 배분으로 바꾼다(계산이 끝나면 그 배분이 보인다).
+  const [revealSeen, setRevealSeen] = useState<number | null>(null)
+  if (reveal !== null && reveal.tab === tab && reveal.nonce !== revealSeen) {
+    setRevealSeen(reveal.nonce)
+    const id = JSON.stringify([tab, reveal.groupKey])
+    setChosen((cur) => new Map(cur).set(id, reveal.cardId))
+  }
 
   const view = state.kind === 'view' ? state.view : undefined
   const groups = useMemo(() => (view === undefined ? [] : groupCards(view.cards, tab, pinnedBundles)), [view, tab, pinnedBundles])
@@ -222,6 +273,26 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
   // 더 계산하지 않는 종결 상태(치명 오류·내 세트 오류)는 busy가 아니다.
   const settled = state.kind === 'fatal' ? state.generation === generation : complete || (view !== undefined && !superseded && view.status.kind !== 'ok')
   const targetOf = (rosterId: string) => customTargets.find((t) => t.rosterId === rosterId)
+
+  // 추가 요청: 현재 세대 뷰에 그 배분 카드가 나오면 그 줄로 스크롤·포커스한다. 1·2단계가 끝났거나 계산이 멈췄는데(내 세트 오류·치명 오류) 없으면 버린다.
+  useEffect(() => {
+    if (reveal === null || reveal.tab !== tab) return
+    if (state.kind === 'fatal' && state.generation === generation) {
+      onRevealed()
+      return
+    }
+    if (view === undefined || superseded) return
+    const found = groups.some((g) => g.key === reveal.groupKey && g.options.some((o) => o.id === reveal.cardId))
+    if (!found) {
+      if (view.stage12Done || view.status.kind !== 'ok') onRevealed()
+      return
+    }
+    const li = panelRef.current?.querySelector<HTMLElement>(`[data-testid="card"][data-group-key="${CSS.escape(reveal.groupKey)}"]`)
+    if (li === null || li === undefined) return
+    li.scrollIntoView({ block: 'nearest' })
+    ;(li.querySelector<HTMLElement>('.bundle-btn') ?? li.querySelector<HTMLElement>('.card-toggle'))?.focus()
+    onRevealed()
+  }, [reveal, tab, state, generation, view, superseded, groups, onRevealed])
 
   return (
     <div
@@ -330,6 +401,7 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
                       onChooseItem={onChooseItem}
                       onResetItem={onResetItem}
                       onMenuCards={onMenu}
+                      judgeAdd={judgeAdd}
                     />
                   ))
                   if (sec.bucket === undefined) return items

@@ -43,6 +43,7 @@ function cardHtml(tab: DamageTab, group: CardGroup, card: CardView = defaultOpti
       items={groupItems(group)}
       onChooseItem={noop}
       onResetItem={noop}
+      judgeAdd={() => ({ kind: 'ok' })}
       onMenuCards={noop}
     />,
   )

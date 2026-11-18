@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { calcDamage, type BattleConditions, type PokemonSet } from '../core'
+import { STAT_IDS, calcDamage, type BattleConditions, type PokemonSet } from '../core'
 import type { MetaEntry } from '../data/meta-schema'
 import { addedBundleCardId, cardId, presetKey } from './ids'
 import { representativeAssumption, resolveAssumption } from '../meta'
-import { DEFENSE_MOVE_SHARE_MIN, defenseMoveIds, planTab } from './plan'
+import { DEFENSE_MOVE_SHARE_MIN, defenseMoveIds, opponentSeeds, planTab } from './plan'
 import { coAdoptionFloor } from './rank'
 import { buildTabView } from './batch'
 import { judgementKey } from './key'
@@ -690,7 +690,7 @@ describe('planTab: 사용자 추가 배분', () => {
   const opp = 'garchomp'
   const ladderCards = (plan: TabPlan, category: CardSpec['category']) =>
     plan.cards.filter((c) => c.opponent.id === opp && c.opponent.source === 'ladder' && c.category === category)
-  const added = (sp: Record<string, number>, extra: Partial<AddedBundle> = {}): AddedBundle => ({ tab: 'attack', opponentId: opp, category: 'physical', sp, ...extra })
+  const added = (sp: Record<string, number>, extra: Partial<AddedBundle> = {}): AddedBundle => ({ tab: 'attack', source: 'ladder', opponentId: opp, category: 'physical', sp, ...extra })
   const planWith = (addedBundles: AddedBundle[], tab: 'attack' | 'defense' = 'attack') =>
     planTab(input({ mySet: GARCHOMP, filters: { topN: 30, selected: [opp] }, addedBundles }), tab)
 
@@ -765,12 +765,19 @@ describe('planTab: 사용자 추가 배분', () => {
     }
   })
 
-  it('목록 밖 타겟(커스텀)에는 사용자 카드가 생기지 않는다', () => {
+  it('래더 출처 추가 배분은 같은 id의 목록 밖 타겟 카드를 만들지 않는다', () => {
     const plan = planTab(
       input({ mySet: GARCHOMP, customTargets: [{ rosterId: 'rotomwash', moves: ['hydropump'], edits: {} }], addedBundles: [added({ hp: 1, def: 1 }, { opponentId: 'rotomwash' })] }),
       'attack',
     )
     expect(plan.cards.filter((c) => c.opponent.source === 'custom').every((c) => c.bundle.userAdded === undefined)).toBe(true)
+    expect(plan.cards.some((c) => c.bundle.userAdded !== undefined)).toBe(false)
+  })
+
+  it('메타 항목 id와 같은 id의 custom 출처 추가 배분은 래더 카드를 만들지 않는다', () => {
+    const base = ladderCards(planWith([]), 'physical')
+    const plan = planWith([added({ hp: 7, def: 7 }, { source: 'custom' })])
+    expect(ladderCards(plan, 'physical').map((c) => c.id)).toEqual(base.map((c) => c.id))
     expect(plan.cards.some((c) => c.bundle.userAdded !== undefined)).toBe(false)
   })
 
@@ -782,9 +789,157 @@ describe('planTab: 사용자 추가 배분', () => {
     const [g] = groupCards(view.cards.filter((c) => c.category === 'physical'))
     expect(g).toBeDefined()
     expect(g.options.slice(0, 2).map((o) => o.bundle.userAdded)).toEqual([0, 1])
-    expect(g.options.slice(0, 2).map((o) => o.id)).toEqual(bs.map((b) => addedBundleCardId(b, Object.entries(b.sp).map(([stat, sp]) => ({ stat, sp: sp as number })))))
+    expect(g.options.slice(0, 2).map((o) => o.id)).toEqual(bs.map((b) => addedBundleCardId(b, STAT_IDS.flatMap((stat) => { const sp = b.sp[stat]; return sp === undefined ? [] : [{ stat, sp }] }))))
     for (const o of g.options.slice(0, 2)) expect(o.rows.length).toBeGreaterThan(0)
     expect(defaultOption(g).bundle.userAdded).toBe(0)
+  })
+})
+
+describe('planTab: 범위 밖 추가분만 상대', () => {
+  const physicalOf = (id: string, sp: Record<string, number>): AddedBundle => ({ tab: 'attack', source: 'ladder', opponentId: id, category: 'physical', sp })
+  const topN = (addedBundles: AddedBundle[], n = 1) => input({ mySet: GARCHOMP, filters: { topN: n, selected: [] }, addedBundles })
+  /** 범위 안(선택)이면 공격 탭 반감열매 변형 카드가 생기는 상위 2~30위 상대 */
+  const berryOpp = (() => {
+    for (const e of bo1.ranking.slice(1, 30)) {
+      const plan = planTab(input({ mySet: GARCHOMP, filters: { topN: 30, selected: [e.id] } }), 'attack')
+      if (cardsOf(plan, e.id).some((c) => c.berry !== undefined)) return e
+    }
+    throw new Error('반감열매 변형이 있는 상대가 없다')
+  })()
+
+  it('topN 밖 상대에 공격 탭 추가 배분을 넣으면 사용자 카드만 생기고, 도구 변형에도 관측 키가 새지 않는다', () => {
+    const id = berryOpp.id
+    const plan = planTab(topN([physicalOf(id, { hp: 7, def: 7 })]), 'attack')
+    const cards = cardsOf(plan, id)
+    expect(cards.length).toBeGreaterThan(1)
+    expect(cards.every((c) => c.bundle.userAdded === 0 && c.opponent.addedOnly === true && c.category === 'physical')).toBe(true)
+    expect(cards.some((c) => c.berry !== undefined)).toBe(true)
+    expect(cards.every((c) => c.opponentSet.item === undefined || c.berry?.item === c.opponentSet.item)).toBe(true)
+    // 범위 안일 때의 사용자 카드와 id·행·조건·가정 세트가 같다(관측 묶음 카드만 없다)
+    const inRange = planTab(input({ mySet: GARCHOMP, filters: { topN: 30, selected: [id] }, addedBundles: [physicalOf(id, { hp: 7, def: 7 })] }), 'attack')
+    const same = cardsOf(inRange, id).filter((c) => c.bundle.userAdded !== undefined)
+    expect(cards.map((c) => c.id)).toEqual(same.map((c) => c.id))
+    expect(cards.map((c) => c.rowIds)).toEqual(same.map((c) => c.rowIds))
+    expect(cards.map((c) => c.conditions)).toEqual(same.map((c) => c.conditions))
+    expect(cards.map((c) => c.opponentSet)).toEqual(same.map((c) => c.opponentSet))
+  })
+
+  it('추가분만 상대는 사용률 순 자리에 끼고, 범위 안 상대·다른 탭·filters는 그대로이며, 배분을 지우면 사라진다', () => {
+    const id = berryOpp.id
+    const base = planTab(topN([]), 'attack')
+    const inp = topN([physicalOf(id, { hp: 7, def: 7 })])
+    const plan = planTab(inp, 'attack')
+    expect(inp.filters).toEqual({ topN: 1, selected: [] })
+    const ladderIds = (p: TabPlan) => [...new Set(p.cards.filter((c) => c.opponent.source === 'ladder').map((c) => c.opponent.id))]
+    expect(ladderIds(plan)).toEqual([bo1.ranking[0].id, id])
+    expect(plan.cards.filter((c) => c.opponent.id !== id)).toEqual(base.cards)
+    expect(planTab(inp, 'defense').cards).toEqual(planTab(topN([]), 'defense').cards)
+    expect(cardsOf(planTab(topN([]), 'attack'), id)).toEqual([])
+    const other = bo1.ranking.find((e, i) => i > 0 && e.id !== id)
+    if (other === undefined) throw new Error('no other')
+    expect(ladderIds(planTab(topN([physicalOf(other.id, { hp: 7, def: 7 })]), 'attack'))).toEqual([bo1.ranking[0].id, other.id])
+  })
+
+  it('범위 안에서 추가했다가 topN을 줄이거나 선택 종을 바꿔 범위에서 빠져도 사용자 카드만 남는다', () => {
+    const id = bo1.ranking[1].id
+    const added = [physicalOf(id, { hp: 7, def: 7 })]
+    const wide = cardsOf(planTab(topN(added, 2), 'attack'), id)
+    expect(wide.some((c) => c.bundle.userAdded === undefined)).toBe(true)
+    expect(wide.every((c) => c.opponent.addedOnly === undefined)).toBe(true)
+    const user = wide.filter((c) => c.bundle.userAdded !== undefined).map((c) => c.id)
+    for (const filters of [
+      { topN: 1, selected: [] },
+      { topN: 30, selected: [bo1.ranking[0].id] },
+    ]) {
+      const narrow = cardsOf(planTab(input({ mySet: GARCHOMP, filters, addedBundles: added }), 'attack'), id)
+      expect(narrow.map((c) => c.id)).toEqual(user)
+      expect(narrow.every((c) => c.opponent.addedOnly === true)).toBe(true)
+    }
+  })
+
+  it('1위·관측 묶음과 같은 SP를 넣어도 추가분만 상대에는 카드가 실제로 생긴다', () => {
+    const id = bo1.ranking[1].id
+    const observed = cardsOf(planTab(input({ mySet: GARCHOMP, filters: { topN: 30, selected: [id] } }), 'attack'), id).filter(
+      (c) => c.category === 'physical' && c.berry === undefined && c.bundle.stats.every((s) => s.nature === 'neutral'),
+    )
+    expect(observed.length).toBeGreaterThan(0)
+    const sp = Object.fromEntries(observed[0].bundle.stats.map((s) => [s.stat, s.sp]))
+    const cards = cardsOf(planTab(topN([physicalOf(id, sp)]), 'attack'), id).filter((c) => c.berry === undefined)
+    expect(cards.map((c) => [c.bundle.key, c.bundle.userAdded])).toEqual([[observed[0].bundle.key, 0]])
+  })
+
+  it('방어 탭 추가분만 상대도 사용자 카드만 만들고 화력 도구 변형에도 관측 키가 없다', () => {
+    const id = bo1.ranking[1].id
+    const seeds = opponentSeeds(topN([]), 'defense', { source: 'ladder', id })
+    if (seeds.kind !== 'ok') throw new Error(seeds.kind)
+    const c = seeds.categories.find((x) => x.keyStats.length > 0)
+    if (c === undefined) throw new Error('no key stats')
+    const added: AddedBundle = { tab: 'defense', source: 'ladder', opponentId: id, category: c.category, sp: Object.fromEntries(c.keyStats.map((st) => [st, 9])) }
+    const cards = cardsOf(planTab(topN([added]), 'defense'), id)
+    expect(cards.length).toBeGreaterThan(0)
+    expect(cards.every((x) => x.bundle.userAdded === 0 && x.category === c.category)).toBe(true)
+    expect(cardsOf(planTab(topN([added]), 'attack'), id)).toEqual([])
+  })
+
+  it('메타 월 전환: 목록 밖 종이 메타에 들어와도(충돌) 목록 밖 출처 추가 배분은 래더 카드를 만들지 않는다', () => {
+    const id = bo1.ranking[5].id
+    const plan = planTab(
+      input({
+        mySet: GARCHOMP,
+        filters: { topN: 1, selected: [] },
+        customTargets: [{ rosterId: id, moves: ['earthquake'], edits: {} }],
+        addedBundles: [{ ...physicalOf(id, { hp: 7, def: 7 }), source: 'custom' }],
+      }),
+      'attack',
+    )
+    expect(plan.customTargetConflicts).toEqual([id])
+    expect(cardsOf(plan, id)).toEqual([])
+  })
+})
+
+describe('planTab: 목록 밖 추가 배분', () => {
+  const ROTOM = { rosterId: 'rotomwash', moves: ['hydropump', 'thief'], edits: {} }
+  const custom = (sp: Record<string, number>): AddedBundle => ({ tab: 'attack', source: 'custom', opponentId: 'rotomwash', category: 'physical', sp })
+  const plan = (addedBundles: AddedBundle[], edits: CardInput['customTargets'][number]['edits'] = {}) =>
+    planTab(input({ mySet: GARCHOMP, customTargets: [{ ...ROTOM, edits }], addedBundles }), 'attack')
+  const physical = (p: TabPlan) => p.cards.filter((c) => c.opponent.source === 'custom' && c.category === 'physical')
+
+  it('프리셋 3장 뒤에 사용자 카드가 생기고 id는 custom 출처 user 표지, 가정은 프리셋 1의 도구·성격 편집을 따른다', () => {
+    const edits = { [presetKey('attack', 'physical', 0)]: { item: 'leftovers', nature: 'modest', sp: { atk: 4 } } }
+    const cards = physical(plan([custom({ hp: 7, def: 9 })], edits))
+    expect(cards.map((c) => c.bundle.presetIndex ?? `u${c.bundle.userAdded}`)).toEqual([0, 1, 2, 'u0'])
+    const user = cards[3]
+    expect(user.id).toBe(addedBundleCardId(custom({ hp: 7, def: 9 }), user.bundle.stats))
+    expect(user.id).toBe(cardId(['attack', 'custom', 'rotomwash', 'physical', user.bundle.key, 'user']))
+    expect(user.opponentSet).toEqual({ ...cards[0].opponentSet, sp: { ...cards[0].opponentSet.sp, hp: 7, def: 9 } })
+    expect(user.opponentSet.item).toBe('leftovers')
+    expect(user.opponentSet.nature).toBe('modest')
+    expect(user.state).toBe('ok')
+    expect(user.rowIds.length).toBeGreaterThan(0)
+  })
+
+  it('프리셋 1 성격이 키 능력치에 보정을 주면 무보정 성격으로 맞춘다', () => {
+    const edits = { [presetKey('attack', 'physical', 0)]: { nature: 'bold' } }
+    const user = physical(plan([custom({ hp: 7, def: 9 })], edits)).find((c) => c.bundle.userAdded !== undefined)
+    if (user === undefined) throw new Error('no user card')
+    const n = game.data.natures[user.opponentSet.nature]
+    expect(n.plus === undefined || n.plus === n.minus).toBe(true)
+  })
+
+  it('프리셋과 같은 키·앞선 추가와 같은 키면 카드를 만들지 않는다', () => {
+    expect(physical(plan([custom({ hp: 32, def: 32 }), custom({ hp: 0, def: 0 })]))).toHaveLength(3)
+    expect(physical(plan([custom({ hp: 5, def: 5 }), custom({ hp: 5, def: 5 })]))).toHaveLength(4)
+    const edits = { [presetKey('attack', 'physical', 1)]: { nature: 'hardy', sp: { hp: 5, def: 6 } } }
+    expect(physical(plan([custom({ hp: 5, def: 6 })], edits))).toHaveLength(3)
+  })
+
+  it('다른 탭·분류·출처의 추가 배분은 목록 밖 카드를 바꾸지 않는다', () => {
+    const base = plan([])
+    const other = plan([
+      { ...custom({ hp: 7, spd: 7 }), category: 'special', tab: 'defense' },
+      { ...custom({ hp: 7, def: 7 }), source: 'ladder' },
+    ])
+    expect(other.cards).toEqual(base.cards)
   })
 })
 
@@ -906,5 +1061,133 @@ describe('planTab: 공격측 필드의 우선도·스피드(R12·AC34)', () => {
     const qc = q.cards.filter((c) => c.state === 'ok')
     expect(qc.length).toBeGreaterThan(0)
     for (const c of qc) expect(c.speedEdge, c.id).toBe(false)
+  })
+})
+
+describe('opponentSeeds: planTab 기본 카드와 동등', () => {
+  const ROTOM = { rosterId: 'rotomwash', moves: ['hydropump', 'thief', 'electroweb'], edits: { [presetKey('attack', 'special', 0)]: { sp: { hp: 10, spd: 20 } } } }
+  const ladderIds = bo1.ranking.slice(0, 3).map((e) => e.id)
+  const keysOf = (plan: TabPlan, source: 'ladder' | 'custom', id: string, category: CardSpec['category']) =>
+    new Set(plan.cards.filter((c) => c.opponent.source === source && c.opponent.id === id && c.category === category && c.berry === undefined).map((c) => c.bundle.key))
+
+  for (const tab of ['attack', 'defense'] as const) {
+    it(`${tab}: 범위 안 래더 상대와 목록 밖 타겟의 분류별 cards 키 = planTab 기본 카드 키(사용자 추가 포함)`, () => {
+      const inp0 = input({ mySet: GARCHOMP, filters: { topN: 3, selected: [] }, customTargets: [ROTOM] })
+      // 사용자 추가 배분은 그 상대·분류의 키 능력치로 만든다(방어 탭 키는 상대 기술에 따라 다르다).
+      const addedBundles: AddedBundle[] = []
+      for (const id of ladderIds.slice(0, 2)) {
+        const r = opponentSeeds(inp0, tab, { source: 'ladder', id })
+        if (r.kind !== 'ok') throw new Error(`${id}: ${r.kind}`)
+        const c = r.categories.find((x) => x.keyStats.length > 0)
+        if (c !== undefined) addedBundles.push({ tab, source: 'ladder', opponentId: id, category: c.category, sp: Object.fromEntries(c.keyStats.map((s) => [s, 7])) })
+      }
+      expect(addedBundles.length).toBeGreaterThan(0)
+      const inp = { ...inp0, addedBundles }
+      const plan = planTab(inp, tab)
+      let userSeen = 0
+      const targets = [...ladderIds.map((id) => ({ source: 'ladder' as const, id })), { source: 'custom' as const, id: ROTOM.rosterId }]
+      for (const target of targets) {
+        const r = opponentSeeds(inp, tab, target)
+        if (r.kind !== 'ok') throw new Error(`${target.id}: ${r.kind}`)
+        const shown = new Set(plan.cards.filter((c) => c.opponent.source === target.source && c.opponent.id === target.id).map((c) => c.category))
+        expect(r.categories.map((c) => c.category), target.id).toEqual([...shown])
+        for (const c of r.categories) {
+          expect(new Set(c.cards.map((b) => b.key)), `${target.id} ${c.category}`).toEqual(keysOf(plan, target.source, target.id, c.category))
+          userSeen += c.cards.filter((b) => b.userAdded !== undefined).length
+          expect(c.observed.every((b) => b.userAdded === undefined)).toBe(true)
+        }
+      }
+      expect(userSeen).toBe(addedBundles.length)
+    })
+  }
+
+  for (const tab of ['attack', 'defense'] as const) {
+    it(`${tab}: 범위 밖 추가분만 상대와 목록 밖 추가 배분도 cards 키 = planTab 기본 카드 키, observed·baseSp는 그대로`, () => {
+      const inp0 = input({ mySet: GARCHOMP, filters: { topN: 1, selected: [] }, customTargets: [ROTOM] })
+      const targets = [
+        { source: 'ladder' as const, id: bo1.ranking[4].id },
+        { source: 'custom' as const, id: ROTOM.rosterId },
+      ]
+      const addedBundles: AddedBundle[] = []
+      for (const target of targets) {
+        const r = opponentSeeds(inp0, tab, target)
+        if (r.kind !== 'ok') throw new Error(`${target.id}: ${r.kind}`)
+        const c = r.categories.find((x) => x.keyStats.length > 0)
+        if (c !== undefined) addedBundles.push({ tab, source: target.source, opponentId: target.id, category: c.category, sp: Object.fromEntries(c.keyStats.map((st) => [st, 7])) })
+      }
+      expect(addedBundles).toHaveLength(2)
+      const inp = { ...inp0, addedBundles }
+      const plan = planTab(inp, tab)
+      for (const target of targets) {
+        const r = opponentSeeds(inp, tab, target)
+        const before = opponentSeeds(inp0, tab, target)
+        if (r.kind !== 'ok' || before.kind !== 'ok') throw new Error(target.id)
+        for (const c of r.categories) {
+          expect(new Set(c.cards.map((b) => b.key)), `${target.id} ${c.category}`).toEqual(keysOf(plan, target.source, target.id, c.category))
+          const prev = before.categories.find((x) => x.category === c.category)
+          expect(c.observed).toEqual(prev?.observed)
+          expect(c.baseSp).toEqual(prev?.baseSp)
+        }
+        expect(r.categories.reduce((n, c) => n + c.cards.filter((b) => b.userAdded !== undefined).length, 0)).toBe(1)
+      }
+      const out = opponentSeeds(inp0, tab, targets[0])
+      if (out.kind !== 'ok') throw new Error(out.kind)
+      expect(out.categories.length).toBeGreaterThan(0)
+      expect(out.categories.every((c) => c.cards.length === 0)).toBe(true)
+    })
+  }
+
+  it('목록 밖 타겟: observed = 프리셋 3개, baseSp = 프리셋 1(편집 반영) SP', () => {
+    const inp = input({ mySet: GARCHOMP, customTargets: [ROTOM] })
+    const r = opponentSeeds(inp, 'attack', { source: 'custom', id: ROTOM.rosterId })
+    if (r.kind !== 'ok') throw new Error(r.kind)
+    const special = r.categories.find((c) => c.category === 'special')
+    if (special === undefined) throw new Error('no special')
+    expect(special.observed.map((b) => b.presetIndex)).toEqual([0, 1, 2])
+    expect(special.baseSp.hp).toBe(10)
+    expect(special.baseSp.spd).toBe(20)
+    const card = planTab(inp, 'attack').cards.find((c) => c.opponent.source === 'custom' && c.category === 'special' && c.bundle.presetIndex === 0)
+    expect(special.baseSp).toEqual(card?.opponentSet.sp)
+  })
+
+  it('래더: observed는 점유율 기준 이상만. 기준 이상이 없으면 observed는 비고 cards에 minority 키가 있다', () => {
+    const e = entryOf('garchomp')
+    const view = syntheticView(game, bo1.meta, [syntheticEntry(e, { spreads: { kept: [['jolly:2/32/0/0/0/32', 0.03], ['impish:32/0/32/0/2/0', 0.02]], keptShare: 0.05, excludedShare: 0 } })])
+    const inp = { ...input({ mySet: GARCHOMP, filters: { topN: 30, selected: ['garchomp'] } }), view }
+    const r = opponentSeeds(inp, 'attack', { source: 'ladder', id: 'garchomp' })
+    if (r.kind !== 'ok') throw new Error(r.kind)
+    expect(r.categories.length).toBeGreaterThan(0)
+    for (const c of r.categories) {
+      expect(c.observed).toEqual([])
+      expect(c.cards.some((b) => b.minority)).toBe(true)
+      expect(new Set(c.cards.map((b) => b.key))).toEqual(keysOf(planTab(inp, 'attack'), 'ladder', 'garchomp', c.category))
+    }
+    const full = opponentSeeds(input({ mySet: GARCHOMP }), 'attack', { source: 'ladder', id: 'garchomp' })
+    if (full.kind !== 'ok') throw new Error(full.kind)
+    expect(full.categories.some((c) => c.observed.length > 0)).toBe(true)
+    for (const c of full.categories) {
+      for (const b of c.observed) expect(b.minority === false && (b.share ?? 0) >= DEFAULT_CRITERIA.bundleShareMin).toBe(true)
+    }
+  })
+
+  it('래더 baseSp = 첫 관측 씨앗 가정 SP(도구 제거와 무관)', () => {
+    const inp = input({ mySet: GARCHOMP, filters: { topN: 3, selected: [] } })
+    const id = ladderIds[0]
+    const r = opponentSeeds(inp, 'attack', { source: 'ladder', id })
+    if (r.kind !== 'ok') throw new Error(r.kind)
+    const plan = planTab(inp, 'attack')
+    for (const c of r.categories) {
+      const first = plan.cards.find((x) => x.opponent.id === id && x.opponent.source === 'ladder' && x.category === c.category)
+      expect(c.baseSp).toEqual(first?.opponentSet.sp)
+    }
+  })
+
+  it('없는 상대는 not-found, 내 세트가 무효면 my-set-error, 범위 밖 래더 상대도 계산한다', () => {
+    const inp = input({ mySet: GARCHOMP, filters: { topN: 1, selected: [] }, customTargets: [{ rosterId: 'garchomp', moves: ['earthquake'], edits: {} }, { ...ROTOM, moves: [] }] })
+    expect(opponentSeeds(inp, 'attack', { source: 'ladder', id: 'notinmeta' }).kind).toBe('not-found')
+    expect(opponentSeeds(inp, 'attack', { source: 'custom', id: 'garchomp' }).kind).toBe('not-found')
+    expect(opponentSeeds(inp, 'attack', { source: 'custom', id: 'rotomwash' }).kind).toBe('not-found')
+    expect(opponentSeeds({ ...inp, mySet: { ...GARCHOMP, sp: { ...GARCHOMP.sp, def: 40 } } }, 'attack', { source: 'ladder', id: ladderIds[0] }).kind).toBe('my-set-error')
+    expect(opponentSeeds(inp, 'defense', { source: 'ladder', id: bo1.ranking[10].id }).kind).toBe('ok')
   })
 })
