@@ -236,7 +236,7 @@ function NewTargetBody({ game, rosterId, actions, onAdd }: { game: Snapshot; ros
           기술 검색
           <input role="combobox" aria-expanded={shown.length > 0} aria-controls={`${uid}-chips`} autoComplete="off" value={moveQuery} onChange={(e) => setMoveQuery(e.target.value)} placeholder="이름 검색" />
         </label>
-        <ul id={`${uid}-chips`} className="move-chips">
+        <ul id={`${uid}-chips`} className="move-chips" data-popover-fit>
           {shown.map((m) => {
             const checked = moves.includes(m)
             return (
@@ -295,7 +295,7 @@ function SpeedBody({ q, target, spMax, dispatch, onAdded, actions }: BodyProps &
       }}
     >
       {q.observed.length > 0 && (
-        <ul className="add-observed" aria-label="관측 배분">
+        <ul className="add-observed" aria-label="관측 배분" data-popover-fit>
           {q.observed.map((o) => (
             <li key={JSON.stringify([o.sp, o.nature])}>
               <button type="button" className="add-observed-op speed" disabled={o.state === 'shown'} data-testid="add-observed-option" data-state={o.state} onClick={() => add(o.sp, o.nature)}>
@@ -402,7 +402,7 @@ function DamageBody({ tab, categories, target, spMax, dispatch, onAdded, actions
         </div>
       )}
       {c.observed.length > 0 && (
-        <ul className="add-observed" aria-label="관측 배분">
+        <ul className="add-observed" aria-label="관측 배분" data-popover-fit>
           {c.observed.map((o) => (
             <li key={JSON.stringify(o.stats)}>
               <button

@@ -100,7 +100,7 @@ export function Combobox(p: Props) {
           onKeyDown={onKeyDown}
         />
       </label>
-      <ul id={listId} role="listbox" aria-label={`${p.label} 후보`} className="combo-list" hidden={!open || ids.length === 0}>
+      <ul id={listId} role="listbox" aria-label={`${p.label} 후보`} className="combo-list" data-popover-fit hidden={!open || ids.length === 0}>
         {ids.map((id, i) => {
           const tag = p.tagOf?.(id)
           return (

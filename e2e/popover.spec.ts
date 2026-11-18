@@ -14,6 +14,97 @@ const box = async (l: Locator) => {
 }
 const pageOverflow = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
 
+/** 팝오버(자신 포함) 안에서 실제로 스크롤되는 영역 수 */
+const scrollerCount = (pop: Locator) =>
+  pop.evaluate((root) => [root, ...root.querySelectorAll('*')].filter((e) => /(auto|scroll)/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight + 1).length)
+
+/** 버튼이 화면 안이면서 팝오버의 보이는 상자 안에 있다 */
+async function expectInPopover(page: Page, pop: Locator, button: Locator) {
+  const vp = page.viewportSize()!
+  const p = await box(pop)
+  const b = await box(button)
+  expect(b.y).toBeGreaterThanOrEqual(Math.max(0, p.y) - 1)
+  expect(b.y + b.height).toBeLessThanOrEqual(Math.min(vp.height, p.y + p.height) + 1)
+}
+
+async function openSearchList(page: Page) {
+  await openProduct(page)
+  await waitComplete(page)
+  await addPanelButton(page).scrollIntoViewIfNeeded()
+  await addPanelButton(page).click()
+  const panel = addPanel(page)
+  await expect(panel).toBeVisible()
+  // 빈 검색어로 후보 목록을 연다(후보가 많은 상태)
+  await expect(panel.getByRole('listbox')).toBeVisible()
+  expect(await panel.getByRole('option').count()).toBeGreaterThanOrEqual(8)
+  return panel
+}
+
+test.describe('팝오버 안 스크롤 영역은 하나', () => {
+  test.describe('1280x800', () => {
+    test.use({ viewport: { width: 1280, height: 800 } })
+
+    test('포켓몬 추가: 후보 목록이 열려도 스크롤 영역 하나, 취소·추가 버튼은 스크롤 없이 보인다', async ({ page }) => {
+      const panel = await openSearchList(page)
+      await expect.poll(() => scrollerCount(panel)).toBeLessThanOrEqual(1)
+      await expectInPopover(page, panel, panel.getByRole('button', { name: '취소', exact: true }))
+      await expectInPopover(page, panel, panel.getByRole('button', { name: '추가', exact: true }))
+
+      // 메타 목록 포켓몬(관측 배분 목록)과 새 포켓몬(기술 칩)도 같다
+      await pickAddTarget(page, '한카리아스', '메타 목록')
+      await expect.poll(() => scrollerCount(panel)).toBeLessThanOrEqual(1)
+      await expectInPopover(page, panel, panel.getByRole('button', { name: '추가', exact: true }))
+      await panel.getByTestId('add-reset').click()
+      await pickAddTarget(page, '워시로토무', null)
+      await expect.poll(() => scrollerCount(panel)).toBeLessThanOrEqual(1)
+      await expectInPopover(page, panel, panel.getByRole('button', { name: '취소', exact: true }))
+      await expectInPopover(page, panel, panel.getByRole('button', { name: '추가', exact: true }))
+    })
+
+    test('스피드 배지 상세: 다른 배분 추가를 펼쳐도 스크롤 영역 하나', async ({ page }) => {
+      await openSpeed(page)
+      const { badge } = await badgeWithRowBelow(page)
+      await badge.click()
+      const pop = detailPopover(page)
+      await expect(pop).toBeVisible()
+      await pop.getByTestId('speed-add-toggle').click()
+      await expect(pop.getByTestId('speed-add-option').first()).toBeVisible()
+      await expect.poll(() => scrollerCount(pop)).toBeLessThanOrEqual(1)
+    })
+  })
+
+  test.describe('1280x560(낮은 화면)', () => {
+    test.use({ viewport: { width: 1280, height: 560 } })
+
+    test('포켓몬 추가: 목록을 줄여도 안 들어가면 팝오버 하나만 스크롤', async ({ page }) => {
+      const panel = await openSearchList(page)
+      await expect.poll(() => scrollerCount(panel)).toBeLessThanOrEqual(1)
+    })
+  })
+
+  test.describe('400px 하단 시트', () => {
+    test.use({ viewport: { width: 400, height: 800 } })
+
+    test('포켓몬 추가·스피드 배지 상세 모두 스크롤 영역 하나', async ({ page }) => {
+      const panel = await openSearchList(page)
+      await expect.poll(() => scrollerCount(panel)).toBeLessThanOrEqual(1)
+      await expectInPopover(page, panel, panel.getByRole('button', { name: '추가', exact: true }))
+      await page.keyboard.press('Escape')
+      await page.keyboard.press('Escape')
+      await expect(panel).toHaveCount(0)
+
+      await selectTab(page, '스피드')
+      const { badge } = await badgeWithRowBelow(page)
+      await badge.scrollIntoViewIfNeeded()
+      await badge.click()
+      const pop = detailPopover(page)
+      await expect(pop).toBeVisible()
+      await pop.getByTestId('speed-add-toggle').click()
+      await expect.poll(() => scrollerCount(pop)).toBeLessThanOrEqual(1)
+    })
+  })
+})
+
 async function openSpeed(page: Page) {
   await openProduct(page)
   await waitComplete(page)

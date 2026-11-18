@@ -29,6 +29,32 @@ interface Props {
   children: ReactNode
 }
 
+/** 팝오버 안에서 높이를 줄여 맞출 수 있는 목록(자체 max-height로 스크롤하는 것) */
+const FIT = '[data-popover-fit]'
+/** 목록을 이보다 낮게 줄여야 하면 줄이지 않고 팝오버 하나만 스크롤한다(약 세 줄) */
+const MIN_FIT = 72
+
+/**
+ * 스크롤 영역은 팝오버 안에 하나만: 넘치면 가장 높은 목록을 넘친 만큼 줄여(목록만 스크롤)
+ * 버튼까지 보이게 하고, 그래도 안 되면 목록 스크롤을 풀어 팝오버만 스크롤한다.
+ */
+function fitInner(el: HTMLElement, fits: readonly HTMLElement[]) {
+  const excess = el.scrollHeight - el.clientHeight
+  if (excess <= 1) return
+  const shown = fits.filter((f) => f.getClientRects().length > 0)
+  if (shown.length === 0) return
+  const target = shown.reduce((a, b) => (b.offsetHeight > a.offsetHeight ? b : a))
+  const next = Math.floor(parseFloat(getComputedStyle(target).height) - excess)
+  if (next >= MIN_FIT) {
+    target.style.maxHeight = `${next}px`
+    return
+  }
+  for (const f of shown) {
+    f.style.maxHeight = 'none'
+    f.style.overflowY = 'visible'
+  }
+}
+
 function rectOf(el: Element): Rect {
   const r = el.getBoundingClientRect()
   return { top: r.top, left: r.left, bottom: r.bottom, right: r.right }
@@ -63,23 +89,32 @@ export function Popover({ id, labelledBy, label, getAnchor, onDismiss, closeWhen
     const update = () => {
       const anchor = latest.current.getAnchor()
       if (anchor === null) return
+      // 자리와 목록 높이는 매번 CSS 기본 높이에서 다시 잰다(내용이 줄면 목록도 되돌린다)
+      const fits = [...el.querySelectorAll<HTMLElement>(FIT)]
+      for (const f of fits) {
+        f.style.removeProperty('max-height')
+        f.style.removeProperty('overflow-y')
+      }
       if (sheet.matches) {
         el.dataset.placement = 'sheet'
         el.style.removeProperty('top')
         el.style.removeProperty('left')
         el.style.removeProperty('max-height')
-        return
+      } else {
+        const border = el.offsetHeight - el.clientHeight
+        const p = placePopover(rectOf(anchor), { width: el.offsetWidth, height: el.scrollHeight + border }, { width: window.innerWidth, height: window.innerHeight }, { gap: GAP, margin: MARGIN })
+        el.dataset.placement = p.side
+        el.style.top = `${p.top}px`
+        el.style.left = `${p.left}px`
+        el.style.maxHeight = `${p.maxHeight}px`
       }
-      const border = el.offsetHeight - el.clientHeight
-      const p = placePopover(rectOf(anchor), { width: el.offsetWidth, height: el.scrollHeight + border }, { width: window.innerWidth, height: window.innerHeight }, { gap: GAP, margin: MARGIN })
-      el.dataset.placement = p.side
-      el.style.top = `${p.top}px`
-      el.style.left = `${p.left}px`
-      el.style.maxHeight = `${p.maxHeight}px`
+      fitInner(el, fits)
     }
     update()
     const ro = new ResizeObserver(update)
     ro.observe(el)
+    // 팝오버가 최대 높이에 묶여 있어도 내용(목록 열림·닫힘)이 바뀌면 다시 맞춘다
+    for (const child of el.children) ro.observe(child)
     const anchor = latest.current.getAnchor()
     if (anchor !== null) ro.observe(anchor)
     // 가려짐은 스크롤로만 판정한다(연 직후 포커스 이동이 앵커를 스크롤해 들여오는 중일 수 있다)
