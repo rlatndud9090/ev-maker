@@ -1,8 +1,8 @@
 ---
 title: "포켓몬 추가 UI/UX 개선"
 date: "2026-11-18"
-status: pre-accepted
-approval: "user:2026-11-18:사전 승인"
+status: accepted
+approval: "user:2026-11-19:그래 확인했다. /make-pr 하고 곧바로 /lph:merge-and-clean 진행좀"
 related_prd: "./prd.md"
 unit_type: feature
 branch: "feature/add-pokemon-ux"

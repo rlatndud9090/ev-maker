@@ -1,9 +1,9 @@
 ---
 title: "포켓몬 추가 UI/UX 개선"
 date: "2026-11-18"
-stage: implementing
-prd_status: pre-approved
-adr_status: pre-accepted
+stage: approved
+prd_status: approved
+adr_status: accepted
 ---
 
 # 작업 단계 원장: 포켓몬 추가 UI/UX 개선
@@ -47,8 +47,11 @@ adr_status: pre-accepted
 - 2026-11-18 implementing: ADR 순서 S1~S6(판별자·추출·판정 모듈·범위 밖 노출·패널/진입점·e2e)을 구현했다. 자체 코드리뷰에서 확정 결함 4건을 수정했고 harness:gate를 통과했다(PRD·ADR 개정 없음).
 - 2026-11-18 빌드 중 개정(사용자 확인): 화면을 확인한 사용자가 "가로가 너무 길고, 공간을 밀어내는 게 싫다"고 해서 바꿨다. '포켓몬 추가' 패널과 스피드 배지 상세를 앵커 팝오버로 띄운다(폭 약 360px, 좁은 화면은 하단 시트). PRD에 R11과 수용 기준을 추가했다. ADR 결정 2를 고치고 결정 3을 추가했으며, supersedes에 speed-tab-revamp 결정 1의 상세 형태 조항(부분 대체)을 적었다.
 - 2026-11-19 빌드 중 개정(사용자 확인): 사용자가 "추가할 때 왜 성격 보정을 못 하냐"고 해서 공·방 추가 배분에도 핵심 능력치별 ▲▼ 성격 보정을 넣기로 했다(패널·카드 '직접 추가' 모두). PRD R3·R4·R6·비기능·수용 기준을 개정하고 ADR 결정 1·2·검증의 "공·방 무보정" 규칙을 바꿨다.
-
+- 2026-11-19 approved: 사용자 명시 최종 승인 (harness:approve --final)
 ## 승인 이벤트
+
+- APPROVAL prd 2026-11-19 make-pr :: 그래 확인했다. /make-pr 하고 곧바로 /lph:merge-and-clean 진행좀
+- APPROVAL adr 2026-11-19 make-pr :: 그래 확인했다. /make-pr 하고 곧바로 /lph:merge-and-clean 진행좀
 
 <!-- 이 블록은 `npm run harness:approve`만 기록한다. 사용자의 명시 승인 발화가
      verbatim으로 남는다. 두 종류: `PREAPPROVAL`(사전 승인 — 빌드 진입 게이트)과
@@ -58,3 +61,7 @@ adr_status: pre-accepted
 
 - PREAPPROVAL prd 2026-11-18 harness:approve :: 사전 승인
 - PREAPPROVAL adr 2026-11-18 harness:approve :: 사전 승인
+
+## 지식 기록
+
+- KNOWLEDGE 2026-11-19 invariants=INV-261119-added-only-opponent,INV-261119-addition-judge-same-seeds gotchas=G-261119-added-bundle-source-compare via=make-pr
