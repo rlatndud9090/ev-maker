@@ -1,12 +1,33 @@
 // 카드 모델 공개 API. 순수 모듈이며 데이터는 입력으로 받는다.
 export * from './types'
-export { addedBundleCardId, addedBundlePin, cardId, rowId, presetKey, samePin } from './ids'
+export { addedBundleCardId, addedBundleIdentity, addedBundlePin, bundleIdentity, cardId, rowId, presetKey, samePin, speedBundleIdentity } from './ids'
+export { isSpValue } from './spValue'
 export { relevantStats, myDependsOn } from './relevance'
 export { bundlesOf } from './bundles'
 export { categoryDefault, chosenOption, defaultOption, groupCards, groupItems, groupKey, isPinned, pinOf, type CardGroup, type GroupItem } from './groups'
 export { RANK_MEANS, REACTIONS, applyMeans, myMeansNotes } from './rankMeans'
 export { presetAssumption } from './presets'
-export { planTab } from './plan'
+export { opponentSeeds, planTab, type OpponentCategorySeeds, type OpponentSeedsResult } from './plan'
+export { ladderInRange } from './range'
+export {
+  additionTargetOf,
+  damageAdditionQuery,
+  judgeDamageAddition,
+  judgeSpeedAddition,
+  observedState,
+  speedAdditionQuery,
+  targetStatus,
+  type AdditionTarget,
+  type AdditionVerdict,
+  type DamageAdditionQuery,
+  type DamageCategoryQuery,
+  type DamageObserved,
+  type ObservedState,
+  type SpeedAdditionQuery,
+  type SpeedObserved,
+  type TargetStatus,
+  type UnavailableReason,
+} from './addition'
 export {
   taskKey,
   pendingTasks,
@@ -39,6 +60,7 @@ export {
   type ItemVariability,
 } from './items'
 export { natureVariants } from './natures'
+export { natureForSigns, normalizeKeySigns, setKeySign, signOf, validKeySigns } from './keySigns'
 export { judgementKey } from './key'
 export { createLruCache } from './cache'
 export { computeRowTask } from './rowTask'
@@ -48,10 +70,12 @@ export { cellLabel } from './target'
 export { bucketKey, resultBucket, sortByResult, type ResultBucket, type ResultSection, type SortMode } from './resultSort'
 export {
   buildSpeedChart,
-  checkSpeedAddition,
+  customSpeedOpponent,
   ladderBaseSet,
+  ladderSpeedOpponent,
   scarfConditionOf,
-  type AddCheck,
+  speedKey,
+  type LadderSpeedOpponent,
   type NatureSign,
   type SpeedBadge,
   type SpeedBadgeOrigin,

@@ -22,10 +22,12 @@ import { bundlesOf, natureSign } from './bundles'
 import { presetKey } from './ids'
 import { natureVariants } from './natures'
 import { presetAssumption } from './presets'
+import { ladderOpponents, type LadderOpponent } from './range'
+import { isSpValue } from './spValue'
 import { ladderMeans, setMeansCandidates, type MeansCandidate } from './rank'
 import { applyMeans, type MeansRef } from './rankMeans'
 import { trimSp } from './spTrim'
-import type { BundleStat, CardFilters, CustomTarget, DisplayCriteria, PresetIndex, SpeedAddedBundle, SpeedConditionKind } from './types'
+import type { BundleStat, CardFilters, CustomTarget, DisplayCriteria, PresetIndex, SpeedAddedBundle, SpeedConditionKind, TargetSource } from './types'
 
 export type NatureSign = BundleStat['nature']
 /** preset = 목록 밖 타겟 전체(타겟 하나당 프리셋 3종 배지) */
@@ -45,7 +47,9 @@ export interface SpeedBadge {
   /** JSON [origin, opponentId, presetIndex | null, sp, nature, conditionKey] */
   id: string
   origin: SpeedBadgeOrigin
-  /** 래더·추가 = 메타 항목 id, 프리셋 = rosterId */
+  /** ladder = 래더 배지·래더 추가 배지, custom = 프리셋·목록 밖 추가 배지 */
+  source: TargetSource
+  /** source = ladder면 메타 항목 id, custom이면 rosterId */
   opponentId: string
   /** 이미지·이름용 계산 폼(메가면 메가 폼) */
   speciesId: string
@@ -64,9 +68,9 @@ export interface SpeedBadge {
   /** 실수치에 배수를 건 지닌 도구(구애스카프·검은철구 등, 도구 무효 특성이면 null). 화면은 이 도구만 표시한다 */
   item: string | null
   set: PokemonSet
-  /** 래더 순위(1부터). 프리셋은 0 */
+  /** 래더 순위(1부터). 목록 밖(프리셋·추가)은 0 */
   usageRank: number
-  /** added = SpeedChartInput.added 순번, preset = customTargets 순번 */
+  /** added = SpeedChartInput.added 순번(래더·목록 밖 공통), preset = customTargets 순번 */
   addedOrder?: number
 }
 
@@ -89,10 +93,10 @@ export interface SpeedBundleOption {
 }
 
 export interface SpeedChartModel {
-  /** 상위 N·선택 필터 적용 후, 조건 필터 적용 전 전부 */
+  /** 조건 필터 적용 전 전부: 범위(상위 N·선택) 안 상대 + 범위 밖 추가분만 상대의 추가 배지 + 목록 밖 타겟 */
   badges: readonly SpeedBadge[]
   unsupported: readonly SpeedUnsupported[]
-  /** 표시 중인 래더 상대 id → 스냅숏 전 S 묶음(점유율 내림차순, bundleShareMin 무관) */
+  /** 표시 중인 래더 상대(추가분만 포함) id → 스냅숏 전 S 묶음(점유율 내림차순, bundleShareMin 무관) */
   options: ReadonlyMap<string, readonly SpeedBundleOption[]>
 }
 
@@ -112,6 +116,9 @@ const SPE_KEY: readonly ['spe'] = ['spe']
 const PRESETS: readonly PresetIndex[] = [0, 1, 2]
 const NATURE_SIGNS: readonly NatureSign[] = ['plus', 'neutral', 'minus']
 const byString = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
+
+/** 차트 위 S 묶음 식별(S SP, S 보정 부호) */
+export const speedKey = (sp: number, nature: NatureSign): string => JSON.stringify([sp, nature])
 
 const isCoreError = (e: unknown): boolean => e instanceof CoreError || e instanceof CoreInputError
 
@@ -220,6 +227,7 @@ const fieldConditions = (f: SpeedFieldCondition): BattleConditions => (f.kind ==
 
 interface Subject {
   origin: SpeedBadgeOrigin
+  source: TargetSource
   opponentId: string
   speciesId: string
   mega: boolean
@@ -233,6 +241,7 @@ function makeBadge(s: Subject, bundle: SpeedBadge['bundle'], condition: SpeedCon
   const badge: SpeedBadge = {
     id: JSON.stringify([s.origin, s.opponentId, s.presetIndex ?? null, bundle.sp, bundle.nature, conditionKey(condition)]),
     origin: s.origin,
+    source: s.source,
     opponentId: s.opponentId,
     speciesId: s.speciesId,
     mega: s.mega,
@@ -298,10 +307,14 @@ function fieldAllowed(field: SpeedFieldCondition, myAbility: string | null): boo
   return field.kind !== 'weather' || myAbility === null || !WEATHER_NEGATING_ABILITIES.includes(myAbility)
 }
 
-/** 상위 N 또는 선택 종(사용률 순) + 목록 밖 타겟(추가 순, 메타 목록 안 종·기술 없음·중복 제외) */
-function opponentsOf(view: MetaView, filters: CardFilters, customTargets: readonly CustomTarget[]): { ladder: MetaEntry[]; custom: { target: CustomTarget; order: number }[] } {
-  const selected = new Set(filters.selected)
-  const ladder = selected.size > 0 ? view.ranking.filter((e) => selected.has(e.id)) : view.ranking.slice(0, filters.topN)
+/** 래더 상대(사용률 순: 범위 안 + 래더 추가 배분이 있는 범위 밖) + 목록 밖 타겟(추가 순, 메타 목록 안 종·기술 없음·중복 제외) */
+function opponentsOf(
+  view: MetaView,
+  filters: CardFilters,
+  customTargets: readonly CustomTarget[],
+  added: readonly SpeedAddedBundle[],
+): { ladder: LadderOpponent[]; custom: { target: CustomTarget; order: number }[] } {
+  const ladder = ladderOpponents(view, filters, (id) => added.some((a) => a.source === 'ladder' && a.opponentId === id))
   const custom: { target: CustomTarget; order: number }[] = []
   const seen = new Set<string>()
   customTargets.forEach((t, order) => {
@@ -331,90 +344,140 @@ function ladderBundles(game: Snapshot, view: MetaView, entry: MetaEntry, baseSet
   })
 }
 
-export function buildSpeedChart(input: SpeedChartInput): SpeedChartModel {
+export type LadderSpeedOpponent =
+  | {
+      kind: 'ok'
+      /** 1위 묶음(스카프 없는 판). 추가분만 상대도 늘 계산한다 */
+      top: SpeedBadge['bundle']
+      /** 기본 배지. 추가분만 상대는 null */
+      base: SpeedBadge | null
+      conditions: SpeedBadge[]
+      added: SpeedBadge[]
+      options: SpeedBundleOption[]
+      shownKeys: ReadonlySet<string>
+    }
+  | { kind: 'none'; unsupported?: SpeedUnsupported }
+
+/**
+ * 래더 상대 하나의 배지: 기본(1위 묶음, 스카프 없는 판)·조건·추가 배지와 묶음 선택지. shownKeys = 차트 위 기본·추가 배지의 speedKey.
+ * addedOnly(범위 밖 추가분만 상대)면 기본·조건 배지를 내지 않고 shownKeys를 빈 집합에서 시작한다(추가 배지는 1위 가정 세트 기준 그대로).
+ */
+export function ladderSpeedOpponent(input: SpeedChartInput, entry: MetaEntry, addedOnly = false): LadderSpeedOpponent {
   const { game, view, criteria, myAbility } = input
-  const { ladder, custom } = opponentsOf(view, input.filters, input.customTargets)
+  const { set: repSet, speciesId, mega } = ladderBaseSet(game, entry)
+  const subject: Subject = { origin: 'ladder', source: 'ladder', opponentId: entry.id, speciesId, mega, usageRank: entry.rank, listed: true }
+  const computed = ladderBundles(game, view, entry, repSet).map((b) => ({ ...b, c: compute(game, b.set) }))
+  const rejected = computed.find((b) => b.c.kind === 'rejected')
+  const ok = computed.flatMap((b) => (b.c.kind === 'ok' ? [{ ...b, resolved: b.c.resolved, speed: b.c.speed }] : []))
+  if (ok.length === 0) {
+    if (rejected?.c.kind === 'rejected') {
+      return { kind: 'none', unsupported: { opponentId: entry.id, speciesId, origin: 'ladder', rejection: rejected.c.rejection, item: rejectedItem(rejected.c.rejection) } }
+    }
+    return { kind: 'none' }
+  }
+  const topShare = ok[0].share
+  const top = ok.filter((b) => b.share === topShare).reduce((best, b) => (b.speed > best.speed ? b : best))
+  const base = makeBadge(subject, { sp: top.sp, nature: top.nature, share: top.share }, { kind: 'none' }, top.set, top.resolved, top.speed)
+
+  const means = ladderMeans(entry, criteria.rankShareMin)
+  const scarf = scarfConditionOf(entry, criteria.scarfShareMin)
+  const fields = fieldAbilityIds
+    .filter((ab) => (entry.abilities[ab] ?? 0) >= criteria.weatherShareMin && fieldAllowed(SPEED_FIELD_ABILITIES[ab], myAbility))
+    .map((ab) => ({ ability: ab, field: SPEED_FIELD_ABILITIES[ab], share: entry.abilities[ab] }))
+  const conditions = addedOnly ? [] : conditionBadges(game, subject, base, top.resolved, means, scarf, fields)
+
+  const onChart = new Set(addedOnly ? [] : [speedKey(top.sp, top.nature)])
+  const listedShare = new Map(ok.map((b) => [speedKey(b.sp, b.nature), b.share]))
+  const added: SpeedBadge[] = []
+  input.added.forEach((a, addedOrder) => {
+    if (a.source !== 'ladder' || a.opponentId !== entry.id || !validBundle(a.sp, a.nature, game.manifest.rules.spMaxPerStat)) return
+    const key = speedKey(a.sp, a.nature)
+    if (onChart.has(key)) return
+    const set = withSpeBundle(game, top.set, a.sp, a.nature)
+    const c = compute(game, set)
+    if (c.kind !== 'ok') return
+    onChart.add(key)
+    const share = listedShare.get(key)
+    const s: Subject = { ...subject, origin: 'added', addedOrder, listed: share !== undefined }
+    added.push(makeBadge(s, { sp: a.sp, nature: a.nature, share: share ?? null }, { kind: 'none' }, set, c.resolved, c.speed))
+  })
+  const options = ok.map((b) => ({ sp: b.sp, nature: b.nature, share: b.share, speed: b.speed, onChart: onChart.has(speedKey(b.sp, b.nature)) }))
+  return { kind: 'ok', top: base.bundle, base: addedOnly ? null : base, conditions, added, options, shownKeys: onChart }
+}
+
+/**
+ * 목록 밖 타겟 하나의 프리셋 3종 배지(기본·조건)와 추가 배지. order = customTargets 순번.
+ * 추가 배지 = 그 타겟의 목록 밖 추가 배분(입력 순)을 프리셋 1 세트(편집 반영)에 S SP·부호만 바꿔 계산한 것. 프리셋·앞선 추가와 같은 (SP, 부호)는 뺀다.
+ * shownKeys = 계산된 프리셋 기본 배지와 추가 배지의 speedKey.
+ */
+export function customSpeedOpponent(
+  input: SpeedChartInput,
+  target: CustomTarget,
+  order: number,
+): { badges: SpeedBadge[]; unsupported: SpeedUnsupported[]; shownKeys: ReadonlySet<string> } {
+  const { game, myAbility } = input
+  const badges: SpeedBadge[] = []
+  const unsupported: SpeedUnsupported[] = []
+  const shownKeys = new Set<string>()
+  for (const presetIndex of PRESETS) {
+    const edit = target.edits[presetKey('speed', null, presetIndex)]
+    const set = presetAssumption(game, target.rosterId, target.moves, 'speed', null, presetIndex, edit).set
+    const c = compute(game, set)
+    const speciesId = c.kind === 'ok' ? c.resolved.species.id : target.rosterId
+    if (c.kind === 'rejected') {
+      unsupported.push({ opponentId: target.rosterId, speciesId, origin: 'preset', presetIndex, rejection: c.rejection, item: rejectedItem(c.rejection) })
+      continue
+    }
+    if (c.kind !== 'ok') continue
+    const subject: Subject = { origin: 'preset', source: 'custom', opponentId: target.rosterId, speciesId, mega: set.mega === true, presetIndex, usageRank: 0, addedOrder: order, listed: false }
+    const bundle = { sp: set.sp.spe, nature: natureSign(game, set.nature, 'spe'), share: null }
+    const base = makeBadge(subject, bundle, { kind: 'none' }, set, c.resolved, c.speed)
+    badges.push(base)
+    shownKeys.add(speedKey(bundle.sp, bundle.nature))
+    const field = Object.hasOwn(SPEED_FIELD_ABILITIES, c.resolved.ability) ? SPEED_FIELD_ABILITIES[c.resolved.ability] : undefined
+    const fields = field !== undefined && fieldAllowed(field, myAbility) ? [{ ability: c.resolved.ability, field }] : []
+    badges.push(...conditionBadges(game, subject, base, c.resolved, setMeansCandidates(c.resolved, 'opponent'), null, fields))
+  }
+  const preset0 = presetAssumption(game, target.rosterId, target.moves, 'speed', null, 0, target.edits[presetKey('speed', null, 0)]).set
+  input.added.forEach((a, addedOrder) => {
+    if (a.source !== 'custom' || a.opponentId !== target.rosterId || !validBundle(a.sp, a.nature, game.manifest.rules.spMaxPerStat)) return
+    const key = speedKey(a.sp, a.nature)
+    if (shownKeys.has(key)) return
+    const set = withSpeBundle(game, preset0, a.sp, a.nature)
+    const c = compute(game, set)
+    if (c.kind !== 'ok') return
+    shownKeys.add(key)
+    const subject: Subject = { origin: 'added', source: 'custom', opponentId: target.rosterId, speciesId: c.resolved.species.id, mega: set.mega === true, usageRank: 0, addedOrder, listed: false }
+    badges.push(makeBadge(subject, { sp: a.sp, nature: a.nature, share: null }, { kind: 'none' }, set, c.resolved, c.speed))
+  })
+  return { badges, unsupported, shownKeys }
+}
+
+export function buildSpeedChart(input: SpeedChartInput): SpeedChartModel {
+  const { ladder, custom } = opponentsOf(input.view, input.filters, input.customTargets, input.added)
   const badges: SpeedBadge[] = []
   const unsupported: SpeedUnsupported[] = []
   const options = new Map<string, SpeedBundleOption[]>()
 
-  for (const entry of ladder) {
-    const { set: repSet, speciesId, mega } = ladderBaseSet(game, entry)
-    const subject: Subject = { origin: 'ladder', opponentId: entry.id, speciesId, mega, usageRank: entry.rank, listed: true }
-    const computed = ladderBundles(game, view, entry, repSet).map((b) => ({ ...b, c: compute(game, b.set) }))
-    const rejected = computed.find((b) => b.c.kind === 'rejected')
-    const ok = computed.flatMap((b) => (b.c.kind === 'ok' ? [{ ...b, resolved: b.c.resolved, speed: b.c.speed }] : []))
-    if (ok.length === 0) {
-      if (rejected?.c.kind === 'rejected') unsupported.push({ opponentId: entry.id, speciesId, origin: 'ladder', rejection: rejected.c.rejection, item: rejectedItem(rejected.c.rejection) })
+  for (const { entry, addedOnly } of ladder) {
+    const r = ladderSpeedOpponent(input, entry, addedOnly)
+    if (r.kind === 'none') {
+      if (r.unsupported !== undefined) unsupported.push(r.unsupported)
       continue
     }
-    const topShare = ok[0].share
-    const top = ok.filter((b) => b.share === topShare).reduce((best, b) => (b.speed > best.speed ? b : best))
-    const base = makeBadge(subject, { sp: top.sp, nature: top.nature, share: top.share }, { kind: 'none' }, top.set, top.resolved, top.speed)
-    badges.push(base)
-
-    const means = ladderMeans(entry, criteria.rankShareMin)
-    const scarf = scarfConditionOf(entry, criteria.scarfShareMin)
-    const fields = fieldAbilityIds
-      .filter((ab) => (entry.abilities[ab] ?? 0) >= criteria.weatherShareMin && fieldAllowed(SPEED_FIELD_ABILITIES[ab], myAbility))
-      .map((ab) => ({ ability: ab, field: SPEED_FIELD_ABILITIES[ab], share: entry.abilities[ab] }))
-    badges.push(...conditionBadges(game, subject, base, top.resolved, means, scarf, fields))
-
-    const onChart = new Set([JSON.stringify([top.sp, top.nature])])
-    const listedShare = new Map(ok.map((b) => [JSON.stringify([b.sp, b.nature]), b.share]))
-    input.added.forEach((a, addedOrder) => {
-      if (a.opponentId !== entry.id || !validBundle(a.sp, a.nature, game.manifest.rules.spMaxPerStat)) return
-      const key = JSON.stringify([a.sp, a.nature])
-      if (onChart.has(key)) return
-      const set = withSpeBundle(game, top.set, a.sp, a.nature)
-      const c = compute(game, set)
-      if (c.kind !== 'ok') return
-      onChart.add(key)
-      const share = listedShare.get(key)
-      const s: Subject = { ...subject, origin: 'added', addedOrder, listed: share !== undefined }
-      badges.push(makeBadge(s, { sp: a.sp, nature: a.nature, share: share ?? null }, { kind: 'none' }, set, c.resolved, c.speed))
-    })
-    options.set(
-      entry.id,
-      ok.map((b) => ({ sp: b.sp, nature: b.nature, share: b.share, speed: b.speed, onChart: onChart.has(JSON.stringify([b.sp, b.nature])) })),
-    )
+    if (r.base !== null) badges.push(r.base)
+    badges.push(...r.conditions, ...r.added)
+    options.set(entry.id, r.options)
   }
 
   for (const { target, order } of custom) {
-    for (const presetIndex of PRESETS) {
-      const edit = target.edits[presetKey('speed', null, presetIndex)]
-      const set = presetAssumption(game, target.rosterId, target.moves, 'speed', null, presetIndex, edit).set
-      const c = compute(game, set)
-      const speciesId = c.kind === 'ok' ? c.resolved.species.id : target.rosterId
-      if (c.kind === 'rejected') {
-        unsupported.push({ opponentId: target.rosterId, speciesId, origin: 'preset', presetIndex, rejection: c.rejection, item: rejectedItem(c.rejection) })
-        continue
-      }
-      if (c.kind !== 'ok') continue
-      const subject: Subject = { origin: 'preset', opponentId: target.rosterId, speciesId, mega: set.mega === true, presetIndex, usageRank: 0, addedOrder: order, listed: false }
-      const bundle = { sp: set.sp.spe, nature: natureSign(game, set.nature, 'spe'), share: null }
-      const base = makeBadge(subject, bundle, { kind: 'none' }, set, c.resolved, c.speed)
-      badges.push(base)
-      const field = Object.hasOwn(SPEED_FIELD_ABILITIES, c.resolved.ability) ? SPEED_FIELD_ABILITIES[c.resolved.ability] : undefined
-      const fields = field !== undefined && fieldAllowed(field, myAbility) ? [{ ability: c.resolved.ability, field }] : []
-      badges.push(...conditionBadges(game, subject, base, c.resolved, setMeansCandidates(c.resolved, 'opponent'), null, fields))
-    }
+    const r = customSpeedOpponent(input, target, order)
+    badges.push(...r.badges)
+    unsupported.push(...r.unsupported)
   }
 
   return { badges, unsupported, options }
 }
 
 const validBundle = (sp: number, nature: NatureSign, spMax: number): boolean =>
-  Number.isInteger(sp) && sp >= 0 && sp <= spMax && NATURE_SIGNS.includes(nature)
-
-export type AddCheck = { kind: 'ok'; listed: boolean } | { kind: 'duplicate' } | { kind: 'invalid' }
-
-/** 차트에 배분을 더할 수 있는가. 표시 중인 래더 상대만 받고, 기본·추가 배지와 같은 (SP, 부호)면 duplicate */
-export function checkSpeedAddition(model: SpeedChartModel, opponentId: string, sp: number, nature: NatureSign, spMax: number): AddCheck {
-  const options = model.options.get(opponentId)
-  if (options === undefined || !validBundle(sp, nature, spMax)) return { kind: 'invalid' }
-  const same = (b: { sp: number; nature: NatureSign }) => b.sp === sp && b.nature === nature
-  const onChart = model.badges.some((b) => b.opponentId === opponentId && b.origin !== 'preset' && b.condition.kind === 'none' && same(b.bundle))
-  if (onChart) return { kind: 'duplicate' }
-  return { kind: 'ok', listed: options.some(same) }
-}
+  isSpValue(sp, spMax) && NATURE_SIGNS.includes(nature)

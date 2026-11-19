@@ -27,6 +27,9 @@ export const DEFENSE_BAND_LABEL: Record<DefenseBand, string> = {
 /** 3단 구간 라벨(dev 경로). 제품 5단 판정 이름은 ui/format의 결과 배지 단계명 */
 export const CATEGORY_LABEL: Record<string, string> = { ...ATTACK_BAND_LABEL, ...DEFENSE_BAND_LABEL }
 
+/** 카드 분류(그 탭의 판정 기술 분류) */
+export const MOVE_CATEGORY_LABEL: Record<'physical' | 'special', string> = { physical: '물리', special: '특수' }
+
 /** 공격측 관점 */
 export const ORDER_LABEL: Record<SpeedOrder, string> = { first: '선공', tie: '동속', second: '후공' }
 

@@ -3,7 +3,7 @@ import { finalSpeed } from '../src/core/speed'
 import type { PokemonSet } from '../src/core/types'
 import type { MetaEntry } from '../src/data/meta-schema'
 import { loadMetaSnapshotSync, loadSnapshotSync } from '../src/data/testing'
-import { cards, combo, dragSlider, findOverlaps, mySet, openProduct, region, resultTab, selectTab, tabPanel, waitComplete } from './helpers'
+import { addCustomTarget, cards, combo, dragSlider, findOverlaps, mySet, openProduct, resultTab, selectTab, tabPanel, waitComplete } from './helpers'
 /** 상위 N 기본값(src/cards/types.ts DEFAULT_TOP_N과 같다) */
 const DEFAULT_TOP_N = 100
 
@@ -238,16 +238,7 @@ async function insideFrame(page: Page, loc: Locator): Promise<boolean> {
   return r.y >= f.y - 1 && r.y + r.height <= f.y + f.height + 1 && r.x >= f.x - 1 && r.x + r.width <= f.x + f.width + 1
 }
 
-async function addWashRotom(page: Page) {
-  await page.getByRole('button', { name: '포켓몬 추가', exact: true }).click()
-  const panel = region(page, '목록 밖 포켓몬 추가')
-  await combo(panel, '추가할 포켓몬').fill('워시로토무')
-  await combo(panel, '추가할 포켓몬').press('Enter')
-  const group = panel.getByRole('group', { name: /^기술/ })
-  await combo(group, '기술 검색').fill('하이드로펌프')
-  await group.getByRole('checkbox', { name: '하이드로펌프', exact: true }).check()
-  await panel.getByRole('button', { name: '추가', exact: true }).click()
-}
+const addWashRotom = (page: Page) => addCustomTarget(page, '워시로토무', ['하이드로펌프'])
 const presetBadges = (page: Page) => page.locator('[data-testid="speed-badge"][data-origin="preset"]')
 
 // ---------- 차트·배치 ----------
@@ -916,7 +907,7 @@ test.describe('필터와 범위(AC11, AC13~AC16)', () => {
 // ---------- 차트 배분 추가 ----------
 
 test.describe('차트에서 배분 추가(AC26)', () => {
-  test('AC26: 목록·직접 입력 추가, "추가" 표지·실수치 줄·도구 아이콘·상태·최소 S·배지 수 ±1, 이미 있음, 지우기, 탭 왕복·필터·새로고침', async ({ page }) => {
+  test('AC26: 목록·직접 입력 추가, "추가" 표지·실수치 줄·도구 아이콘·상태·최소 S·배지 수 ±1, 이미 존재합니다, 지우기, 탭 왕복, 범위·선택 필터 밖이면 추가 배지만, 새로고침', async ({ page }) => {
     await openSpeed(page)
     const set = await mySetFromUi(page)
     // 순위 2 이상인 래더 상대 기본 배지(상위 N으로 뺄 수 있게)
@@ -933,7 +924,7 @@ test.describe('차트에서 배분 추가(AC26)', () => {
     const options = detail(page).getByTestId('speed-add-option')
     const baseOpt = options.filter({ has: page.locator('b .bundle-mark', { hasText: new RegExp(`^${bundleText(base.sp, base.sign)}$`) }) })
     await expect(baseOpt).toBeDisabled()
-    await expect(baseOpt).toContainText('차트에 있음')
+    await expect(baseOpt).toContainText('이미 존재합니다')
     const pickOpt = options.and(page.locator(':enabled')).first()
     const optLabel = (await pickOpt.locator('b .bundle-mark').textContent())!
     const optSpoken = (await pickOpt.locator('b .sr-only').textContent())!
@@ -988,12 +979,12 @@ test.describe('차트에서 배분 추가(AC26)', () => {
     expect(c.rowSpeed).toBe(c.speed)
     await expect(detail(page)).toHaveAttribute('data-badge-id', c.id)
 
-    // 이미 있음: 기본 묶음·추가한 배분과 같은 SP·성격
+    // 이미 존재합니다: 기본 묶음·추가한 배분과 같은 SP·성격
     const count = (await readBadges(page)).length
     await detail(page).getByTestId('speed-add-toggle').click()
     for (const dup of [{ sp: base.sp, sign: base.sign }, custom!]) {
       await fillCustom(dup.sp, dup.sign)
-      await expect(detail(page).getByTestId('speed-add-msg')).toContainText('이미 있음')
+      await expect(detail(page).getByTestId('speed-add-msg')).toHaveText(`이미 존재합니다 — ${bundleText(dup.sp, dup.sign)}`)
       expect((await readBadges(page)).length).toBe(count)
     }
 
@@ -1008,19 +999,27 @@ test.describe('차트에서 배분 추가(AC26)', () => {
     await waitComplete(page)
     await selectTab(page, '스피드')
     await expect(added).toHaveCount(1)
-    // 상위 N으로 그 상대를 빼면 안 보이고, 되돌리면 다시 보인다
+    // 상위 N·포켓몬 선택 필터로 그 상대를 빼도 추가 배지만 남고 기본·조건 배지는 사라진다. 되돌리면 기본 배지가 다시 보인다
+    const ladderOf = async () => (await ofOpponent()).filter((b) => b.origin === 'ladder')
+    const expectAddedOnly = async () => {
+      await expect(added).toHaveCount(1)
+      await expect.poll(async () => (await ladderOf()).length).toBe(0)
+    }
+    const expectRestored = async () => {
+      await expect(added).toHaveCount(1)
+      await expect.poll(async () => (await ladderOf()).some((b) => b.condition === 'none' && b.sp === base.sp && b.sign === base.sign)).toBe(true)
+    }
     await setTopN(page, entry.rank - 1)
-    await expect(added).toHaveCount(0)
+    await expectAddedOnly()
     await setTopN(page, DEFAULT_TOP_N)
-    await expect(added).toHaveCount(1)
-    // 포켓몬 선택 필터로 다른 상대만 고르면 안 보이고, 비우면 다시 보인다
+    await expectRestored()
     const other = ranking.find((e) => e.id !== base.opponent)!
     const pick = combo(page.getByTestId('tool-row-search'), '포켓몬 찾기')
     await pick.fill(speciesKo(other.id))
     await pick.press('Enter')
-    await expect(added).toHaveCount(0)
+    await expectAddedOnly()
     await page.getByRole('button', { name: '선택 비우기', exact: true }).click()
-    await expect(added).toHaveCount(1)
+    await expectRestored()
     // 새로고침이면 사라진다
     await page.reload()
     await expect(page.locator('main[data-app="product"]')).toBeVisible()

@@ -10,10 +10,15 @@ import {
   DEFAULT_TOP_N,
   MAX_CUSTOM_MOVES,
   baseConditionOf,
+  addedBundleIdentity,
   addedBundlePin,
+  isSpValue,
+  normalizeKeySigns,
+  validKeySigns,
   itemKey,
   opponentKey,
   samePin,
+  speedBundleIdentity,
   type AddedBundle,
   type AddedMove,
   type CardFilters,
@@ -26,6 +31,7 @@ import {
   type SpeedConditionFilters,
   type SpeedConditionKind,
   type Tab,
+  type TargetSource,
 } from '../cards'
 import type { SetDraft } from '../ui/setDraft'
 import { EXAMPLE_DRAFT } from './example'
@@ -80,7 +86,7 @@ export interface AppState {
 /** 직접 고른 기술 항목. key = cards itemKey(기술, 랭크 조건) */
 export interface MoveChoice {
   tab: Tab
-  source: 'ladder' | 'custom'
+  source: TargetSource
   opponentId: string
   key: string
 }
@@ -112,11 +118,11 @@ export type AppAction =
   /** 스피드 차트 내 순풍. 세대 그대로 */
   | { type: 'set-my-tailwind'; on: boolean }
   /**
-   * 스피드 차트 배분 추가(맨 뒤). 형식(상대 id 비어 있지 않음, sp = 0~spMax 정수, 성격 부호)과 같은 (상대, SP, 부호) 중복만 거른다.
-   * 차트에 이미 있는 배분인지의 최종 판정은 cards checkSpeedAddition이 한다. 세대 그대로
+   * 스피드 차트 배분 추가(맨 뒤). 형식(출처, 상대 id 비어 있지 않음, sp = 0~spMax 정수, 성격 부호)과 같은 (출처, 상대, SP, 부호) 중복만 거른다.
+   * 차트에 이미 있는 배분인지의 최종 판정은 cards judgeSpeedAddition이 한다. 세대 그대로
    */
   | { type: 'add-speed-bundle'; bundle: SpeedAddedBundle; spMax: number }
-  /** 같은 (상대, SP, 부호)를 지운다. 없으면 무시. 세대 그대로 */
+  /** 같은 (출처, 상대, SP, 부호)를 지운다. 없으면 무시. 세대 그대로 */
   | { type: 'remove-speed-bundle'; bundle: SpeedAddedBundle }
   /** steps가 1~ROLL_STEPS−1 정수가 아니면 무시 */
   | { type: 'set-roll-steps'; steps: number }
@@ -124,21 +130,22 @@ export type AppAction =
   | { type: 'set-selected'; ids: readonly string[] }
   /** moves가 1~MAX_CUSTOM_MOVES개가 아니거나 rosterId가 이미 있으면 무시 */
   | { type: 'add-custom-target'; rosterId: string; moves: readonly string[] }
+  /** 그 타겟과 출처 custom·같은 id의 추가 배분(공·방·스피드)·고정을 함께 지운다. 래더 항목은 남긴다 */
   | { type: 'remove-custom-target'; rosterId: string }
   | { type: 'edit-preset'; rosterId: string; key: string; edit: PresetEdit }
   /** 0개 또는 초과면 무시(최소 1개 유지) */
   | { type: 'set-custom-moves'; rosterId: string; moves: readonly string[] }
   /**
-   * sp 키가 keyStats와 같은 집합이 아니거나 값이 0~spMax 정수가 아니면 무시. 같은 (탭, 상대, 분류, SP)가 이미 있으면 무시.
+   * 출처가 ladder·custom이 아니거나 sp 키가 keyStats와 같은 집합이 아니거나 값이 0~spMax 정수가 아니면 무시. 같은 (탭, 출처, 상대, 분류, SP)가 이미 있으면 무시.
    * keyStats = 그 카드 묶음의 키 능력치, spMax = 레귤레이션 능력치당 SP 상한.
    * 상태는 계획을 모르므로(계층: cards ← app) 이 검증은 호출자가 준 값 기준의 1차 거름이다. 최종 권한은 계획(plan.userSeeds)이
    * 갖는다 — 게임의 키 능력치 집합·SP 상한과 맞지 않거나 관측 묶음과 키가 같은 항목은 카드를 만들지 않는다(화면은 같은 키의
    * 관측 묶음을 고른다: cards chosenOption). 그런 항목은 상태에 남아 기준이 바뀌어 관측 묶음이 빠지면 다시 카드가 된다.
    */
   | { type: 'add-bundle'; bundle: AddedBundle; keyStats: readonly StatId[]; spMax: number }
-  /** 같은 (탭, 상대, 분류, SP)를 지운다(고정도 함께). 없으면 무시 */
+  /** 같은 (탭, 출처, 상대, 분류, SP)를 지운다(고정도 함께). 없으면 무시 */
   | { type: 'remove-bundle'; bundle: AddedBundle }
-  /** 래더 배분 고정(맨 뒤에 붙는다). 이미 고정이거나 상대 id·키가 빈 문자열이면 무시 */
+  /** 배분 고정(맨 뒤에 붙는다). 이미 고정이거나 출처가 ladder·custom이 아니거나 상대 id·키가 빈 문자열이면 무시 */
   | { type: 'pin-bundle'; pin: PinnedBundle }
   /**
    * 고정 해제. 같은 키의 직접 추가 배분이 있으면 그것도 지운다(직접 추가는 고정을 풀면 사라진다). 없으면 무시.
@@ -150,7 +157,7 @@ export type AppAction =
   /** 기술 항목 직접 선택(같은 (탭, 상대)의 이전 선택을 바꾼다). 상대 id·키가 빈 문자열이면 무시 */
   | { type: 'choose-move'; choice: MoveChoice }
   /** 직접 선택 해제(기본 항목으로). 없으면 무시 */
-  | { type: 'reset-move'; tab: Tab; source: 'ladder' | 'custom'; opponentId: string }
+  | { type: 'reset-move'; tab: Tab; source: TargetSource; opponentId: string }
   /** 방어 탭 래더 상대 기술 추가 + 그 기술 랭크 전 항목 직접 선택. 빈 문자열이거나 이미 있으면 무시 */
   | { type: 'add-move'; opponentId: string; moveId: string }
   /** 추가한 기술 삭제. 그 기술이 직접 선택돼 있으면(랭크 후 항목 포함) 선택도 해제. 없으면 무시 */
@@ -211,13 +218,14 @@ function setCriteria(state: AppState, patch: Partial<DisplayCriteria>): AppState
 }
 
 const SPEED_NATURE_SIGNS: readonly SpeedAddedBundle['nature'][] = ['plus', 'neutral', 'minus']
-const sameSpeedBundle = (a: SpeedAddedBundle, b: SpeedAddedBundle): boolean => a.opponentId === b.opponentId && a.sp === b.sp && a.nature === b.nature
+const TARGET_SOURCES: readonly TargetSource[] = ['ladder', 'custom']
+const isTargetSource = (v: unknown): v is TargetSource => TARGET_SOURCES.some((s) => s === v)
+const sameSpeedBundle = (a: SpeedAddedBundle, b: SpeedAddedBundle): boolean => speedBundleIdentity(a) === speedBundleIdentity(b)
 const validSpeedBundle = (b: SpeedAddedBundle, spMax: number): boolean =>
+  isTargetSource(b.source) &&
   typeof b.opponentId === 'string' &&
   b.opponentId !== '' &&
-  Number.isInteger(b.sp) &&
-  b.sp >= 0 &&
-  b.sp <= spMax &&
+  isSpValue(b.sp, spMax) &&
   SPEED_NATURE_SIGNS.includes(b.nature)
 
 function updateSpeedChart(state: AppState, patch: Partial<AppState['speedChart']>): AppState {
@@ -228,24 +236,21 @@ function updateSpeedChart(state: AppState, patch: Partial<AppState['speedChart']
 const validMoves = (moves: readonly string[]): boolean =>
   moves.length >= 1 && moves.length <= MAX_CUSTOM_MOVES && new Set(moves).size === moves.length && moves.every((m) => typeof m === 'string' && m !== '')
 
-/** 같은 (탭, 상대, 분류, SP) 배분인지 */
+/** 같은 (탭, 출처, 상대, 분류, SP, 보정 부호) 배분인지 */
 export function sameBundle(a: AddedBundle, b: AddedBundle): boolean {
-  if (a.tab !== b.tab || a.opponentId !== b.opponentId || a.category !== b.category) return false
-  const ka = Object.keys(a.sp) as StatId[]
-  const kb = Object.keys(b.sp) as StatId[]
-  return ka.length === kb.length && ka.every((k) => a.sp[k] === b.sp[k])
+  return addedBundleIdentity(a) === addedBundleIdentity(b)
 }
 
 function validBundle(bundle: AddedBundle, keyStats: readonly StatId[], spMax: number): boolean {
-  if (typeof bundle.opponentId !== 'string' || bundle.opponentId === '') return false
+  if (!isTargetSource(bundle.source) || typeof bundle.opponentId !== 'string' || bundle.opponentId === '') return false
   const keys = Object.keys(bundle.sp) as StatId[]
   const expected = new Set(keyStats)
   if (expected.size === 0 || keys.length !== expected.size || !keys.every((k) => expected.has(k))) return false
-  return keys.every((k) => {
-    const v = bundle.sp[k]
-    return typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= spMax
-  })
+  return keys.every((k) => isSpValue(bundle.sp[k], spMax)) && validKeySigns(keyStats, bundle.nature)
 }
+
+/** 목록 밖 타겟 rosterId가 가진 추가·고정 항목인지 */
+const ownedByCustom = (rosterId: string) => (x: { source: TargetSource; opponentId: string }): boolean => x.source === 'custom' && x.opponentId === rosterId
 
 /** SP·성격(하락 자동 지정 포함) 밖의 초안 항목이 같은지 */
 function sameBeyondSpNature(a: SetDraft, b: SetDraft): boolean {
@@ -312,7 +317,7 @@ export function reducer(state: AppState, action: AppAction): AppState {
     case 'add-speed-bundle': {
       const b = action.bundle
       if (!validSpeedBundle(b, action.spMax) || state.speedChart.added.some((x) => sameSpeedBundle(x, b))) return state
-      return updateSpeedChart(state, { added: [...state.speedChart.added, { opponentId: b.opponentId, sp: b.sp, nature: b.nature }] })
+      return updateSpeedChart(state, { added: [...state.speedChart.added, { source: b.source, opponentId: b.opponentId, sp: b.sp, nature: b.nature }] })
     }
     case 'remove-speed-bundle': {
       const added = state.speedChart.added.filter((x) => !sameSpeedBundle(x, action.bundle))
@@ -331,7 +336,17 @@ export function reducer(state: AppState, action: AppAction): AppState {
       return bump(state, { customTargets: [...state.customTargets, { rosterId: action.rosterId, moves: [...action.moves], edits: {} }] })
     case 'remove-custom-target': {
       const next = state.customTargets.filter((t) => t.rosterId !== action.rosterId)
-      return next.length === state.customTargets.length ? state : bump(state, { customTargets: next })
+      if (next.length === state.customTargets.length) return state
+      const owned = ownedByCustom(action.rosterId)
+      const addedBundles = state.addedBundles.filter((x) => !owned(x))
+      const pinnedBundles = state.pinnedBundles.filter((x) => !owned(x))
+      const speedAdded = state.speedChart.added.filter((x) => !owned(x))
+      const bumped = bump(state, addedBundles.length === state.addedBundles.length ? { customTargets: next } : { customTargets: next, addedBundles })
+      return {
+        ...bumped,
+        pinnedBundles: pinnedBundles.length === state.pinnedBundles.length ? state.pinnedBundles : pinnedBundles,
+        speedChart: speedAdded.length === state.speedChart.added.length ? state.speedChart : { ...state.speedChart, added: speedAdded },
+      }
     }
     case 'edit-preset':
       return updateTarget(state, action.rosterId, (t) => ({ ...t, edits: { ...t.edits, [action.key]: { ...action.edit } } }))
@@ -341,7 +356,9 @@ export function reducer(state: AppState, action: AppAction): AppState {
     case 'add-bundle': {
       const b = action.bundle
       if (!validBundle(b, action.keyStats, action.spMax) || state.addedBundles.some((x) => sameBundle(x, b))) return state
-      const added: AddedBundle = { tab: b.tab, opponentId: b.opponentId, category: b.category, sp: { ...b.sp } }
+      const added: AddedBundle = { tab: b.tab, source: b.source, opponentId: b.opponentId, category: b.category, sp: { ...b.sp } }
+      const nature = normalizeKeySigns(b.nature)
+      if (nature !== undefined) added.nature = nature
       const pin = addedBundlePin(added)
       const pinnedBundles = state.pinnedBundles.some((p) => samePin(p, pin)) ? state.pinnedBundles : [...state.pinnedBundles, pin]
       return { ...bump(state, { addedBundles: [...state.addedBundles, added] }), pinnedBundles }
@@ -354,10 +371,10 @@ export function reducer(state: AppState, action: AppAction): AppState {
     }
     case 'pin-bundle': {
       const p = action.pin
-      if (typeof p.opponentId !== 'string' || p.opponentId === '' || typeof p.key !== 'string' || p.key === '') return state
+      if (!isTargetSource(p.source) || typeof p.opponentId !== 'string' || p.opponentId === '' || typeof p.key !== 'string' || p.key === '') return state
       if (p.item !== undefined && (typeof p.item !== 'string' || p.item === '')) return state
       if (state.pinnedBundles.some((x) => samePin(x, p))) return state
-      const pin: PinnedBundle = { tab: p.tab, opponentId: p.opponentId, category: p.category, key: p.key }
+      const pin: PinnedBundle = { tab: p.tab, source: p.source, opponentId: p.opponentId, category: p.category, key: p.key }
       if (p.item !== undefined) pin.item = p.item
       return { ...state, pinnedBundles: [...state.pinnedBundles, pin] }
     }

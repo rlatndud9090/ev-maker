@@ -56,9 +56,13 @@ export type SpeedConditionKind = 'rank' | 'scarf' | 'tailwind' | 'field'
 export const SPEED_CONDITION_KINDS: readonly SpeedConditionKind[] = ['rank', 'scarf', 'tailwind', 'field']
 export type SpeedConditionFilters = Readonly<Record<SpeedConditionKind, boolean>>
 export const DEFAULT_SPEED_FILTERS: SpeedConditionFilters = Object.freeze({ rank: true, scarf: true, tailwind: false, field: true })
-/** 스피드 차트에 사용자가 더한 래더 상대 배분(S SP·S 보정 부호만) */
+/** 상대 출처: ladder = 메타 항목, custom = 목록 밖 타겟 */
+export type TargetSource = 'ladder' | 'custom'
+
+/** 스피드 차트에 사용자가 더한 상대 배분(S SP·S 보정 부호만) */
 export interface SpeedAddedBundle {
-  /** 래더 메타 항목 id */
+  source: TargetSource
+  /** 출처별 id(ladder = 메타 항목 id, custom = rosterId) */
   opponentId: string
   sp: number
   nature: BundleStat['nature']
@@ -84,16 +88,22 @@ export interface CustomTarget {
   edits: Readonly<Record<string, PresetEdit>>
 }
 
+/** 키 능력치별 성격 보정 부호. 없는 능력치는 무보정 */
+export type KeySigns = Readonly<Partial<Record<StatId, BundleStat['nature']>>>
+
 /**
- * 사용자가 직접 추가한 래더 상대 배분(목록 밖 타겟은 프리셋이 있어 받지 않는다).
- * sp 키 = 그 (탭, 분류) 카드의 묶음 키 능력치 전부(각 0~spMaxPerStat 정수). 성격은 키 능력치에 보정 없음.
+ * 사용자가 직접 추가한 상대 배분.
+ * sp 키 = 그 (탭, 분류) 카드의 묶음 키 능력치 전부(각 0~spMaxPerStat 정수).
+ * nature = 키 능력치별 보정 부호(없으면 전부 무보정). 부호 규칙은 validKeySigns.
  */
 export interface AddedBundle {
   tab: Tab
-  /** 래더 메타 항목 id */
+  source: TargetSource
+  /** 출처별 id(ladder = 메타 항목 id, custom = rosterId) */
   opponentId: string
   category: Category | null
   sp: Readonly<Partial<Record<StatId, number>>>
+  nature?: KeySigns
 }
 
 /** 방어 탭 래더 상대 후보에 사용자가 더한 기술. 기본 후보 기준과 무관하게 후보다(스냅샷에 없거나 변화기면 무시) */
@@ -104,12 +114,13 @@ export interface AddedMove {
 }
 
 /**
- * 사용자가 고정한 래더 상대 배분(목록 맨 위, 고정한 순서). key = 그 카드 묶음의 정규화 키(BundleSpec.key).
+ * 사용자가 고정한 상대 배분(목록 맨 위, 고정한 순서). key = 그 카드 묶음의 정규화 키(BundleSpec.key).
  * 직접 추가 배분도 추가와 함께 고정된다(키 = addedBundleKey). 고정은 계산 입력이 아니다(정렬·표시만 바꾼다).
  */
 export interface PinnedBundle {
   tab: Tab
-  /** 래더 메타 항목 id */
+  source: TargetSource
+  /** 출처별 id(ladder = 메타 항목 id, custom = rosterId) */
   opponentId: string
   category: Category | null
   key: string
@@ -265,7 +276,7 @@ export interface BundleSpec {
   representativeSpread?: string
   /** 커스텀만 */
   presetIndex?: PresetIndex
-  /** 래더만: 사용자가 직접 추가한 배분(점유율 없음). 값은 addedBundles 안 추가 순번(0부터) */
+  /** 사용자가 직접 추가한 배분(점유율 없음). 값은 addedBundles 안 추가 순번(0부터) */
   userAdded?: number
 }
 
@@ -273,10 +284,12 @@ export interface BundleSpec {
 export interface OpponentHeader {
   /** 로스터 종·폼 id(메가는 메가 폼 id) */
   id: string
-  source: 'ladder' | 'custom'
+  source: TargetSource
   /** 래더만 */
   rank?: number
   usage?: number
+  /** 래더만: 표시 범위 밖이지만 그 탭에 사용자 추가 배분이 있어 그 배분 카드만 나온 상대. 카드·그룹 id에는 들지 않는다 */
+  addedOnly?: true
 }
 
 /**

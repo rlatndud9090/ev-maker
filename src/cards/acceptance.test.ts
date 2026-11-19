@@ -58,6 +58,8 @@ const N = DEFAULT_ROLL_STEPS
 const { game, bo1, bo3 } = realData()
 const { spTotal, spMaxPerStat } = game.manifest.rules
 const OVER = { judgeOverBudget: true, rollSteps: N }
+// 예시 세트 전체 planTab→buildTabView + 코어 재판정이라 로컬 1~2초, 느린 CI 러너(4~5배)에서 기본 5초를 넘는다.
+const HEAVY_TIMEOUT = 30_000
 const IGNORE_TOTAL = { ignoreSpTotal: true, rollSteps: N }
 
 // 파일 전체가 같은 판정 캐시를 쓴다(캐시 경유 = 무캐시는 batch.test가 봉인).
@@ -505,7 +507,7 @@ describe('AC1 예시 세트(F9): 공격·방어 탭 모두 표시 카드가 있�
     const { view } = run('example', top(EXAMPLE_SET), tab)
     expect(view.status).toEqual({ kind: 'ok' })
     expect(view.cards.length).toBeGreaterThan(0)
-  })
+  }, HEAVY_TIMEOUT)
 
   it('공격 탭 스톤샤워 기본 행 경계 = 코어', () => {
     const atk = run('example', top(EXAMPLE_SET), 'attack')
@@ -562,7 +564,7 @@ describe('AC2 공격 탭 고정 입력(F1)', () => {
     const n = expectMatchesCore(plan, view)
     expect(n.allSame).toBeGreaterThan(0)
     expect(n.items).toBeGreaterThan(0)
-  })
+  }, HEAVY_TIMEOUT)
 })
 
 // ---------- AC 3 묶음 ----------
@@ -846,7 +848,7 @@ describe('AC5 방어 탭 극단 필터(F3)', () => {
   it('표시 카드·변화 없음 행·표시 행 칸 = 코어 재판정(극단 필터 1건 = 1행)', () => {
     const { plan, view } = run('example', top(EXAMPLE_SET), 'defense')
     expect(expectMatchesCore(plan, view).items).toBeGreaterThan(0)
-  })
+  }, HEAVY_TIMEOUT)
 })
 
 // ---------- AC33 공격측 특성 날씨·필드(PRD R12) ----------
@@ -884,7 +886,7 @@ describe('AC6 변화 없음 행(목록에서 빼지 않는다)', () => {
     // 상위 N 래더 상대는 모두 목록에 있다(상대마다 적어도 한 카드).
     const ladder = new Set(view.cards.filter((c) => c.opponent.source === 'ladder').map((c) => c.opponent.id))
     expect([...new Set(plan.cards.filter((c) => c.opponent.source === 'ladder').map((c) => c.opponent.id))].filter((id) => !ladder.has(id)), tab).toEqual([])
-  })
+  }, HEAVY_TIMEOUT)
 
   it('내 SP 무관(속임수) 1건 = 1행: 모든 래더 카드가 고정 판정 1행으로 보이고 변동 가능이 아니다', () => {
     const { plan, view } = run('foul-only', top(kingambitFoul(['foulplay'])), 'attack')

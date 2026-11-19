@@ -170,7 +170,7 @@ describe('공격 탭 상대 도구: 기본 카드는 도구 없음, 반감열매
   })
 
   it('격투 기술이 있으면 대도각참 로플열매 변형이 생기고, 직접 추가 배분은 기본·열매 카드 모두에 생긴다', () => {
-    const added = { tab: 'attack' as const, opponentId: 'kingambit', category: 'physical' as const, sp: { hp: 10, def: 20 } }
+    const added = { tab: 'attack' as const, source: 'ladder' as const, opponentId: 'kingambit', category: 'physical' as const, sp: { hp: 10, def: 20 } }
     const p = planTab(cardInput({ mySet: KINGAMBIT, filters: { topN: 30, selected: ['kingambit'] }, addedBundles: [added] }), 'attack')
     const chople = p.cards.filter((c) => c.berry?.item === 'chopleberry')
     expect(chople.length).toBeGreaterThan(0)
@@ -181,7 +181,7 @@ describe('공격 탭 상대 도구: 기본 카드는 도구 없음, 반감열매
   })
 
   it('직접 추가 배분 카드도 기본은 도구 없음, 열매 카드는 열매(대표 도구가 기합의띠인 대쓰여너)', () => {
-    const added = { tab: 'attack' as const, opponentId: 'basculegion', category: 'physical' as const, sp: { hp: 32, def: 20 } }
+    const added = { tab: 'attack' as const, source: 'ladder' as const, opponentId: 'basculegion', category: 'physical' as const, sp: { hp: 32, def: 20 } }
     const p = planTab(cardInput({ mySet: KINGAMBIT, filters: { topN: 30, selected: ['basculegion'] }, addedBundles: [added] }), 'attack')
     const users = p.cards.filter((c) => c.bundle.userAdded !== undefined)
     expect(users.map((c) => c.berry?.item ?? null)).toEqual([null, 'colburberry'])
@@ -204,7 +204,7 @@ describe('조립: 열매 행은 가장 센 기술에 열매가 발동할 때만'
     const groups = groupCards(view.cards, 'attack')
     expect(groups.map((g) => g.key)).toEqual([JSON.stringify(['ladder', 'basculegion']), JSON.stringify(['ladder', 'basculegion', 'colburberry'])])
     expect(groups[1].berry).toEqual({ item: 'colburberry', share: entryOf('basculegion').items.shares.colburberry })
-    expect(pinOf('attack', colbur[0])).toEqual({ tab: 'attack', opponentId: 'basculegion', category: colbur[0].category, key: colbur[0].bundle.key, item: 'colburberry' })
+    expect(pinOf('attack', colbur[0])).toEqual({ tab: 'attack', source: 'ladder', opponentId: 'basculegion', category: colbur[0].category, key: colbur[0].bundle.key, item: 'colburberry' })
     // 열매 행 고정은 기본 행 고정이 아니다
     const pinned = groupCards(view.cards, 'attack', [pinOf('attack', colbur[0])])
     expect(pinned[0].pinned).toEqual([])
@@ -214,7 +214,7 @@ describe('조립: 열매 행은 가장 센 기술에 열매가 발동할 때만'
     const neutral = colbur.find((c) => c.bundle.stats.every((x) => x.nature === 'neutral'))
     expect(neutral).toBeDefined()
     const n = neutral as (typeof colbur)[number]
-    const added = { tab: 'attack' as const, opponentId: 'basculegion', category: n.category }
+    const added = { tab: 'attack' as const, source: 'ladder' as const, opponentId: 'basculegion', category: n.category }
     const id = addedBundleCardId(added, n.bundle.stats, 'colburberry')
     expect(id).not.toBe(addedBundleCardId(added, n.bundle.stats))
     expect(chosenOption(groups[1], 'attack', id).id).toBe(n.id)

@@ -18,24 +18,24 @@ export const groupKey = (opponent: OpponentHeader, berry?: string): string =>
   JSON.stringify(berry === undefined ? [opponent.source, opponent.id] : [opponent.source, opponent.id, berry])
 
 
-/** 화면 배분 카드 → 그 카드의 고정 항목(래더만 고정할 수 있다). 반감열매 행 고정은 그 열매를 담아 기본 행 고정과 따로다 */
+/** 화면 배분 카드 → 그 카드의 고정 항목. 반감열매 행 고정은 그 열매를 담아 기본 행 고정과 따로다 */
 export function pinOf(tab: Tab, card: CardView): PinnedBundle {
-  const pin: PinnedBundle = { tab, opponentId: card.opponent.id, category: card.category, key: card.bundle.key }
+  const pin: PinnedBundle = { tab, source: card.opponent.source, opponentId: card.opponent.id, category: card.category, key: card.bundle.key }
   if (card.berry !== undefined) pin.item = card.berry.item
   return pin
 }
 
-/** 고정 없이: 래더는 사용자 추가 배분(추가 순) → 소수 배분이 아닌 것 점유율 내림차순 → 소수 배분. 커스텀: 프리셋 순. 동률은 원래 순서. */
+/** 고정 없이: 사용자 추가 배분(추가 순)이 먼저. 그다음 래더는 소수 배분이 아닌 것 점유율 내림차순 → 소수 배분, 커스텀은 프리셋 순. 동률은 원래 순서. */
 function compareBase(a: CardView, b: CardView): number {
+  const ua = a.bundle.userAdded
+  const ub = b.bundle.userAdded
+  if (ua !== undefined || ub !== undefined) {
+    if (ua === undefined) return 1
+    if (ub === undefined) return -1
+    if (ua !== ub) return ua - ub
+    return a.order - b.order
+  }
   if (a.opponent.source === 'ladder') {
-    const ua = a.bundle.userAdded
-    const ub = b.bundle.userAdded
-    if (ua !== undefined || ub !== undefined) {
-      if (ua === undefined) return 1
-      if (ub === undefined) return -1
-      if (ua !== ub) return ua - ub
-      return a.order - b.order
-    }
     if (a.bundle.minority !== b.bundle.minority) return a.bundle.minority ? 1 : -1
     const d = (b.bundle.share ?? 0) - (a.bundle.share ?? 0)
     if (d !== 0) return d
@@ -46,9 +46,13 @@ function compareBase(a: CardView, b: CardView): number {
   return a.order - b.order
 }
 
-/** 고정 순번(없으면 -1). 래더 카드만 고정된다. */
+/**
+ * 고정 순번(없으면 -1). 목록 밖 카드는 직접 추가 카드만 고정과 견준다: 프리셋 줄은 고정을 풀 수 없어서,
+ * 같은 키의 추가 배분 고정이 프리셋을 고정으로 끌어올리면 안 된다.
+ */
 function pinIndex(tab: Tab | undefined, pins: readonly PinnedBundle[], card: CardView): number {
-  if (tab === undefined || card.opponent.source !== 'ladder' || pins.length === 0) return -1
+  if (tab === undefined || pins.length === 0) return -1
+  if (card.opponent.source === 'custom' && card.bundle.userAdded === undefined) return -1
   const p = pinOf(tab, card)
   return pins.findIndex((x) => samePin(x, p))
 }
@@ -186,7 +190,7 @@ export function groupItems(group: CardGroup): GroupItem[] {
 
 /**
  * 선택 id를 그룹의 선택지로 푼다. 사용자 추가 카드 id가 선택지에 없으면(계획이 같은 키의 관측 묶음으로 합쳐
- * 사용자 카드를 만들지 않은 경우 — 관측 묶음이 나중에 나타나거나 기준을 낮춘 경우) 같은 능력치·SP의 무보정 관측 묶음을 고르고,
+ * 사용자 카드를 만들지 않은 경우 — 관측 묶음이 나중에 나타나거나 기준을 낮춘 경우) 같은 능력치·SP·보정 부호의 관측 묶음을 고르고,
  * 그것도 없으면 기본 선택지로 돌아간다.
  */
 export function chosenOption(group: CardGroup, tab: Tab, chosen: string | undefined): CardView {
@@ -201,7 +205,6 @@ function matchedOption(group: CardGroup, tab: Tab, chosen: string): CardView | u
     (o) =>
       o.opponent.source === 'ladder' &&
       o.bundle.userAdded === undefined &&
-      o.bundle.stats.every((s) => s.nature === 'neutral') &&
-      addedCardId(tab, o.opponent.id, o.category, addedBundleKey(o.bundle.stats), o.berry?.item) === chosen,
+      addedCardId(tab, o.opponent.source, o.opponent.id, o.category, addedBundleKey(o.bundle.stats), o.berry?.item) === chosen,
   )
 }

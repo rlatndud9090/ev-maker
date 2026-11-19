@@ -33,6 +33,7 @@ function badge(id: string, speed: number, patch: Partial<SpeedBadge> = {}): Spee
   return {
     id,
     origin: 'ladder',
+    source: 'ladder',
     opponentId: id,
     speciesId: id,
     mega: false,
@@ -110,9 +111,9 @@ describe('같은 줄 순서(R2)', () => {
   const cmp = compareInRow((id) => names[id] ?? id)
   it('점유율 내림 → 기본 먼저 → 이름 → 직접 입력 추가(추가 순) → 목록 밖 타겟(추가 순·프리셋 순)', () => {
     const list = [
-      badge('preset-1-0', 150, { origin: 'preset', speciesId: 'a', bundle: { sp: 32, nature: 'neutral', share: null }, presetIndex: 0, addedOrder: 1, listed: false }),
-      badge('preset-0-1', 150, { origin: 'preset', speciesId: 'a', bundle: { sp: 32, nature: 'neutral', share: null }, presetIndex: 1, addedOrder: 0, listed: false }),
-      badge('preset-0-0', 150, { origin: 'preset', speciesId: 'a', bundle: { sp: 32, nature: 'neutral', share: null }, presetIndex: 0, addedOrder: 0, listed: false }),
+      badge('preset-1-0', 150, { origin: 'preset', source: 'custom', speciesId: 'a', bundle: { sp: 32, nature: 'neutral', share: null }, presetIndex: 0, addedOrder: 1, listed: false }),
+      badge('preset-0-1', 150, { origin: 'preset', source: 'custom', speciesId: 'a', bundle: { sp: 32, nature: 'neutral', share: null }, presetIndex: 1, addedOrder: 0, listed: false }),
+      badge('preset-0-0', 150, { origin: 'preset', source: 'custom', speciesId: 'a', bundle: { sp: 32, nature: 'neutral', share: null }, presetIndex: 0, addedOrder: 0, listed: false }),
       badge('free-2', 150, { origin: 'added', bundle: { sp: 3, nature: 'neutral', share: null }, addedOrder: 2, listed: false }),
       badge('free-0', 150, { origin: 'added', bundle: { sp: 4, nature: 'neutral', share: null }, addedOrder: 0, listed: false }),
       badge('c-cond', 150, { speciesId: 'c', bundle: { sp: 32, nature: 'neutral', share: 0.5 }, condition: { kind: 'tailwind' }, filterKind: 'tailwind' }),

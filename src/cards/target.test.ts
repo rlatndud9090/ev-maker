@@ -337,7 +337,7 @@ describe('방어 탭 H·B 최소 조합 2종(예시 세트)', () => {
     for (const { spec, nature, r } of pairs) {
       expect(r.kind === 'pair' && r.points).toEqual(brute(judgeOf(spec, nature === 'neutral' ? spec.natures.neutral : spec.natures.plus), spMaxPerStat))
     }
-  })
+  }, 30_000) // 필터 4개 × 33×33 전수 대조라 느린 CI 러너에서 기본 5초를 넘을 수 있다
 
   it('H행·B/D행이 같은 쌍 목표 2종을 싣고, 목표 판정은 현재보다 한 단계 위(두 변형 모두 불가면 유지), n = 합 증가분 − 잔여', () => {
     const remaining = spTotal - STAT_IDS.reduce((s, k) => s + EXAMPLE_SET.sp[k], 0)

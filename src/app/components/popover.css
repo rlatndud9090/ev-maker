@@ -1,0 +1,46 @@
+/* 앵커 팝오버: 뒤 화면 위에 겹친다(자리를 차지하지 않음). 자리는 Popover가 top/left/max-height로 맞춘다 */
+.popover {
+  position: fixed;
+  z-index: 40;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  width: min(22.5rem, calc(100vw - 32px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--card);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(20, 16, 40, 0.22), 0 2px 6px rgba(20, 16, 40, 0.12);
+}
+
+/* 팝오버 안 내용은 테두리·바깥 여백 없이 팝오버 면을 쓴다 */
+.popover > .custom-panel,
+.popover > .speed-detail {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* 검색 후보는 팝오버 스크롤 안에서 흐름대로(겹쳐 띄우면 팝오버 끝에서 잘린다) */
+.popover .combo-list {
+  position: static;
+  margin-top: 0.25rem;
+  box-shadow: none;
+}
+
+/* 좁은 화면: 화면 아래에 붙는 하단 시트(Popover.tsx SHEET_QUERY와 같은 구간) */
+@media (max-width: 30rem) {
+  .popover {
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: 0;
+    width: auto;
+    max-height: min(75dvh, calc(100dvh - 4rem));
+    border-bottom: 0;
+    border-radius: 14px 14px 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 -6px 24px rgba(20, 16, 40, 0.25);
+  }
+}
