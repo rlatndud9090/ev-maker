@@ -100,7 +100,7 @@ describe.each(['attack', 'defense'] as const)('%s 탭 카드 도구 아이콘(�
     expect(textOf(head)).not.toMatch(/\d%/)
     // 상세 아이콘은 장식이라 읽기 이름·변형 testid가 간단행과 겹치지 않는다
     expect(attr(openTag(head, 'class="item-mark"'), 'aria-hidden')).toBe('true')
-  })
+  }, 30_000) // 탭의 첫 테스트라 예시 세트 전체 카드 계산을 떠안아 느린 CI 러너에서 기본 5초를 넘을 수 있다
 
   it('도구 없는 기본 줄: 도구 아이콘·상세 도구 머리가 없다', () => {
     const group = groupsOf(tab).find((g) => g.berry === undefined && !isMega(g))!
