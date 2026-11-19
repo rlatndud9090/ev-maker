@@ -10,7 +10,7 @@ export const UNAVAILABLE_TEXT: Readonly<Record<UnavailableReason, string>> = {
   'speed-unsupported': '스피드를 계산할 수 없는 세트입니다',
 }
 
-export const OBSERVED_STATE_TEXT = { shown: '이미 존재합니다', boosted: '무보정 배분만 추가할 수 있습니다' } as const
+export const OBSERVED_STATE_TEXT = { shown: '이미 존재합니다' } as const
 
 /** label = 입력 배분 표기(스피드 bundleLabel, 공·방 bundleText). ok면 빈 문자열 */
 export function additionMessage(v: AdditionVerdict, label: string, spMax: number): string {

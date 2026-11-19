@@ -140,6 +140,8 @@ test.describe('설정 영역 3줄', () => {
   })
 
   test('최소 사용률: 카드 계산 기준 2종은 인라인으로 바로 반영(세대 +1·재계산), 스피드 차트 전용 2종(구애스카프·날씨 특성)은 세대 그대로, 범위 밖은 반영하지 않는다', async ({ page }) => {
+    // 전체 재계산을 5번 직렬로 기다려 기본 30s에 거의 붙는다(main 기준 약 29s).
+    test.setTimeout(90_000)
     await openProduct(page)
     await waitComplete(page)
     const stats = rowGroup(page, '통계 설정')

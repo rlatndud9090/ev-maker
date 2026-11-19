@@ -9,6 +9,8 @@ import {
   isDamageTab,
   judgeDamageAddition,
   judgeSpeedAddition,
+  setKeySign,
+  signOf,
   speedAdditionQuery,
   targetStatus,
   type AdditionTarget,
@@ -18,6 +20,7 @@ import {
   type DamageAdditionQuery,
   type DamageCategoryQuery,
   type DamageTab,
+  type KeySigns,
   type NatureSign,
   type SpeedAdditionQuery,
   type SpeedChartInput,
@@ -349,12 +352,13 @@ const sameKeys = (values: Readonly<Partial<Record<StatId, number>>>, keyStats: r
   return given.length === keyStats.length && keyStats.every((k) => given.includes(k))
 }
 
-/** 공·방 탭: 분류 선택(둘 이상일 때) → 관측 묶음 목록 → 키 능력치 SP 직접 입력(무보정). 기본값은 그 분류의 대표 배분 */
+/** 공·방 탭: 분류 선택(둘 이상일 때) → 관측 묶음 목록(보정 부호 그대로 추가) → 키 능력치 SP·▲▼ 직접 입력(H는 ▲▼ 없음). 기본값은 그 분류의 대표 배분 SP·무보정 */
 function DamageBody({ tab, categories, target, spMax, dispatch, onAdded, actions }: BodyProps & { tab: DamageTab; categories: readonly DamageCategoryQuery[] }) {
   const uid = useId()
   const msgId = `${uid}-msg`
   const [selected, setSelected] = useState(categories[0].category)
   const [values, setValues] = useState<Partial<Record<StatId, number>>>(() => ({ ...categories[0].defaultSp }))
+  const [signs, setSigns] = useState<KeySigns>({})
   const [message, announce, clearMessage] = useAnnounce()
   const found = categories.find((x) => x.category === selected)
   const c = found ?? categories[0]
@@ -362,24 +366,26 @@ function DamageBody({ tab, categories, target, spMax, dispatch, onAdded, actions
   if (found === undefined || !sameKeys(values, c.keyStats)) {
     setSelected(c.category)
     setValues({ ...c.defaultSp })
+    setSigns({})
     if (message !== '') clearMessage()
   }
-  const statsOf = (sp: Readonly<Partial<Record<StatId, number>>>) => c.keyStats.map((stat) => ({ stat, sp: sp[stat] ?? NaN }))
-  const add = (sp: Readonly<Partial<Record<StatId, number>>>) => {
-    const stats = statsOf(sp)
-    const verdict = judgeDamageAddition(c, sp, spMax)
+  const statsOf = (sp: Readonly<Partial<Record<StatId, number>>>, nature: KeySigns) => c.keyStats.map((stat) => ({ stat, sp: sp[stat] ?? NaN, nature: signOf(nature, stat) }))
+  const add = (sp: Readonly<Partial<Record<StatId, number>>>, nature: KeySigns) => {
+    const stats = statsOf(sp, nature)
+    const verdict = judgeDamageAddition(c, sp, spMax, nature)
     if (verdict.kind !== 'ok') {
-      announce(additionMessage(verdict, bundleText(stats.map((s) => ({ ...s, nature: 'neutral' }))), spMax))
+      announce(additionMessage(verdict, bundleText(stats), spMax))
       return
     }
     clearMessage()
     const added = { tab, source: target.source, opponentId: target.id, category: c.category }
-    dispatch({ type: 'add-bundle', bundle: { ...added, sp: { ...sp } }, keyStats: c.keyStats, spMax })
+    dispatch({ type: 'add-bundle', bundle: { ...added, sp: { ...sp }, nature: { ...nature } }, keyStats: c.keyStats, spMax })
     onAdded({ tab, groupKey: groupKey({ source: target.source, id: target.id }), cardId: addedBundleCardId(added, stats) })
   }
   const pick = (x: DamageCategoryQuery) => {
     setSelected(x.category)
     setValues({ ...x.defaultSp })
+    setSigns({})
     clearMessage()
   }
   return (
@@ -388,7 +394,7 @@ function DamageBody({ tab, categories, target, spMax, dispatch, onAdded, actions
       noValidate
       onSubmit={(e) => {
         e.preventDefault()
-        add(values)
+        add(values, signs)
       }}
     >
       {categories.length > 1 && (
@@ -411,7 +417,12 @@ function DamageBody({ tab, categories, target, spMax, dispatch, onAdded, actions
                 disabled={o.state !== 'addable'}
                 data-testid="add-observed-option"
                 data-state={o.state}
-                onClick={() => add(Object.fromEntries(o.stats.map((s) => [s.stat, s.sp])))}
+                onClick={() =>
+                  add(
+                    Object.fromEntries(o.stats.map((s) => [s.stat, s.sp])),
+                    Object.fromEntries(o.stats.map((s) => [s.stat, s.nature])),
+                  )
+                }
               >
                 <b className="num">{bundleText(o.stats)}</b>
                 {o.share !== undefined && <span className="num bundle-share">{shareText(o.share)}</span>}
@@ -424,25 +435,36 @@ function DamageBody({ tab, categories, target, spMax, dispatch, onAdded, actions
       <div className="add-direct">
         <span className="group-title">직접 입력</span>
         {c.keyStats.map((stat) => (
-          <NumberField
-            key={stat}
-            label={STAT_SHORT[stat]}
-            ariaLabel={`SP ${STAT_LABEL[stat]}`}
-            value={values[stat] ?? NaN}
-            min={0}
-            max={spMax}
-            step={1}
-            describedBy={msgId}
-            testId={`add-sp-${stat}`}
-            className="sp-field"
-            onValue={(v) => {
-              setValues((cur) => ({ ...cur, [stat]: v }))
-              clearMessage()
-            }}
-          />
+          <span key={stat} className="add-stat">
+            <NumberField
+              label={STAT_SHORT[stat]}
+              ariaLabel={`SP ${STAT_LABEL[stat]}`}
+              value={values[stat] ?? NaN}
+              min={0}
+              max={spMax}
+              step={1}
+              describedBy={msgId}
+              testId={`add-sp-${stat}`}
+              className="sp-field"
+              onValue={(v) => {
+                setValues((cur) => ({ ...cur, [stat]: v }))
+                clearMessage()
+              }}
+            />
+            {stat !== 'hp' && (
+              <NatureToggle
+                value={signOf(signs, stat)}
+                onChange={(v) => {
+                  setSigns((cur) => setKeySign(cur, stat, v))
+                  clearMessage()
+                }}
+                testIdPrefix={`add-nat-${stat}`}
+                statLabel={STAT_LABEL[stat]}
+              />
+            )}
+          </span>
         ))}
       </div>
-      <p className="hint">무보정 배분으로 추가합니다</p>
       <p id={msgId} className="add-msg" role="status" aria-live="polite" data-testid="add-msg">
         {message}
       </p>

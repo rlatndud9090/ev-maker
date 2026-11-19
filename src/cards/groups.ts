@@ -190,7 +190,7 @@ export function groupItems(group: CardGroup): GroupItem[] {
 
 /**
  * 선택 id를 그룹의 선택지로 푼다. 사용자 추가 카드 id가 선택지에 없으면(계획이 같은 키의 관측 묶음으로 합쳐
- * 사용자 카드를 만들지 않은 경우 — 관측 묶음이 나중에 나타나거나 기준을 낮춘 경우) 같은 능력치·SP의 무보정 관측 묶음을 고르고,
+ * 사용자 카드를 만들지 않은 경우 — 관측 묶음이 나중에 나타나거나 기준을 낮춘 경우) 같은 능력치·SP·보정 부호의 관측 묶음을 고르고,
  * 그것도 없으면 기본 선택지로 돌아간다.
  */
 export function chosenOption(group: CardGroup, tab: Tab, chosen: string | undefined): CardView {
@@ -205,7 +205,6 @@ function matchedOption(group: CardGroup, tab: Tab, chosen: string): CardView | u
     (o) =>
       o.opponent.source === 'ladder' &&
       o.bundle.userAdded === undefined &&
-      o.bundle.stats.every((s) => s.nature === 'neutral') &&
       addedCardId(tab, o.opponent.source, o.opponent.id, o.category, addedBundleKey(o.bundle.stats), o.berry?.item) === chosen,
   )
 }

@@ -190,6 +190,24 @@ describe('reducer', () => {
       expect(otherCategory.addedBundles).toHaveLength(2)
     })
 
+    it('보정 부호: 규칙(H 무보정·상승/하락 각 하나·키 능력치만)을 어기면 무시, 같은 SP라도 부호가 다르면 따로, 무보정 항목은 빼고 담는다', () => {
+      const s = start()
+      for (const nature of [{ hp: 'plus' }, { spd: 'minus' }, JSON.parse('{"def":"up"}')] as const) expect(reducer(s, add({ ...hb(4, 8), nature }))).toBe(s)
+      const one = reducer(s, add({ ...hb(4, 8), nature: { hp: 'neutral', def: 'plus' } }))
+      expect(one.addedBundles).toEqual([{ ...hb(4, 8), nature: { def: 'plus' } }])
+      expect(one.pinnedBundles.map((p) => p.key)).toEqual(['[{"stat":"hp","sp":4,"nature":"neutral"},{"stat":"def","sp":8,"nature":"plus"}]'])
+      expect(reducer(one, add({ ...hb(4, 8), nature: { def: 'plus' } }))).toBe(one)
+      const two = reducer(one, add(hb(4, 8)))
+      expect(two.addedBundles).toEqual([{ ...hb(4, 8), nature: { def: 'plus' } }, hb(4, 8)])
+      const three = reducer(two, add({ ...hb(4, 8), nature: { def: 'minus' } }))
+      expect(three.addedBundles).toHaveLength(3)
+      // 무보정 명시는 부호 없음과 같은 배분
+      expect(reducer(three, add({ ...hb(4, 8), nature: { def: 'neutral' } }))).toBe(three)
+      const removed = reducer(three, { type: 'remove-bundle', bundle: { ...hb(4, 8), nature: { def: 'plus' } } })
+      expect(removed.addedBundles).toEqual([hb(4, 8), { ...hb(4, 8), nature: { def: 'minus' } }])
+      expect(removed.pinnedBundles).toHaveLength(2)
+    })
+
     it('삭제는 같은 배분만 지우고, 없으면 그대로', () => {
       const two = run(start(), add(hb(0, 32)), add(hb(32, 0)))
       const removed = reducer(two, { type: 'remove-bundle', bundle: hb(0, 32) })

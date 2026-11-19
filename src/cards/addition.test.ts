@@ -18,7 +18,7 @@ import { addedBundleCardId, addedBundleKey, presetKey } from './ids'
 import { opponentSeeds, planTab } from './plan'
 import { buildSpeedChart, customSpeedOpponent, ladderSpeedOpponent, speedKey, type SpeedChartInput } from './speedChart'
 import { cardInput, realData, syntheticEntry, syntheticView } from './testing'
-import { DEFAULT_CRITERIA, type AddedBundle, type BundleStat, type CardInput, type CustomTarget, type SpeedAddedBundle } from './types'
+import { DEFAULT_CRITERIA, type AddedBundle, type CardInput, type CustomTarget, type SpeedAddedBundle } from './types'
 
 const { game, bo1 } = realData()
 const SP_MAX = game.manifest.rules.spMaxPerStat
@@ -235,8 +235,42 @@ describe('공·방 판정', () => {
     expect(judgeDamageAddition(physicalOf(inp()), { hp: 2, def: 0 }, SP_MAX)).toEqual({ kind: 'duplicate' })
   })
 
-  it('보정 관측만 있는 SP는 ok', () => {
-    expect(judgeDamageAddition(physicalOf(inp()), { hp: 32, def: 32 }, SP_MAX)).toEqual({ kind: 'ok' })
+  it('보정 관측만 있는 SP는 ok(같은 SP라도 부호가 다르면 다른 배분), 같은 SP·부호면 duplicate', () => {
+    const c = physicalOf(inp())
+    expect(judgeDamageAddition(c, { hp: 32, def: 32 }, SP_MAX)).toEqual({ kind: 'ok' })
+    expect(judgeDamageAddition(c, { hp: 32, def: 32 }, SP_MAX, { def: 'minus' })).toEqual({ kind: 'ok' })
+    expect(judgeDamageAddition(c, { hp: 32, def: 32 }, SP_MAX, { def: 'plus' })).toEqual({ kind: 'duplicate' })
+    expect(judgeDamageAddition(c, { hp: 32, def: 32 }, SP_MAX, { hp: 'neutral', def: 'plus' })).toEqual({ kind: 'duplicate' })
+    expect(judgeDamageAddition(c, { hp: 2, def: 0 }, SP_MAX, { def: 'plus' })).toEqual({ kind: 'ok' })
+  })
+
+  it('부호 규칙 위반은 invalid: H에 부호, 키 능력치 밖 부호, 알 수 없는 값', () => {
+    const c = physicalOf(inp())
+    expect(judgeDamageAddition(c, { hp: 20, def: 4 }, SP_MAX, { hp: 'plus' })).toEqual({ kind: 'invalid' })
+    expect(judgeDamageAddition(c, { hp: 20, def: 4 }, SP_MAX, { hp: 'minus', def: 'plus' })).toEqual({ kind: 'invalid' })
+    expect(judgeDamageAddition(c, { hp: 20, def: 4 }, SP_MAX, { spd: 'plus' })).toEqual({ kind: 'invalid' })
+    expect(judgeDamageAddition(c, { hp: 20, def: 4 }, SP_MAX, JSON.parse('{"def":"up"}'))).toEqual({ kind: 'invalid' })
+  })
+
+  it('보정 붙은 관측 줄을 그 부호 그대로 추가하면 사용자 카드가 그 키로 생기고 다시 질의하면 duplicate', () => {
+    const out = (partial: Partial<CardInput> = {}): CardInput => ({
+      ...cardInput({ mySet: GARCHOMP, filters: { topN: 30, selected: ['incineroar'] } }),
+      view: viewWith(DAMAGE_CHOMP, entryOf('incineroar')),
+      ...partial,
+    })
+    const c = physicalOf(out())
+    const row = c.observed.find((o) => o.stats.some((s) => s.nature !== 'neutral'))
+    if (row === undefined) throw new Error('no boosted row')
+    expect(row.state).toBe('addable')
+    const sp = Object.fromEntries(row.stats.map((s) => [s.stat, s.sp]))
+    const nature = Object.fromEntries(row.stats.map((s) => [s.stat, s.nature]))
+    expect(judgeDamageAddition(c, sp, SP_MAX, nature)).toEqual({ kind: 'ok' })
+    const added: AddedBundle = { tab: 'attack', source: 'ladder', opponentId: 'garchomp', category: 'physical', sp, nature: { def: 'plus' } }
+    const cards = planTab(out({ addedBundles: [added] }), 'attack').cards.filter((x) => x.opponent.id === 'garchomp')
+    expect(cards.map((x) => [x.bundle.key, x.bundle.userAdded])).toEqual([[JSON.stringify(row.stats), 0]])
+    expect(cards[0].id).toBe(addedBundleCardId(added, row.stats))
+    expect(judgeDamageAddition(physicalOf(out({ addedBundles: [added] })), sp, SP_MAX, nature)).toEqual({ kind: 'duplicate' })
+    expect(judgeDamageAddition(physicalOf(out({ addedBundles: [added] })), sp, SP_MAX)).toEqual({ kind: 'ok' })
   })
 
   it('기준 미달 관측은 ok(bundleShareMin을 올리면 30% 묶음도 ok)', () => {
@@ -292,7 +326,7 @@ describe('공·방 판정', () => {
     const c = physicalOf(out())
     expect(c.shownKeys.size).toBe(0)
     expect(c.defaultSp).toEqual({ hp: 32, def: 32 })
-    expect(c.observed.map((o) => o.state)).toEqual(['boosted', 'addable'])
+    expect(c.observed.map((o) => o.state)).toEqual(['addable', 'addable'])
     expect(judgeDamageAddition(c, { hp: 2, def: 0 }, SP_MAX)).toEqual({ kind: 'ok' })
     const added: AddedBundle = { tab: 'attack', source: 'ladder', opponentId: 'garchomp', category: 'physical', sp: { hp: 2, def: 0 } }
     const cards = planTab(out({ addedBundles: [added] }), 'attack').cards.filter((x) => x.opponent.id === 'garchomp')
@@ -300,18 +334,9 @@ describe('공·방 판정', () => {
     expect(judgeDamageAddition(physicalOf(out({ addedBundles: [added] })), { hp: 2, def: 0 }, SP_MAX)).toEqual({ kind: 'duplicate' })
   })
 
-  it('observedState 판정 순서: shown → boosted → addable', () => {
-    const boostedStats: BundleStat[] = [
-      { stat: 'hp', sp: 32, nature: 'neutral' },
-      { stat: 'def', sp: 32, nature: 'plus' },
-    ]
-    const plainStats: BundleStat[] = [{ stat: 'hp', sp: 2, nature: 'neutral' }]
-    const boosted = { key: 'b', stats: boostedStats }
-    const plain = { key: 'p', stats: plainStats }
-    expect(observedState(boosted, new Set(['b']))).toBe('shown')
-    expect(observedState(boosted, new Set())).toBe('boosted')
-    expect(observedState(plain, new Set(['p']))).toBe('shown')
-    expect(observedState(plain, new Set())).toBe('addable')
+  it('observedState: 표시 중이면 shown, 아니면 보정이 붙어도 addable', () => {
+    expect(observedState({ key: 'b' }, new Set(['b']))).toBe('shown')
+    expect(observedState({ key: 'b' }, new Set())).toBe('addable')
   })
 
   it('목록 밖: 무보정 프리셋과 같으면 duplicate, observed는 빈 배열', () => {

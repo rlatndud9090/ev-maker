@@ -29,6 +29,6 @@ describe('additionMessage', () => {
   })
 
   it('관측 줄 상태 문구', () => {
-    expect(OBSERVED_STATE_TEXT).toEqual({ shown: '이미 존재합니다', boosted: '무보정 배분만 추가할 수 있습니다' })
+    expect(OBSERVED_STATE_TEXT).toEqual({ shown: '이미 존재합니다' })
   })
 })

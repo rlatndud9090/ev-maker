@@ -752,6 +752,31 @@ describe('planTab: 사용자 추가 배분', () => {
     expect(trimmed).toEqual({ hp: 32, atk: 0, def: 32, spa: 0, spd: 0, spe: 2 })
   })
 
+  it('보정 부호: 카드 묶음·키·id가 입력 부호를 따르고, 계산용 성격의 키 능력치 부호가 입력과 같다', () => {
+    const signed = added({ hp: 10, def: 20 }, { nature: { def: 'plus' } })
+    const minus = added({ hp: 10, def: 20 }, { nature: { def: 'minus' } })
+    const plain = added({ hp: 10, def: 20 })
+    const user = ladderCards(planWith([signed, minus, plain]), 'physical').filter((c) => c.bundle.userAdded !== undefined)
+    expect(user.map((c) => c.bundle.stats.map((x) => x.nature))).toEqual([
+      ['neutral', 'plus'],
+      ['neutral', 'minus'],
+      ['neutral', 'neutral'],
+    ])
+    expect(user.map((c) => c.id)).toEqual([signed, minus, plain].map((b, i) => addedBundleCardId(b, user[i].bundle.stats)))
+    expect(user[2].id).toBe(cardId(['attack', 'ladder', opp, 'physical', JSON.stringify([{ stat: 'hp', sp: 10, nature: 'neutral' }, { stat: 'def', sp: 20, nature: 'neutral' }]), 'user']))
+    const n = (c: CardSpec) => game.data.natures[c.opponentSet.nature]
+    expect([n(user[0]).plus, n(user[0]).minus === 'def']).toEqual(['def', false])
+    expect([n(user[1]).minus, n(user[1]).plus === 'def']).toEqual(['def', false])
+    for (const c of user) expect(c.opponentSet.sp.hp + c.opponentSet.sp.def).toBe(30)
+  })
+
+  it('부호 규칙을 어긴 추가 배분은 받지 않는다(H 부호·키 밖 부호·상승 둘)', () => {
+    const observed = ladderCards(planWith([]), 'physical').length
+    for (const nature of [{ hp: 'plus' }, { spd: 'plus' }, { hp: 'minus', def: 'minus' }] as const) {
+      expect(ladderCards(planWith([added({ hp: 7, def: 7 }, { nature })]), 'physical'), JSON.stringify(nature)).toHaveLength(observed)
+    }
+  })
+
   it('관측 묶음과 키가 같거나 앞선 추가와 같으면 새 카드를 만들지 않고, 키 능력치 집합·SP 범위가 틀리면 받지 않는다', () => {
     const base = planWith([])
     const observed = ladderCards(base, 'physical')
@@ -924,6 +949,19 @@ describe('planTab: 목록 밖 추가 배분', () => {
     if (user === undefined) throw new Error('no user card')
     const n = game.data.natures[user.opponentSet.nature]
     expect(n.plus === undefined || n.plus === n.minus).toBe(true)
+  })
+
+  it('목록 밖 추가 배분도 입력 부호를 따른다: 상승만이면 하락은 키·H 밖, 키 부호는 입력과 같다', () => {
+    const edits = { [presetKey('attack', 'physical', 0)]: { nature: 'jolly' } }
+    const signed: AddedBundle = { ...custom({ hp: 7, def: 9 }), nature: { def: 'plus' } }
+    const user = physical(plan([signed], edits)).find((c) => c.bundle.userAdded !== undefined)
+    if (user === undefined) throw new Error('no user card')
+    expect(user.bundle.stats).toEqual([
+      { stat: 'hp', sp: 7, nature: 'neutral' },
+      { stat: 'def', sp: 9, nature: 'plus' },
+    ])
+    expect(user.id).toBe(addedBundleCardId(signed, user.bundle.stats))
+    expect(user.opponentSet.nature).toBe('impish')
   })
 
   it('프리셋과 같은 키·앞선 추가와 같은 키면 카드를 만들지 않는다', () => {

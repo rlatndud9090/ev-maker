@@ -26,7 +26,7 @@ import type { Snapshot, StatId } from '../data/schema'
 import { observedSpreadAssumption, representativeAssumption, resolveAssumption, type Assumption } from '../meta'
 import { berryActivates, resistBerriesOf } from './berries'
 import { powerItemBoosts, powerItemsOf } from './powerItems'
-import { bundleStats, bundlesOf, natureSign } from './bundles'
+import { bundleStats, bundlesOf } from './bundles'
 import { LAST_RESPECTS, LAST_RESPECTS_FAINTS, addedBundleKey, addedCardId, faintConditionId, cardId as makeCardId, presetKey, rowId } from './ids'
 import { presetAssumption } from './presets'
 import { isInRange, ladderOpponents, type LadderOpponent } from './range'
@@ -35,6 +35,7 @@ import { trimSp } from './spTrim'
 import { TAB_MEANS_OWNERS, ladderMeans, rankMoveAllowed, rankVariants, setMeansCandidates, type CardRefStats, type MeansCandidate } from './rank'
 import type { BoostStat } from './rankMeans'
 import { mainMoves } from './items'
+import { natureForSigns, signOf, validKeySigns } from './keySigns'
 import { natureVariants } from './natures'
 import { myDependsOn, relevantStats } from './relevance'
 import {
@@ -223,8 +224,9 @@ class PlanBuilder {
 
   /**
    * 사용자 추가 배분(이 탭·출처·상대·분류, 추가 순). 가정 세트 = base(래더 = 최고 점유율 묶음 가정, 목록 밖 = 프리셋 1 편집 반영)에서 키 능력치 SP만 바꾸고,
-   * 그 성격이 키 능력치에 보정을 주면 무보정 성격으로 바꾼다. SP 합이 상한을 넘으면 키가 아닌 능력치(큰 것부터)에서 덜어 낸다.
-   * 키 능력치 집합이 다르거나 SP가 0~최대 정수가 아니면 받지 않고, seen(이미 표시하는 묶음 키)·앞선 추가와 키가 같으면 새 카드를 만들지 않는다.
+   * 성격은 키 능력치 부호를 정확히 만족하도록 맞춘다(natureForSigns). SP 합이 상한을 넘으면 키가 아닌 능력치(큰 것부터)에서 덜어 낸다.
+   * 키 능력치 집합이 다르거나 SP가 0~최대 정수가 아니거나 부호 규칙을 어기면(또는 만족하는 성격이 없으면) 받지 않고,
+   * seen(이미 표시하는 묶음 키)·앞선 추가와 키가 같으면 새 카드를 만들지 않는다.
    */
   userSeeds(opp: Opponent, category: Category | null, keyStats: readonly StatId[], base: Assumption | undefined, seen: Set<string>): CardSeed[] {
     const { game, input } = this
@@ -237,12 +239,13 @@ class PlanBuilder {
       const given = Object.keys(added.sp) as StatId[]
       if (given.length !== keys.size || !given.every((s) => keys.has(s))) return
       if (!given.every((s) => isSpValue(added.sp[s], spMaxPerStat))) return
-      const stats = STAT_IDS.filter((s) => keys.has(s)).map((stat) => ({ stat, sp: added.sp[stat] as number, nature: 'neutral' as const }))
+      if (!validKeySigns(keyStats, added.nature)) return
+      const nature = natureForSigns(game, base.set.nature, keyStats, added.nature)
+      if (nature === undefined) return
+      const stats = STAT_IDS.filter((s) => keys.has(s)).map((stat) => ({ stat, sp: added.sp[stat] as number, nature: signOf(added.nature, stat) }))
       const key = addedBundleKey(stats)
       if (seen.has(key)) return
       seen.add(key)
-      const touchesKey = keyStats.some((s) => natureSign(game, base.set.nature, s) !== 'neutral')
-      const nature = touchesKey ? neutralNature(game, base.set.nature) : base.set.nature
       const sp = { ...base.set.sp } as SpTable
       for (const st of stats) sp[st.stat] = st.sp
       trimSp(sp, keys, spTotal)
@@ -697,12 +700,6 @@ const unique = <T>(xs: readonly T[]): T[] => [...new Set(xs)]
 function withAdded(base: readonly string[], added: ReadonlySet<string>, entry: MetaEntry): string[] {
   const share = (id: string): number => entry.moves.shares[id] ?? 0
   return unique([...base, ...added]).sort((a, b) => share(b) - share(a) || byString(a, b))
-}
-
-/** 보정 없는 성격(스냅샷 성격 id 정렬 순 첫 번째). 없으면 원래 성격. */
-function neutralNature(game: Snapshot, fallback: string): string {
-  const natures = game.data.natures
-  return Object.keys(natures).sort().find((id) => natures[id].plus === undefined || natures[id].plus === natures[id].minus) ?? fallback
 }
 
 const meansParts = (b: RankBasis): string[] => [b.owner, b.means.kind, b.means.id]

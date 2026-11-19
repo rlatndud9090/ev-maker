@@ -61,6 +61,19 @@ describe('사용자 추가 배분 키', () => {
     expect(addedBundleKey(stats)).toBe(key)
   })
 
+  it('보정 부호: 무보정(부호 없음·neutral 명시)은 예전 키·카드 id 문자열 그대로, 부호가 있으면 키·동일성·고정이 달라진다', () => {
+    expect(addedBundleKey(stats.map((x) => ({ ...x, nature: 'neutral' as const })))).toBe(key)
+    expect(addedBundleCardId(hb, stats.map((x) => ({ ...x, nature: 'neutral' as const })))).toBe(JSON.stringify(['attack', 'ladder', 'garchomp', 'physical', key, 'user']))
+    expect(addedBundlePin({ ...hb, nature: { hp: 'neutral', def: 'neutral' } })).toEqual(addedBundlePin(hb))
+    expect(addedBundleIdentity({ ...hb, nature: { def: 'neutral' } })).toBe(addedBundleIdentity(hb))
+    const plus = [stats[0], { ...stats[1], nature: 'plus' as const }]
+    const plusKey = '[{"stat":"hp","sp":4,"nature":"neutral"},{"stat":"def","sp":8,"nature":"plus"}]'
+    expect(addedBundleKey(plus)).toBe(plusKey)
+    expect(addedBundlePin({ ...hb, nature: { def: 'plus' } }).key).toBe(plusKey)
+    expect(addedBundleIdentity({ ...hb, nature: { def: 'plus' } })).not.toBe(addedBundleIdentity(hb))
+    expect(addedBundleIdentity({ ...hb, nature: { def: 'plus' } })).not.toBe(addedBundleIdentity({ ...hb, nature: { def: 'minus' } }))
+  })
+
   it('출처만 다른 두 항목은 동일성 키가 다르다', () => {
     const base = { tab: 'attack' as const, opponentId: 'garchomp', category: 'physical' as const, stats: [{ stat: 'hp' as const, sp: 4, nature: 'neutral' as const }] }
     expect(bundleIdentity({ ...base, source: 'ladder' })).not.toBe(bundleIdentity({ ...base, source: 'custom' }))

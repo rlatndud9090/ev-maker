@@ -23,10 +23,17 @@ export function presetKey(tab: Tab, category: Category | null, preset: PresetInd
   return JSON.stringify([tab, category, preset])
 }
 
-/** 사용자 추가 배분의 묶음 키(성격 보정은 늘 neutral). 입력 stats 순서와 무관하게 STAT_IDS 순으로 직렬화한다(관측 묶음 키와 같은 순서) */
-export function addedBundleKey(stats: readonly { stat: StatId; sp: number }[]): string {
+/** 사용자 추가 배분 한 칸(보정 부호가 없으면 무보정) */
+export interface AddedStat {
+  stat: StatId
+  sp: number
+  nature?: BundleStat['nature']
+}
+
+/** 사용자 추가 배분의 묶음 키. 입력 stats 순서와 무관하게 STAT_IDS 순으로 직렬화한다(관측 묶음 키와 같은 모양·순서) */
+export function addedBundleKey(stats: readonly AddedStat[]): string {
   const ordered = STAT_IDS.flatMap((stat) => stats.filter((s) => s.stat === stat))
-  return JSON.stringify(ordered.map((s) => ({ stat: s.stat, sp: s.sp, nature: 'neutral' })))
+  return JSON.stringify(ordered.map((s) => ({ stat: s.stat, sp: s.sp, nature: s.nature ?? 'neutral' })))
 }
 
 /** 사용자 추가 배분의 동일성 키: (탭, 출처, 상대, 분류, STAT_IDS 순 {stat, sp, nature}) 튜플. 입력 stats 순서와 무관하다 */
@@ -35,15 +42,15 @@ export function bundleIdentity(b: { tab: Tab; source: TargetSource; opponentId: 
   return JSON.stringify([b.tab, b.source, b.opponentId, b.category, stats])
 }
 
-/** 직접 추가 배분의 키 능력치 SP(STAT_IDS 순) */
-const addedStats = (added: AddedBundle): { stat: BundleStat['stat']; sp: number }[] =>
+/** 직접 추가 배분의 키 능력치 SP·보정 부호(STAT_IDS 순) */
+const addedStats = (added: AddedBundle): BundleStat[] =>
   STAT_IDS.flatMap((stat) => {
     const sp = added.sp[stat]
-    return sp === undefined ? [] : [{ stat, sp }]
+    return sp === undefined ? [] : [{ stat, sp, nature: added.nature?.[stat] ?? 'neutral' }]
   })
 
 export const addedBundleIdentity = (a: AddedBundle): string =>
-  bundleIdentity({ tab: a.tab, source: a.source, opponentId: a.opponentId, category: a.category, stats: addedStats(a).map((s) => ({ ...s, nature: 'neutral' })) })
+  bundleIdentity({ tab: a.tab, source: a.source, opponentId: a.opponentId, category: a.category, stats: addedStats(a) })
 
 export const speedBundleIdentity = (b: SpeedAddedBundle): string =>
   bundleIdentity({ tab: 'speed', source: b.source, opponentId: b.opponentId, category: null, stats: [{ stat: 'spe', sp: b.sp, nature: b.nature }] })
@@ -56,7 +63,7 @@ export function addedCardId(tab: Tab, source: TargetSource, opponentId: string, 
   return cardId(berry === undefined ? [tab, source, opponentId, category, bundleKey, 'user'] : [tab, source, opponentId, category, bundleKey, 'user', berry])
 }
 
-/** 직접 추가 배분의 고정 항목(키 = 그 배분 카드의 묶음 키: 키 능력치 STAT_IDS 순, 무보정) */
+/** 직접 추가 배분의 고정 항목(키 = 그 배분 카드의 묶음 키: 키 능력치 STAT_IDS 순, 보정 부호 포함) */
 export function addedBundlePin(added: AddedBundle): PinnedBundle {
   return { tab: added.tab, source: added.source, opponentId: added.opponentId, category: added.category, key: addedBundleKey(addedStats(added)) }
 }
@@ -73,7 +80,7 @@ export const samePin = (a: PinnedBundle, b: PinnedBundle): boolean =>
 /** 화면이 추가 직후(계산이 끝나기 전) 그 카드를 미리 고를 때 쓰는 id. 계획(plan)과 같은 규칙이다. */
 export function addedBundleCardId(
   added: { tab: Tab; source: TargetSource; opponentId: string; category: Category | null },
-  stats: readonly { stat: StatId; sp: number }[],
+  stats: readonly AddedStat[],
   berry?: string,
 ): string {
   return addedCardId(added.tab, added.source, added.opponentId, added.category, addedBundleKey(stats), berry)

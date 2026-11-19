@@ -88,9 +88,13 @@ export interface CustomTarget {
   edits: Readonly<Record<string, PresetEdit>>
 }
 
+/** 키 능력치별 성격 보정 부호. 없는 능력치는 무보정 */
+export type KeySigns = Readonly<Partial<Record<StatId, BundleStat['nature']>>>
+
 /**
  * 사용자가 직접 추가한 상대 배분.
- * sp 키 = 그 (탭, 분류) 카드의 묶음 키 능력치 전부(각 0~spMaxPerStat 정수). 성격은 키 능력치에 보정 없음.
+ * sp 키 = 그 (탭, 분류) 카드의 묶음 키 능력치 전부(각 0~spMaxPerStat 정수).
+ * nature = 키 능력치별 보정 부호(없으면 전부 무보정). 부호 규칙은 validKeySigns.
  */
 export interface AddedBundle {
   tab: Tab
@@ -99,6 +103,7 @@ export interface AddedBundle {
   opponentId: string
   category: Category | null
   sp: Readonly<Partial<Record<StatId, number>>>
+  nature?: KeySigns
 }
 
 /** 방어 탭 래더 상대 후보에 사용자가 더한 기술. 기본 후보 기준과 무관하게 후보다(스냅샷에 없거나 변화기면 무시) */

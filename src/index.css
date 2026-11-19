@@ -1214,6 +1214,12 @@ td.src {
   padding-block: 0.25rem;
 }
 
+.add-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .add-msg {
   margin: 0;
   font-size: 0.85rem;
@@ -1753,7 +1759,7 @@ img.mon-icon {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.2rem;
-  padding: 0.3rem 0.45rem 0.4rem;
+  padding: 0.3rem 0.3rem 0.4rem;
   margin-bottom: 0.15rem;
   border-bottom: 1px solid var(--border);
   font-size: 0.85rem;
@@ -1768,7 +1774,7 @@ img.mon-icon {
   display: inline-flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.3rem;
   white-space: nowrap;
 }
 
@@ -1781,7 +1787,7 @@ img.mon-icon {
 }
 
 .bundle-add input {
-  width: 2.6rem;
+  width: 2.2rem;
   padding: 0.05rem 0.25rem;
   font: inherit;
   font-size: 0.85rem;
@@ -1804,6 +1810,22 @@ img.mon-icon {
   border-radius: 6px;
   /* "추가" 두 글자가 좁은 폭에서 두 줄로 갈라지지 않게 */
   white-space: nowrap;
+}
+
+.bundle-add-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.bundle-add .nat-btns {
+  gap: 0.1rem;
+}
+
+.product .bundle-add .nat-btn {
+  width: 1rem;
+  padding: 0.05rem 0;
+  font-size: 0.65rem;
 }
 
 .bundle-add-hint {

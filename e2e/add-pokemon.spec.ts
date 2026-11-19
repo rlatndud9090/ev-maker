@@ -106,6 +106,34 @@ async function setSign(scope: Locator, sign: Sign) {
   await expect(down).toHaveAttribute('aria-pressed', String(sign === 'minus'))
 }
 
+const STAT_OF: Record<string, string> = { H: 'hp', A: 'atk', B: 'def', C: 'spa', D: 'spd', S: 'spe' }
+const signOfMark = (mark: string): Sign => (mark === '↑' ? 'plus' : mark === '↓' ? 'minus' : 'neutral')
+/** 배분 표기 "H32 B4↑" → 능력치별 SP·부호 */
+const parseBundle = (text: string) => [...text.matchAll(/([HABCDS])(\d+)([↑↓]?)/g)].map((m) => ({ stat: STAT_OF[m[1]], sp: m[2], sign: signOfMark(m[3]) }))
+
+/** 키 능력치 ▲▼(testid `${prefix}-${stat}-plus|minus`)를 sign에 맞춘다. H에는 토글이 없다 */
+async function setStatSign(scope: Locator, prefix: string, stat: string, sign: Sign) {
+  if (stat === 'hp') {
+    await expect(scope.locator(`[data-testid^="${prefix}-hp-"]`)).toHaveCount(0)
+    return
+  }
+  for (const k of ['plus', 'minus'] as const) {
+    const btn = scope.getByTestId(`${prefix}-${stat}-${k}`)
+    if (((await btn.getAttribute('aria-pressed')) === 'true') !== (sign === k)) await btn.click()
+  }
+  for (const k of ['plus', 'minus'] as const) await expect(scope.getByTestId(`${prefix}-${stat}-${k}`)).toHaveAttribute('aria-pressed', String(sign === k))
+}
+
+/** 패널 공·방 직접 입력을 배분 표기 text(SP·부호)로 채운다 */
+async function fillDamage(panel: Locator, text: string) {
+  const parts = parseBundle(text)
+  await expect(damageFields(panel)).toHaveCount(parts.length)
+  for (const p of parts) {
+    await panel.getByTestId(`add-sp-${p.stat}`).fill(p.sp)
+    await setStatSign(panel, 'add-nat', p.stat, p.sign)
+  }
+}
+
 /** 공·방 직접 입력 칸(키 능력치 순) */
 const damageFields = (panel: Locator) => panel.locator('.add-direct input[data-testid^="add-sp-"]')
 
@@ -235,11 +263,14 @@ test.describe("'포켓몬 추가' 패널", () => {
     const panel = await openAddPanel(page)
     await pickAddTarget(page, '워시로토무', '추가됨')
     await expect(panel.getByRole('group', { name: /^기술/ })).toHaveCount(0)
-    // 내 기술이 모두 물리라 공격 탭 분류는 물리 하나: 분류 선택 없이 H·B 입력, 성격 토글 없음
+    // 내 기술이 모두 물리라 공격 탭 분류는 물리 하나: 분류 선택 없이 H·B 입력, B에만 ▲▼(H·스피드 토글 없음)
     await expect(panel.getByTestId('add-category')).toHaveCount(0)
     await expect(panel.getByTestId('add-sp-hp')).toBeVisible()
     await expect(panel.getByTestId('add-sp-def')).toBeVisible()
     await expect(panel.getByTestId('add-nat-plus')).toHaveCount(0)
+    await expect(panel.locator('[data-testid^="add-nat-hp-"]')).toHaveCount(0)
+    await expect(panel.getByTestId('add-nat-def-plus')).toHaveAttribute('aria-pressed', 'false')
+    await expect(panel.getByTestId('add-nat-def-minus')).toHaveAttribute('aria-pressed', 'false')
     await expect(panel.getByTestId('add-observed-option')).toHaveCount(0)
     const first = presetText(presets[0])
     expect(await damageInputText(panel)).toBe(first)
@@ -367,6 +398,7 @@ test.describe("'포켓몬 추가' 패널", () => {
     const form2 = bundleMenu(row).getByTestId('bundle-add')
     await form2.getByRole('spinbutton', { name: '직접 추가 SP HP', exact: true }).fill(h)
     await form2.getByRole('spinbutton', { name: '직접 추가 SP 방어', exact: true }).fill(b)
+    await setStatSign(form2, 'bundle-add-nat', 'def', 'neutral')
     await form2.getByRole('button', { name: '추가', exact: true }).click()
     await expect(form2.locator('.bundle-add-hint')).toHaveText(damageMsg)
     await expect(bundleMenu(row).getByRole('menuitemradio')).toHaveCount(options.length)
@@ -424,7 +456,7 @@ test.describe("'포켓몬 추가' 패널", () => {
     await expect(bundleMenu(row).getByRole('menuitemradio')).toHaveCount(options)
   })
 
-  test('탭 전환: 스피드 탭에서 고른 메타 포켓몬은 공격·방어 탭으로 바꿔도 칩이 남고 그 탭 기준 입력(공·방은 성격 토글 없음)으로 다시 그린다', async ({ page }) => {
+  test('탭 전환: 스피드 탭에서 고른 메타 포켓몬은 공격·방어 탭으로 바꿔도 칩이 남고 그 탭 기준 입력(공·방은 키 능력치별 ▲▼, H엔 없음)으로 다시 그린다', async ({ page }) => {
     await openSpeed(page)
     const entry = plainEntries[0]
     const panel = await openAddPanel(page)
@@ -438,6 +470,10 @@ test.describe("'포켓몬 추가' 패널", () => {
       await expect(addPanel(page).getByTestId('add-sp-spe')).toHaveCount(0)
       await expect(addPanel(page).getByTestId('add-nat-plus')).toHaveCount(0)
       await expect(damageFields(addPanel(page)).first()).toBeVisible()
+      await expect(addPanel(page).locator('[data-testid^="add-nat-hp-"]')).toHaveCount(0)
+      const toggled = await damageFields(addPanel(page)).evaluateAll((els) => els.map((el) => el.getAttribute('data-testid')?.slice('add-sp-'.length) ?? '').filter((st) => st !== 'hp'))
+      expect(toggled.length, tab).toBeGreaterThan(0)
+      for (const st of toggled) await expect(addPanel(page).getByTestId(`add-nat-${st}-plus`)).toBeVisible()
     }
   })
 
@@ -467,6 +503,52 @@ test.describe("'포켓몬 추가' 패널", () => {
     const line = cards(page).and(page.locator(`[data-card-id='${focused.cardId.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}']`))
     await expect(line.getByTestId('card-bundle')).toHaveText(`H${h} B${b} 고정됨`)
     expect((await menuOptions(line)).filter((o) => o.user).map((o) => o.text)).toEqual([`H${h} B${b} 고정됨`])
+  })
+
+  test('공격 탭 메타 포켓몬 직접 입력 ▲▼: B에 ▲를 걸면 보정 배분(B..↑)으로 추가돼 선택지에 생기고, 같은 SP·부호를 다시 넣으면 "이미 존재합니다 — H.. B..↑"', async ({ page }) => {
+    await openProduct(page)
+    await waitComplete(page)
+    const entry = plainEntries[0]
+    const row = opponentCards(page, entry.id).first()
+    const taken = new Set((await menuOptions(row)).map((o) => o.text.replace(/ \S+$/, '')))
+    const panel = await openAddPanel(page)
+    await pickAddTarget(page, speciesLabel(entry.id), '메타 목록')
+    await expect(panel.locator('[data-testid^="add-nat-hp-"]')).toHaveCount(0)
+    const up = panel.getByTestId('add-nat-def-plus')
+    const down = panel.getByTestId('add-nat-def-minus')
+    await expect(up).toHaveAccessibleName('방어 성격 상승')
+    // 한 능력치에는 ▲·▼ 중 하나: ▼를 누르면 ▲가 풀리고, 다시 ▲를 누르면 ▼가 풀린다
+    await up.click()
+    await down.click()
+    await expect(up).toHaveAttribute('aria-pressed', 'false')
+    await expect(down).toHaveAttribute('aria-pressed', 'true')
+    await up.click()
+    await expect(up).toHaveAttribute('aria-pressed', 'true')
+    await expect(down).toHaveAttribute('aria-pressed', 'false')
+    const h = await panel.getByTestId('add-sp-hp').inputValue()
+    let b = 0
+    while (taken.has(`H${h} B${b}↑`)) b++
+    await panel.getByTestId('add-sp-def').fill(String(b))
+    await panel.getByTestId('add-submit').click()
+    await expect(addPanel(page)).toHaveCount(0)
+    await waitComplete(page)
+    await expect.poll(async () => (await focusedCardOf(page))?.userAdded).toBe(true)
+    const focused = (await focusedCardOf(page))!
+    expect(focused.opponent).toBe(entry.id)
+    const line = cards(page).and(page.locator(`[data-card-id='${focused.cardId.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}']`))
+    await expect(line.getByTestId('card-bundle')).toHaveText(`H${h} B${b}↑ 고정됨`)
+    expect((await menuOptions(line)).filter((o) => o.user).map((o) => o.text)).toEqual([`H${h} B${b}↑ 고정됨`])
+
+    const again = await openAddPanel(page)
+    await pickAddTarget(page, speciesLabel(entry.id), '메타 목록')
+    await fillDamage(again, `H${h} B${b}↑`)
+    const generation = await tabPanel(page).getAttribute('data-generation')
+    await again.getByTestId('add-submit').click()
+    await expect(again.getByTestId('add-msg')).toHaveText(`이미 존재합니다 — H${h} B${b}↑`)
+    await expect(tabPanel(page)).toHaveAttribute('data-generation', generation!)
+    // 부호를 바꾸면 안내가 지워진다
+    await again.getByTestId('add-nat-def-minus').click()
+    await expect(again.getByTestId('add-msg')).toHaveText('')
   })
 
   test('공격 탭 패널을 연 채 내 기술을 바꾸면: 고른 분류가 남으면 입력 유지, 분류가 사라지면 남은 첫 분류의 대표 배분으로 되돌리고 알림을 비운다, 공격기가 없으면 사유를 알린다', async ({ page }) => {
@@ -559,7 +641,7 @@ test.describe("'포켓몬 추가' 패널", () => {
     expect((await menuOptions(line)).filter((o) => o.user)).toHaveLength(1)
   })
 
-  test('방어 탭 범위 밖 메타 포켓몬: 보정 붙은 관측 줄은 비활성·"무보정 배분만 추가할 수 있습니다", 무보정 줄 "+ 추가"는 그 카드만 생기고 같은 SP 직접 입력은 무보정으로 추가된다(공격 탭엔 없음)', async ({ page }) => {
+  test('방어 탭 범위 밖 메타 포켓몬: 보정 붙은 관측 줄도 "+ 추가"로 그 부호 그대로 그 카드만 생기고, 같은 SP·부호 직접 입력은 "이미 존재합니다 — …", 부호만 바꾸면 따로 추가된다(공격 탭엔 없음)', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     await selectTab(page, '방어')
@@ -567,30 +649,27 @@ test.describe("'포켓몬 추가' 패널", () => {
     await setTopN(page, 1)
     await waitComplete(page)
     const panel = await openAddPanel(page)
-    // 보정 줄과 추가 가능 줄이 함께 있는 범위 밖 포켓몬·분류를 찾는다
-    let found: { id: string; category: number; addable: string; boosted: string } | null = null
+    // 보정 붙은 관측 줄이 있는 범위 밖 포켓몬·분류를 찾는다
+    let found: { id: string; category: number; boosted: string } | null = null
     for (const entry of plainEntries.slice(1, 15)) {
       await pickAddTarget(page, speciesLabel(entry.id), '표시 범위 밖')
       const categories = Math.max(1, await panel.getByTestId('add-category').count())
       for (let i = 0; i < categories && found === null; i++) {
         if ((await panel.getByTestId('add-category').count()) > 0) await panel.getByTestId('add-category').nth(i).check()
-        const boosted = panel.getByTestId('add-observed-option').and(page.locator('[data-state="boosted"]'))
-        const addable = panel.getByTestId('add-observed-option').and(page.locator('[data-state="addable"]'))
-        if ((await boosted.count()) > 0 && (await addable.count()) > 0) {
-          found = { id: entry.id, category: i, addable: (await addable.first().locator('b').textContent()) ?? '', boosted: (await boosted.first().locator('b').textContent()) ?? '' }
-          await expect(boosted.first()).toBeDisabled()
-          await expect(boosted.first()).toContainText('무보정 배분만 추가할 수 있습니다')
-          await expect(addable.first()).toBeEnabled()
-          await expect(addable.first()).toContainText('+ 추가')
-          await expect(panel.getByTestId('add-observed-option').and(page.locator('[data-state="shown"]'))).toHaveCount(0)
-          await addable.first().click()
+        await expect(panel.getByTestId('add-observed-option').and(page.locator(':not([data-state="addable"])'))).toHaveCount(0)
+        const boosted = panel.getByTestId('add-observed-option').filter({ has: page.locator('b', { hasText: /[↑↓]/ }) })
+        if ((await boosted.count()) > 0) {
+          found = { id: entry.id, category: i, boosted: (await boosted.first().locator('b').textContent()) ?? '' }
+          await expect(boosted.first()).toBeEnabled()
+          await expect(boosted.first()).toContainText('+ 추가')
+          await boosted.first().click()
         }
       }
       if (found !== null) break
       await panel.getByTestId('add-reset').click()
     }
-    expect(found, '보정 줄·추가 가능 줄이 함께 있는 범위 밖 포켓몬').not.toBeNull()
-    const { id, category, addable, boosted } = found!
+    expect(found, '보정 붙은 관측 줄이 있는 범위 밖 포켓몬').not.toBeNull()
+    const { id, category, boosted } = found!
     await expect(addPanel(page)).toHaveCount(0)
     await waitComplete(page)
     // 화력 도구 행(같은 배분의 도구 변형)을 뺀 그 포켓몬 줄은 하나, 도구 행까지 모두 추가 배분 노출 줄이다
@@ -599,30 +678,35 @@ test.describe("'포켓몬 추가' 패널", () => {
     await expect(own).toHaveCount(1)
     await expect(own).toHaveAttribute('data-added-only', 'true')
     await expect(own).toHaveAttribute('data-user-added', 'true')
-    await expect(own.getByTestId('card-bundle')).toHaveText(`${addable} 고정됨`)
+    await expect(own.getByTestId('card-bundle')).toHaveText(`${boosted} 고정됨`)
     await expect.poll(async () => (await focusedCardOf(page))?.opponent).toBe(id)
-    // 추가한 배분만: 그 포켓몬의 선택지는 추가 배분 하나(1위 배분은 나오지 않는다)
-    expect((await menuOptions(own)).map((o) => o.user)).toEqual([true])
+    // 추가한 배분만: 그 포켓몬의 선택지는 보정 그대로의 추가 배분 하나
+    expect((await menuOptions(own)).map((o) => [o.user, o.text])).toEqual([[true, `${boosted} 고정됨`]])
     await expect(toolbarSpin(page, '상위 N')).toHaveValue('1')
 
-    // 같은 SP라도 보정 줄과 다른 배분: 직접 입력하면 무보정으로 추가된다
+    const reopen = async () => {
+      const p = await openAddPanel(page)
+      await pickAddTarget(page, speciesLabel(id), '표시 범위 밖')
+      if ((await p.getByTestId('add-category').count()) > 0) await p.getByTestId('add-category').nth(category).check()
+      return p
+    }
+    // 같은 SP·부호 직접 입력은 이미 존재(관측 줄도 이제 표시 중)
+    let p = await reopen()
+    await expect(p.getByTestId('add-observed-option').filter({ has: page.locator('b', { hasText: boosted }) }).first()).toHaveAttribute('data-state', 'shown')
+    await fillDamage(p, boosted)
+    await p.getByTestId('add-submit').click()
+    await expect(p.getByTestId('add-msg')).toHaveText(`이미 존재합니다 — ${boosted}`)
+    await p.getByRole('button', { name: '취소', exact: true }).click()
+
+    // 같은 SP라도 부호가 다르면(무보정) 따로 추가된다
     const neutral = boosted.replace(/[↑↓]/g, '')
-    await openAddPanel(page)
-    await pickAddTarget(page, speciesLabel(id), '표시 범위 밖')
-    if ((await addPanel(page).getByTestId('add-category').count()) > 0) await addPanel(page).getByTestId('add-category').nth(category).check()
-    const fields = damageFields(addPanel(page))
-    const values = [...neutral.matchAll(/[A-Z](\d+)/g)].map((m) => m[1])
-    await expect(fields).toHaveCount(values.length)
-    for (const [i, v] of values.entries()) await fields.nth(i).fill(v)
-    expect(await damageInputText(addPanel(page))).toBe(neutral)
-    await addPanel(page).getByTestId('add-submit').click()
-    if (neutral !== addable) {
-      await expect(addPanel(page)).toHaveCount(0)
-      await waitComplete(page)
-      const texts = (await menuOptions(own)).map((o) => o.text.replace(/ 고정됨$/, ''))
-      expect(texts).toContain(neutral)
-      expect(texts).not.toContain(boosted)
-    } else await expect(addPanel(page).getByTestId('add-msg')).toHaveText(`이미 존재합니다 — ${neutral}`)
+    p = await reopen()
+    await fillDamage(p, neutral)
+    await p.getByTestId('add-submit').click()
+    await expect(addPanel(page)).toHaveCount(0)
+    await waitComplete(page)
+    const texts = (await menuOptions(own)).map((o) => o.text.replace(/ 고정됨$/, ''))
+    expect(texts).toEqual(expect.arrayContaining([boosted, neutral]))
 
     await selectTab(page, '공격')
     await waitComplete(page)

@@ -13,6 +13,8 @@ import {
   addedBundleIdentity,
   addedBundlePin,
   isSpValue,
+  normalizeKeySigns,
+  validKeySigns,
   itemKey,
   opponentKey,
   samePin,
@@ -234,7 +236,7 @@ function updateSpeedChart(state: AppState, patch: Partial<AppState['speedChart']
 const validMoves = (moves: readonly string[]): boolean =>
   moves.length >= 1 && moves.length <= MAX_CUSTOM_MOVES && new Set(moves).size === moves.length && moves.every((m) => typeof m === 'string' && m !== '')
 
-/** 같은 (탭, 출처, 상대, 분류, SP) 배분인지 */
+/** 같은 (탭, 출처, 상대, 분류, SP, 보정 부호) 배분인지 */
 export function sameBundle(a: AddedBundle, b: AddedBundle): boolean {
   return addedBundleIdentity(a) === addedBundleIdentity(b)
 }
@@ -244,7 +246,7 @@ function validBundle(bundle: AddedBundle, keyStats: readonly StatId[], spMax: nu
   const keys = Object.keys(bundle.sp) as StatId[]
   const expected = new Set(keyStats)
   if (expected.size === 0 || keys.length !== expected.size || !keys.every((k) => expected.has(k))) return false
-  return keys.every((k) => isSpValue(bundle.sp[k], spMax))
+  return keys.every((k) => isSpValue(bundle.sp[k], spMax)) && validKeySigns(keyStats, bundle.nature)
 }
 
 /** 목록 밖 타겟 rosterId가 가진 추가·고정 항목인지 */
@@ -355,6 +357,8 @@ export function reducer(state: AppState, action: AppAction): AppState {
       const b = action.bundle
       if (!validBundle(b, action.keyStats, action.spMax) || state.addedBundles.some((x) => sameBundle(x, b))) return state
       const added: AddedBundle = { tab: b.tab, source: b.source, opponentId: b.opponentId, category: b.category, sp: { ...b.sp } }
+      const nature = normalizeKeySigns(b.nature)
+      if (nature !== undefined) added.nature = nature
       const pin = addedBundlePin(added)
       const pinnedBundles = state.pinnedBundles.some((p) => samePin(p, pin)) ? state.pinnedBundles : [...state.pinnedBundles, pin]
       return { ...bump(state, { addedBundles: [...state.addedBundles, added] }), pinnedBundles }

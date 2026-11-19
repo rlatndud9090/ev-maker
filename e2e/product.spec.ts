@@ -1129,7 +1129,7 @@ test.describe('포켓몬마다 한 행 + 노력치 배분 선택(사용자 피�
     await expect(cardLine(row)).toHaveAttribute('aria-expanded', 'false')
   })
 
-  test('직접 추가 폼 "H [ ] B [ ] [추가]"는 드롭다운에서 한 줄(상세 목록은 없음, R9)(사용자 피드백 2026-11-12)', async ({ page }) => {
+  test('직접 추가 폼 "H [ ] B [ ]▲▼ [추가]"는 드롭다운에서 한 줄(상세 목록은 없음, R9)(사용자 피드백 2026-11-12)', async ({ page }) => {
     await openProduct(page)
     for (const tab of ['공격', '방어'] as const) {
       await selectTab(page, tab)
@@ -1162,11 +1162,13 @@ test.describe('포켓몬마다 한 행 + 노력치 배분 선택(사용자 피�
       const wide = await bundleMenu(row).evaluate((menu) => {
         const form = menu.querySelector('[data-testid="bundle-add"]')!
         const fields = form.querySelector('.bundle-add-fields')!
-        const label = fields.querySelector('label')!
-        for (let i = 0; i < 2; i++) fields.insertBefore(label.cloneNode(true), label)
+        // ▲▼가 붙은 마지막 능력치 칸(라벨 + 토글)을 복제해 관여 능력치를 3개로 만든다
+        const stats = fields.querySelectorAll('.bundle-add-stat')
+        const stat = stats[stats.length - 1]
+        for (let i = stats.length; i < 3; i++) fields.insertBefore(stat.cloneNode(true), stat)
         const parts = [...form.querySelectorAll('label, input, button')].map((e) => e.getBoundingClientRect())
         const mid = parts.map((r) => r.top + r.height / 2)
-        const button = form.querySelector('button')!.getBoundingClientRect()
+        const button = form.querySelector('button[type="submit"]')!.getBoundingClientRect()
         const box = menu.getBoundingClientRect()
         return {
           labels: fields.querySelectorAll('label').length,
@@ -1262,6 +1264,14 @@ test.describe('배분 직접 추가·고정(사용자 피드백 2026-11-12)', ()
   const addForm = (row: Locator) => bundleMenu(row).getByTestId('bundle-add')
   const spInput = (row: Locator, stat: string) => addForm(row).getByRole('spinbutton', { name: `직접 추가 SP ${stat}`, exact: true })
   const addButton = (row: Locator) => addForm(row).getByRole('button', { name: '추가', exact: true })
+  const natButton = (row: Locator, stat: string, sign: 'plus' | 'minus') => addForm(row).getByTestId(`bundle-add-nat-${stat}-${sign}`)
+  /** 직접 추가 폼의 stat ▲▼를 sign에 맞춘다 */
+  async function setFormSign(row: Locator, stat: string, sign: 'plus' | 'neutral' | 'minus') {
+    for (const k of ['plus', 'minus'] as const) {
+      if (((await natButton(row, stat, k).getAttribute('aria-pressed')) === 'true') !== (sign === k)) await natButton(row, stat, k).click()
+    }
+    for (const k of ['plus', 'minus'] as const) await expect(natButton(row, stat, k)).toHaveAttribute('aria-pressed', String(sign === k))
+  }
   const bg = (loc: Locator) => loc.evaluate((el) => getComputedStyle(el).backgroundColor)
   /** 고정 배분 면 토큰(--pinned-bundle-bg)을 계산된 rgb로: 같은 배경을 칠한 탐침 요소로 푼다 */
   const pinnedBg = (page: Page) =>
@@ -1546,12 +1556,13 @@ test.describe('배분 직접 추가·고정(사용자 피드백 2026-11-12)', ()
     const items = bundleMenu(row).getByRole('menuitemradio')
     const texts = await items.locator('.bundle-opt-label').allTextContents()
     const ids = await items.evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.cardId))
-    // 성격 보정 없는 두 번째 이후 관측 배분(직접 추가는 늘 무보정)
+    // 성격 보정 없는 두 번째 이후 관측 배분(폼의 ▲▼는 무보정으로 맞춘다)
     const at = texts.findIndex((t, i) => i > 0 && /^H\d+ B\d+ /.test(t))
     expect(at, texts.join(' | ')).toBeGreaterThan(0)
     const [, h, b] = /^H(\d+) B(\d+) /.exec(texts[at])!
     await spInput(row, 'HP').fill(h)
     await spInput(row, '방어').fill(b)
+    await setFormSign(row, 'def', 'neutral')
     await addButton(row).click()
     const hint = addForm(row).locator('.bundle-add-hint')
     await expect(hint).toHaveText(`이미 존재합니다 — H${h} B${b}`)
@@ -1568,6 +1579,50 @@ test.describe('배분 직접 추가·고정(사용자 피드백 2026-11-12)', ()
     await expect(tabPanel(page)).toHaveAttribute('data-generation', generation!)
     // 입력을 바꾸면 안내가 지워진다
     await spInput(row, 'HP').fill(String((Number(h) + 1) % 33))
+    await expect(hint).toHaveText('')
+  })
+
+  test('직접 추가 ▲▼: H엔 토글이 없고 B ▲▼ 기본값은 현재 배분 부호, ▲로 보정 배분(B..↑)을 추가하면 선택·고정되고 같은 SP·부호는 "이미 존재합니다 — H.. B..↑"', async ({ page }) => {
+    await openProduct(page)
+    await waitComplete(page)
+    const row = await firstRow(page)
+    const badge = (await row.getByTestId('card-bundle').textContent()) ?? ''
+    const m = /^H(\d+) B(\d+)([↑↓]?)/.exec(badge)
+    expect(m, badge).not.toBeNull()
+    await bundleButton(row).click()
+    await expect(addForm(row).locator('[data-testid^="bundle-add-nat-hp-"]')).toHaveCount(0)
+    await expect(natButton(row, 'def', 'plus')).toHaveAttribute('aria-pressed', String(m![3] === '↑'))
+    await expect(natButton(row, 'def', 'minus')).toHaveAttribute('aria-pressed', String(m![3] === '↓'))
+    await expect(natButton(row, 'def', 'plus')).toHaveAccessibleName('직접 추가 방어 성격 상승')
+    const texts = await bundleMenu(row).getByRole('menuitemradio').locator('.bundle-opt-label').allTextContents()
+    const taken = new Set(texts.map((t) => t.split(' ').slice(0, 2).join(' ')))
+    const h = m![1]
+    let b = 0
+    while (taken.has(`H${h} B${b}↑`)) b++
+    await spInput(row, 'HP').fill(h)
+    await spInput(row, '방어').fill(String(b))
+    // 한 능력치에는 ▲·▼ 중 하나: ▼ 다음 ▲를 누르면 ▲만 남는다
+    await setFormSign(row, 'def', 'minus')
+    await natButton(row, 'def', 'plus').click()
+    await expect(natButton(row, 'def', 'plus')).toHaveAttribute('aria-pressed', 'true')
+    await expect(natButton(row, 'def', 'minus')).toHaveAttribute('aria-pressed', 'false')
+    // 토글 클릭은 메뉴를 닫거나 행을 펼치지 않는다
+    await expect(bundleMenu(row)).toBeVisible()
+    await expect(cardLine(row)).toHaveAttribute('aria-expanded', 'false')
+    await addButton(row).click()
+    await waitComplete(page)
+    await expect(row).toHaveAttribute('data-user-added', 'true')
+    await expect(row).toHaveAttribute('data-pinned', 'true')
+    await expect(row.getByTestId('card-bundle')).toHaveText(`H${h} B${b}↑ 고정됨`)
+
+    // 폼 기본값이 지금 배분(H.. B..↑)이라 그대로 추가하면 이미 존재
+    if ((await bundleMenu(row).count()) === 0) await bundleButton(row).click()
+    await expect(natButton(row, 'def', 'plus')).toHaveAttribute('aria-pressed', 'true')
+    await addButton(row).click()
+    const hint = addForm(row).locator('.bundle-add-hint')
+    await expect(hint).toHaveText(`이미 존재합니다 — H${h} B${b}↑`)
+    // 부호를 바꾸면 안내가 지워진다
+    await natButton(row, 'def', 'plus').click()
     await expect(hint).toHaveText('')
   })
 

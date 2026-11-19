@@ -60,6 +60,7 @@ export {
   type ItemVariability,
 } from './items'
 export { natureVariants } from './natures'
+export { natureForSigns, normalizeKeySigns, setKeySign, signOf, validKeySigns } from './keySigns'
 export { judgementKey } from './key'
 export { createLruCache } from './cache'
 export { computeRowTask } from './rowTask'

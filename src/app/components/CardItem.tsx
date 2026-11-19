@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type Dispatch, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
-import { addedBundleCardId, defaultOption, isDamageTab, isPinned, isSpValue, pinOf, type AddedBundle, type AdditionTarget, type AdditionVerdict, type CardGroup, type CardView, type Category, type CustomTarget, type GroupItem, type RowView, type Tab } from '../../cards'
+import { addedBundleCardId, defaultOption, isDamageTab, isPinned, isSpValue, normalizeKeySigns, pinOf, setKeySign, signOf, type AddedBundle, type KeySigns, type NatureSign, type AdditionTarget, type AdditionVerdict, type CardGroup, type CardView, type Category, type CustomTarget, type GroupItem, type RowView, type Tab } from '../../cards'
 import type { Snapshot, StatId } from '../../data/schema'
 import { namesOf } from '../../ui/names'
 import { STAT_SHORT, bundleText, categoryBadge, fixedText, koBadge, shareText, type KoBadge } from '../../ui/format'
@@ -14,6 +14,7 @@ import { ItemMark } from './ItemMark'
 import { PokemonIcon } from './PokemonIcon'
 import { MoveLabel, VariableTag } from './MoveLabel'
 import { MoveMenu, type MoveAdding } from './MoveMenu'
+import { NatureToggle } from './NatureToggle'
 import { Caret } from './Caret'
 import { cardItemOf, moveNoticeText, rowTitle } from './text'
 
@@ -46,10 +47,18 @@ interface Props {
   judgeAdd: (target: AdditionTarget, category: Category | null, stats: readonly AddStat[]) => AdditionVerdict
 }
 
-/** 직접 추가 입력 한 칸(키 능력치, 그 SP) */
+/** 직접 추가 입력 한 칸(키 능력치, 그 SP·보정 부호) */
 export interface AddStat {
   stat: StatId
   sp: number
+  nature: NatureSign
+}
+
+/** 입력 칸 → 상태의 SP·보정 부호(무보정만이면 nature 없음) */
+function addedFields(stats: readonly AddStat[]): Pick<AddedBundle, 'sp' | 'nature'> {
+  const sp = Object.fromEntries(stats.map((s) => [s.stat, s.sp]))
+  const nature = normalizeKeySigns(Object.fromEntries(stats.map((s) => [s.stat, s.nature])))
+  return nature === undefined ? { sp } : { sp, nature }
 }
 
 /** 카드 줄 배지의 기준 행: 대표 행. 대표로 세울 행이 없는 카드(no-change)는 범주가 있는 첫 행. */
@@ -77,7 +86,7 @@ const pinClass = (pinned: boolean): string => (pinned ? ' pinned-bundle' : '')
 
 /** 화면 배분 카드 → 상태의 사용자 추가 배분 */
 function addedOf(tab: Tab, card: CardView): AddedBundle {
-  return { tab, source: card.opponent.source, opponentId: card.opponent.id, category: card.category, sp: Object.fromEntries(card.bundle.stats.map((s) => [s.stat, s.sp])) }
+  return { tab, source: card.opponent.source, opponentId: card.opponent.id, category: card.category, ...addedFields(card.bundle.stats) }
 }
 
 /** 배분 라벨 "A32↑ 56.3%": 묶음(본문색)과 비중(래더)·소수 배분·고정됨·프리셋(커스텀)은 작은 회색 글씨. 고정 배분(목록 밖 직접 추가 포함)은 비중 대신 "고정됨". */
@@ -193,13 +202,14 @@ const stop = (e: MouseEvent) => e.stopPropagation()
 const parseSp = (text: string): number => (text.trim() === '' ? NaN : Number(text))
 
 /**
- * 직접 추가 폼 "H [ ] B [ ] [추가]"(한 줄): 현재 배분의 키 능력치 순, 기본값은 현재 SP.
+ * 직접 추가 폼 "H [ ] B [ ]▲▼ [추가]"(한 줄): 현재 배분의 키 능력치 순, 기본값은 현재 SP·보정 부호. H에는 ▲▼가 없고, 상승·하락은 각각 한 능력치에만 걸린다(다른 능력치에 걸면 옮긴다).
  * 0~spMax 정수가 아니거나 빈칸이면 [추가]를 막고 안내한다. Enter로 추가하고, 판정이 ok가 아니면(이미 존재 등) 안내만 하고 메뉴를 연 채 둔다.
  * 키 입력은 바깥 키보드 처리(메뉴·목록)로 올리지 않는다.
  */
 function BundleAddForm({ card, spMax, judge, onAdd }: { card: CardView; spMax: number; judge: (stats: readonly AddStat[]) => AdditionVerdict; onAdd: (stats: readonly AddStat[]) => void }) {
   const stats = card.bundle.stats
   const [values, setValues] = useState<readonly string[]>(() => stats.map((s) => String(s.sp)))
+  const [signs, setSigns] = useState<KeySigns>(() => Object.fromEntries(stats.map((s) => [s.stat, s.nature])))
   const [message, announce, clearMessage] = useAnnounce()
   const uid = useId()
   const nums = values.map(parseSp)
@@ -219,39 +229,52 @@ function BundleAddForm({ card, spMax, judge, onAdd }: { card: CardView; spMax: n
       onSubmit={(e) => {
         e.preventDefault()
         if (!ok) return
-        const input = stats.map((s, i) => ({ stat: s.stat, sp: nums[i] }))
+        const input = stats.map((s, i) => ({ stat: s.stat, sp: nums[i], nature: signOf(signs, s.stat) }))
         const verdict = judge(input)
         if (verdict.kind === 'ok') {
           clearMessage()
           onAdd(input)
           return
         }
-        announce(additionMessage(verdict, bundleText(input.map((s) => ({ ...s, nature: 'neutral' }))), spMax))
+        announce(additionMessage(verdict, bundleText(input), spMax))
       }}
     >
       <span className="bundle-add-fields">
         {stats.map((s, i) => (
-          <label key={s.stat} title={`SP ${STAT_LABEL[s.stat]}`}>
-            {STAT_SHORT[s.stat]}
-            <input
-              type="number"
-              inputMode="numeric"
-              className="num"
-              min={0}
-              max={spMax}
-              step={1}
-              aria-label={`직접 추가 SP ${STAT_LABEL[s.stat]}`}
-              aria-invalid={!valid[i]}
-              aria-describedby={hintId}
-              value={values[i]}
-              onChange={(e) => {
-                const next = [...values]
-                next[i] = e.target.value
-                setValues(next)
-                clearMessage()
-              }}
-            />
-          </label>
+          <span key={s.stat} className="bundle-add-stat">
+            <label title={`SP ${STAT_LABEL[s.stat]}`}>
+              {STAT_SHORT[s.stat]}
+              <input
+                type="number"
+                inputMode="numeric"
+                className="num"
+                min={0}
+                max={spMax}
+                step={1}
+                aria-label={`직접 추가 SP ${STAT_LABEL[s.stat]}`}
+                aria-invalid={!valid[i]}
+                aria-describedby={hintId}
+                value={values[i]}
+                onChange={(e) => {
+                  const next = [...values]
+                  next[i] = e.target.value
+                  setValues(next)
+                  clearMessage()
+                }}
+              />
+            </label>
+            {s.stat !== 'hp' && (
+              <NatureToggle
+                value={signOf(signs, s.stat)}
+                onChange={(v) => {
+                  setSigns((cur) => setKeySign(cur, s.stat, v))
+                  clearMessage()
+                }}
+                testIdPrefix={`bundle-add-nat-${s.stat}`}
+                statLabel={`직접 추가 ${STAT_LABEL[s.stat]}`}
+              />
+            )}
+          </span>
         ))}
         <button type="submit" disabled={!ok}>
           추가
@@ -291,7 +314,7 @@ function bundleActions({ tab, group, card, onSelect, dispatch }: ActionProps, sp
   /** done: 선택을 반영한 뒤(포커스 복귀 기억 전) 부를 마무리(메뉴 닫기 등) */
   const add = (stats: readonly AddStat[], done?: () => void) => {
     if (spMax === undefined) return
-    const added: AddedBundle = { tab, source: card.opponent.source, opponentId: card.opponent.id, category: card.category, sp: Object.fromEntries(stats.map((s) => [s.stat, s.sp])) }
+    const added: AddedBundle = { tab, source: card.opponent.source, opponentId: card.opponent.id, category: card.category, ...addedFields(stats) }
     dispatch({ type: 'add-bundle', bundle: added, keyStats: stats.map((s) => s.stat), spMax })
     onSelect(group.key, addedBundleCardId(added, stats, card.berry?.item))
     done?.()

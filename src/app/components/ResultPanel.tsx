@@ -158,7 +158,12 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
       if (q.kind === 'unavailable') return { kind: 'unavailable', reason: q.reason }
       const c = q.categories.find((x) => x.category === category)
       if (c === undefined) return { kind: 'unavailable', reason: 'no-key-stats' }
-      return judgeDamageAddition(c, Object.fromEntries(stats.map((s) => [s.stat, s.sp])), addInputRef.current.game.manifest.rules.spMaxPerStat)
+      return judgeDamageAddition(
+        c,
+        Object.fromEntries(stats.map((s) => [s.stat, s.sp])),
+        addInputRef.current.game.manifest.rules.spMaxPerStat,
+        Object.fromEntries(stats.map((s) => [s.stat, s.nature])),
+      )
     },
     [tab],
   )

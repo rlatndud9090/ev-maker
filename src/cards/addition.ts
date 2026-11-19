@@ -4,11 +4,12 @@ import type { StatId } from '../data/schema'
 import type { MetaView } from '../meta'
 import { bundlesOf } from './bundles'
 import { addedBundleKey } from './ids'
+import { signOf, validKeySigns } from './keySigns'
 import { opponentSeeds } from './plan'
 import { isInRange } from './range'
 import { customSpeedOpponent, ladderSpeedOpponent, speedKey, type NatureSign, type SpeedChartInput } from './speedChart'
 import { isSpValue } from './spValue'
-import type { BundleStat, CardFilters, CardInput, Category, CustomTarget, DamageTab, TargetSource } from './types'
+import type { BundleStat, CardFilters, CardInput, Category, CustomTarget, DamageTab, KeySigns, TargetSource } from './types'
 
 export type TargetStatus = 'meta' | 'out-of-range' | 'added' | 'new'
 
@@ -34,7 +35,7 @@ export type UnavailableReason = 'not-found' | 'my-set-error' | 'no-my-attack-mov
 
 export type AdditionVerdict = { kind: 'ok' } | { kind: 'duplicate' } | { kind: 'invalid' } | { kind: 'unavailable'; reason: UnavailableReason }
 
-export type ObservedState = 'addable' | 'shown' | 'boosted'
+export type ObservedState = 'addable' | 'shown'
 
 const NATURE_SIGNS: readonly NatureSign[] = ['plus', 'neutral', 'minus']
 const SPE_KEY: readonly ['spe'] = ['spe']
@@ -116,11 +117,9 @@ export interface DamageCategoryQuery {
 
 export type DamageAdditionQuery = { kind: 'ok'; categories: readonly DamageCategoryQuery[] } | { kind: 'unavailable'; reason: UnavailableReason }
 
-/** 관측 줄 상태 판정 순서: 표시 중(shown) → 키 능력치에 성격 보정(boosted) → 추가 가능(addable) */
-export function observedState(bundle: { key: string; stats: readonly BundleStat[] }, shownKeys: ReadonlySet<string>): ObservedState {
-  if (shownKeys.has(bundle.key)) return 'shown'
-  if (bundle.stats.some((s) => s.nature !== 'neutral')) return 'boosted'
-  return 'addable'
+/** 관측 줄 상태: 표시 중(shown)이 아니면 보정 부호 그대로 추가 가능(addable) */
+export function observedState(bundle: { key: string }, shownKeys: ReadonlySet<string>): ObservedState {
+  return shownKeys.has(bundle.key) ? 'shown' : 'addable'
 }
 
 /** 공·방 탭 판정 질의. 분류·키 능력치·표시 키는 탭 계획과 같은 씨앗 함수(opponentSeeds)에서 온다. 키 능력치가 빈 분류는 뺀다 */
@@ -144,17 +143,21 @@ export function damageAdditionQuery(input: CardInput, tab: DamageTab, target: Ad
   return { kind: 'ok', categories }
 }
 
-/** 판정 순서: invalid(sp 키 집합 = 키 능력치, 값 0~spMax 정수) → duplicate(무보정 묶음 키가 표시 중) → ok */
-export function judgeDamageAddition(q: DamageCategoryQuery, sp: Readonly<Partial<Record<StatId, number>>>, spMax: number): AdditionVerdict {
+/**
+ * 판정 순서: invalid(sp 키 집합 = 키 능력치, 값 0~spMax 정수, 보정 부호 규칙 validKeySigns) → duplicate(SP·부호 묶음 키가 표시 중) → ok.
+ * nature가 없으면 전부 무보정
+ */
+export function judgeDamageAddition(q: DamageCategoryQuery, sp: Readonly<Partial<Record<StatId, number>>>, spMax: number, nature?: KeySigns): AdditionVerdict {
   const keys = new Set<string>(q.keyStats)
   const given = Object.keys(sp)
   if (given.length !== keys.size || !given.every((k) => keys.has(k))) return { kind: 'invalid' }
-  const stats: { stat: StatId; sp: number }[] = []
+  if (!validKeySigns(q.keyStats, nature)) return { kind: 'invalid' }
+  const stats: BundleStat[] = []
   for (const stat of STAT_IDS) {
     if (!keys.has(stat)) continue
     const v = sp[stat]
     if (!isSpValue(v, spMax)) return { kind: 'invalid' }
-    stats.push({ stat, sp: v })
+    stats.push({ stat, sp: v, nature: signOf(nature, stat) })
   }
   if (q.shownKeys.has(addedBundleKey(stats))) return { kind: 'duplicate' }
   return { kind: 'ok' }
