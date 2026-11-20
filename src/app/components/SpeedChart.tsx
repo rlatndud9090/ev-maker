@@ -1,26 +1,34 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent } from 'react'
 import {
   focusAfterRemove,
+  lockTargetId,
   minSpToPass,
   navigate,
+  speedBadgeLockKey,
+  speedBranchLines,
+  speedLockCandidate,
   statusOf,
   type CustomTarget,
+  type SpeedBranchLine,
   type LadderRow,
   type NatureSign,
   type SpeedBadge as Badge,
   type SpeedBaseline,
   type SpeedChartModel,
+  type SpeedLockCandidate,
 } from '../../cards'
-import type { PokemonSet } from '../../core'
+import type { EvalOptions, PokemonSet } from '../../core'
 import type { Snapshot } from '../../data/schema'
 import { namesOf } from '../../ui/names'
+import { useLockUi } from '../lockContext'
 import type { AppAction } from '../state'
+import { OUTSIDE_FILTER_TEXT } from './lockText'
 import { BundleText } from './BundleText'
 import { ItemMark } from './ItemMark'
 import { PokemonIcon } from './PokemonIcon'
 import { SpeedBadge } from './SpeedBadge'
 import { SpeedBadgeDetail } from './SpeedBadgeDetail'
-import { rejectionText, toggleDetail, type SpeedBadgeHandlers } from './speedText'
+import { lockedMinSp, rejectionText, toggleDetail, type SpeedBadgeHandlers } from './speedText'
 import './speedChart.css'
 
 const DETAIL_ID = 'speed-detail-panel'
@@ -35,6 +43,8 @@ interface Props {
   rows: readonly LadderRow[]
   baseline: SpeedBaseline
   shownSet: PokemonSet
+  /** 고정 후보·갈래 예산의 내 세트(고정 전 값). 고정 문맥이 없으면 없음 */
+  lockSet?: PokemonSet
   myTailwind: boolean
   customTargets: readonly CustomTarget[]
   dispatch: Dispatch<AppAction>
@@ -44,8 +54,21 @@ interface Props {
 
 type Pending = { kind: 'id'; id: string } | { kind: 'added'; opponentId: string; sp: number; nature: NatureSign }
 
+const IGNORE_TOTAL: EvalOptions = { ignoreSpTotal: true }
+const NO_SEQS: readonly number[] = []
+
+/** 고정 대상 배지: 정확한 키, 없으면 출처만 다른(래더·추가) 같은 배분·조건 */
+function revealBadge(badges: readonly Badge[], target: ReturnType<typeof speedBadgeLockKey>): Badge | undefined {
+  const id = lockTargetId(target)
+  const keyed = badges.map((b) => ({ b, k: speedBadgeLockKey(b) }))
+  const exact = keyed.find(({ k }) => lockTargetId(k) === id)
+  if (exact !== undefined || target.origin === 'preset') return exact?.b
+  const bundle = JSON.stringify(target.bundle)
+  return keyed.find(({ k }) => k.origin !== 'preset' && k.opponentId === target.opponentId && JSON.stringify(k.bundle) === bundle && k.condition === target.condition)?.b
+}
+
 /** 실수치 내림차순 줄 목록(기준선 띠 포함)과 줄 아래 인라인 상세, 순서 비교 불가 영역 */
-export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTailwind, customTargets, dispatch, empty }: Props) {
+export function SpeedChart({ game, model, badges, rows, baseline, shownSet, lockSet, myTailwind, customTargets, dispatch, empty }: Props) {
   const frame = useRef<HTMLDivElement>(null)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -138,7 +161,7 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
   useEffect(() => {
     if (detailId === null) return
     const onDown = (e: PointerEvent) => {
-      if (e.target instanceof Element && e.target.closest('.speed-badge, .speed-detail') === null) setDetailId(null)
+      if (e.target instanceof Element && e.target.closest('.speed-badge, .speed-detail, .cut-pin-wrap') === null) setDetailId(null)
     }
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return
@@ -157,14 +180,74 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
     }
   }, [detailId, buttonOf])
 
+  // 컷 고정: 고정 중에는 합계 검사를 끄고(계획 세트), 갈래 줄은 갈래 예산으로(speedBranchLines)
+  const lockUi = useLockUi()
+  const { locks, derivation, reveal, clearReveal } = lockUi
+  const locked = locks.length > 0
+  const lockedByTarget = useMemo(() => {
+    const m = new Map<string, number[]>()
+    for (const l of locks) if (l.target.kind === 'speed') m.set(lockTargetId(l.target), [...(m.get(lockTargetId(l.target)) ?? []), l.seq])
+    return m
+  }, [locks])
+  const lockedBy = (b: Badge): readonly number[] => (lockedByTarget.size === 0 ? NO_SEQS : (lockedByTarget.get(lockTargetId(speedBadgeLockKey(b))) ?? NO_SEQS))
+
   const names = namesOf(game)
-  const minSp = useMemo(
-    () => (detailBadge === undefined || baseline.kind !== 'ok' ? null : minSpToPass(game, shownSet, detailBadge.speed, myTailwind)),
-    [game, shownSet, detailBadge, baseline.kind, myTailwind],
+  const minSp = useMemo(() => {
+    if (detailBadge === undefined || baseline.kind !== 'ok') return null
+    if (!locked) return minSpToPass(game, shownSet, detailBadge.speed, myTailwind)
+    const r = minSpToPass(game, shownSet, detailBadge.speed, myTailwind, IGNORE_TOTAL)
+    return r === null ? null : lockedMinSp(r)
+  }, [game, shownSet, detailBadge, baseline.kind, myTailwind, locked])
+  const spTotal = game.manifest.rules.spTotal
+  const lockLines = useMemo((): readonly SpeedBranchLine[] | null => {
+    if (!locked || derivation === null || detailBadge === undefined || lockSet === undefined || baseline.kind !== 'ok') return null
+    const lines = speedBranchLines({ game, mySet: shownSet, derivation, badge: detailBadge, myTailwind, mySp: lockSet.sp, spTotal })
+    return lines.length === 0 ? null : lines
+  }, [locked, derivation, detailBadge, lockSet, baseline.kind, game, shownSet, myTailwind, spTotal])
+  // 핀을 누를 때만 그 배지 후보를 만든다(배지마다 미리 만들지 않는다)
+  const pinCandidate = useMemo(
+    () => (lockSet === undefined ? undefined : (b: Badge): SpeedLockCandidate => speedLockCandidate(game, lockSet, b, myTailwind, locked ? IGNORE_TOTAL : undefined)),
+    [game, lockSet, myTailwind, locked],
   )
+
+  // 고정 목록의 이동 요청: 그 배지 상세를 열고 포커스, 표시 필터 밖이면 안내(조건 칩은 리듀서가 켠다)
+  // 요청은 렌더 중 한 번만 처리하고(nonce), 요청 지우기·포커스는 커밋 뒤에 한다
+  const [revealDone, setRevealDone] = useState<{ nonce: number; outside: number | null; badgeId?: string } | null>(null)
+  const revealLock = reveal === null ? undefined : locks.find((l) => l.seq === reveal.seq)
+  if (reveal !== null && revealLock !== undefined && revealLock.target.kind === 'speed' && revealDone?.nonce !== reveal.nonce) {
+    const b = revealBadge(badges, revealLock.target)
+    if (b === undefined) {
+      const missing = derivation?.statuses.get(revealLock.seq)?.kind === 'missing'
+      setRevealDone({ nonce: reveal.nonce, outside: missing ? null : revealLock.seq })
+    } else {
+      setRevealDone({ nonce: reveal.nonce, outside: null, badgeId: b.id })
+      setActiveId(b.id)
+      setDetailId(b.id)
+    }
+  }
+  const revealNonce = reveal?.nonce
+  useEffect(() => {
+    if (revealDone !== null && revealDone.nonce === revealNonce) clearReveal()
+  }, [revealDone, revealNonce, clearReveal])
+  const revealFocused = useRef<number | null>(null)
+  useLayoutEffect(() => {
+    const id = revealDone?.badgeId
+    if (revealDone === null || id === undefined || revealFocused.current === revealDone.nonce) return
+    const btn = buttonOf(id)
+    if (btn === null) return
+    revealFocused.current = revealDone.nonce
+    btn.scrollIntoView({ block: 'nearest' })
+    btn.focus({ preventScroll: true })
+  })
+  const outside = revealDone !== null && revealDone.outside !== null && locks.some((l) => l.seq === revealDone.outside)
 
   return (
     <div className="speed-frame" ref={frame} data-testid="speed-frame">
+      {locked && (
+        <p className="lock-outside" role="status" data-testid="lock-outside">
+          {outside ? OUTSIDE_FILTER_TEXT : ''}
+        </p>
+      )}
       <ul className="speed-rows" aria-label="스피드 실수치 내림차순">
         {rows.map((row) => {
           const band = row.baseline && baseline.kind === 'ok'
@@ -184,6 +267,8 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
                     open={id === detailId}
                     detailId={DETAIL_ID}
                     handlers={handlers}
+                    lockedBy={lockedBy(b)}
+                    pinCandidate={pinCandidate}
                   />
                 )
               })}
@@ -198,6 +283,8 @@ export function SpeedChart({ game, model, badges, rows, baseline, shownSet, myTa
               status={statusOf(detailBadge.speed, baseline)}
               baseline={baseline}
               minSp={minSp}
+              lockLines={lockLines}
+              lockPending={locked && derivation === null}
               myTailwind={myTailwind}
               target={customTargets.find((t) => t.rosterId === detailBadge.opponentId)}
               dispatch={dispatch}

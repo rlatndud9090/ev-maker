@@ -1,5 +1,5 @@
 // 스피드 차트 응용 로직: 기준선·상태, 조건 필터, 같은 줄 순서, 사다리 줄, 최소 S, 키보드 탐색, 배분 표기. 화면 없는 순수 함수다.
-import { CoreError, CoreInputError, finalSpeed, minSpToOutspeed, speedSupport, validateSet, type OutspeedResult, type PokemonSet, type SpeedRejection } from '../core'
+import { CoreError, CoreInputError, finalSpeed, minSpToOutspeed, speedSupport, validateSet, type EvalOptions, type OutspeedResult, type PokemonSet, type SpeedRejection } from '../core'
 import type { Snapshot } from '../data/schema'
 import { natureSign } from './bundles'
 import { natureVariants } from './natures'
@@ -15,12 +15,12 @@ export type SpeedBaseline =
   | { kind: 'invalid' }
 
 /** 랭크를 지운 내 세트. 세트 자체 오류면 null, 스피드 거부면 원인 */
-function checkedMySet(game: Snapshot, mySet: PokemonSet): { set: PokemonSet } | { rejection: SpeedRejection } | null {
+export function checkedMySet(game: Snapshot, mySet: PokemonSet, options?: EvalOptions): { set: PokemonSet } | { rejection: SpeedRejection } | null {
   const set = { ...mySet }
   delete set.boosts
   try {
-    validateSet(game, set)
-    const rejection = speedSupport(game, set)
+    validateSet(game, set, options)
+    const rejection = speedSupport(game, set, options)
     return rejection === null ? { set } : { rejection }
   } catch (e) {
     if (e instanceof CoreError || e instanceof CoreInputError) return null
@@ -29,14 +29,14 @@ function checkedMySet(game: Snapshot, mySet: PokemonSet): { set: PokemonSet } | 
 }
 
 /** 내 현재 배분의 실수치(날씨·필드 없음, 내 순풍만 반영) */
-export function speedBaseline(game: Snapshot, mySet: PokemonSet, myTailwind: boolean): SpeedBaseline {
-  const checked = checkedMySet(game, mySet)
+export function speedBaseline(game: Snapshot, mySet: PokemonSet, myTailwind: boolean, options?: EvalOptions): SpeedBaseline {
+  const checked = checkedMySet(game, mySet, options)
   if (checked === null) return { kind: 'invalid' }
   if ('rejection' in checked) return { kind: 'rejected', rejection: checked.rejection }
   const { set } = checked
   return {
     kind: 'ok',
-    speed: finalSpeed(game, set, { attacker: { tailwind: myTailwind } }),
+    speed: finalSpeed(game, set, { attacker: { tailwind: myTailwind } }, 'attacker', options),
     sp: set.sp.spe,
     nature: natureSign(game, set.nature, 'spe'),
     tailwind: myTailwind,
@@ -108,19 +108,27 @@ export function ladderRows(badges: readonly SpeedBadge[], baselineSpeed: number 
 
 export type MinSp = OutspeedResult
 
+export interface MinSpOptions extends EvalOptions {
+  /** 두 변형 성격 id. plus null = 상승 변형 없음(결과 plus도 null) */
+  natures?: { neutral: string; plus: string | null }
+}
+
 /**
- * 배지 실수치(target)를 엄격히 앞지르는 내 최소 S SP. 성격은 S 무보정·상승 두 변형, 도구·특성·내 순풍은 기준선과 같고 날씨·필드는 없다.
+ * 배지 실수치(target)를 엄격히 앞지르는 내 최소 S SP. 성격은 S 무보정·상승 두 변형(natures가 있으면 그 성격), 도구·특성·내 순풍은 기준선과 같고 날씨·필드는 없다.
  * 내 세트가 무효이거나 스피드 거부면 null.
  */
-export function minSpToPass(game: Snapshot, mySet: PokemonSet, target: number, myTailwind: boolean): { neutral: MinSp; plus: MinSp } | null {
-  const checked = checkedMySet(game, mySet)
+export function minSpToPass(game: Snapshot, mySet: PokemonSet, target: number, myTailwind: boolean): { neutral: MinSp; plus: MinSp } | null
+export function minSpToPass(game: Snapshot, mySet: PokemonSet, target: number, myTailwind: boolean, options: MinSpOptions): { neutral: MinSp; plus: MinSp | null } | null
+export function minSpToPass(game: Snapshot, mySet: PokemonSet, target: number, myTailwind: boolean, options?: MinSpOptions): { neutral: MinSp; plus: MinSp | null } | null {
+  const evalOptions: EvalOptions | undefined = options?.ignoreSpTotal === undefined ? undefined : { ignoreSpTotal: options.ignoreSpTotal }
+  const checked = checkedMySet(game, mySet, evalOptions)
   if (checked === null || 'rejection' in checked) return null
   const { set } = checked
-  const v = natureVariants(game, set.nature, 'spe', [])
+  const v = options?.natures ?? natureVariants(game, set.nature, 'spe', [])
   const conditions = { attacker: { tailwind: myTailwind } }
   return {
-    neutral: minSpToOutspeed(game, { ...set, nature: v.neutral }, target, conditions),
-    plus: minSpToOutspeed(game, { ...set, nature: v.plus }, target, conditions),
+    neutral: minSpToOutspeed(game, { ...set, nature: v.neutral }, target, conditions, evalOptions),
+    plus: v.plus === null ? null : minSpToOutspeed(game, { ...set, nature: v.plus }, target, conditions, evalOptions),
   }
 }
 

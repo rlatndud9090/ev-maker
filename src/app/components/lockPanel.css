@@ -1,0 +1,235 @@
+/* 내 포켓몬 패널의 컷 고정 표시: 고정 능력치 SP 줄, 고정 목록, 초과·자르기 알림 */
+
+/* 고정 능력치 SP 줄: 슬라이더 모양은 그대로 두고 조작을 막은 채, 채움·손잡이·숫자 칸을 고정색(--lock, 성격 하락 보라와 다른 색)으로 칠해 고정을 보인다 */
+.sp-row[data-locked='true'] input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 1.1rem;
+  cursor: not-allowed;
+}
+
+.sp-row[data-locked='true'] input[type='range']::-webkit-slider-runnable-track {
+  height: 0.4rem;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--lock-strong) var(--fill, 0%), var(--lock-soft) var(--fill, 0%));
+  box-shadow: inset 0 0 0 1px var(--lock);
+}
+
+.sp-row[data-locked='true'] input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 0.95rem;
+  height: 0.95rem;
+  margin-top: -0.275rem;
+  border: 2px solid var(--card);
+  border-radius: 50%;
+  background: var(--lock-strong);
+  box-shadow: 0 0 0 1px var(--lock-strong);
+}
+
+.sp-row[data-locked='true'] input[type='range']::-moz-range-track {
+  height: 0.4rem;
+  border-radius: 999px;
+  background: var(--lock-soft);
+  box-shadow: inset 0 0 0 1px var(--lock);
+}
+
+.sp-row[data-locked='true'] input[type='range']::-moz-range-progress {
+  height: 0.4rem;
+  border-radius: 999px;
+  background: var(--lock-strong);
+}
+
+.sp-row[data-locked='true'] input[type='range']::-moz-range-thumb {
+  width: 0.7rem;
+  height: 0.7rem;
+  border: 2px solid var(--card);
+  border-radius: 50%;
+  background: var(--lock-strong);
+  box-shadow: 0 0 0 1px var(--lock-strong);
+}
+
+.sp-row[data-locked='true'] .sp-num:disabled {
+  border-color: var(--lock);
+  background: var(--lock-soft);
+  color: var(--lock-strong);
+  -webkit-text-fill-color: var(--lock-strong);
+  font-weight: 700;
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+.sp-row .sp-alert > .lock-chip {
+  justify-self: start;
+}
+
+.lock-warn {
+  margin: 0;
+  padding: 0.2rem 0.45rem;
+  border: 1px dashed var(--bad);
+  border-radius: 8px;
+  background: var(--tier-warn);
+  color: var(--tier-ink);
+  font-size: 0.82rem;
+}
+
+.lock-trim {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 0.82rem;
+}
+
+.lock-trim > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.product .lock-trim button {
+  flex: none;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* 해제: "×" 한 글자 정사각 버튼 */
+.product .lock-item .lock-remove {
+  grid-column: 3;
+  grid-row: 1;
+  display: inline-grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.product .lock-item .lock-remove:hover {
+  color: var(--danger);
+  border-color: var(--danger-border);
+}
+
+.lock-list {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.lock-list-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.lock-list-head:focus {
+  outline: none;
+}
+
+.lock-list-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.lock-computing {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.lock-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+/* 항목 한 줄: 컷 설명(남는 폭, 안에서 줄바꿈) · 선택지 SP · 해제(×). 상태 칩은 아랫줄 */
+.lock-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.3rem 0.45rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+/* 컷 설명: 상대 이미지 열 | 배분 · 관여 도구 이미지 · 기술 · 단계 배지 글 열(누르면 그 컷으로 이동).
+   글 열 안에서만 줄바꿈해 둘째 줄도 이미지 아래가 아닌 글 열에서 시작한다 */
+.product .lock-item .lock-desc {
+  grid-column: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.1rem 0.25rem;
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: left;
+}
+
+.product .lock-item .lock-desc:hover {
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+.lock-item .lock-mon {
+  flex: none;
+  background: var(--mon-icon-halo);
+}
+
+.lock-item .lock-desc-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.35rem;
+}
+
+.lock-item .lock-bundle {
+  font-weight: 600;
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+
+.lock-item .lock-move {
+  font-size: 0.82rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.lock-item .lock-sp {
+  grid-column: 2;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lock-chip {
+  display: inline-block;
+  padding: 0 0.45rem;
+  border: 1px dashed var(--bad);
+  border-radius: 999px;
+  color: var(--bad);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lock-item .lock-chip {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  justify-self: start;
+}

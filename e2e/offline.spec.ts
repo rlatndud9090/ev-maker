@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { ALL_SP_ZERO, cards, combo, fillSet, openPage, openProduct, region, selectTab, waitComplete } from './helpers'
+import { ALL_SP_ZERO, cards, combo, fillSet, openAdjust, openPage, openProduct, region, selectTab, waitComplete } from './helpers'
 
 test('개발 화면(/#/dev) 로드·계산·조회 중 외부 origin 요청 0건', async ({ page, baseURL }) => {
   const origin = new URL(baseURL!).origin
@@ -22,7 +22,7 @@ test('개발 화면(/#/dev) 로드·계산·조회 중 외부 origin 요청 0건
   expect(all.filter((u) => !u.startsWith('data:') && new URL(u).origin !== origin)).toEqual([])
 })
 
-test('제품 화면 로드·탭 전환·카드 펼침·Bo3 전환 중 외부 origin 요청 0건', async ({ page, baseURL }) => {
+test('제품 화면 로드·탭 전환·변동 팝오버·Bo3 전환 중 외부 origin 요청 0건', async ({ page, baseURL }) => {
   const origin = new URL(baseURL!).origin
   const all: string[] = []
   page.on('request', (r) => all.push(r.url()))
@@ -32,8 +32,10 @@ test('제품 화면 로드·탭 전환·카드 펼침·Bo3 전환 중 외부 ori
     await selectTab(page, tab)
     await waitComplete(page)
   }
-  await cards(page).first().locator('button[aria-expanded]').first().click()
-  await expect(cards(page).first().getByTestId('row').first()).toBeVisible()
+  // 변동 팝오버는 그 카드 선택지 계산(후보 수요)까지 돌린다
+  const menu = await openAdjust(cards(page).filter({ has: page.getByTestId('adjust-button') }).first())
+  await expect(menu.getByTestId('adjust-result').first()).toHaveAttribute('data-enabled', 'true', { timeout: 15_000 })
+  await page.keyboard.press('Escape')
   await combo(page, '형식').selectOption('bo3')
   await expect(page.getByTestId('meta-source')).toContainText('Bo3')
   await waitComplete(page)

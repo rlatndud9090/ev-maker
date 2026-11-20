@@ -1,0 +1,246 @@
+/* 카드 줄 "변동" 버튼(펼침 화살표)과 2단 교체 팝오버(결과 → 성격). 메뉴 모양은 cutPin.css 단계 메뉴와 같고, 색은 index.css 역할 토큰만 쓴다 */
+
+.adjust-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+/* "변동 가능" 태그 자리의 같은 보라 테두리를 버튼으로 */
+.product .adjust-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1em;
+  margin: 0;
+  padding: 0 0.3em 0 0.45em;
+  border: 1px solid var(--accent);
+  border-radius: 0.25rem;
+  background: var(--card);
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.product .adjust-btn:hover,
+.product .adjust-btn[aria-expanded='true'] {
+  background: var(--accent-soft);
+}
+
+.product .adjust-btn[aria-expanded='true'] {
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.product .adjust-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.product .adjust-btn[aria-disabled='true'] {
+  border-color: var(--control-border);
+  background: var(--card);
+  color: var(--muted);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* 펼침 화살표는 글자 크기에 맞춰 배분·기술 배지보다 작게, 버튼 글자색을 따른다 */
+.product .adjust-btn .bundle-caret {
+  width: 10px;
+  height: 10px;
+  color: currentColor;
+}
+
+/* 버튼 오른쪽 끝에 맞춰 왼쪽으로 펼친다. 폭 상한은 그릴 때 버튼 왼쪽 공간으로 더 줄인다(AdjustPopover, 좁은 화면에서 왼쪽이 잘리지 않게) */
+.adjust-menu {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  top: calc(100% + 3px);
+  width: max-content;
+  max-width: min(20rem, calc(100vw - 2rem));
+  box-sizing: border-box;
+  padding: 0.2rem;
+  display: grid;
+  gap: 1px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  white-space: normal;
+  text-align: left;
+  cursor: default;
+}
+
+.adjust-menu.up {
+  top: auto;
+  bottom: calc(100% + 3px);
+}
+
+.adjust-menu:focus {
+  outline: none;
+}
+
+.adjust-title {
+  padding: 0.2rem 0.45rem 0.15rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.product .adjust-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.5rem;
+  margin: 0;
+  padding: 0.3rem 0.45rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.product .adjust-item:hover,
+.product .adjust-item:focus-visible {
+  background: var(--accent-soft);
+  outline: none;
+}
+
+.product .adjust-item[data-current='true'] {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.product .adjust-item[aria-disabled='true'] {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.product .adjust-item[aria-disabled='true']:hover {
+  background: var(--surface);
+}
+
+.adjust-sps {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.1rem 0.3rem;
+  margin-left: auto;
+  padding-left: 0.6rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.adjust-sp-locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0 0.25rem;
+  border-radius: 4px;
+  background: var(--lock-soft);
+  color: var(--lock-strong);
+}
+
+.adjust-lock-icon {
+  display: block;
+  flex: none;
+}
+
+
+.adjust-go {
+  width: 0.7rem;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* 2단 머리줄: ‹ 뒤로 · 고른 결과 배지 + SP · 제목 */
+.adjust-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.35rem;
+  margin-bottom: 0.1rem;
+  padding: 0.15rem 0.2rem 0.3rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.product .adjust-back {
+  margin: 0;
+  padding: 0.05rem 0.35rem;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.product .adjust-back:hover,
+.product .adjust-back:focus-visible {
+  background: var(--accent-soft);
+  color: var(--text);
+  outline: none;
+}
+
+.adjust-head-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.adjust-head-result .adjust-sps {
+  padding-left: 0;
+  font-size: 0.8rem;
+}
+
+.adjust-head-title {
+  margin-left: auto;
+  padding-left: 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.adjust-nature-name {
+  min-width: 3.2rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.adjust-why {
+  margin-left: auto;
+  padding-left: 0.6rem;
+  font-size: 0.72rem;
+  color: var(--danger);
+  white-space: nowrap;
+}
+
+/* 방어 쌍 선택지 안의 배분 이름("합 최소" · "H 최대"). H 최대 항목은 성격 이름 자리만큼 들여써 그 선택지 아래에 붙인다 */
+.adjust-alloc {
+  padding: 0 0.3rem;
+  border-radius: 4px;
+  background: var(--surface);
+  font-size: 0.7rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.adjust-nature-pad {
+  min-width: 3.2rem;
+}
+
+.product .adjust-hmax {
+  margin-top: -1px;
+}

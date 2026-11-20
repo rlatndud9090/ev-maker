@@ -1,5 +1,20 @@
 import { expect, test, type Page } from '@playwright/test'
-import { TAB_ID, dragSlider, mySet, resultTab, tabPanel, waitComplete, type ProductTab } from './helpers'
+import {
+  TAB_ID,
+  dragSlider,
+  fillMySet,
+  lockBadge,
+  lockList,
+  lockRow,
+  mySet,
+  openProduct,
+  resultTab,
+  selectTab,
+  settle,
+  tabPanel,
+  waitComplete,
+  type ProductTab,
+} from './helpers'
 
 // 반응성: 공격·방어 탭(실행기 계산)과 스피드 차트(동기 배지 모델) 각각 (a) 처음 열기 · (b) 주 능력치 SP 슬라이더 ±4 놓기, 시나리오마다 10회.
 const RUNS = 10
@@ -461,4 +476,186 @@ test(`반응성 보조: 공격 탭 계산 중 렌더 프레임 간격 중앙값 
   console.log(`[product-perf] chromium ${browser.version()} ${line}`)
   test.info().annotations.push({ type: 'perf', description: line })
   expect(Math.max(...medians)).toBeLessThanOrEqual(FRAME_INTERVAL_MEDIAN_LIMIT_MS)
+})
+
+// ---------- 컷 고정(cut-lock-budget 비기능 3항) ----------
+
+/** 고정 상태 탭별 첫 결과 중앙값 ≤ 같은 실행 무고정 첫 결과 중앙값 × 3 */
+const LOCK_FIRST_RATIO_LIMIT = 3
+const LOCK_RUNS = 5
+const NINETALES_152 = /^나인테일 S32 성격 무보정, 실수치 152,/
+/** 상위 100 → 30: 나인테일(사용률 66위)은 필터 밖, 한카리아스(7위)·짜랑고우거(23위)는 안 */
+const TOP_N_AFTER = '30'
+const LOCK_MOVES = ['지진', '드래곤클로', '스톤샤워', '용성군']
+
+type TabRuns = Record<ProductTab, Run>
+
+/** 입력 이벤트 시각(상위 N 칸 값 바꿈) */
+const lastInputAt = (page: Page): Promise<number> => page.evaluate(() => (window as unknown as { __inputAt: number }).__inputAt)
+
+/** start 뒤 그 탭이 generationAfter보다 새 세대로 첫 카드·완료한 사건(공격·방어) */
+const damageRun = (raw: Raw, tab: string, start: number, generationAfter: number): Run => ({
+  ...summarize(raw, tab, start, generationAfter),
+  bootstrapLongTaskMs: 0,
+  bootstrapStage: '—',
+})
+
+/**
+ * 한 번 로드해 (locked면 스피드 1·공격 1·방어 쌍(H 포함) 1 컷 고정 뒤) 상위 N을 바꾸고, 공격 탭(지금 탭) 첫 결과 → 방어 탭 클릭 첫 결과 → 스피드 탭 클릭 첫 표시를 잰다.
+ * 두 조건 모두 같은 세트(예시 세트 기술 4 = 용성군)·같은 입력(상위 N 100 → 30)·같은 탭 순서다.
+ */
+async function measureLockOnce(page: Page, locked: boolean): Promise<TabRuns> {
+  await openProduct(page)
+  await waitComplete(page)
+  await fillMySet(page, { moves: LOCK_MOVES })
+  if (locked) {
+    await lockBadge(page, NINETALES_152)
+    await settle(page)
+    await lockRow(page, '공격', 'garchomp', 'dragonclaw')
+    await lockRow(page, '방어', 'garchomp', 'dragonclaw')
+    await expect(lockList(page).locator('.lock-item')).toHaveCount(3)
+  }
+  await selectTab(page, '공격')
+  await waitComplete(page)
+  const genBefore = Number(await tabPanel(page).getAttribute('data-generation'))
+  await page.getByRole('spinbutton', { name: '상위 N', exact: true }).fill(TOP_N_AFTER)
+  await expect(tabPanel(page)).not.toHaveAttribute('data-generation', String(genBefore))
+  await waitComplete(page)
+  const attack = damageRun(await readRaw(page), 'attack', await lastInputAt(page), genBefore)
+  if (locked) await settle(page)
+
+  await resultTab(page, '방어').click()
+  await expect(tabPanel(page)).toHaveAttribute('data-tab', 'defense')
+  await waitComplete(page)
+  const defense = damageRun(await readRaw(page), 'defense', await lastPointerUp(page), genBefore)
+
+  await resultTab(page, '스피드').click()
+  const speed = await speedRun(page, await lastPointerUp(page), null)
+  return { 공격: attack, 방어: defense, 스피드: speed }
+}
+
+interface AdjustOpen {
+  ms: number
+  /** 연 카드 상대 id */
+  opponent: string
+  /** 누름 ~ 목록 확정 구간과 겹친 Long Task 최대(없으면 0) */
+  longTaskMs: number
+}
+
+/**
+ * 지금 탭에서 첫 활성 "변동" 버튼을 페이지 안에서 눌러 팝오버 목록이 확정(계산 중 항목이 사라짐)될 때까지 잰다.
+ * 테스트 쪽 대기는 CDP 왕복만큼 늦어 페이지 안에서 누르고 MutationObserver로 본다.
+ */
+async function measureAdjustOpen(page: Page): Promise<AdjustOpen> {
+  const r = await page.evaluate(
+    () =>
+      new Promise<{ start: number; end: number; opponent: string }>((resolve, reject) => {
+        const btn = [...document.querySelectorAll<HTMLButtonElement>('[data-testid="tab-panel"] [data-testid="adjust-button"]')].find((b) => b.getAttribute('aria-disabled') !== 'true')
+        const card = btn?.closest<HTMLElement>('[data-testid="card"]')
+        if (btn === undefined || card == null) return reject(new Error('활성 변동 버튼이 없다'))
+        const ready = () => {
+          const menu = card.querySelector('[data-testid="adjust-menu"]')
+          return menu !== null && !(menu.textContent ?? '').includes('계산 중')
+        }
+        const start = performance.now()
+        const finish = () => resolve({ start, end: performance.now(), opponent: card.dataset.opponent ?? '' })
+        btn.click()
+        if (ready()) return finish()
+        let timer = 0
+        const mo = new MutationObserver(() => {
+          if (!ready()) return
+          mo.disconnect()
+          clearTimeout(timer)
+          finish()
+        })
+        mo.observe(card, { subtree: true, childList: true, characterData: true, attributes: true })
+        timer = window.setTimeout(() => {
+          mo.disconnect()
+          reject(new Error('변동 목록이 15초 안에 확정되지 않았다'))
+        }, 15_000)
+      }),
+  )
+  const longTasks = await page.evaluate(() => window.__probe.longTasks)
+  const overlap = longTasks.filter((lt) => lt.start < r.end && lt.start + lt.duration > r.start)
+  await page.keyboard.press('Escape')
+  await expect(tabPanel(page).getByTestId('adjust-menu')).toHaveCount(0)
+  return { ms: r.end - r.start, opponent: r.opponent, longTaskMs: Math.max(0, ...overlap.map((lt) => lt.duration)) }
+}
+
+test(`컷 고정 3개(스피드·공격·H 포함 방어 쌍, 필터 밖 1건) 탭별 첫 결과 ≤ 무고정 중앙값 × ${LOCK_FIRST_RATIO_LIMIT} · Long Task ≤ ${LONG_TASK_LIMIT_MS}ms (${LOCK_RUNS}회씩 교대)`, async ({ page, browser }) => {
+  test.setTimeout(600_000)
+  await page.addInitScript(installProbe, null)
+  await page.addInitScript(() => {
+    const w = window as unknown as { __inputAt: number }
+    w.__inputAt = 0
+    window.addEventListener('input', () => (w.__inputAt = performance.now()), true)
+  })
+  const plain: TabRuns[] = []
+  const locked: TabRuns[] = []
+  for (let i = 0; i < LOCK_RUNS; i++) {
+    plain.push(await measureLockOnce(page, false))
+    locked.push(await measureLockOnce(page, true))
+  }
+
+  // 기준 갈래 전환: 마지막 고정 상태에서 공격 탭으로 가 고정 줄 성격 ▲(기준 갈래 선택)를 누른 뒤 첫 결과
+  await selectTab(page, '공격')
+  await waitComplete(page)
+  const toggles = mySet(page).locator('.sp-row[data-locked="true"] .nat-btn.plus:not([disabled])')
+  expect(await toggles.count()).toBeGreaterThanOrEqual(1)
+  const genBefore = Number(await tabPanel(page).getAttribute('data-generation'))
+  await toggles.first().click()
+  await expect(tabPanel(page)).not.toHaveAttribute('data-generation', String(genBefore))
+  await waitComplete(page)
+  const baseSwitch = damageRun(await readRaw(page), 'attack', await lastPointerUp(page), genBefore)
+
+  // 고정 3개 상태의 변동 팝오버 처음 열기(공격·방어 탭 첫 활성 변동 버튼)
+  const adjustOpens: Partial<Record<DamageTabName, AdjustOpen>> = {}
+  for (const name of ['공격', '방어'] as const) {
+    await selectTab(page, name)
+    await waitComplete(page)
+    await settle(page)
+    adjustOpens[name] = await measureAdjustOpen(page)
+  }
+
+  const lanes = await page.evaluate(async (moves) => {
+    // src/app/perf.ts의 lane 훅(앱 tsconfig와 분리돼 있어 모양만 다시 적는다)
+    const perf = (window as unknown as { __perf: { lane(opponentId: string, moveId: string, moves: string[], tab: 'attack' | 'defense'): Promise<{ tasks: number; judgements: number; ms: number }> } }).__perf
+    return [await perf.lane('garchomp', 'dragonclaw', moves, 'attack'), await perf.lane('garchomp', 'dragonclaw', moves, 'defense')]
+  }, LOCK_MOVES)
+
+  const lines: string[] = []
+  for (const tab of ['공격', '방어', '스피드'] as const) {
+    const p = plain.map((r) => r[tab])
+    const l = locked.map((r) => r[tab])
+    const base = median(p.map((r) => r.firstMs))
+    const lockedMedian = median(l.map((r) => r.firstMs))
+    lines.push(
+      `컷 고정 ${tab} 탭: 무고정 첫 결과 중앙값 ${fmt(base)}ms [${list(p, (r) => r.firstMs)}]` +
+        ` · 고정 3개 첫 결과 중앙값 ${fmt(lockedMedian)}ms [${list(l, (r) => r.firstMs)}] · 배수 ${(lockedMedian / Math.max(base, 1)).toFixed(2)}` +
+        ` · 계산 구간 Long Task 최대 무고정 ${fmt(Math.max(...p.map((r) => r.computeLongTaskMs)))}ms / 고정 ${fmt(Math.max(...l.map((r) => r.computeLongTaskMs)))}ms`,
+    )
+  }
+  lines.push(`기준 갈래 전환(공격 탭 고정 줄 ▲ 클릭 → 첫 결과): ${fmt(baseSwitch.firstMs)}ms · 완료 ${fmt(baseSwitch.completeMs)}ms · Long Task 최대 ${fmt(baseSwitch.computeLongTaskMs)}ms`)
+  for (const [name, a] of Object.entries(adjustOpens)) {
+    lines.push(`변동 팝오버 처음 열기(고정 3개, ${name} 탭 ${a.opponent}): 누름 → 목록 확정 ${fmt(a.ms)}ms · Long Task 최대 ${fmt(a.longTaskMs)}ms`)
+  }
+  lines.push(
+    `고정 레인(캐시 없음): 한카리아스 드래곤클로 공격 작업 ${lanes[0].tasks}개·판정 ${lanes[0].judgements}회·${fmt(lanes[0].ms)}ms` +
+      `, 한카리아스 드래곤클로 방어 쌍(H 포함) 작업 ${lanes[1].tasks}개·계단 H 칸 ${lanes[1].judgements}개·${fmt(lanes[1].ms)}ms`,
+  )
+  for (const l of lines) {
+    console.log(`[product-perf] chromium ${browser.version()} ${l}`)
+    test.info().annotations.push({ type: 'perf', description: l })
+  }
+  for (const tab of ['공격', '방어', '스피드'] as const) {
+    const base = median(plain.map((r) => r[tab].firstMs))
+    expect.soft(median(locked.map((r) => r[tab].firstMs)), `${tab} 탭 고정 3개 첫 결과 중앙값`).toBeLessThanOrEqual(Math.max(base, 1) * LOCK_FIRST_RATIO_LIMIT)
+    expect.soft(Math.max(...locked.map((r) => r[tab].computeLongTaskMs)), `${tab} 탭 고정 3개 Long Task`).toBeLessThanOrEqual(LONG_TASK_LIMIT_MS)
+  }
+  expect.soft(baseSwitch.computeLongTaskMs, '기준 갈래 전환 Long Task').toBeLessThanOrEqual(LONG_TASK_LIMIT_MS)
+  for (const [name, a] of Object.entries(adjustOpens)) {
+    expect.soft(a.ms, `${name} 탭 변동 목록 확정`).toBeLessThanOrEqual(COMPLETE_MEDIAN_LIMIT_MS)
+    expect.soft(a.longTaskMs, `${name} 탭 변동 팝오버 Long Task`).toBeLessThanOrEqual(LONG_TASK_LIMIT_MS)
+  }
+  for (const lane of lanes) expect(lane.tasks).toBeGreaterThan(0)
 })

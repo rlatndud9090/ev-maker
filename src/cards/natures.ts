@@ -1,7 +1,7 @@
 // 내 성격 변형(무보정·상승) 고르기. 판정은 하지 않고 스냅샷 성격 표에서 실제 성격 id만 찾는다.
 import type { PokemonSet } from '../core'
 import type { NatureEntry, Snapshot, StatId } from '../data/schema'
-import type { NatureVariant, NatureVariants } from './types'
+import type { NatureVariant, NatureVariants, SpOverride } from './types'
 
 type BoostableStat = Exclude<StatId, 'hp'>
 /** 상승 성격 하락 후보 순서: 특공·공격(흔한 고집·조심·겁쟁이·명랑 계열)을 먼저 */
@@ -40,3 +40,7 @@ export function natureVariants(game: Snapshot, current: string, stat: BoostableS
 export const variantNature = (v: NatureVariants, which: NatureVariant): string => (which === 'neutral' ? v.neutral : v.plus)
 
 export const withNature = (set: PokemonSet, nature: string): PokemonSet => (set.nature === nature ? set : { ...set, nature })
+
+/** 내 쪽 세트의 일부 SP를 덮어쓴 세트(없거나 비면 그대로) */
+export const withSpOverride = (set: PokemonSet, sp: SpOverride | undefined): PokemonSet =>
+  sp === undefined || Object.keys(sp).length === 0 ? set : { ...set, sp: { ...set.sp, ...sp } }

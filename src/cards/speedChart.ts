@@ -105,6 +105,8 @@ export interface SpeedChartInput {
   filters: CardFilters
   customTargets: readonly CustomTarget[]
   added: readonly SpeedAddedBundle[]
+  /** 있으면 filters와 무관하게 그 상대 하나만 만든다(ladder = 메타 항목 id, custom = customTargets의 rosterId) */
+  force?: { opponentId: string; source: 'ladder' | 'custom' }
 }
 
 const SCARF = 'choicescarf'
@@ -195,7 +197,8 @@ function withSpeBundle(game: Snapshot, base: PokemonSet, sp: number, nature: Nat
   return { ...base, nature: natureWithSign(game, base.nature, nature), sp: table }
 }
 
-function conditionKey(c: SpeedCondition): string {
+/** 배지 id·고정 대상 키의 조건 부분 */
+export function conditionKey(c: SpeedCondition): string {
   switch (c.kind) {
     case 'none':
     case 'scarf':
@@ -298,14 +301,27 @@ function fieldAllowed(field: SpeedFieldCondition, myAbility: string | null): boo
   return field.kind !== 'weather' || myAbility === null || !WEATHER_NEGATING_ABILITIES.includes(myAbility)
 }
 
-/** 상위 N 또는 선택 종(사용률 순) + 목록 밖 타겟(추가 순, 메타 목록 안 종·기술 없음·중복 제외) */
-function opponentsOf(view: MetaView, filters: CardFilters, customTargets: readonly CustomTarget[]): { ladder: MetaEntry[]; custom: { target: CustomTarget; order: number }[] } {
+/** 상위 N 또는 선택 종(사용률 순) + 목록 밖 타겟(추가 순, 메타 목록 안 종·기술 없음·중복 제외). force면 그 상대 하나만 */
+function opponentsOf(
+  view: MetaView,
+  filters: CardFilters,
+  customTargets: readonly CustomTarget[],
+  force: SpeedChartInput['force'],
+): { ladder: MetaEntry[]; custom: { target: CustomTarget; order: number }[] } {
   const selected = new Set(filters.selected)
-  const ladder = selected.size > 0 ? view.ranking.filter((e) => selected.has(e.id)) : view.ranking.slice(0, filters.topN)
+  const ladder =
+    force !== undefined
+      ? force.source === 'ladder'
+        ? view.ranking.filter((e) => e.id === force.opponentId)
+        : []
+      : selected.size > 0
+        ? view.ranking.filter((e) => selected.has(e.id))
+        : view.ranking.slice(0, filters.topN)
   const custom: { target: CustomTarget; order: number }[] = []
   const seen = new Set<string>()
   customTargets.forEach((t, order) => {
     if (view.entry(t.rosterId) || t.moves.length === 0 || seen.has(t.rosterId)) return
+    if (force !== undefined && (force.source !== 'custom' || t.rosterId !== force.opponentId)) return
     seen.add(t.rosterId)
     custom.push({ target: t, order })
   })
@@ -333,7 +349,7 @@ function ladderBundles(game: Snapshot, view: MetaView, entry: MetaEntry, baseSet
 
 export function buildSpeedChart(input: SpeedChartInput): SpeedChartModel {
   const { game, view, criteria, myAbility } = input
-  const { ladder, custom } = opponentsOf(view, input.filters, input.customTargets)
+  const { ladder, custom } = opponentsOf(view, input.filters, input.customTargets, input.force)
   const badges: SpeedBadge[] = []
   const unsupported: SpeedUnsupported[] = []
   const options = new Map<string, SpeedBundleOption[]>()

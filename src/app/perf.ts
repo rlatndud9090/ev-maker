@@ -6,6 +6,25 @@ import { loadSnapshot } from '../data/loader'
 import { assertMetaSnapshot } from '../data/meta-guard'
 import type { MetaSnapshot } from '../data/meta-schema'
 import { createMetaView, topAssumptions } from '../meta'
+import {
+  DEFAULT_CRITERIA,
+  DEFAULT_ROLL_STEPS,
+  computeRowTask,
+  createTabAssembler,
+  findLockTarget,
+  laneInput,
+  laneTasks,
+  nextStage,
+  pendingTasks,
+  planTab,
+  taskCardId,
+  taskKey,
+  type CardInput,
+  type DamageTab,
+  type RowTaskResult,
+} from '../cards'
+import { toPokemonSet } from '../ui/setDraft'
+import { EXAMPLE_DRAFT } from './example'
 
 const ZERO: StatTable = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }
 
@@ -32,6 +51,15 @@ export interface PerfHook {
   batch(runs?: number, warmup?: number): Promise<PerfStats>
   /** m-c 2026-10 Bo1 메타 본문 JSON.parse → 검사 → 뷰 → 상위 30 대표 가정 */
   metaLoad(runs?: number, warmup?: number): Promise<PerfStats>
+  /** 예시 세트(moves = 기술 칸 한국어 이름, 없으면 예시 그대로)의 그 탭(기본 공격) (상대, 기술) 행·쌍을 고정할 때 고정 레인(미니 계획 + 레인 작업, 캐시 없음)의 작업 수·판정 수·소요 */
+  lane(opponentId: string, moveId: string, moves?: string[], tab?: DamageTab): Promise<LaneStats>
+}
+
+export interface LaneStats {
+  tasks: number
+  /** 레인 작업 결과 칸 수(공격 갈래 칸 하나 = 판정 하나, 방어 계단은 H 칸 수: 한 칸에 판정 여러 번일 수 있다) */
+  judgements: number
+  ms: number
 }
 
 declare global {
@@ -99,6 +127,55 @@ export function installPerfHook(): void {
         runs,
         warmup,
       )
+    },
+    async lane(opponentId, moveId, moves, tab = 'attack') {
+      const s = await loadSnapshot('m-c')
+      const { default: text } = await import('../data/meta/m-c/2026-10-bo1.json?raw')
+      const input: CardInput = {
+        game: s,
+        view: createMetaView(JSON.parse(text) as MetaSnapshot, s),
+        mySet: toPokemonSet(s, moves === undefined ? EXAMPLE_DRAFT : { ...EXAMPLE_DRAFT, moves }).set,
+        rollSteps: DEFAULT_ROLL_STEPS,
+        criteria: { ...DEFAULT_CRITERIA },
+        filters: { topN: 1, selected: [opponentId] },
+        customTargets: [],
+      }
+      // 고정 후보(대상 키)는 그 상대만 끝까지 계산한 뷰의 고정 조작에서 얻는다(방어 쌍 후보는 그 계단까지)
+      const plan = planTab(input, tab)
+      const results = new Map<string, RowTaskResult>()
+      for (;;) {
+        const stage = nextStage(pendingTasks(plan, results, new Map()))
+        if (stage.length === 0) break
+        for (const task of stage) results.set(taskKey(task), computeRowTask(plan, task))
+      }
+      const assembler = createTabAssembler(plan, new Map(), { lockControls: true })
+      const ids = new Set(plan.cards.filter((c) => c.opponent.id === opponentId).map((c) => c.id))
+      const extra = assembler.candidates(results, ids)
+      for (const task of [...extra.stage4, ...extra.stage5]) {
+        results.set(taskKey(task), computeRowTask(plan, task))
+        assembler.invalidate(taskCardId(plan, task))
+      }
+      const view = assembler.assemble(results)
+      const own = view.cards.filter((c) => c.opponent.id === opponentId)
+      const control =
+        tab === 'attack'
+          ? own.flatMap((c) => c.rows).find((r) => r.moveId === moveId)?.lock?.control
+          : own.find((c) => c.pair?.lock?.control !== undefined && c.rows.some((r) => r.moveId === moveId))?.pair?.lock?.control
+      // 닿는 단계 중 가장 높은 단계(단계 목록은 낮은 단계부터)
+      const candidate = control?.kind === 'lockable' ? [...control.stages].reverse().find((s) => s.candidate.kind === 'ready' && s.candidate.resolution.kind === 'ok')?.candidate : undefined
+      if (candidate?.kind !== 'ready') throw new Error(`${opponentId} ${moveId} 고정 후보 없음`)
+      const lock = { ...candidate.lock, seq: 1 }
+      const t0 = performance.now()
+      const lanePlan = planTab(laneInput(input, lock), tab)
+      const target = findLockTarget(lanePlan, lock)
+      const tasks = target === null ? [] : laneTasks(lanePlan, lock, target)
+      let judgements = 0
+      for (const task of tasks) {
+        const r = computeRowTask(lanePlan, task)
+        if (r.kind === 'branch') judgements += r.cells.length
+        else if (r.kind === 'stairs' && r.stairs !== 'non-monotonic') judgements += r.stairs.length
+      }
+      return { tasks: tasks.length, judgements, ms: performance.now() - t0 }
     },
   }
 }

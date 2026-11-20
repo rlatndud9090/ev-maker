@@ -1,0 +1,137 @@
+/* 컷 고정 핀(카드 줄·사다리 배지)과 단계 메뉴. 색은 index.css 역할 토큰만 쓴다 */
+
+.cut-pin-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+.product .cut-pin {
+  width: 1.5rem;
+  height: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.product .cut-pin[aria-pressed='true'] {
+  color: var(--lock-strong);
+}
+
+.product .cut-pin:hover,
+.product .cut-pin:focus-visible,
+.product .cut-pin[aria-expanded='true'] {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  outline: none;
+}
+
+.product .cut-pin:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.product .cut-pin[aria-disabled='true'] {
+  background: none;
+  color: var(--muted);
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.cut-pin-icon {
+  display: block;
+}
+
+.cut-pin-menu {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  top: calc(100% + 3px);
+  width: max-content;
+  max-width: min(18rem, calc(100vw - 2rem));
+  box-sizing: border-box;
+  padding: 0.2rem;
+  display: grid;
+  gap: 1px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  cursor: default;
+}
+
+.cut-pin-menu.up {
+  top: auto;
+  bottom: calc(100% + 3px);
+}
+
+.cut-pin-menu:focus {
+  outline: none;
+}
+
+.product .cut-pin-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.3rem 0.45rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.product .cut-pin-item:hover,
+.product .cut-pin-item:focus-visible {
+  background: var(--accent-soft);
+  outline: none;
+}
+
+.product .cut-pin-item[aria-disabled='true'] {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.product .cut-pin-item[aria-disabled='true']:hover {
+  background: var(--surface);
+}
+
+.cut-pin-stage {
+  font-weight: 700;
+}
+
+.cut-pin-detail {
+  font-size: 0.8rem;
+}
+
+.cut-pin-item[aria-disabled='true'] .cut-pin-detail {
+  color: var(--danger);
+}
+
+/* 카드 줄: 포켓몬 이미지 앞 열 */
+.card-line > .cut-pin-wrap {
+  grid-area: pin;
+  justify-self: center;
+}
+
+/* 사다리 배지: 배지 버튼 앞 */
+.speed-badge-item:has(> .cut-pin-wrap) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+  max-width: 100%;
+}

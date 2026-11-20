@@ -200,6 +200,10 @@ const keyOf = (r: RowTaskResult): string => {
       return taskKey({ kind: 'variant', rowId: r.rowId, nature: r.nature })
     case 'pair':
       return taskKey({ kind: 'pair', filterId: r.filterId, nature: r.nature })
+    case 'stairs':
+      return taskKey({ kind: 'stairs', filterId: r.filterId, nature: r.nature, rank: r.rank, hpMin: r.hpMin })
+    case 'branch':
+      return taskKey({ kind: 'branch', rowId: r.rowId, nature: r.nature })
     case 'error':
       return taskKey(r.task)
   }

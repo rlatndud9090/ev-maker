@@ -1,11 +1,33 @@
 // 행 작업 대기열. 계획과 지금까지의 결과에서 남은 작업을 단계별로 낸다(판정 없음).
+import { STAT_IDS, TIER_ORDER, tierRank } from '../core'
+import type { Snapshot, StatId } from '../data/schema'
 import { cardItems, itemStates, resolveDefault, type CardItemRef, type DefaultResult } from './items'
+import type { Branch } from './lock'
+import { rowNature, strictVariants } from './lockNature'
+import { findLockTarget } from './lockTarget'
 import { variantNature } from './natures'
 import { NATURE_VARIANTS } from './types'
-import type { CardSpec, CompactCell, MoveCandidate, NatureVariant, OpponentHeader, PendingTasks, ResultMap, RowSpec, RowTask, RowTaskResult, TabPlan } from './types'
+import type {
+  CardSpec,
+  CompactCell,
+  ExtremeSpec,
+  MoveCandidate,
+  NatureVariant,
+  OpponentHeader,
+  PendingTasks,
+  ResultMap,
+  RowLockSpec,
+  RowSpec,
+  RowTask,
+  RowTaskResult,
+  SpOverride,
+  TabPlan,
+} from './types'
 
 /** 기술 선택의 상대 단위 키(반감열매 변형 카드도 같은 키 — 같은 포켓몬의 선택을 공유한다) */
 export const opponentKey = (o: Pick<OpponentHeader, 'source' | 'id'>): string => JSON.stringify([o.source, o.id])
+
+const spKey = (sp: SpOverride | undefined): unknown => (sp === undefined ? null : STAT_IDS.filter((s) => sp[s] !== undefined).map((s) => [s, sp[s]]))
 
 /** 결과 맵 키. sweep은 stage와 무관하게 같은 키다. */
 export function taskKey(task: RowTask): string {
@@ -24,6 +46,10 @@ export function taskKey(task: RowTask): string {
       return JSON.stringify(['variant', task.rowId, task.nature])
     case 'pair':
       return JSON.stringify(['pair', task.filterId, task.nature])
+    case 'stairs':
+      return JSON.stringify(['stairs', task.filterId, task.nature, task.rank, task.hpMin, spKey(task.sp)])
+    case 'branch':
+      return JSON.stringify(['branch', task.rowId, task.nature, spKey(task.sp)])
   }
 }
 
@@ -35,11 +61,14 @@ export function nextStage(p: PendingTasks): readonly RowTask[] {
 
 const myNature = (plan: TabPlan, spec: RowSpec): string => (plan.mySide === 'attacker' ? spec.attacker : spec.defender).nature
 
+/** 고정 계획에서 엄격 상승이 없는 행·필터는 상승 변형을 만들지 않는다 */
+const variantsOf = (lock: RowLockSpec | undefined): readonly NatureVariant[] => (lock?.strict.plus === null ? ['neutral'] : NATURE_VARIANTS)
+
 /** 현재 성격과 다른 변형만(같은 변형은 현재 스윕을 그대로 쓴다). */
 export function neededVariants(plan: TabPlan, spec: RowSpec): NatureVariant[] {
   const natures = spec.natures
   if (natures === undefined) return []
-  return NATURE_VARIANTS.filter((v) => variantNature(natures, v) !== myNature(plan, spec))
+  return variantsOf(spec.lock).filter((v) => variantNature(natures, v) !== myNature(plan, spec))
 }
 
 /**
@@ -190,8 +219,12 @@ export function cardPending(plan: TabPlan, card: CardSpec, results: ResultMap, s
   const decideRow = (rowId: string) => decideRowTasks(plan, results, rowId, (t) => push(stage1, t), (t) => push(stage2, t))
   const gatedRows = (filterId: string) => card.rowIds.filter((id) => plan.rows[id].gate === filterId)
   const pairs = (filterId: string) => {
-    const missing = NATURE_VARIANTS.filter((nature) => !results.has(taskKey({ kind: 'pair', filterId, nature })))
-    if (missing.length > 0 && pairReady(plan, card, filterId, results)) for (const nature of missing) stage5.push({ kind: 'pair', filterId, nature })
+    const spec = plan.filters[filterId]
+    if (!pairReady(plan, card, filterId, results)) return
+    // 계단 모드(H 또는 B/D 고정)의 목표·갈래는 계단으로 내고, 쌍 결과는 합계 띠에만 쓴다(계단 먼저)
+    if (spec.lock?.viewLocked === true) for (const t of baseStairsTasks(plan, spec, results)) push(stage5, t)
+    const missing = variantsOf(spec.lock).filter((nature) => !results.has(taskKey({ kind: 'pair', filterId, nature })))
+    for (const nature of missing) stage5.push({ kind: 'pair', filterId, nature })
   }
 
   if (card.conditions.length === 0) {
@@ -272,9 +305,12 @@ export function taskCardId(plan: TabPlan, task: RowTask): string {
       return plan.rows[task.rowId].cardId
     case 'extreme':
     case 'pair':
+    case 'stairs':
       return plan.filters[task.filterId].cardId
     case 'fixed':
       return plan.fixed[task.fixedId].cardId
+    case 'branch':
+      return plan.rows[task.rowId].cardId
   }
 }
 
@@ -314,4 +350,103 @@ export function pendingTasks(plan: TabPlan, results: ResultMap, selections: Read
     stage5.push(...p.stage5)
   }
   return { stage1, stage2, stage3, stage4, stage5 }
+}
+
+// ---------- 컷 고정 ----------
+
+const DEFENSE_TOP = TIER_ORDER.defense.length - 1
+
+/** 필터 현재 세트 단건 판정의 방어 순위(판정 전·오류·순위 밖이면 null) */
+function currentRank(results: ResultMap, filterId: string): number | null {
+  const r = results.get(taskKey({ kind: 'probe', target: 'filter', id: filterId }))
+  if (r?.kind !== 'probe' || !(TIER_ORDER.defense as readonly string[]).includes(r.cell.category)) return null
+  return tierRank('defense', r.cell.category)
+}
+
+const stageRanks = new WeakMap<TabPlan, ReadonlyMap<string, readonly number[]>>()
+
+/** 필터 id → 그 필터를 대상으로 하는 활성 방어 고정의 단계 순위 */
+function lockedStageRanks(plan: TabPlan): ReadonlyMap<string, readonly number[]> {
+  const hit = stageRanks.get(plan)
+  if (hit !== undefined) return hit
+  const out = new Map<string, number[]>()
+  if (plan.lock?.mode === 'main') {
+    const { derivation } = plan.lock
+    for (const lock of derivation.locks) {
+      if (lock.kind !== 'defense' || derivation.statuses.get(lock.seq)?.kind !== 'active') continue
+      const ref = findLockTarget(plan, lock)
+      if (ref === null || !('filterId' in ref)) continue
+      const list = out.get(ref.filterId) ?? []
+      list.push(tierRank('defense', lock.stage))
+      out.set(ref.filterId, list)
+    }
+  }
+  stageRanks.set(plan, out)
+  return out
+}
+
+export const lockedHp = (plan: TabPlan, branch: Branch): number =>
+  plan.lock?.mode === 'main' && plan.lock.derivation.lockedStats.includes('hp') ? (branch.lockedSp.hp ?? 0) : 0
+
+/** 계단 모드 필터의 기준 갈래 계단: 현재 순위·한 단계 위·그 필터 고정 단계 × 엄격 두 성격, H 하한 = 고정 H */
+function baseStairsTasks(plan: TabPlan, spec: ExtremeSpec, results: ResultMap): RowTask[] {
+  if (plan.lock?.mode !== 'main' || spec.lock === undefined) return []
+  const cur = currentRank(results, spec.id)
+  if (cur === null) return []
+  const ranks = [...new Set([cur, Math.min(cur + 1, DEFENSE_TOP), ...(lockedStageRanks(plan).get(spec.id) ?? [])])]
+  const hpMin = lockedHp(plan, plan.lock.base)
+  const out: RowTask[] = []
+  for (const nature of [spec.lock.strict.neutral, spec.lock.strict.plus]) {
+    if (nature === null) continue
+    for (const rank of ranks) out.push({ kind: 'stairs', filterId: spec.id, nature, rank, hpMin })
+  }
+  return out
+}
+
+type BoostableStat = Exclude<StatId, 'hp'>
+
+/** 성격의 능력치 보정 부호(+1·0·−1). 스냅샷에 없는 성격은 null */
+function natureSignOf(game: Snapshot, id: string, stat: StatId): number | null {
+  if (!Object.prototype.hasOwnProperty.call(game.data.natures, id)) return null
+  const n = game.data.natures[id]
+  if (n.plus === undefined || n.plus === n.minus) return 0
+  return n.plus === stat ? 1 : n.minus === stat ? -1 : 0
+}
+
+/** 두 성격이 v·H를 뺀 관여 능력치에서 같은 배수를 주는가(그 행의 v 스윕 결과를 그대로 쓸 수 있다) */
+export function branchEquivalent(game: Snapshot, natureA: string, natureB: string, relevant: readonly StatId[], v: StatId): boolean {
+  if (natureA === natureB) return true
+  return relevant.every((s) => {
+    if (s === v || s === 'hp') return true
+    const a = natureSignOf(game, natureA, s)
+    return a !== null && a === natureSignOf(game, natureB, s)
+  })
+}
+
+export interface BranchVariants {
+  branch: Branch
+  strict: { neutral: string; plus: string | null }
+  sp?: SpOverride
+}
+
+/** 기준이 아닌 갈래마다 그 행의 엄격 변형과 SP 덮어쓰기(하락 자리가 없는 갈래는 뺀다) */
+export function otherBranches(plan: TabPlan, branches: readonly Branch[], v: BoostableStat, relevant: readonly StatId[], dependsOn: readonly StatId[]): BranchVariants[] {
+  if (plan.lock?.mode !== 'main') return []
+  const { derivation, base } = plan.lock
+  const locked = derivation.lockedStats
+  const avoid = [...new Set<StatId>([...locked, ...relevant, v])]
+  const out: BranchVariants[] = []
+  for (const branch of branches) {
+    if (branch.id === base.id) continue
+    const rn = rowNature(plan.game, branch.nature, branch.plus, avoid)
+    if (rn.dropWarning) continue
+    const allowPlus = branch.plus === v || (branch.plus === 'out' && !locked.includes(v))
+    const st = strictVariants(plan.game, rn.nature, v, allowPlus, avoid)
+    const sp: Partial<Record<StatId, number>> = {}
+    for (const s of dependsOn) if (locked.includes(s) && (branch.lockedSp[s] ?? 0) !== (base.lockedSp[s] ?? 0)) sp[s] = branch.lockedSp[s] ?? 0
+    const item: BranchVariants = { branch, strict: { neutral: st.neutral, plus: st.plus } }
+    if (Object.keys(sp).length > 0) item.sp = sp
+    out.push(item)
+  }
+  return out
 }

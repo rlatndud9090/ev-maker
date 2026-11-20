@@ -11,6 +11,7 @@ import {
   type PresetIndex,
   type SpeedBadge as Badge,
   type SpeedBaseline,
+  type SpeedBranchLine,
   type SpeedChartModel,
   type SpeedStatus,
 } from "../../cards";
@@ -23,6 +24,7 @@ import { Combobox } from "./Combobox";
 import { BundleText } from "./BundleText";
 import { ItemMark } from "./ItemMark";
 import { NumberField } from "./NumberField";
+import { LockBranchList } from "./LockBranchList";
 import {
   STATUS_CLASS,
   STATUS_LABEL,
@@ -39,6 +41,10 @@ interface Props {
   status: SpeedStatus | null;
   baseline: SpeedBaseline;
   minSp: { neutral: MinSp; plus: MinSp } | null;
+  /** 컷 고정 중 이 배지의 갈래 줄(없으면 minSp 문구) */
+  lockLines?: readonly SpeedBranchLine[] | null;
+  /** 고정이 있는데 파생이 아직 없음 */
+  lockPending?: boolean;
   myTailwind: boolean;
   target: CustomTarget | undefined;
   dispatch: Dispatch<AppAction>;
@@ -59,6 +65,8 @@ export function SpeedBadgeDetail({
   status,
   baseline,
   minSp,
+  lockLines,
+  lockPending = false,
   myTailwind,
   target,
   dispatch,
@@ -113,6 +121,10 @@ export function SpeedBadgeDetail({
             const r = rejectionText(game, baseline.rejection, "mine");
             return `${r.reason} · ${r.cause}`;
           })()
+        ) : lockLines !== undefined && lockLines !== null ? (
+          <LockBranchList lines={lockLines} tab="speed" />
+        ) : lockPending ? (
+          "계산 중…"
         ) : minSp === null ? (
           "내 세트를 확인해 주세요"
         ) : (

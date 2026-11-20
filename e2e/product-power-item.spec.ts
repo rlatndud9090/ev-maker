@@ -51,8 +51,9 @@ test('방어 탭: 대도각참 기본 행 뒤에 생명의구슬 행(표지), �
   await expect(orb.locator('.card-meta')).toHaveCount(0)
   const height = async (row: typeof base) => (await row.locator('.card-line').boundingBox())!.height
   expect(Math.abs((await height(orb)) - (await height(base)))).toBeLessThanOrEqual(1)
-  await expect(orb.locator('.card-toggle')).toHaveAccessibleName(/^대도각참.*생명의구슬 지닌 경우/)
-  await expect(orb.locator('.card-toggle')).not.toHaveAccessibleName(/%|사용률/)
+  // 카드 줄 이름 칸 읽기: "대도각참 생명의구슬 지닌 경우"(상세 안내 대신 이름 옆 도구 표지, R20). 점유율 문구는 없다
+  await expect(orb.locator('.card-name')).toHaveText(/^대도각참\s*생명의구슬 지닌 경우$/)
+  await expect(orb.locator('.card-who')).not.toContainText(/%|사용률/)
   // 사용률 순: 원래 행 바로 뒤(도구 행끼리는 점유율 순)
   const keys = await cards(page).evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.groupKey))
   expect(keys.indexOf(JSON.stringify(LIFE_ORB))).toBe(keys.indexOf(JSON.stringify(KINGAMBIT)) + 1)

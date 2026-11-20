@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>디자인 대안 비교 · 컷 고정 화면 배치</title>
+<!--
+  하네스 design-options 템플릿 (adr-helper 디자인 결정 레인).
+  - Claude 아티팩트가 아니다. 이 파일을 docs/raw/<type>/<slug>/design-options.html로
+    떨구고, 사용자가 브라우저에서 직접 연다(자기완결: 외부 CSS/JS/폰트/이미지 참조 없음).
+  - 이 파일을 그대로 cp로 목적지에 복사한 뒤, 채우기 구역만 Edit한다. 파일 전체를 Write로
+    다시 쓰지 않는다 — 고정된 CSS/JS/패널 스캐폴딩 재출력은 순수 출력 토큰 낭비다.
+  - 에이전트가 채우는 곳은 <section class="option"> 카드 안의 .mockup 영역과 data-label·라디오
+    value·.name(대안 이름으로 함께 일치)뿐이다. 카드를 복제/삭제해 대안 수(2개 이상)를 맞춘다.
+  - 사용자는 대안을 나란히 비교 → 베이스 라디오 선택 → 세부 수정 요구사항 작성 →
+    "요약 생성" → "복사"해서 에이전트에게 붙여넣는다(정적 파일이라 서버로 전송 불가 →
+    붙여넣기로 루프를 닫는다). 에이전트는 그 요약을 ADR 선택지/결정/선택 근거로 흡수한다.
+-->
+<style>
+  :root{
+    --bg:#f7f7f8; --fg:#1a1a1e; --muted:#5c5c66; --line:#d9d9e0; --card:#ffffff;
+    --accent:#3b5bdb; --accent-soft:#e7ecfb; --shadow:0 1px 3px rgba(0,0,0,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#16161a; --fg:#ececf0; --muted:#9a9aa5; --line:#2c2c34; --card:#1e1e24;
+      --accent:#7a93f5; --accent-soft:#22283d; --shadow:0 1px 3px rgba(0,0,0,.4); }
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; padding:24px; background:var(--bg); color:var(--fg);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif; }
+  header{ max-width:1200px; margin:0 auto 20px; }
+  h1{ font-size:20px; margin:0 0 6px; }
+  .lead{ color:var(--muted); margin:0 0 12px; }
+  .how{ background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:12px 16px; box-shadow:var(--shadow); }
+  .how ol{ margin:6px 0 0; padding-left:20px; } .how li{ margin:2px 0; }
+  .grid{ max-width:1200px; margin:0 auto; display:grid; gap:16px;
+    grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
+  .option{ background:var(--card); border:1px solid var(--line); border-radius:12px;
+    box-shadow:var(--shadow); display:flex; flex-direction:column; overflow:hidden; }
+  .option.selected{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft),var(--shadow); }
+  .option > header{ display:flex; align-items:center; gap:10px; padding:12px 14px;
+    border-bottom:1px solid var(--line); margin:0; }
+  .option > header label{ font-weight:600; cursor:pointer; display:flex; align-items:center; gap:8px; }
+  .option .name{ font-size:15px; }
+  .mockup{ padding:14px; min-height:160px; overflow-x:auto; }
+  /* 목업 안에서 쓰기 좋은 중립 프리미티브(원하면 무시하고 자유 HTML/CSS로 그려도 됨) */
+  .mockup .box{ border:1px dashed var(--line); border-radius:8px; padding:10px; margin:6px 0;
+    color:var(--muted); }
+  .mockup .bar{ height:12px; border-radius:6px; background:var(--line); margin:6px 0; }
+  .notes{ padding:12px 14px; border-top:1px solid var(--line); }
+  .notes label{ display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  textarea{ width:100%; min-height:64px; resize:vertical; border:1px solid var(--line);
+    border-radius:8px; padding:8px; background:var(--bg); color:var(--fg); font:inherit; }
+  .panel{ max-width:1200px; margin:18px auto 0; background:var(--card); border:1px solid var(--line);
+    border-radius:12px; padding:16px; box-shadow:var(--shadow); }
+  .panel label{ display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  button{ font:inherit; font-weight:600; border:1px solid var(--accent); background:var(--accent);
+    color:#fff; border-radius:8px; padding:8px 16px; cursor:pointer; }
+  button.secondary{ background:transparent; color:var(--accent); }
+  button:disabled{ opacity:.5; cursor:not-allowed; }
+  #summary{ width:100%; min-height:150px; margin-top:12px; white-space:pre; font-family:ui-monospace,
+    SFMono-Regular,Menlo,monospace; font-size:13px; }
+  .hint{ color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>디자인 대안 비교 — 컷 고정 화면 배치</h1>
+  <p class="lead">아래 대안을 비교하고, <b>베이스로 삼을 안 하나를 라디오로 선택</b>한 뒤,
+    <b>세부 수정 요구사항</b>을 적어 주세요.</p>
+  <div class="how">
+    <b>사용법</b>
+    <ol>
+      <li>각 대안을 나란히 비교합니다.</li>
+      <li>가장 마음에 드는 안의 <b>◉ 라디오</b>를 선택합니다(베이스 = 이 안을 출발점으로 발전).</li>
+      <li>대안별 칸과 아래 "전체 수정 요구사항"에 원하는 변경을 구체적으로 적습니다.</li>
+      <li><b>"요약 생성"</b>을 누르고 <b>"복사"</b>해서 에이전트에게 붙여넣습니다(이 파일은 정적이라
+        직접 전송되지 않습니다 — 붙여넣기로 전달).</li>
+    </ol>
+  </div>
+</header>
+
+<!-- ▼▼▼ 에이전트가 채우는 영역: 대안 카드(최소 2개). cp한 복사본에서 이 구역만 Edit한다.
+     카드를 복제/삭제해 개수를 맞추고, data-label·라디오 value·.name·.mockup을 이번 유닛의
+     실제 화면 배치로 채운다(value·data-label·.name은 대안 이름으로 함께 일치). ▼▼▼ -->
+<div class="grid" id="grid">
+  <style>
+    /* 목업 공용(중립 톤). 판정 단계 색만 실제 앱 파스텔을 흉내 낸다. */
+    .grid{ grid-template-columns:repeat(auto-fit,minmax(360px,1fr)); }
+    .mk{ font-size:12.5px; line-height:1.45; display:grid; gap:8px; }
+    .mk-cap{ font-size:11px; color:var(--muted); margin:4px 0 -4px; font-weight:600; }
+    .mk-panel,.mk-res{ border:1px solid var(--line); border-radius:10px; padding:8px; background:var(--card); display:grid; gap:6px; }
+    .mk-res{ background:var(--bg); }
+    .mk-h{ margin:0; font-size:12px; font-weight:700; }
+    .mk-muted{ color:var(--muted); }
+    .mk-ghost{ border:1px dashed var(--line); border-radius:6px; padding:4px 6px; color:var(--muted); font-size:11px; }
+    .mk-sp{ display:grid; gap:3px; }
+    .mk-sprow{ display:grid; grid-template-columns:1.6rem 1fr 2rem 2.1rem 2.2rem; align-items:center; gap:6px; }
+    .mk-st{ font-weight:700; }
+    .mk-st b{ font-size:10px; margin-left:1px; }
+    .mk-sl{ height:6px; border-radius:3px; background:var(--line); position:relative; overflow:hidden; }
+    .mk-sl i{ position:absolute; inset:0 auto 0 0; background:var(--muted); opacity:.55; }
+    .mk-num{ border:1px solid var(--line); border-radius:4px; text-align:right; padding:0 4px; font-variant-numeric:tabular-nums; }
+    .mk-nat{ font-size:10px; color:var(--muted); letter-spacing:2px; text-align:center; }
+    .mk-nat.off{ opacity:.45; }
+    .mk-val{ color:var(--muted); text-align:right; font-variant-numeric:tabular-nums; }
+    .mk-locked{ grid-column:2 / 4; border:1px solid var(--fg); border-radius:4px; padding:0 6px; font-weight:600; background:var(--accent-soft); white-space:nowrap; }
+    .mk-locks{ list-style:none; margin:0; padding:0; display:grid; gap:4px; }
+    .mk-lock{ display:flex; align-items:center; gap:6px; border:1px solid var(--line); border-radius:6px; padding:3px 6px; }
+    .mk-lock a{ flex:1; min-width:0; color:var(--fg); text-decoration:underline dotted; cursor:pointer; }
+    .mk-chip{ font-size:10.5px; border-radius:999px; padding:0 6px; border:1px solid var(--fg); white-space:nowrap; }
+    .mk-chip.warn{ border-style:dashed; }
+    .mk-x{ font:inherit; font-size:11px; font-weight:400; border:1px solid var(--line); border-radius:4px; padding:0 5px; background:transparent; color:var(--muted); cursor:pointer; }
+    .mk-btn{ font:inherit; font-size:11px; font-weight:600; border:1px solid var(--fg); border-radius:999px; padding:0 8px; background:transparent; color:var(--fg); cursor:pointer; }
+    .mk-btn.on{ background:var(--fg); color:var(--card); }
+    .mk-radio{ display:flex; gap:10px; align-items:center; font-size:11.5px; }
+    .mk-radio input{ margin:0 3px 0 0; vertical-align:-2px; }
+    .mk-row{ border:1px solid var(--line); border-radius:8px; padding:8px; background:var(--card); display:grid; gap:5px; }
+    .mk-head{ display:flex; align-items:center; gap:6px; }
+    .mk-mon{ display:inline-flex; align-items:center; gap:3px; }
+    .mk-img{ width:20px; height:20px; border-radius:50%; background:var(--line); display:inline-block; }
+    .mk-item{ width:11px; height:11px; border-radius:3px; border:1px solid var(--muted); display:inline-block; }
+    .mk-tier{ font-size:10.5px; font-weight:700; border-radius:999px; padding:0 6px; color:#222; white-space:nowrap; }
+    .t-r{ background:#f2ccc8; } .t-y{ background:#f4e7b0; } .t-g{ background:#d1ebd6; }
+    .mk-band{ display:grid; grid-template-columns:repeat(var(--n,33),minmax(0,1fr)); gap:1px; padding:3px 3px 0; }
+    .mk-band i{ height:14px; border-radius:1px; }
+    .mk-band i.cur{ outline:2px solid var(--fg); outline-offset:1px; position:relative; z-index:1; }
+    .mk-band i.miss{ background-image:radial-gradient(rgba(0,0,0,.55) 0.9px,transparent 1.2px); background-size:4px 4px; }
+    .mk-legend{ display:flex; flex-wrap:wrap; gap:3px 10px; font-size:11px; color:var(--muted); align-items:center; }
+    .mk-sw{ display:inline-block; width:10px; height:10px; border-radius:2px; vertical-align:-1px; margin-right:2px; }
+    .mk-lines{ list-style:none; margin:0; padding:0 0 0 8px; border-left:2px solid var(--line); display:grid; gap:2px; font-size:12px; }
+    .mk-ref{ font-size:10px; border:1px solid var(--muted); border-radius:3px; padding:0 4px; color:var(--muted); white-space:nowrap; }
+    .mk-small{ font-size:10.5px; color:var(--muted); }
+    .mk-speed{ border:1px solid var(--line); border-radius:8px; padding:6px; background:var(--card); display:grid; gap:5px; }
+    .mk-shead{ background:#d1ebd6; color:#222; border-radius:6px; padding:4px 6px; display:flex; align-items:center; gap:6px; }
+    .mk-goal{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .mk-goal small{ display:block; color:var(--muted); font-size:10.5px; }
+    .mk-strip{ position:relative; border:1px solid var(--fg); border-radius:8px; padding:5px 6px; background:var(--card); display:flex; flex-wrap:wrap; gap:5px 8px; align-items:center; font-size:11.5px; }
+    .mk-strip .mk-pill{ display:inline-flex; align-items:center; gap:4px; border:1px solid var(--line); border-radius:999px; padding:0 4px 0 6px; }
+    .mk-seg{ display:inline-flex; border:1px solid var(--fg); border-radius:6px; overflow:hidden; }
+    .mk-seg span{ padding:0 7px; font-size:11px; }
+    .mk-seg span.on{ background:var(--fg); color:var(--card); font-weight:600; }
+    .mk-tabs{ display:flex; gap:4px; font-size:11px; }
+    .mk-tabs span{ border:1px solid var(--line); border-radius:6px 6px 0 0; padding:1px 8px; color:var(--muted); }
+    .mk-tabs span.on{ border-color:var(--fg); color:var(--fg); font-weight:700; }
+    .mk-menu{ position:relative; margin-left:auto; }
+    .mk-menu ul{ position:absolute; right:0; top:120%; z-index:2; list-style:none; margin:0; padding:4px; min-width:9.5rem; background:var(--card); border:1px solid var(--fg); border-radius:6px; box-shadow:0 2px 6px rgba(0,0,0,.15); font-size:11.5px; color:var(--fg); }
+    .mk-menu li{ padding:2px 6px; border-radius:4px; white-space:nowrap; }
+    .mk-menu li.on{ background:var(--accent-soft); font-weight:600; }
+    .mk-menu li.dis{ color:var(--muted); }
+    .mk-tbl{ border-collapse:collapse; width:100%; font-size:11.5px; }
+    .mk-tbl th,.mk-tbl td{ border:1px solid var(--line); padding:2px 5px; text-align:left; vertical-align:top; }
+    .mk-tbl th{ font-weight:600; color:var(--muted); background:var(--bg); }
+    .mk-tbl th.ref{ color:var(--fg); background:var(--accent-soft); }
+    .mk-tbl td.ref{ background:var(--accent-soft); }
+    .mk-why{ font-size:11px; color:var(--muted); border-top:1px dashed var(--line); padding-top:6px; margin-top:2px; }
+    .mk-why b{ color:var(--fg); }
+  </style>
+
+  <section class="option" data-label="대안 A — 목표 곁 토글 + 패널 목록(권장안)">
+    <header>
+      <label><input type="radio" name="base" value="대안 A — 목표 곁 토글 + 패널 목록(권장안)" /><span class="name">대안 A — 목표 곁 토글 + 패널 목록(권장안)</span></label>
+    </header>
+    <div class="mockup">
+      <div class="mk">
+        <p class="mk-cap">내 포켓몬 패널</p>
+        <div class="mk-panel">
+          <p class="mk-h">내 포켓몬 <span class="mk-muted">· 메가라이츄Y</span></p>
+          <div class="mk-ghost">종 · 특성 · 도구 · 기술 칩 (변경 없음)</div>
+          <div class="mk-ghost">랭크 수단 메모 (means-notes)</div>
+          <p class="mk-h">컷 고정</p>
+          <ul class="mk-locks">
+            <li class="mk-lock"><a title="스피드 탭으로 이동 · 상대: 최속 120족(S32↑)">스피드 · <span class="mk-mon"><span class="mk-img"></span>S32↑</span> 추월</a><button class="mk-x">해제</button></li>
+            <li class="mk-lock"><a title="방어 탭으로 이동 · 상대: 가브리아스 지진">방어 · <span class="mk-mon"><span class="mk-img"></span>A32↑<span class="mk-item"></span></span> 지진 확정견딤</a><span class="mk-chip warn" title="도구를 바꿔 H·B 각 32로도 확정견딤에 닿지 않습니다">도달 불가</span><button class="mk-x">해제</button></li>
+          </ul>
+          <div class="mk-radio"><span class="mk-muted">표 기준</span><label><input type="radio" name="a-ref" checked />S12+</label><label><input type="radio" name="a-ref" />S20</label></div>
+          <p class="mk-small" style="margin:2px 0 0">SP 합계 <b>48</b> / 66 · 잔여 <b>18</b></p>
+          <div class="mk-sp">
+            <div class="mk-sprow"><span class="mk-st">H</span><span class="mk-sl"><i style="width:12%"></i></span><span class="mk-num">4</span><span class="mk-nat"></span><span class="mk-val">142</span></div>
+            <div class="mk-sprow"><span class="mk-st">A<b>↓</b></span><span class="mk-sl"><i style="width:0"></i></span><span class="mk-num">0</span><span class="mk-nat off" title="상승은 갈래별 · 하락 자동">▲▼</span><span class="mk-val">94</span></div>
+            <div class="mk-sprow"><span class="mk-st">B</span><span class="mk-sl"><i style="width:12%"></i></span><span class="mk-num">4</span><span class="mk-nat off" title="상승은 갈래별 · 하락 자동">▲▼</span><span class="mk-val">82</span></div>
+            <div class="mk-sprow"><span class="mk-st">C</span><span class="mk-sl"><i style="width:87%"></i></span><span class="mk-num">28</span><span class="mk-nat off" title="상승은 갈래별 · 하락 자동">▲▼</span><span class="mk-val">207</span></div>
+            <div class="mk-sprow"><span class="mk-st">D</span><span class="mk-sl"><i style="width:0"></i></span><span class="mk-num">0</span><span class="mk-nat off" title="상승은 갈래별 · 하락 자동">▲▼</span><span class="mk-val">105</span></div>
+            <div class="mk-sprow"><span class="mk-st">S</span><span class="mk-locked">S12+ / S20 고정</span><span class="mk-nat off" title="상승은 갈래별 · 하락 자동">▲▼</span><span class="mk-val">—</span></div>
+          </div>
+        </div>
+
+        <p class="mk-cap">방어 탭 · 판정 행 상세 (펼침)</p>
+        <div class="mk-row">
+          <div class="mk-head"><span class="mk-mon" title="마기라스 · 스톤에지"><span class="mk-img"></span>A32↑<span class="mk-item"></span></span><b>스톤에지</b></div>
+          <div><span class="mk-tier t-r">확정1타</span> 현재 H4 B4 (합계 8) · 목표 확정견딤</div>
+          <ul class="mk-lines">
+            <li>S12+일 때: 확정견딤 최소 H4 B12 <span class="mk-small">(상승은 S에)</span> · 예산 26 <span class="mk-ref">표 기준</span></li>
+            <li>S20일 때: 확정견딤 최소 H4 B16 <span class="mk-chip warn">SP 부족(2)</span> / H2 B8+ · 예산 18</li>
+          </ul>
+          <div class="mk-band" data-spec="r:10,y:6,g:11,g:38:m" data-cur="8" data-unit="합계"></div>
+          <div class="mk-legend">
+            <span><span class="mk-sw t-r"></span>0–9</span>
+            <span><span class="mk-sw t-y"></span>10–15 → H2 B8</span>
+            <span><span class="mk-sw t-g"></span>16+ → H4 B12 <button class="mk-btn">고정</button></span>
+            <span title="S 고정을 깨는 합계"><span class="mk-sw" style="background:#d1ebd6;background-image:radial-gradient(rgba(0,0,0,.55) .9px,transparent 1.2px);background-size:4px 4px"></span>27+ 고정 미달</span>
+          </div>
+        </div>
+
+        <p class="mk-cap">스피드 탭 · 배지 상세 (펼침)</p>
+        <div class="mk-speed">
+          <div class="mk-shead"><span class="mk-mon" title="최속 120족"><span class="mk-img"></span></span><b>S32↑</b> · 실수치 189</div>
+          <div class="mk-goal"><div>최소 S20 / S12+<small>성격 무보정 / 상승</small></div><button class="mk-btn on" aria-pressed="true">고정됨</button></div>
+        </div>
+
+        <p class="mk-why"><b>위계:</b> 고정 조작은 목표 문구 바로 옆(그 컷이 보이는 자리), 갈래 줄은 현재 판정 아래 들여쓴 목록으로 띠보다 위. 고정 목록·표 기준은 패널 안 SP 블록 바로 위라 "무엇이 SP를 묶는가"가 SP 행과 붙어 읽힌다.</p>
+      </div>
+    </div>
+    <div class="notes">
+      <label>대안 A 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="예: 갈래 줄 순서, 고정 버튼 문구(고정/고정됨)…"></textarea>
+    </div>
+  </section>
+
+  <section class="option" data-label="대안 B — 결과 위 고정 바 + 갈래 전환">
+    <header>
+      <label><input type="radio" name="base" value="대안 B — 결과 위 고정 바 + 갈래 전환" /><span class="name">대안 B — 결과 위 고정 바 + 갈래 전환</span></label>
+    </header>
+    <div class="mockup">
+      <div class="mk">
+        <p class="mk-cap">내 포켓몬 패널 (고정 목록 없음)</p>
+        <div class="mk-panel">
+          <p class="mk-h">내 포켓몬 <span class="mk-muted">· 메가라이츄Y</span></p>
+          <div class="mk-ghost">종 · 특성 · 도구 · 기술 칩 · 랭크 수단 메모 (변경 없음)</div>
+          <p class="mk-small" style="margin:2px 0 0">SP 합계 <b>48</b> / 66 · 잔여 <b>18</b></p>
+          <div class="mk-sp">
+            <div class="mk-sprow"><span class="mk-st">H</span><span class="mk-sl"><i style="width:12%"></i></span><span class="mk-num">4</span><span class="mk-nat"></span><span class="mk-val">142</span></div>
+            <div class="mk-sprow"><span class="mk-st">A<b>↓</b></span><span class="mk-sl"><i style="width:0"></i></span><span class="mk-num">0</span><span class="mk-nat off">▲▼</span><span class="mk-val">94</span></div>
+            <div class="mk-sprow"><span class="mk-st">B</span><span class="mk-sl"><i style="width:12%"></i></span><span class="mk-num">4</span><span class="mk-nat off">▲▼</span><span class="mk-val">82</span></div>
+            <div class="mk-sprow"><span class="mk-st">C</span><span class="mk-sl"><i style="width:87%"></i></span><span class="mk-num">28</span><span class="mk-nat off">▲▼</span><span class="mk-val">207</span></div>
+            <div class="mk-sprow"><span class="mk-st">D</span><span class="mk-sl"><i style="width:0"></i></span><span class="mk-num">0</span><span class="mk-nat off">▲▼</span><span class="mk-val">105</span></div>
+            <div class="mk-sprow"><span class="mk-st">S</span><span class="mk-locked">S12+ / S20 고정</span><span class="mk-nat off" title="상승은 갈래별 · 하락 자동">▲▼</span><span class="mk-val">—</span></div>
+          </div>
+        </div>
+
+        <p class="mk-cap">결과 영역 상단 (sticky 고정 바)</p>
+        <div class="mk-res">
+          <div class="mk-strip">
+            <b>컷 고정</b>
+            <span class="mk-pill" title="스피드 탭으로 이동"><span class="mk-img" style="width:14px;height:14px"></span>S32↑ 추월 <button class="mk-x">해제</button></span>
+            <span class="mk-pill" title="방어 탭으로 이동 · 가브리아스 지진"><span class="mk-img" style="width:14px;height:14px"></span>지진 확정견딤 <span class="mk-chip warn">도달 불가</span> <button class="mk-x">해제</button></span>
+            <span style="margin-left:auto" class="mk-muted">표 기준</span>
+            <span class="mk-seg"><span class="on">S12+</span><span>S20</span></span>
+          </div>
+          <div class="mk-tabs"><span>공격</span><span class="on">방어</span><span>스피드</span></div>
+
+          <div class="mk-row">
+            <div class="mk-head"><span class="mk-mon" title="마기라스 · 스톤에지"><span class="mk-img"></span>A32↑<span class="mk-item"></span></span><b>스톤에지</b></div>
+            <div><span class="mk-tier t-r">확정1타</span> 현재 H4 B4 (합계 8) · 목표 확정견딤 <button class="mk-btn">고정</button></div>
+            <div class="mk-goal" style="gap:6px">
+              <span class="mk-seg"><span class="on">S12+</span><span>S20</span></span>
+              <span>확정견딤 최소 H4 B12 <span class="mk-small">(상승은 S에)</span> · 예산 26</span>
+            </div>
+            <p class="mk-small" style="margin:0">S20으로 바꾸면: H4 B16 <span class="mk-chip warn">SP 부족(2)</span> / H2 B8+ · 예산 18 (한 번에 한 줄만 보임)</p>
+            <div class="mk-band" data-spec="r:10,y:6,g:11,g:38:m" data-cur="8" data-unit="합계"></div>
+            <div class="mk-legend">
+              <span><span class="mk-sw t-r"></span>0–9</span>
+              <span><span class="mk-sw t-y"></span>10–15 → H2 B8</span>
+              <span><span class="mk-sw t-g"></span>16+ → H4 B12</span>
+              <span><span class="mk-sw" style="background:#d1ebd6;background-image:radial-gradient(rgba(0,0,0,.55) .9px,transparent 1.2px);background-size:4px 4px"></span>27+ 고정 미달</span>
+            </div>
+          </div>
+
+          <div class="mk-speed">
+            <div class="mk-shead"><span class="mk-mon" title="최속 120족"><span class="mk-img"></span></span><b>S32↑</b> · 실수치 189</div>
+            <div>최소 S20 / S12+<small class="mk-small" style="display:block">성격 무보정 / 상승</small></div>
+            <button class="mk-btn on" style="justify-self:start" aria-pressed="true">이 컷 고정됨 · 해제</button>
+          </div>
+        </div>
+
+        <p class="mk-why"><b>위계:</b> 고정 상태가 결과 영역 맨 위에 항상 보여 탭을 오가도 잊지 않는다. 대신 패널과 결과에 상태가 둘로 나뉘고, 갈래는 한 줄씩만 보여 두 안을 한눈에 비교할 수 없다. (고정 목록·표 기준을 패널에 둔다는 기존 결정과 다르다.)</p>
+      </div>
+    </div>
+    <div class="notes">
+      <label>대안 B 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="이 안에 대한 수정 요구사항…"></textarea>
+    </div>
+  </section>
+
+  <section class="option" data-label="대안 C — 갈래 열 비교표 + 행 메뉴">
+    <header>
+      <label><input type="radio" name="base" value="대안 C — 갈래 열 비교표 + 행 메뉴" /><span class="name">대안 C — 갈래 열 비교표 + 행 메뉴</span></label>
+    </header>
+    <div class="mockup">
+      <div class="mk">
+        <p class="mk-cap">내 포켓몬 패널 (고정 목록 = 갈래 열 표)</p>
+        <div class="mk-panel">
+          <p class="mk-h">내 포켓몬 <span class="mk-muted">· 메가라이츄Y</span></p>
+          <div class="mk-ghost">종 · 특성 · 도구 · 기술 칩 · 랭크 수단 메모 (변경 없음)</div>
+          <p class="mk-h">컷 고정</p>
+          <table class="mk-tbl">
+            <thead><tr><th>컷</th><th class="ref"><label><input type="radio" name="c-ref" checked style="margin:0 3px 0 0;vertical-align:-2px" />S12+</label></th><th><label><input type="radio" name="c-ref" style="margin:0 3px 0 0;vertical-align:-2px" />S20</label></th><th></th></tr></thead>
+            <tbody>
+              <tr><td><a title="스피드 탭으로 이동 · 최속 120족" style="color:var(--fg);text-decoration:underline dotted"><span class="mk-mon"><span class="mk-img" style="width:14px;height:14px"></span>S32↑</span> 추월</a></td><td class="ref">S12+</td><td>S20</td><td><button class="mk-x">해제</button></td></tr>
+              <tr><td><a title="방어 탭으로 이동 · 가브리아스 지진" style="color:var(--fg);text-decoration:underline dotted"><span class="mk-mon"><span class="mk-img" style="width:14px;height:14px"></span>A32↑<span class="mk-item"></span></span> 지진 확정견딤</a></td><td colspan="2" style="text-align:center"><span class="mk-chip warn">도달 불가</span></td><td><button class="mk-x">해제</button></td></tr>
+            </tbody>
+          </table>
+          <p class="mk-small" style="margin:0">열 머리 라디오 = 표 기준 (갈래 2개 이상일 때만)</p>
+          <p class="mk-small" style="margin:2px 0 0">SP 합계 <b>48</b> / 66 · 잔여 <b>18</b></p>
+          <div class="mk-sp">
+            <div class="mk-sprow"><span class="mk-st">H</span><span class="mk-sl"><i style="width:12%"></i></span><span class="mk-num">4</span><span class="mk-nat"></span><span class="mk-val">142</span></div>
+            <div class="mk-sprow"><span class="mk-st">B</span><span class="mk-sl"><i style="width:12%"></i></span><span class="mk-num">4</span><span class="mk-nat off">▲▼</span><span class="mk-val">82</span></div>
+            <div class="mk-sprow"><span class="mk-st">C</span><span class="mk-sl"><i style="width:87%"></i></span><span class="mk-num">28</span><span class="mk-nat off">▲▼</span><span class="mk-val">207</span></div>
+            <div class="mk-sprow"><span class="mk-st">S</span><span class="mk-locked">S12+ / S20 고정</span><span class="mk-nat off" title="상승은 갈래별 · 하락 자동">▲▼</span><span class="mk-val">—</span></div>
+            <p class="mk-small" style="margin:0">(A·D 행 생략)</p>
+          </div>
+        </div>
+
+        <p class="mk-cap">방어 탭 · 판정 행 상세 (펼침, 행 메뉴 열린 상태)</p>
+        <div class="mk-row">
+          <div class="mk-head"><span class="mk-mon" title="마기라스 · 스톤에지"><span class="mk-img"></span>A32↑<span class="mk-item"></span></span><b>스톤에지</b>
+            <span class="mk-menu"><button class="mk-x" aria-expanded="true">⋯</button>
+              <ul><li class="on">이 컷 고정 (확정견딤)</li><li class="dis">고난수견딤 고정</li></ul>
+            </span>
+          </div>
+          <div><span class="mk-tier t-r">확정1타</span> 현재 H4 B4 (합계 8) · 목표 확정견딤</div>
+          <table class="mk-tbl">
+            <thead><tr><th></th><th class="ref">S12+일 때 <span class="mk-ref">표 기준</span></th><th>S20일 때</th></tr></thead>
+            <tbody>
+              <tr><th>무보정</th><td class="ref">H4 B12</td><td>H4 B16 <span class="mk-chip warn">SP 부족(2)</span></td></tr>
+              <tr><th>상승</th><td class="ref mk-muted">상승은 S에</td><td>H2 B8+</td></tr>
+              <tr><th>예산</th><td class="ref">26</td><td>18</td></tr>
+            </tbody>
+          </table>
+          <div class="mk-band" data-spec="r:10,y:6,g:11,g:38:m" data-cur="8" data-unit="합계"></div>
+          <div class="mk-legend">
+            <span><span class="mk-sw t-r"></span>0–9</span>
+            <span><span class="mk-sw t-y"></span>10–15 → H2 B8</span>
+            <span><span class="mk-sw t-g"></span>16+ → H4 B12</span>
+            <span><span class="mk-sw" style="background:#d1ebd6;background-image:radial-gradient(rgba(0,0,0,.55) .9px,transparent 1.2px);background-size:4px 4px"></span>27+ 고정 미달</span>
+          </div>
+        </div>
+
+        <p class="mk-cap">스피드 탭 · 배지 상세 (펼침, 메뉴 열린 상태)</p>
+        <div class="mk-speed">
+          <div class="mk-shead"><span class="mk-mon" title="최속 120족"><span class="mk-img"></span></span><b>S32↑</b> · 실수치 189
+            <span class="mk-menu"><button class="mk-x" aria-expanded="true" style="background:#fff">⋯</button>
+              <ul><li class="on">고정 해제</li><li class="dis">이 배지 지우기</li></ul>
+            </span>
+          </div>
+          <div>최소 S20 / S12+ <span class="mk-ref">고정 중</span><small class="mk-small" style="display:block">성격 무보정 / 상승</small></div>
+        </div>
+
+        <p class="mk-why"><b>위계:</b> 갈래를 열로 나란히 놓아 "S12+ vs S20 어느 쪽이 방어에 유리한가"를 표 한 장으로 비교한다. 고정 조작은 행 메뉴로 숨겨 기본 화면은 조용하지만, 발견성이 낮고 행마다 표가 들어가 세로 길이가 커진다.</p>
+      </div>
+      <script>
+        document.querySelectorAll('.mk-band[data-spec]').forEach(function(b){
+          var n=0, cur=+b.getAttribute('data-cur'), unit=b.getAttribute('data-unit')||'SP';
+          b.getAttribute('data-spec').split(',').forEach(function(p){
+            var a=p.split(':');
+            for(var i=0;i<+a[1];i++){
+              var c=document.createElement('i');
+              c.className='t-'+a[0]+(a[2]?' miss':'')+(n===cur?' cur':'');
+              c.title=unit+' '+n+(a[2]?' · 고정 미달':'');
+              b.appendChild(c); n++;
+            }
+          });
+          b.style.setProperty('--n', n);
+        });
+      </script>
+    </div>
+    <div class="notes">
+      <label>대안 C 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="이 안에 대한 수정 요구사항…"></textarea>
+    </div>
+  </section>
+</div>
+<!-- ▲▲▲ 에이전트가 채우는 영역 끝 ▲▲▲ -->
+
+<div class="panel">
+  <label for="overall">전체 수정 요구사항 (선택한 베이스를 어떻게 발전시킬지 · 공통 사항)</label>
+  <textarea id="overall" placeholder="예: 모바일 320px에서 컨트롤이 겹치지 않게, 결과 위계를 점수 > 순위 > 상세 순으로…"></textarea>
+  <div class="row">
+    <button id="gen">요약 생성</button>
+    <button id="copy" class="secondary" disabled>복사</button>
+    <span class="hint">요약을 복사해 에이전트 대화창에 붙여넣으세요.</span>
+  </div>
+  <textarea id="summary" readonly placeholder="여기에 붙여넣을 요약이 생성됩니다."></textarea>
+</div>
+
+<script>
+  (function(){
+    var grid = document.getElementById('grid');
+    grid.addEventListener('change', function(e){
+      if (e.target && e.target.name === 'base') {
+        document.querySelectorAll('.option').forEach(function(o){ o.classList.remove('selected'); });
+        var card = e.target.closest('.option');
+        if (card) card.classList.add('selected');
+      }
+    });
+
+    function build(){
+      var checked = document.querySelector('input[name="base"]:checked');
+      var base = checked ? checked.value : '(아직 선택 안 함)';
+      var overall = document.getElementById('overall').value.trim() || '(없음)';
+      var lines = [];
+      lines.push('=== 디자인 선택 요약 (에이전트에게 붙여넣기) ===');
+      lines.push('베이스로 선택: ' + base);
+      lines.push('전체 수정 요구사항:');
+      lines.push(overall);
+      lines.push('');
+      lines.push('대안별 메모:');
+      document.querySelectorAll('.option').forEach(function(o){
+        var label = o.getAttribute('data-label') || '(무명)';
+        var ta = o.querySelector('textarea[data-notes]');
+        var note = (ta && ta.value.trim()) ? ta.value.trim() : '(없음)';
+        lines.push('- ' + label + ': ' + note);
+      });
+      return lines.join('\n');
+    }
+
+    document.getElementById('gen').addEventListener('click', function(){
+      var out = document.getElementById('summary');
+      out.value = build();
+      document.getElementById('copy').disabled = false;
+    });
+
+    document.getElementById('copy').addEventListener('click', function(){
+      var out = document.getElementById('summary');
+      out.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(out.value).then(function(){}, function(){});
+      }
+      this.textContent = ok ? '복사됨 ✓' : '직접 선택해 복사(Ctrl/Cmd+C)';
+      var b = this; setTimeout(function(){ b.textContent = '복사'; }, 1800);
+    });
+  })();
+</script>
+</body>
+</html>

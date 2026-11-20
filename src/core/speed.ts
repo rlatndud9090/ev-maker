@@ -110,9 +110,10 @@ export function finalSpeed(
   set: PokemonSet,
   conditions?: BattleConditions,
   side: 'attacker' | 'defender' = 'attacker',
+  options?: EvalOptions,
 ): number {
   if (side !== 'attacker' && side !== 'defender') throw new CoreInputError('side', `attacker|defender여야 한다(받은 값: ${String(side)})`)
-  const r = validateSet(snapshot, set)
+  const r = validateSet(snapshot, set, options)
   return speedOf(r, withEffectiveWeather(normalizeConditions(conditions), r), side)
 }
 
@@ -166,15 +167,17 @@ export function checkSpeedSupport(snapshot: Snapshot, set: PokemonSet, options?:
 /**
  * set(attacker 쪽 조건 적용)이 목표를 엄격히 앞지르는 최소 스피드 SP. 성격·도구·조건은 고정한다.
  * 목표가 세트면 defender 쪽 조건으로 그 최종 스피드를 구한다. 유효 날씨는 양측(수치 목표면 set만) 특성으로 정한다.
+ * options는 두 세트 검증에 쓴다. over-budget의 remaining은 합계 검사를 꺼도 66 기준 그대로라 음수일 수 있다.
  */
 export function minSpToOutspeed(
   snapshot: Snapshot,
   set: PokemonSet,
   target: number | PokemonSet,
   conditions?: BattleConditions,
+  options?: EvalOptions,
 ): OutspeedResult {
   const raw = normalizeConditions(conditions)
-  const r = validateSet(snapshot, set)
+  const r = validateSet(snapshot, set, options)
   let c: NormalizedConditions
   let targetSpeed: number
   if (typeof target === 'number') {
@@ -184,7 +187,7 @@ export function minSpToOutspeed(
   } else if (!isPlainObject(target)) {
     throw new CoreInputError('target', `스피드 수치 또는 세트여야 한다(받은 값: ${String(target)})`)
   } else {
-    const rt = validateSet(snapshot, target)
+    const rt = validateSet(snapshot, target, options)
     c = withEffectiveWeather(raw, r, rt)
     targetSpeed = speedOf(rt, c, 'defender')
   }

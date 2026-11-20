@@ -5,13 +5,18 @@ import { cards, combo, mySet, openProduct, selectTab, tabPanel, waitComplete } f
 // 방어 탭 상대 랭크업은 첫 턴 전용 기술(만나자마자)과 묶지 않으며 동시채용 하한 미달 조합(명상 × 파멸의빛)은 만들지 않는다.
 
 const groupRow = (page: Page, id: string) => cards(page).and(page.locator(`[data-group-key='${JSON.stringify(['ladder', id])}']`))
-const detailRows = (row: Locator) => row.getByTestId('row')
 
-async function expand(row: Locator) {
+/** 그 줄 기술 선택 목록 항목 키([기술, 조건]). 랭크 행은 목록 항목으로 통합돼 있다(PRD R7) */
+async function itemKeys(page: Page, row: Locator): Promise<[string, string][]> {
   await expect(row).toHaveCount(1)
-  const toggle = row.locator('.card-toggle')
-  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click()
-  await expect(detailRows(row).first()).toBeVisible()
+  await row.getByTestId('move-pick').click()
+  const keys = await row
+    .getByTestId('move-menu')
+    .locator('[role="menuitemradio"]')
+    .evaluateAll((els) => els.map((e) => JSON.parse((e as HTMLElement).dataset.itemKey ?? '[]') as [string, string]))
+  await page.keyboard.press('Escape')
+  await expect(row.getByTestId('move-menu')).toHaveCount(0)
+  return keys
 }
 
 test.describe('랭크 행: 능동 랭크업만', () => {
@@ -27,10 +32,11 @@ test.describe('랭크 행: 능동 랭크업만', () => {
 
     // 내 세트에 능동 랭크업이 없으니 공격 탭 어디에도 랭크 라벨이 없다.
     await expect(tabPanel(page).getByTestId('move-rank')).toHaveCount(0)
+    // 어흥염 줄의 기술 선택 항목에 랭크 조건 항목이 없다(카드 줄에서 고르는 판정 행 = 목록 항목)
     const incineroar = groupRow(page, 'incineroar')
-    await expand(incineroar)
-    expect(await detailRows(incineroar).count()).toBeGreaterThan(0)
-    await expect(incineroar.locator('[data-testid="row"][data-row-kind="rank"]')).toHaveCount(0)
+    const keys = await itemKeys(page, incineroar)
+    expect(keys.length).toBeGreaterThan(0)
+    expect(keys.filter(([, c]) => (JSON.parse(c) as string[])[0] === 'rank')).toEqual([])
     await expect(incineroar.getByTestId('move-label').filter({ hasText: '+1 안다리걸기' })).toHaveCount(0)
   })
 
@@ -40,21 +46,15 @@ test.describe('랭크 행: 능동 랭크업만', () => {
     await waitComplete(page)
 
     // 기술 선택 목록 항목(키 = [기술, 조건])으로 본다(랭크 행은 목록 항목으로 통합, PRD R7).
-    const itemKeys = async (row: ReturnType<typeof groupRow>) => {
-      await row.getByTestId('move-pick').click()
-      const keys = await row.getByTestId('move-menu').locator('[role="menuitemradio"]').evaluateAll((els) => els.map((e) => JSON.parse((e as HTMLElement).dataset.itemKey ?? '[]') as [string, string]))
-      await page.keyboard.press('Escape')
-      return keys
-    }
     const sd = JSON.stringify(['rank', 'opponent', 'move', 'swordsdance'])
-    const golisopod = await itemKeys(groupRow(page, 'golisopodmega'))
+    const golisopod = await itemKeys(page, groupRow(page, 'golisopodmega'))
     const sdMoves = golisopod.filter(([, c]) => c === sd).map(([m]) => m)
     expect(sdMoves.length).toBeGreaterThan(0)
     for (const move of sdMoves) expect(['leechlife', 'ironhead']).toContain(move)
     expect(sdMoves).not.toContain('firstimpression')
 
     const cm = JSON.stringify(['rank', 'opponent', 'move', 'calmmind'])
-    const floette = await itemKeys(groupRow(page, 'floettemega'))
+    const floette = await itemKeys(page, groupRow(page, 'floettemega'))
     expect(floette.some(([m, c]) => m === 'lightofruin' && c === JSON.stringify(['base']))).toBe(true)
     expect(floette.some(([, c]) => c === cm)).toBe(true)
     expect(floette.some(([m, c]) => m === 'lightofruin' && c === cm)).toBe(false)

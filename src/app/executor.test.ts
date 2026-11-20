@@ -13,6 +13,8 @@ vi.mock('../cards', async (importOriginal) => {
   return { ...mod, computeRowTask: vi.fn(mod.computeRowTask) }
 })
 
+/** 실행기는 고정이 없어도 고정 조작과 조정 모델을 낸다(AssembleOptions.lockControls·adjust) */
+const CONTROLS = { lockControls: true, adjust: true } as const
 const { game } = realData()
 const reg = game.manifest.regulation.id
 const garchomp: PokemonSet = {
@@ -82,7 +84,7 @@ function viewOf(s: TabViewState): TabView {
  */
 function expectSameAsBatch(s: TabViewState, input: CardInput, tab: DamageTab): void {
   const got = viewOf(s)
-  const want = buildTabView(input, tab)
+  const want = buildTabView(input, tab, undefined, undefined, CONTROLS)
   expect({ ...got, progress: null }).toEqual({ ...want, progress: null })
   expect(got.progress.done).toBe(got.progress.total)
   expect(got.progress.done).toBeLessThanOrEqual(want.progress.done)
@@ -132,7 +134,7 @@ describe('createExecutor: 스피드 탭은 계산하지 않는다', () => {
     await runToEnd(m, () => expect(executor!.getSnapshot().tabs.speed).toEqual({ kind: 'idle' }))
     const snap = executor.getSnapshot()
     expect(snap.activeTab).toBe('speed')
-    for (const tab of DAMAGE_TABS) expect(viewOf(snap.tabs[tab])).toEqual(buildTabView(inputA, tab))
+    for (const tab of DAMAGE_TABS) expect(viewOf(snap.tabs[tab])).toEqual(buildTabView(inputA, tab, undefined, undefined, CONTROLS))
     expect(new Set(vi.mocked(computeRowTask).mock.calls.map(([p]) => p.tab as string))).toEqual(new Set(DAMAGE_TABS))
   })
 
@@ -173,7 +175,7 @@ describe('createExecutor', () => {
     for (const tab of DAMAGE_TABS) {
       const s = snap.tabs[tab]
       expect(s).toMatchObject({ kind: 'view', generation: 1, superseded: false })
-      expect(viewOf(s)).toEqual(buildTabView(inputA, tab))
+      expect(viewOf(s)).toEqual(buildTabView(inputA, tab, undefined, undefined, CONTROLS))
     }
     expect(Object.keys(snap.tabs).sort()).toEqual([...TABS].sort())
     expect(snap.tabs.speed).toEqual({ kind: 'idle' })
@@ -241,7 +243,7 @@ describe('createExecutor', () => {
     const lastPrimaryEarly = attack.findLastIndex((c) => c.primary && c.early)
     expect(firstSecondary).toBeGreaterThan(0)
     expect(lastPrimaryEarly).toBeLessThan(firstSecondary)
-    expect(viewOf(executor.getSnapshot().tabs.attack)).toEqual(buildTabView(inputA, 'attack'))
+    expect(viewOf(executor.getSnapshot().tabs.attack)).toEqual(buildTabView(inputA, 'attack', undefined, undefined, CONTROLS))
   })
 
   it('활성 탭을 바꾸면 그 탭의 1·2단계가 먼저 끝난다', async () => {
@@ -365,12 +367,12 @@ describe('createExecutor', () => {
     expect(cache.gets).toBe(gets)
     expect(m.waiting()).toBe(0)
     const { plan, results } = runAll(inputA, 'attack')
-    expect(viewOf(after.tabs.attack)).toEqual(assembleTab(plan, results, sp))
+    expect(viewOf(after.tabs.attack)).toEqual(assembleTab(plan, results, sp, new Map(), CONTROLS))
     expect(after.tabs.defense).toBe(before.tabs.defense)
     expect(after.tabs.speed).toBe(before.tabs.speed)
 
     executor.setDisplaySp(null)
-    expect(viewOf(executor.getSnapshot().tabs.attack)).toEqual(buildTabView(inputA, 'attack'))
+    expect(viewOf(executor.getSnapshot().tabs.attack)).toEqual(buildTabView(inputA, 'attack', undefined, undefined, CONTROLS))
     expect(cache.gets).toBe(gets)
   })
 
@@ -387,7 +389,7 @@ describe('createExecutor', () => {
     expect(held).toMatchObject({ kind: 'view', generation: 1, superseded: true })
     expect(viewOf(held)).toBe(dragged)
     await runToEnd(m)
-    expect(viewOf(executor.getSnapshot().tabs.attack)).toEqual(buildTabView(inputB, 'attack'))
+    expect(viewOf(executor.getSnapshot().tabs.attack)).toEqual(buildTabView(inputB, 'attack', undefined, undefined, CONTROLS))
   })
 
   it('getSnapshot은 바뀔 때만 새 객체이고, 바뀔 때만 알린다', async () => {
@@ -438,7 +440,7 @@ describe('createExecutor', () => {
     await runToEnd(m)
     const snap = executor.getSnapshot()
     expect(snap.tabs.attack).toEqual({ kind: 'fatal', message: 'boom', generation: 1 })
-    expect(viewOf(snap.tabs.defense)).toEqual(buildTabView(inputA, 'defense'))
+    expect(viewOf(snap.tabs.defense)).toEqual(buildTabView(inputA, 'defense', undefined, undefined, CONTROLS))
     expect(snap.tabs.speed).toEqual({ kind: 'idle' })
     expect(error).toHaveBeenCalledTimes(1)
   })
@@ -518,6 +520,6 @@ describe('createExecutor', () => {
     executor.setInput(inputA, 1)
     executor.setMenuCards('defense', [])
     await runToEnd(m)
-    expect(viewOf(executor.getSnapshot().tabs.defense)).toEqual(buildTabView(inputA, 'defense'))
+    expect(viewOf(executor.getSnapshot().tabs.defense)).toEqual(buildTabView(inputA, 'defense', undefined, undefined, CONTROLS))
   })
 })

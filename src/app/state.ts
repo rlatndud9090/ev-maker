@@ -14,10 +14,12 @@ import {
   itemKey,
   opponentKey,
   samePin,
+  sameLockTarget,
   type AddedBundle,
   type AddedMove,
   type CardFilters,
   type CustomTarget,
+  type CutLock,
   type DisplayCriteria,
   type PinnedBundle,
   type PresetEdit,
@@ -27,8 +29,9 @@ import {
   type SpeedConditionKind,
   type Tab,
 } from '../cards'
-import type { SetDraft } from '../ui/setDraft'
+import { parseNumber, type SetDraft } from '../ui/setDraft'
 import { EXAMPLE_DRAFT } from './example'
+import { clampSp, fitUnlocked, type LockedSp, type SpRules } from './spLimit'
 
 export interface AppState {
   regulation: string
@@ -75,6 +78,40 @@ export interface AppState {
   draftCache: Readonly<Record<string, SetDraft>>
   /** 마지막으로 종을 바꾼 세대(0 = 바꾼 적 없음). 결과 목록은 이 세대 뷰가 보이면 그 전에 펼친 카드를 접는다 */
   speciesGeneration: number
+  /**
+   * 컷 고정(생성 순, 메모리에만 둔다). 계산 입력이다. 고정 SP·상태·갈래는 저장하지 않고 매 세대 파생한다.
+   * 고정 중 draft의 고정 능력치 SP는 첫 고정 직전 값을 지킨다(해제 복원값). 성격은 고정 중에도 고칠 수 있고(고정 밖 ▲▼),
+   * 첫 고정 직전 성격은 lockNature에 두었다가 고정이 모두 풀릴 때 돌려놓는다
+   */
+  locks: readonly CutLock[]
+  /** 다음 고정 seq. 고정이 0개가 되면 1로 돌아간다 */
+  lockSeq: number
+  /** 사용자가 고른 기준 갈래 id(내 세트 성격 ▲로 고른다, null = 자동 규칙). 계산 입력이다. 고정이 0개면 null */
+  lockBase: string | null
+  /** 첫 고정 직전 성격·자동 하락 표지(전부 해제 복원값). 고정이 0개면 null */
+  lockNature: Pick<SetDraft, 'nature' | 'natureMinusAuto'> | null
+  /** 첫 고정 때 받은 레귤레이션 SP 합계 상한(해제 복원 자르기 기준). 고정이 0개면 null */
+  lockSpTotal: number | null
+  /** 고정 목록 이동 요청(일회성, nonce = 같은 고정을 다시 눌러도 새 요청). 탭을 떠나면 null. 세대 그대로 */
+  lockReveal: { seq: number; nonce: number } | null
+  /** 마지막으로 낸 이동 요청 nonce. 요청을 비워도(clear-reveal·탭 이동·해제) 되돌리지 않는다(화면이 처리한 nonce와 겹치지 않게) */
+  lockRevealNonce: number
+  /**
+   * 마지막 해제 복원 또는 고정 초과 자동 조정에서 SP를 자른 능력치(자른 순). 세대 그대로.
+   * 마지막 고정 조작(핀·해제·기준 갈래 변경·종 변경 해제)의 알림만 남는다: 그 조작이 자르지 않았으면 비운다
+   */
+  lockTrim: readonly LockTrim[] | null
+  /**
+   * 고정 초과 자동 조정 대기 표지(핀 고정·기준 갈래 변경 직후의 세대, null = 대기 없음). 그 뒤 처음 나온 파생으로 fit-locks를 한 번만
+   * 적용하고 비운다. 재계산으로 생긴 초과는 표지가 없어 줄이지 않는다
+   */
+  lockFit: number | null
+}
+
+export interface LockTrim {
+  stat: StatId
+  from: number
+  to: number
 }
 
 /** 직접 고른 기술 항목. key = cards itemKey(기술, 랭크 조건) */
@@ -99,9 +136,14 @@ export type AppAction =
   /**
    * 내 포켓몬 종 교체(풀린 종 id가 from → to로 바뀜). 지금 초안을 from 종 기억에 넣고, to 종 기억이 있으면 그 초안(종 칸 글자만
    * draft.species)을, 없으면 draft(호출자가 만든 대표 세트 또는 종만 바꾼 초안)를 쓴다. from === to면 set-draft와 같다.
+   * sameBase = from·to가 같은 원종의 원종·메가 폼 사이 전환(호출자가 게임 메가 표로 판정)이면 컷 고정을 지우지 않는다.
    */
-  | { type: 'switch-species'; from: string | undefined; to: string; draft: SetDraft }
-  | { type: 'commit-sp'; stat: StatId; value: number }
+  | { type: 'switch-species'; from: string | undefined; to: string; draft: SetDraft; sameBase?: boolean }
+  /**
+   * SP 확정. value는 spLimit 범위(0..min(능력치당 상한, 합계 상한 − 다른 능력치))로 자른다. lockedSp = 기준 갈래 고정 SP(고정이 없거나
+   * 기준 갈래가 없으면 null). 고정 능력치면 무시
+   */
+  | { type: 'commit-sp'; stat: StatId; value: number; rules: SpRules; lockedSp: LockedSp | null }
   | { type: 'set-meta'; meta: { match: MatchType; month: string } }
   | { type: 'set-tab'; tab: Tab }
   | { type: 'set-sort'; mode: SortMode }
@@ -155,6 +197,43 @@ export type AppAction =
   | { type: 'add-move'; opponentId: string; moveId: string }
   /** 추가한 기술 삭제. 그 기술이 직접 선택돼 있으면(랭크 후 항목 포함) 선택도 해제. 없으면 무시 */
   | { type: 'remove-move'; opponentId: string; moveId: string }
+  /**
+   * 컷 고정 추가(seq 부여). 형식(종류·단계·능력치 모양·대상 종류)이 맞지 않거나 같은 (대상, 단계)가 있으면 무시.
+   * spTotal = 레귤레이션 SP 합계 상한(첫 고정 때만 기억). 고정 가능·상태 판정은 호출자(cards checkLockCandidate) 몫이다
+   */
+  | { type: 'add-lock'; lock: Omit<CutLock, 'seq'>; spTotal: number }
+  /**
+   * 고정 해제. 없으면 무시. 마지막 고정이 풀린 능력치는 초안 값으로 돌아가고, 초안 SP 합이 lockSpTotal을 넘으면 그 능력치를
+   * 나중에 만든 고정의 능력치부터 max(0, lockSpTotal − 나머지)로 자르고 lockTrim에 남긴다. 고정이 0개면 고정 상태를 모두 비운다.
+   * lockedSp = 지금 기준 갈래의 고정 능력치 SP(cards Branch.lockedSp). 남은 고정 능력치는 "나머지"에 초안 값 대신 이 값으로 센다(없으면 초안 값)
+   */
+  | { type: 'remove-lock'; seq: number; lockedSp?: Readonly<Partial<Record<StatId, number>>> }
+  /** 고정이 없으면 무시 */
+  | { type: 'set-lock-base'; id: string | null }
+  /** 그 고정의 탭으로 바꾸고 이동 요청을 낸다. 스피드 고정의 조건 필터가 꺼져 있으면 켠다. 상위 N·선택은 그대로. 세대 그대로 */
+  | { type: 'reveal-lock'; seq: number }
+  | { type: 'clear-reveal' }
+  | { type: 'dismiss-lock-trim' }
+  /**
+   * 고정 초과 자동 조정. token이 lockFit과 같을 때만 고정 밖 능력치를 H→A→B→C→D→S 순으로 줄여 합계를 lockSpTotal에 맞추고
+   * lockTrim에 남긴다. lockedSp = 그 세대 파생의 기준 갈래 고정 SP(null = 기준 갈래 없음: 줄이지 않는다). 어느 쪽이든 lockFit을 비운다
+   */
+  | { type: 'fit-locks'; token: number; lockedSp: LockedSp | null }
+  /**
+   * 조정 결과 적용. sp = 조정 능력치의 새 SP(0..spMaxPerStat 정수로 자른다, 고정 능력치 키·유한하지 않은 값은 버린다),
+   * nature = 새 성격·자동 하락 표지(없으면 그대로), lockBase = 고를 기준 갈래 id(없거나 고정이 없으면 그대로).
+   * 그 뒤 고정·keep·쓴 능력치 밖을 H→A→B→C→D→S 순서로 줄여 합계를 lockSpTotal(고정이 없으면 rules.spTotal)에 맞추고 lockTrim에 남긴다.
+   * lockedSp = 적용 뒤 기준 갈래의 활성 고정 SP(빠진 고정 능력치는 초안 값으로 센다). 바뀐 게 없으면 상태 그대로, 있으면 세대 +1 한 번·lockFit 비움
+   */
+  | {
+      type: 'apply-adjust'
+      sp: Readonly<Partial<Record<StatId, number>>>
+      nature?: Pick<SetDraft, 'nature' | 'natureMinusAuto'>
+      lockBase?: string
+      lockedSp: LockedSp
+      keep: readonly StatId[]
+      rules: SpRules
+    }
 
 export function initialState(regulation: string): AppState {
   return {
@@ -175,6 +254,15 @@ export function initialState(regulation: string): AppState {
     generation: 0,
     draftCache: {},
     speciesGeneration: 0,
+    locks: [],
+    lockSeq: 1,
+    lockBase: null,
+    lockNature: null,
+    lockSpTotal: null,
+    lockReveal: null,
+    lockRevealNonce: 0,
+    lockTrim: null,
+    lockFit: null,
   }
 }
 
@@ -265,6 +353,92 @@ const moveOfKey = (key: string): string | undefined => {
   }
 }
 
+const ATTACK_LOCK_STAGES: readonly CutLock['stage'][] = ['guaranteed-ohko', 'high-roll-ohko']
+const DEFENSE_LOCK_STAGES: readonly CutLock['stage'][] = ['guaranteed-survive', 'low-roll-ohko']
+const NON_HP_STATS: readonly StatId[] = ['atk', 'def', 'spa', 'spd', 'spe']
+
+function validLock(l: Omit<CutLock, 'seq'>): boolean {
+  if (typeof l !== 'object' || l === null || typeof l.target !== 'object' || l.target === null || l.target.kind !== l.kind) return false
+  if (!Array.isArray(l.stats)) return false
+  const [a, b] = l.stats
+  switch (l.kind) {
+    case 'speed':
+      return l.stage === 'first' && l.stats.length === 1 && a === 'spe'
+    case 'attack':
+      return ATTACK_LOCK_STAGES.includes(l.stage) && l.stats.length === 1 && NON_HP_STATS.includes(a)
+    case 'defense':
+      return DEFENSE_LOCK_STAGES.includes(l.stage) && l.stats.length === 2 && a === 'hp' && (b === 'def' || b === 'spd')
+    default:
+      return false
+  }
+}
+
+const lockedStatsOf = (locks: readonly CutLock[]): Set<StatId> => new Set(locks.flatMap((l) => l.stats))
+
+const spTableOf = (draft: SetDraft): Record<StatId, number> => {
+  const out = {} as Record<StatId, number>
+  for (const s of Object.keys(draft.sp) as StatId[]) out[s] = parseNumber(draft.sp[s])
+  return out
+}
+
+/** 사용자 조작으로 기준 갈래가 바뀌는 상태 변경이면(next !== prev) 자동 조정 대기 표지를 그 세대로 단다 */
+const armFit = (next: AppState, prev: AppState): AppState => (next === prev ? next : { ...next, lockFit: next.generation })
+
+/** 고정 능력치 SP를 지금 초안 값으로 덮어쓴다(고정 중 초안 SP는 고정 전 값 보관소다). 성격은 받는다 */
+function normalizeLocked(state: AppState, draft: SetDraft): SetDraft {
+  const locked = lockedStatsOf(state.locks)
+  if (locked.size === 0) return draft
+  const sp = { ...draft.sp }
+  for (const s of locked) sp[s] = state.draft.sp[s]
+  return { ...draft, sp }
+}
+
+/** 첫 고정 직전 성격·자동 하락 표지를 초안에 돌려놓는다(표지가 없던 초안은 표지 없이) */
+const natureOf = (draft: SetDraft): Pick<SetDraft, 'nature' | 'natureMinusAuto'> =>
+  draft.natureMinusAuto === undefined ? { nature: draft.nature } : { nature: draft.nature, natureMinusAuto: draft.natureMinusAuto }
+
+function restoreNature(draft: SetDraft, saved: AppState['lockNature']): SetDraft {
+  if (saved === null) return draft
+  const next: SetDraft = { ...draft, nature: saved.nature }
+  if (saved.natureMinusAuto === undefined) delete next.natureMinusAuto
+  else next.natureMinusAuto = saved.natureMinusAuto
+  return next
+}
+
+/**
+ * remaining만 남기고 나머지 고정을 푼 초안과 자르기. 풀린 능력치(남은 고정에 없음)는 그 능력치를 쓰던 고정의 seq 역순으로,
+ * 같은 고정 안에서는 stats 뒤쪽부터 자른다. 초안 SP에 숫자가 아닌 칸이 있으면 합을 알 수 없어 자르지 않는다
+ */
+function releaseLocks(
+  state: AppState,
+  remaining: readonly CutLock[],
+  lockedSp: Readonly<Partial<Record<StatId, number>>> = {},
+): { draft: SetDraft; trims: LockTrim[] } {
+  const keep = lockedStatsOf(remaining)
+  const order: StatId[] = []
+  for (const l of state.locks.filter((x) => !remaining.includes(x)).sort((x, y) => y.seq - x.seq)) {
+    for (const s of [...l.stats].reverse()) if (!keep.has(s) && !order.includes(s)) order.push(s)
+  }
+  const cap = state.lockSpTotal
+  const trims: LockTrim[] = []
+  let draft = remaining.length === 0 ? restoreNature(state.draft, state.lockNature) : state.draft
+  if (cap === null) return { draft, trims }
+  for (const stat of order) {
+    const total = (Object.keys(draft.sp) as StatId[]).reduce((a, s) => a + (keep.has(s) ? (lockedSp[s] ?? parseNumber(draft.sp[s])) : parseNumber(draft.sp[s])), 0)
+    const from = parseNumber(draft.sp[stat])
+    if (!Number.isFinite(total) || total <= cap) continue
+    const to = Math.max(0, cap - (total - from))
+    if (to >= from) continue
+    trims.push({ stat, from, to })
+    draft = { ...draft, sp: { ...draft.sp, [stat]: String(to) } }
+  }
+  return { draft, trims }
+}
+
+const CLEARED_LOCKS = { locks: [], lockSeq: 1, lockBase: null, lockNature: null, lockSpTotal: null, lockReveal: null, lockFit: null } as const satisfies Partial<AppState>
+
+const LOCK_TABS: Readonly<Record<CutLock['kind'], Tab>> = { speed: 'speed', attack: 'attack', defense: 'defense' }
+
 function updateTarget(state: AppState, rosterId: string, f: (t: CustomTarget) => CustomTarget): AppState {
   const i = state.customTargets.findIndex((t) => t.rosterId === rosterId)
   if (i < 0) return state
@@ -276,27 +450,34 @@ function updateTarget(state: AppState, rosterId: string, f: (t: CustomTarget) =>
 export function reducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'set-draft': {
-      const next = bump(state, { draft: action.draft })
-      if (next === state || sameBeyondSpNature(state.draft, action.draft) || next.moveChoices.length === 0) return next
+      const draft = normalizeLocked(state, action.draft)
+      const next = bump(state, { draft })
+      if (next === state || sameBeyondSpNature(state.draft, draft) || next.moveChoices.length === 0) return next
       return { ...next, moveChoices: [] }
     }
     case 'switch-species': {
       if (action.from === action.to) return reducer(state, { type: 'set-draft', draft: action.draft })
-      const draftCache = action.from === undefined ? state.draftCache : { ...state.draftCache, [action.from]: state.draft }
+      let base = state
+      if (state.locks.length > 0 && action.sameBase !== true) {
+        const { draft, trims } = releaseLocks(state, [])
+        base = { ...state, ...CLEARED_LOCKS, draft, lockTrim: trims.length > 0 ? trims : null, generation: state.generation + 1 }
+      }
+      const draftCache = action.from === undefined ? base.draftCache : { ...base.draftCache, [action.from]: base.draft }
       const kept = Object.prototype.hasOwnProperty.call(draftCache, action.to) ? draftCache[action.to] : undefined
-      const next = reducer(state, { type: 'set-draft', draft: kept === undefined ? action.draft : { ...kept, species: action.draft.species } })
+      const next = reducer(base, { type: 'set-draft', draft: kept === undefined ? action.draft : { ...kept, species: action.draft.species } })
       return { ...next, draftCache, speciesGeneration: next.generation === state.generation ? state.speciesGeneration : next.generation }
     }
     case 'commit-sp': {
-      if (!Number.isInteger(action.value)) return state
-      return bump(state, { draft: { ...state.draft, sp: { ...state.draft.sp, [action.stat]: String(action.value) } } })
+      if (!Number.isInteger(action.value) || lockedStatsOf(state.locks).has(action.stat)) return state
+      const value = clampSp(action.stat, action.value, spTableOf(state.draft), action.rules, action.lockedSp)
+      return bump(state, { draft: { ...state.draft, sp: { ...state.draft.sp, [action.stat]: String(value) } } })
     }
     case 'set-meta': {
       if (same(state.meta, action.meta)) return state
       return { ...state, meta: { ...action.meta }, filters: { ...state.filters, selected: [] }, generation: state.generation + 1 }
     }
     case 'set-tab':
-      return state.tab === action.tab ? state : { ...state, tab: action.tab }
+      return state.tab === action.tab ? state : { ...state, tab: action.tab, lockReveal: null }
     case 'set-sort':
       if (action.mode !== 'usage' && action.mode !== 'result') return state
       return state.sortMode === action.mode ? state : { ...state, sortMode: action.mode }
@@ -394,5 +575,99 @@ export function reducer(state: AppState, action: AppAction): AppState {
       const moveChoices = state.moveChoices.filter((x) => !(sameTarget(x, target) && moveOfKey(x.key) === action.moveId))
       return { ...bump(state, { addedMoves }), moveChoices: moveChoices.length === state.moveChoices.length ? state.moveChoices : moveChoices }
     }
+    case 'add-lock': {
+      const l = action.lock
+      if (!validLock(l) || !isPositiveInt(action.spTotal)) return state
+      if (state.locks.some((x) => x.stage === l.stage && sameLockTarget(x.target, l.target))) return state
+      const lock: CutLock = { seq: state.lockSeq, kind: l.kind, target: l.target, stage: l.stage, stats: [...l.stats] }
+      return {
+        ...state,
+        locks: [...state.locks, lock],
+        lockSeq: state.lockSeq + 1,
+        lockNature: state.lockNature ?? natureOf(state.draft),
+        lockSpTotal: state.lockSpTotal ?? action.spTotal,
+        lockTrim: null,
+        generation: state.generation + 1,
+        lockFit: state.generation + 1,
+      }
+    }
+    case 'remove-lock': {
+      const locks = state.locks.filter((l) => l.seq !== action.seq)
+      if (locks.length === state.locks.length) return state
+      const { draft, trims } = releaseLocks(state, locks, action.lockedSp)
+      const lockTrim = trims.length > 0 ? trims : null
+      if (locks.length === 0) return { ...state, ...CLEARED_LOCKS, draft, lockTrim, generation: state.generation + 1 }
+      const lockReveal = state.lockReveal?.seq === action.seq ? null : state.lockReveal
+      return { ...state, locks, draft, lockTrim, lockReveal, generation: state.generation + 1 }
+    }
+    case 'set-lock-base': {
+      if (state.locks.length === 0 || (action.id !== null && typeof action.id !== 'string')) return state
+      const next = bump(state, { lockBase: action.id })
+      return next === state ? state : armFit({ ...next, lockTrim: null }, state)
+    }
+    case 'reveal-lock': {
+      const lock = state.locks.find((l) => l.seq === action.seq)
+      if (lock === undefined) return state
+      const t = lock.target
+      const filters =
+        t.kind === 'speed' && t.filterKind !== null && !state.speedChart.filters[t.filterKind]
+          ? { ...state.speedChart.filters, [t.filterKind]: true }
+          : state.speedChart.filters
+      return {
+        ...state,
+        tab: LOCK_TABS[lock.kind],
+        lockReveal: { seq: lock.seq, nonce: state.lockRevealNonce + 1 },
+        lockRevealNonce: state.lockRevealNonce + 1,
+        speedChart: filters === state.speedChart.filters ? state.speedChart : { ...state.speedChart, filters },
+      }
+    }
+    case 'clear-reveal':
+      return state.lockReveal === null ? state : { ...state, lockReveal: null }
+    case 'dismiss-lock-trim':
+      return state.lockTrim === null ? state : { ...state, lockTrim: null }
+    case 'fit-locks': {
+      if (state.lockFit === null || action.token !== state.lockFit) return state
+      const cleared = { ...state, lockFit: null }
+      if (action.lockedSp === null || state.lockSpTotal === null) return cleared
+      const sp = spTableOf(state.draft)
+      // 기준 갈래 계산에서 빠진(문제) 고정의 능력치도 줄이지 않는다: 초안 값(해제 복원값)으로 센다.
+      const lockedSp: Partial<Record<StatId, number>> = { ...action.lockedSp }
+      for (const s of lockedStatsOf(state.locks)) lockedSp[s] ??= sp[s]
+      const trims = fitUnlocked(sp, state.lockSpTotal, lockedSp)
+      if (trims.length === 0) return cleared
+      const draft = { ...state.draft, sp: { ...state.draft.sp } }
+      for (const t of trims) draft.sp[t.stat] = String(t.to)
+      return { ...cleared, draft, lockTrim: trims, generation: state.generation + 1 }
+    }
+    case 'apply-adjust':
+      return applyAdjust(state, action)
   }
+}
+
+function applyAdjust(state: AppState, action: Extract<AppAction, { type: 'apply-adjust' }>): AppState {
+  const locked = lockedStatsOf(state.locks)
+  const written = new Map<StatId, number>()
+  for (const s of Object.keys(action.sp) as StatId[]) {
+    const v = action.sp[s]
+    if (locked.has(s) || typeof v !== 'number' || !Number.isFinite(v)) continue
+    written.set(s, Math.max(0, Math.min(Math.round(v), action.rules.spMaxPerStat)))
+  }
+  const sp = { ...state.draft.sp }
+  for (const [s, v] of written) sp[s] = String(v)
+  let draft: SetDraft = action.nature === undefined ? { ...state.draft, sp } : restoreNature({ ...state.draft, sp }, action.nature)
+  const lockBase = state.locks.length > 0 && action.lockBase !== undefined ? action.lockBase : state.lockBase
+
+  const table = spTableOf(draft)
+  // 우선순위: 기준 갈래 고정 SP > 빠진 고정 능력치의 초안 값(해제 복원값) > keep·쓴 능력치의 새 값.
+  const fixed: Partial<Record<StatId, number>> = { ...action.lockedSp }
+  for (const s of locked) fixed[s] ??= table[s]
+  for (const s of [...action.keep, ...written.keys()]) fixed[s] ??= table[s]
+  const trims = fitUnlocked(table, state.lockSpTotal ?? action.rules.spTotal, fixed)
+  if (trims.length > 0) {
+    draft = { ...draft, sp: { ...draft.sp } }
+    for (const t of trims) draft.sp[t.stat] = String(t.to)
+  }
+
+  if (trims.length === 0 && lockBase === state.lockBase && same(draft, state.draft)) return state
+  return { ...state, draft, lockBase, lockTrim: trims.length > 0 ? trims : null, lockFit: null, generation: state.generation + 1 }
 }

@@ -116,3 +116,41 @@ export function pairTarget(
     }
   })
 }
+
+/** 목표 뷰의 목표 순위(choose가 고른 순위: better = 현재 + 1, keep = 현재) */
+export function targetRank(side: JudgementSide, currentLabel: string, target: Pick<TargetView, 'goal'>): number {
+  return tierRank(side, currentLabel) + (target.goal === 'better' ? 1 : 0)
+}
+
+/** rank 이상 판정을 내는 가장 낮은 칸(그 관점 순서 밖 범주는 건너뛴다). 없으면 undefined */
+export function firstCellAt<T extends Pick<CompactCell, 'sp' | 'category'>>(side: JudgementSide, cells: readonly T[], rank: number): T | undefined {
+  return cells.find((c) => cellLabel(side, c) !== undefined && tierRank(side, c.category) >= rank)
+}
+
+/**
+ * 고정 이상 범위의 쌍 목표(계단 결과). at(which, rank) = 그 순위 이상 최소 합 점(닿지 않으면 null, 결과 대기면 undefined).
+ * 라벨은 목표 순위 이름이다(계단은 실제 판정을 담지 않는다). available = H+B/D에 쓸 수 있는 예산. 대기 중인 순위가 있으면 undefined.
+ */
+export function floorPairTarget(
+  currentLabel: string,
+  defenseStat: Exclude<StatId, 'hp'>,
+  at: (which: 'neutral' | 'plus', rank: number) => { hp: number; defense: number } | null | undefined,
+  available: number,
+): TargetView | undefined {
+  let waiting = false
+  const view = choose('defense', currentLabel, defenseStat, (which, min) => {
+    if (min >= TIER_ORDER.defense.length) return null
+    const p = at(which, min)
+    if (p === undefined) waiting = true
+    if (p === undefined || p === null) return null
+    return {
+      label: TIER_ORDER.defense[min],
+      stats: [
+        { stat: 'hp', sp: p.hp },
+        { stat: defenseStat, sp: p.defense },
+      ],
+      need: Math.max(0, p.hp + p.defense - available),
+    }
+  })
+  return waiting ? undefined : view
+}

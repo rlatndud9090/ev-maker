@@ -8,11 +8,13 @@ import {
   type CustomTarget,
   type SpeedBaseline,
 } from '../../cards'
-import { CoreError, CoreInputError, validateSet, type PokemonSet } from '../../core'
+import { CoreError, CoreInputError, validateSet, type EvalOptions, type PokemonSet } from '../../core'
 import type { Snapshot } from '../../data/schema'
 import type { MetaView } from '../../meta'
 import { namesOf } from '../../ui/names'
+import { toPokemonSet } from '../../ui/setDraft'
 import { useDisplaySp, type DisplaySpStore } from '../displaySp'
+import { useLockUi } from '../lockContext'
 import { SPEED_CHART_COMPLETE_MARK, SPEED_CHART_FIRST_MARK, markSpeedChart } from '../perf'
 import type { AppAction, AppState } from '../state'
 import { SpeedChart } from './SpeedChart'
@@ -36,10 +38,12 @@ interface Props {
   customPanel: ReactNode
 }
 
+const IGNORE_TOTAL: EvalOptions = { ignoreSpTotal: true }
+
 /** 내 계산 특성(메가면 메가 폼). 해석할 수 없으면 null */
-function abilityOf(game: Snapshot, set: PokemonSet): string | null {
+function abilityOf(game: Snapshot, set: PokemonSet, options?: EvalOptions): string | null {
   try {
-    return validateSet(game, set).ability
+    return validateSet(game, set, options).ability
   } catch (e) {
     if (e instanceof CoreError || e instanceof CoreInputError) return null
     throw e
@@ -53,7 +57,12 @@ const summaryText = (b: SpeedBaseline): string => (b.kind === 'ok' ? `내 스피
 export function SpeedTab({ game, view, state, mySet, displaySp, dispatch, tabId, panelId, generation, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel }: Props) {
   const { filters, myTailwind, added } = state.speedChart
   const shownSp = useDisplaySp(displaySp)
-  const myAbility = useMemo(() => abilityOf(game, mySet), [game, mySet])
+  // 고정 중 mySet은 계획 세트(합계 66 초과 가능)라 합계 검사를 끄고, 고정 능력치는 드래그를 따르지 않는다
+  const lockUi = useLockUi()
+  const locked = lockUi.locks.length > 0
+  const evalOptions = locked ? IGNORE_TOTAL : undefined
+  const lockedStats = locked ? (lockUi.derivation?.lockedStats ?? null) : undefined
+  const myAbility = useMemo(() => abilityOf(game, mySet, evalOptions), [game, mySet, evalOptions])
   const model = useMemo(
     () => buildSpeedChart({ game, view, myAbility, criteria: state.criteria, filters: state.filters, customTargets: state.customTargets, added }),
     [game, view, myAbility, state.criteria, state.filters, state.customTargets, added],
@@ -66,9 +75,25 @@ export function SpeedTab({ game, view, state, mySet, displaySp, dispatch, tabId,
   const cmp = useMemo(() => compareInRow(nameOf), [nameOf])
 
   // 확정 SP 기준(알림 영역)과 드래그 중 표시 SP 기준(화면)을 나눈다
-  const confirmedBaseline = useMemo(() => speedBaseline(game, mySet, myTailwind), [game, mySet, myTailwind])
-  const shownSet = useMemo(() => (shownSp === null ? mySet : { ...mySet, sp: shownSp }), [mySet, shownSp])
-  const baseline: SpeedBaseline = useMemo(() => (shownSp === null ? confirmedBaseline : speedBaseline(game, shownSet, myTailwind)), [shownSp, confirmedBaseline, game, shownSet, myTailwind])
+  const confirmedBaseline = useMemo(() => speedBaseline(game, mySet, myTailwind, evalOptions), [game, mySet, myTailwind, evalOptions])
+  const shownSet = useMemo(() => {
+    if (shownSp === null || lockedStats === null) return mySet
+    if (lockedStats === undefined) return { ...mySet, sp: shownSp }
+    const sp = { ...shownSp }
+    for (const s of lockedStats) sp[s] = mySet.sp[s]
+    return { ...mySet, sp }
+  }, [mySet, shownSp, lockedStats])
+  const baseline: SpeedBaseline = useMemo(
+    () => (shownSet === mySet ? confirmedBaseline : speedBaseline(game, shownSet, myTailwind, evalOptions)),
+    [shownSet, mySet, confirmedBaseline, game, myTailwind, evalOptions],
+  )
+  // 고정 후보·갈래 예산의 내 세트(고정 전 값, 드래그 중이면 표시 SP)
+  const draft = state.draft
+  const lockSet = useMemo(() => {
+    if (!lockUi.enabled) return undefined
+    const set = toPokemonSet(game, draft).set
+    return shownSp === null ? set : { ...set, sp: shownSp }
+  }, [lockUi.enabled, game, draft, shownSp])
   const rows = useMemo(() => ladderRows(badges, baseline.kind === 'ok' ? baseline.speed : null, cmp), [badges, baseline, cmp])
   // 알림 영역은 확정 SP 기준(드래그 중에는 알리지 않는다)
   const summary = summaryText(confirmedBaseline)
@@ -128,6 +153,7 @@ export function SpeedTab({ game, view, state, mySet, displaySp, dispatch, tabId,
         rows={rows}
         baseline={baseline}
         shownSet={shownSet}
+        lockSet={lockSet}
         myTailwind={myTailwind}
         customTargets={targets}
         dispatch={dispatch}

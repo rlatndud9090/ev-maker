@@ -426,3 +426,37 @@ describe('경계 실수치(AC12)', () => {
     expect(kinds(build({ view: viewWith(klutz('leftovers', { leftovers: 0.6, choicescarf: 0.4 })) }).badges)).not.toContain('scarf')
   })
 })
+
+describe('force(필터 밖 대상 하나만)', () => {
+  it('force가 없으면 기존 모델과 같다', () => {
+    expect(build({ force: undefined })).toEqual(build())
+  })
+
+  it('상위 N 밖 래더 상대도 그 상대 배지·선택지만 전체 모델과 같게 만든다', () => {
+    const outside = bo1.ranking[40]
+    const added = [
+      { opponentId: outside.id, sp: 0, nature: 'neutral' as const },
+      { opponentId: bo1.ranking[0].id, sp: 0, nature: 'neutral' as const },
+    ]
+    const full = build({ filters: { topN: 200, selected: [] }, added })
+    const forced = build({ filters: { topN: 1, selected: [bo1.ranking[0].id] }, added, force: { opponentId: outside.id, source: 'ladder' } })
+    expect(build({ filters: { topN: 1, selected: [] }, added }).badges.some((b) => b.opponentId === outside.id)).toBe(false)
+    expect(forced.badges.length).toBeGreaterThan(0)
+    expect(forced.badges).toEqual(of(full.badges, outside.id))
+    expect([...forced.options.keys()]).toEqual([outside.id])
+    expect(forced.options.get(outside.id)).toEqual(full.options.get(outside.id))
+  })
+
+  it('목록 밖 타겟은 그 타겟만 만들고 추가 순번(addedOrder)은 원래 순번이다', () => {
+    const customTargets: CustomTarget[] = [
+      { rosterId: 'raichualola', moves: ['agility'], edits: {} },
+      { rosterId: 'rotomwash', moves: ['hydropump'], edits: {} },
+    ]
+    const full = build({ customTargets })
+    const forced = build({ customTargets, force: { opponentId: 'rotomwash', source: 'custom' } })
+    expect(forced.badges.length).toBeGreaterThan(0)
+    expect(forced.badges).toEqual(of(full.badges, 'rotomwash'))
+    expect(forced.badges.every((b) => b.origin === 'preset' && b.addedOrder === 1)).toBe(true)
+    expect(build({ customTargets, force: { opponentId: 'rotomwash', source: 'ladder' } }).badges).toEqual([])
+  })
+})

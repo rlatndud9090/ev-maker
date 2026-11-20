@@ -846,7 +846,7 @@ describe('AC5 방어 탭 극단 필터(F3)', () => {
   it('표시 카드·변화 없음 행·표시 행 칸 = 코어 재판정(극단 필터 1건 = 1행)', () => {
     const { plan, view } = run('example', top(EXAMPLE_SET), 'defense')
     expect(expectMatchesCore(plan, view).items).toBeGreaterThan(0)
-  })
+  }, 20_000) // 전 카드 코어 재판정이라 전체 병렬 실행에서 기본 5초를 넘을 수 있다
 })
 
 // ---------- AC33 공격측 특성 날씨·필드(PRD R12) ----------

@@ -31,7 +31,7 @@ async function chooseWithHyperVoice(page: Page, speciesId: string): Promise<numb
 
 const moveSlot = (page: Page, i: number) => mySet(page).locator('.move-slot').nth(i)
 
-/** 첫 카드에서 하이퍼보이스 항목을 고르고 배지·메뉴 항목·상세 제목의 타입을 본다 */
+/** 첫 카드에서 하이퍼보이스 항목을 고르고 메뉴 항목·카드 줄 기술 배지의 타입을 본다 */
 async function expectAttackHyperVoice(page: Page, slug: string, typeKo: string) {
   await waitComplete(page)
   const card = cards(page).first()
@@ -43,11 +43,8 @@ async function expectAttackHyperVoice(page: Page, slug: string, typeKo: string) 
   await item.click()
   await expect(pick.getByTestId('move-label')).toHaveAttribute('data-type', slug)
   await expect(pick.getByTestId('move-label')).toContainText(HYPER_VOICE)
-  const toggle = card.locator('.card-toggle')
-  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click()
-  const title = card.getByTestId('row').first().locator('.row-title').getByTestId('move-label')
-  await expect(title).toHaveAttribute('data-type', slug)
-  await expect(title).toContainText(HYPER_VOICE)
+  // 카드 줄이 보이는 판정 행 기술(상세 판정 행 제목 대신, R20)
+  await expect(card).toHaveAttribute('data-move', 'hypervoice')
 }
 
 async function expectSlotType(slot: Locator, slug: string, typeKo: string) {

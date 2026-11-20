@@ -1,0 +1,289 @@
+{
+  "regulation": "m-c",
+  "natures": {
+    "hash": "5565891aa1502f317696bfc5031ef48d7ac7272c4c2cb44aaf76d1f31082bd50",
+    "count": 1000
+  },
+  "cases": {
+    "example-garchomp": {
+      "hashes": {
+        "attack": "be46d6559bd0950b951619824dc22fb32f8ddb6cb9c1ed02a0a28ade5f10f4cb",
+        "defense": "6f5898ce30f45a53324381b441d50a35517ff89aad6eb7942c7227431d540d88",
+        "speedChart": "bb3e9b3b0d126d1fe51c5166426d02318ee6a15ad6e6478a6b7cc4342d948dfb",
+        "speedLadder": "e52a88fc2217a487ec70d0960071b49bd2b6399b8d334cf282be5fe636616cdf",
+        "core": "9b049b9bbffc67b74c142204ae5f23e2f8cb343900f0defa90f19646b2579fd2"
+      },
+      "summary": {
+        "attack": {
+          "status": "ok",
+          "cards": 246,
+          "complete": true,
+          "progress": {
+            "done": 1735,
+            "total": 1735
+          },
+          "first": {
+            "id": "[\"attack\",\"ladder\",\"sneasler\",\"physical\",\"[{\\\"stat\\\":\\\"hp\\\",\\\"sp\\\":2,\\\"nature\\\":\\\"neutral\\\"},{\\\"stat\\\":\\\"def\\\",\\\"sp\\\":0,\\\"nature\\\":\\\"neutral\\\"}]\"]",
+            "opponent": "sneasler",
+            "category": "physical",
+            "headline": "row",
+            "rows": 1
+          }
+        },
+        "defense": {
+          "status": "ok",
+          "cards": 322,
+          "complete": true,
+          "progress": {
+            "done": 3135,
+            "total": 3135
+          },
+          "first": {
+            "id": "[\"defense\",\"ladder\",\"sneasler\",\"physical\",\"[{\\\"stat\\\":\\\"atk\\\",\\\"sp\\\":32,\\\"nature\\\":\\\"plus\\\"}]\"]",
+            "opponent": "sneasler",
+            "category": "physical",
+            "headline": "row",
+            "rows": 1
+          }
+        },
+        "speed": {
+          "badges": 180,
+          "unsupported": 0,
+          "options": 79,
+          "baseline": {
+            "kind": "ok",
+            "speed": 154,
+            "sp": 32,
+            "nature": "neutral",
+            "tailwind": false
+          }
+        },
+        "finalSpeed": 154
+      }
+    },
+    "ac1-raichu-mega-y": {
+      "hashes": {
+        "attack": "319be0f56551d4273196f0bf738d7dbb269cd668c8061f14a06ba87d2ec4c04d",
+        "defense": "c06688704efc757ffe73e9f1afe9ac82b27a46d2f4fb070a8a6605f043fbebcf",
+        "speedChart": "051f3da93b01459ca04d879e0c624c1dbeaeb24c0ad1306ef8e2e322773e334a",
+        "speedLadder": "a5545e81ee79014cf926ed1e9f08aad644a58a3e7ca8a0895d33808230a74b00",
+        "core": "aff5c44a342dee708cfb5151b0d258566bb1f474549a176d79bac5a0466d13b6"
+      },
+      "summary": {
+        "attack": {
+          "status": "ok",
+          "cards": 65,
+          "complete": true,
+          "progress": {
+            "done": 462,
+            "total": 462
+          },
+          "first": {
+            "id": "[\"attack\",\"ladder\",\"sneasler\",\"special\",\"[{\\\"stat\\\":\\\"hp\\\",\\\"sp\\\":2,\\\"nature\\\":\\\"neutral\\\"},{\\\"stat\\\":\\\"spd\\\",\\\"sp\\\":0,\\\"nature\\\":\\\"neutral\\\"}]\"]",
+            "opponent": "sneasler",
+            "category": "special",
+            "headline": "row",
+            "rows": 1
+          }
+        },
+        "defense": {
+          "status": "ok",
+          "cards": 97,
+          "complete": true,
+          "progress": {
+            "done": 1364,
+            "total": 1364
+          },
+          "first": {
+            "id": "[\"defense\",\"ladder\",\"sneasler\",\"physical\",\"[{\\\"stat\\\":\\\"atk\\\",\\\"sp\\\":32,\\\"nature\\\":\\\"plus\\\"}]\"]",
+            "opponent": "sneasler",
+            "category": "physical",
+            "headline": "row",
+            "rows": 2
+          }
+        },
+        "speed": {
+          "badges": 43,
+          "unsupported": 0,
+          "options": 20,
+          "baseline": {
+            "kind": "ok",
+            "speed": 150,
+            "sp": 0,
+            "nature": "neutral",
+            "tailwind": false
+          }
+        },
+        "finalSpeed": 150
+      }
+    },
+    "gyroball-metagross": {
+      "hashes": {
+        "attack": "b486e4f253f08062e7e9b7aebd501f23018c99939d995ff49bb2f21bbe7b5690",
+        "defense": "d712fd678a3d3e3a89f7aa4acfd117f1dd598410483bd28e98c791843a6c0bf8",
+        "speedChart": "051f3da93b01459ca04d879e0c624c1dbeaeb24c0ad1306ef8e2e322773e334a",
+        "speedLadder": "df36bd388dcaa73cc9d248c62b70a75c2a8a6ecf1e5d2086913d64c1c3bd0927",
+        "core": "3ba9bf95bf44ec47a3b4d6b40aa6de153f98c2e1fe2eb78ef91f7c8395dbf882"
+      },
+      "summary": {
+        "attack": {
+          "status": "ok",
+          "cards": 61,
+          "complete": true,
+          "progress": {
+            "done": 427,
+            "total": 427
+          },
+          "first": {
+            "id": "[\"attack\",\"ladder\",\"sneasler\",\"physical\",\"[{\\\"stat\\\":\\\"hp\\\",\\\"sp\\\":2,\\\"nature\\\":\\\"neutral\\\"},{\\\"stat\\\":\\\"def\\\",\\\"sp\\\":0,\\\"nature\\\":\\\"neutral\\\"}]\"]",
+            "opponent": "sneasler",
+            "category": "physical",
+            "headline": "row",
+            "rows": 1
+          }
+        },
+        "defense": {
+          "status": "ok",
+          "cards": 95,
+          "complete": true,
+          "progress": {
+            "done": 821,
+            "total": 821
+          },
+          "first": {
+            "id": "[\"defense\",\"ladder\",\"sneasler\",\"physical\",\"[{\\\"stat\\\":\\\"atk\\\",\\\"sp\\\":32,\\\"nature\\\":\\\"plus\\\"}]\"]",
+            "opponent": "sneasler",
+            "category": "physical",
+            "headline": "row",
+            "rows": 1
+          }
+        },
+        "speed": {
+          "badges": 43,
+          "unsupported": 0,
+          "options": 20,
+          "baseline": {
+            "kind": "ok",
+            "speed": 81,
+            "sp": 0,
+            "nature": "minus",
+            "tailwind": false
+          }
+        },
+        "finalSpeed": 81
+      }
+    },
+    "bodypress-corviknight": {
+      "hashes": {
+        "attack": "4c368b8345826b1bf9a29e2074ebc666ede7c174a2482e822a8693bae0fc18ef",
+        "defense": "e62eba3af20eb55adef488a76c5da863a56ed24c8d29120cde18705bfa5a8a75",
+        "speedChart": "64fe6c28f0b3ea04ef74826e68e42921aaff13eb275f3d0e7bbdf328c4a1dad9",
+        "speedLadder": "db3dff7a4f2ec4721c823557b387f563e3ef3050249de73873ef5029aad20eb6",
+        "core": "fac8c0fc478acf96de08d0cfa61a5b89c261b42aee3fb3423ca8130889da0e79"
+      },
+      "summary": {
+        "attack": {
+          "status": "ok",
+          "cards": 68,
+          "complete": true,
+          "progress": {
+            "done": 474,
+            "total": 474
+          },
+          "first": {
+            "id": "[\"attack\",\"custom\",\"rotomwash\",\"physical\",0]",
+            "opponent": "rotomwash",
+            "category": "physical",
+            "headline": "row",
+            "rows": 1
+          }
+        },
+        "defense": {
+          "status": "ok",
+          "cards": 101,
+          "complete": true,
+          "progress": {
+            "done": 952,
+            "total": 952
+          },
+          "first": {
+            "id": "[\"defense\",\"custom\",\"rotomwash\",\"physical\",0]",
+            "opponent": "rotomwash",
+            "category": "physical",
+            "headline": "row",
+            "rows": 1
+          }
+        },
+        "speed": {
+          "badges": 49,
+          "unsupported": 0,
+          "options": 20,
+          "baseline": {
+            "kind": "ok",
+            "speed": 87,
+            "sp": 0,
+            "nature": "neutral",
+            "tailwind": false
+          }
+        },
+        "finalSpeed": 87
+      }
+    },
+    "full66-electroball-raichu-scarf": {
+      "hashes": {
+        "attack": "07b5a9871ad2dae01824926c1af3e06f64e60b3c935993fad6cc8a090b91718d",
+        "defense": "383b2c41060e73f7c20b607086e5efafe474e6e623201eac3c52cd46dd1c52a4",
+        "speedChart": "051f3da93b01459ca04d879e0c624c1dbeaeb24c0ad1306ef8e2e322773e334a",
+        "speedLadder": "6fd12ea2f52b3b7647d21de1c08ca562f5abe69a67c719edda80c4f8abe2314a",
+        "core": "c2230f5fc3a89e5cc6411e28f927f8a32812edb17b5ba7105631ca7a02f0898d"
+      },
+      "summary": {
+        "attack": {
+          "status": "ok",
+          "cards": 65,
+          "complete": true,
+          "progress": {
+            "done": 462,
+            "total": 462
+          },
+          "first": {
+            "id": "[\"attack\",\"ladder\",\"sneasler\",\"special\",\"[{\\\"stat\\\":\\\"hp\\\",\\\"sp\\\":2,\\\"nature\\\":\\\"neutral\\\"},{\\\"stat\\\":\\\"spd\\\",\\\"sp\\\":0,\\\"nature\\\":\\\"neutral\\\"}]\"]",
+            "opponent": "sneasler",
+            "category": "special",
+            "headline": "row",
+            "rows": 1
+          }
+        },
+        "defense": {
+          "status": "ok",
+          "cards": 99,
+          "complete": true,
+          "progress": {
+            "done": 1349,
+            "total": 1349
+          },
+          "first": {
+            "id": "[\"defense\",\"ladder\",\"sneasler\",\"physical\",\"[{\\\"stat\\\":\\\"atk\\\",\\\"sp\\\":32,\\\"nature\\\":\\\"plus\\\"}]\"]",
+            "opponent": "sneasler",
+            "category": "physical",
+            "headline": "row",
+            "rows": 2
+          }
+        },
+        "speed": {
+          "badges": 43,
+          "unsupported": 0,
+          "options": 20,
+          "baseline": {
+            "kind": "ok",
+            "speed": 267,
+            "sp": 32,
+            "nature": "plus",
+            "tailwind": false
+          }
+        },
+        "finalSpeed": 267
+      }
+    }
+  }
+}

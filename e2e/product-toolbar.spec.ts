@@ -39,7 +39,9 @@ interface Item {
   current?: string
   /** 그룹 제목 id */
   headingId?: string
-  /** 행 토글 버튼 aria-describedby 토큰 */
+  /** 카드 줄 변동 버튼이 있음 */
+  adjust?: boolean
+  /** 변동 버튼 aria-describedby 토큰 */
   describedBy?: string[]
 }
 
@@ -69,7 +71,8 @@ async function listItems(page: Page): Promise<Item[]> {
           rank: e.dataset.rank === undefined ? undefined : Number(e.dataset.rank),
           origin: e.dataset.origin,
           current: e.querySelector('[data-testid="ko-badge"]')?.firstChild?.textContent ?? undefined,
-          describedBy: (e.querySelector('.card-toggle')?.getAttribute('aria-describedby') ?? '').split(' ').filter(Boolean),
+          adjust: e.querySelector('.card-line [data-testid="adjust-button"]') !== null,
+          describedBy: (e.querySelector('.card-line [data-testid="adjust-button"]')?.getAttribute('aria-describedby') ?? '').split(' ').filter(Boolean),
         }
       }),
     )
@@ -264,9 +267,12 @@ test.describe('정렬: 계산결과순', () => {
         } else members.get(current!)!.push(it)
       }
       for (const [g, rows] of members) {
-        // 행 토글 버튼 설명에 그 그룹 제목(소속)이 붙는다
+        // 카드 줄 변동 버튼(변동 가능 행에만) 설명에 그 그룹 제목(소속)이 붙는다
         expect(g.headingId, g.label).toBeTruthy()
-        for (const r of rows) expect(r.describedBy, `${g.label} ${r.groupKey}`).toContain(g.headingId)
+        for (const r of rows) {
+          expect(r.adjust, `${g.label} ${r.groupKey}`).toBe(r.variable === 'true')
+          if (r.adjust) expect(r.describedBy, `${g.label} ${r.groupKey}`).toContain(g.headingId)
+        }
         expect(rows.length, g.label).toBe(g.count)
         expect(rows.length, g.label).toBeGreaterThan(0)
         const ladderRanks = rows.filter((r) => r.origin === 'ladder').map((r) => r.rank!)
@@ -287,7 +293,7 @@ test.describe('정렬: 계산결과순', () => {
     })
   }
 
-  test('정렬을 바꿔도 펼친 행·고른 배분은 그대로(같은 DOM 요소, 다시 마운트 안 함)', async ({ page }) => {
+  test('정렬을 바꿔도 고른 배분은 그대로(같은 DOM 요소, 다시 마운트 안 함)', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     // 배분 선택지가 둘 이상인 변동 가능 행
@@ -307,18 +313,14 @@ test.describe('정렬: 계산결과순', () => {
     expect(pickedId).not.toBe(defaultId)
     await other.click()
     await expect(row).toHaveAttribute('data-card-id', pickedId)
-    await row.locator('button[aria-expanded]').first().click()
-    await expect(row.locator('button[aria-expanded]').first()).toHaveAttribute('aria-expanded', 'true')
     await row.evaluate((el) => ((el as HTMLElement & { __mark?: number }).__mark = 7))
     await sortButton(page, '계산결과순').click()
     await expect(page.getByTestId('sort-group').first()).toBeVisible()
-    await expect(row.locator('button[aria-expanded]').first()).toHaveAttribute('aria-expanded', 'true')
     await expect(row).toHaveAttribute('data-card-id', pickedId)
     await expect(row.getByTestId('bundle-menu')).toHaveCount(0)
     expect(await row.evaluate((el) => (el as HTMLElement & { __mark?: number }).__mark)).toBe(7)
     await sortButton(page, '사용률').click()
     expect(await row.evaluate((el) => (el as HTMLElement & { __mark?: number }).__mark)).toBe(7)
-    await expect(row.locator('button[aria-expanded]').first()).toHaveAttribute('aria-expanded', 'true')
     await expect(row).toHaveAttribute('data-card-id', pickedId)
   })
 

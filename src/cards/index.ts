@@ -42,7 +42,7 @@ export { natureVariants } from './natures'
 export { judgementKey } from './key'
 export { createLruCache } from './cache'
 export { computeRowTask } from './rowTask'
-export { assembleTab, createTabAssembler, type TabAssembler } from './assemble'
+export { LOCK_STAGES, assembleTab, createTabAssembler, type TabAssembler } from './assemble'
 export { buildTabView } from './batch'
 export { cellLabel } from './target'
 export { bucketKey, resultBucket, sortByResult, type ResultBucket, type ResultSection, type SortMode } from './resultSort'
@@ -78,3 +78,45 @@ export {
   type SpeedBaseline,
   type SpeedStatus,
 } from './speedLadder'
+export {
+  branchBudget,
+  budgetMark,
+  checkLockCandidate,
+  deriveLocks,
+  lockTargetId,
+  sameLockTarget,
+  type Branch,
+  type BranchPlus,
+  type BudgetMark,
+  type CutLock,
+  type DeriveLocksInput,
+  type LockCheck,
+  type LockDerivation,
+  type LockKind,
+  type LockOptions,
+  type LockResolution,
+  type LockStage,
+  type LockStatus,
+  type LockTargetKey,
+  type Stairs,
+} from './lock'
+export { branchNature, laneNature, rowNature, strictVariants } from './lockNature'
+export { findLockTarget, lockTargetKeyOf, type DamageLockKey, type LockTargetRef } from './lockTarget'
+export { laneInput, laneResolution, laneTasks, lockedInput } from './lockLane'
+export { minSumWithFloors } from './stairs'
+export { branchEquivalent } from './schedule'
+export { buildLockedTabView, resolveLaneLock } from './batch'
+export {
+  resolveSpeedLocks,
+  speedBadgeLockKey,
+  speedBranchLines,
+  speedDropWarning,
+  speedLockCandidate,
+  speedLockSignature,
+  type ResolveSpeedLocksInput,
+  type SpeedBranchLine,
+  type SpeedBranchLinesInput,
+  type SpeedBranchOption,
+  type SpeedLockCandidate,
+  type SpeedLockKey,
+} from './speedLock'

@@ -172,7 +172,8 @@ test.describe('스피드 차트 접근성', () => {
     await expectLive()
     const changes = await read()
     expect(changes.length).toBeGreaterThan(0)
-    for (const c of changes) expect(c.t, `드래그 중 알림 갱신: ${c.text}`).toBeGreaterThanOrEqual(upAt)
+    // performance.now()는 100µs 단위로 거칠게 맞춰지고 지터가 있어 같은 순간의 두 기록이 0.1ms 앞뒤로 뒤집힐 수 있다.
+    for (const c of changes) expect(c.t, `드래그 중 알림 갱신: ${c.text}`).toBeGreaterThanOrEqual(upAt - 1)
     await expect(live).not.toHaveText(before ?? '')
 
     // 필터 변경(순풍 켬 → 배지가 늘어도 내 스피드는 그대로라 알림이 바뀌지 않는다)
@@ -192,11 +193,14 @@ test.describe('스피드 차트 접근성', () => {
     expect((await read()).length).toBeGreaterThan(n1)
   })
 
-  test('키보드: Tab 한 번으로 들어가고 나감, 화살표·Home/End, 기준선은 건너뜀, Enter/Esc, 키보드로 추가·삭제', async ({ page }) => {
+  test('키보드: 로빙 자리의 컷 고정 핀 → 배지로 들어가고 Tab 한 번으로 나감, 화살표·Home/End, 기준선은 건너뜀, Enter/Esc, 키보드로 추가·삭제', async ({ page }) => {
     await openSpeed(page)
     await expect(badges(page).and(page.locator('[tabindex="0"]'))).toHaveCount(1)
-    // 차트 머리 마지막 칩에서 Tab 한 번 → 배지, 다시 Tab 한 번 → 배지 밖
+    await expect(page.locator('.speed-badge-item [data-testid="cut-pin"][tabindex="0"]')).toHaveCount(1)
+    // 차트 머리 마지막 칩에서 Tab → 로빙 자리 배지 앞 핀 → 배지, 다시 Tab 한 번 → 배지 밖
     await chip(page, 'my-tailwind').focus()
+    await page.keyboard.press('Tab')
+    await expect(page.locator('.speed-badge-item [data-testid="cut-pin"]:focus')).toHaveCount(1)
     await page.keyboard.press('Tab')
     const entered = await activeBadge(page)
     expect(entered).not.toBeNull()
