@@ -85,6 +85,12 @@
   outline: none;
 }
 
+/* 공·방 카드 핀 메뉴: 핀이 카드 왼쪽 끝에 있어 핀 왼쪽 끝에서 오른쪽으로 펼친다(폭은 useAdjustMenu anchor start가 오른쪽 공간으로 줄인다) */
+.adjust-menu.pin {
+  right: auto;
+  left: 0;
+}
+
 .adjust-title {
   padding: 0.2rem 0.45rem 0.15rem;
   font-size: 0.72rem;

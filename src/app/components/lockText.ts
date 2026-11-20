@@ -48,6 +48,26 @@ export function lockOptionText(resolution: LockResolution | undefined): string |
   return shown.length === 0 ? undefined : shown.join(' / ')
 }
 
+/**
+ * 고정 목록 항목 SP: 그 고정 능력치의 갈래별 고정 SP(상승이 그 고정 능력치인 갈래 먼저, 같은 글자는 한 번) "S12+ / S20" · "H32 B4+ / H32 B12".
+ * 파생 갈래 값이라 H 공유 합치기·H 최대 배분이 그대로 보인다. 갈래가 없으면 undefined
+ */
+export function lockChoiceText(derivation: LockDerivation, lock: Pick<CutLock, 'stats'>): string | undefined {
+  const seen = new Set<string>()
+  const parts: string[] = []
+  const mine = (b: LockDerivation['branches'][number]) => Number(b.plus !== 'out' && lock.stats.includes(b.plus))
+  for (const b of [...derivation.branches].sort((x, y) => mine(y) - mine(x))) {
+    const t = lock.stats.map((st) => spText(st, b.lockedSp[st] ?? 0, st !== 'hp' && b.plus === st)).join(' ')
+    if (seen.has(t)) continue
+    seen.add(t)
+    parts.push(t)
+  }
+  return parts.length === 0 ? undefined : parts.join(' / ')
+}
+
+/** 고정 목록 H 최대 배분 표지(변동 배분 이름과 같다) */
+export const lockAllocationText = (lock: Pick<CutLock, 'allocation'>): string | undefined => (lock.allocation === 'h-max' ? ADJUST_ALLOCATION_TEXT['h-max'] : undefined)
+
 /** 갈래마다 다른 고정 능력치 값(상승 갈래 먼저, 같은 값은 한 번). 내 세트 고정 줄의 읽기 설명 "S12+ / S20" */
 export function lockedStatText(derivation: LockDerivation, stat: StatId): string {
   const seen = new Set<string>()
@@ -341,9 +361,10 @@ export function lockSubjectView(game: Snapshot, lock: Pick<CutLock, 'target' | '
   return { ...base, bundle, item: itemOf(t.item), note, badge: categoryBadge(lock.stage) }
 }
 
-/** 고정 목록 항목 읽기 이름(배분 성격 보정은 말로) */
-export function lockDescriptionSpoken(game: Snapshot, lock: Pick<CutLock, 'target' | 'stage'>): string {
-  return `${LOCK_NAME}: ${lockSubjectSpoken(game, lock)}`
+/** 고정 목록 항목 읽기 이름(배분 성격 보정은 말로, H 최대 배분이면 붙인다) */
+export function lockDescriptionSpoken(game: Snapshot, lock: Pick<CutLock, 'target' | 'stage' | 'allocation'>): string {
+  const alloc = lockAllocationText(lock)
+  return `${LOCK_NAME}: ${lockSubjectSpoken(game, lock)}${alloc === undefined ? '' : ` · ${alloc}`}`
 }
 
 /** 고정 대상·단계의 읽기 문구(이름 접두 없음, 해제 버튼 읽기 이름용) */
@@ -380,8 +401,18 @@ const ADJUST_OFF_TEXT: Readonly<Record<AdjustOff['reason'], string>> = {
   'no-branch': '고정과 겹침',
 }
 
-/** 고를 수 없는 성격 선택지의 짧은 이유 */
-export const adjustOffText = (option: AdjustOff): string => ADJUST_OFF_TEXT[option.reason]
+/** 고를 수 없는 성격 선택지의 짧은 이유(SP 부족 초과량이 있으면 "SP 부족(n)") */
+export const adjustOffText = (option: AdjustOff): string => (option.over === undefined ? ADJUST_OFF_TEXT[option.reason] : spShortText(option.over))
+
+// 공·방 카드 핀 메뉴(변동 메뉴와 같은 2단, 사용자 결정 2026-11-21)
+export const PIN_RESULTS_TITLE = '고정할 결과'
+export const PIN_EMPTY_TEXT = '고정할 수 있는 결과 없음'
+
+/** 1단 메뉴 이름 "컷 고정할 결과: 한카리아스" */
+export const pinResultsLabel = (subject: string): string => `${LOCK_NAME}할 결과: ${subject}`
+
+/** 빈 목록 "고정할 수 있는 결과 없음 · SP 부족(8)" */
+export const pinEmptyText = (over: number | undefined): string => (over === undefined ? PIN_EMPTY_TEXT : `${PIN_EMPTY_TEXT} · ${spShortText(over)}`)
 
 /** 성격 선택지 이름: "무보정" · "C 상승" · 방어 3방향(반대쪽 상승 선택지가 있음)은 "B 보정"/"D 보정" */
 export function adjustNatureName(natures: readonly AdjustNature[], nature: AdjustNature): string {

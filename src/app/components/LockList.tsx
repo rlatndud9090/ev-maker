@@ -6,7 +6,7 @@ import { useLockUi } from '../lockContext'
 import type { AppAction } from '../state'
 import { ItemMark } from './ItemMark'
 import { PokemonIcon } from './PokemonIcon'
-import { LOCK_NAME, lockDescription, lockDescriptionSpoken, lockOptionText, lockStatusText, lockSubjectSpoken, lockSubjectView } from './lockText'
+import { LOCK_NAME, lockAllocationText, lockChoiceText, lockDescription, lockDescriptionSpoken, lockOptionText, lockStatusText, lockSubjectSpoken, lockSubjectView } from './lockText'
 import './lockPanel.css'
 
 interface Props {
@@ -37,7 +37,10 @@ function LockItem({ game, lock, derivation, resolution, pending, onReveal, onRem
   const view = lockSubjectView(game, lock)
   const status = pending ? undefined : derivation?.statuses.get(lock.seq)
   const chip = status === undefined ? undefined : lockStatusText(status)
-  const options = lockOptionText(resolution)
+  // 활성 고정은 파생 갈래 값(H 공유 합치기·H 최대 배분 반영), 문제 고정은 해석 선택지
+  const active = derivation?.statuses.get(lock.seq)?.kind === 'active' && derivation.locks.some((l) => l.seq === lock.seq)
+  const options = (active && derivation !== null ? lockChoiceText(derivation, lock) : undefined) ?? lockOptionText(resolution)
+  const alloc = lockAllocationText(lock)
   return (
     <li className="lock-item" data-lock-seq={lock.seq} data-lock-kind={lock.kind}>
       <button
@@ -56,6 +59,11 @@ function LockItem({ game, lock, derivation, resolution, pending, onReveal, onRem
           {view.badge !== undefined && (
             <span className={`ko-badge ko-${view.badge.tone} ko-small`} data-testid="lock-stage" data-tone={view.badge.tone}>
               {view.badge.label}
+            </span>
+          )}
+          {alloc !== undefined && (
+            <span className="lock-alloc" data-testid="lock-alloc">
+              {alloc}
             </span>
           )}
         </span>

@@ -5,6 +5,7 @@ import {
   branchBudget,
   budgetMark,
   checkLockCandidate,
+  conflictingLocks,
   deriveLocks,
   lockTargetId,
   sameLockTarget,
@@ -388,5 +389,93 @@ describe('branchBudget·budgetMark(R6·R9)', () => {
     expect(budgetMark(16, 14, 32)).toEqual({ kind: 'need', n: 2 })
     expect(budgetMark(46, 14, 32)).toEqual({ kind: 'need', n: 32 })
     expect(budgetMark(50, 14, 32)).toEqual({ kind: 'short', m: 4 })
+  })
+})
+
+describe('같은 능력치 고정 교체(conflictingLocks, 사용자 결정 2026-11-21)', () => {
+  const locks = [lock(1, ['spe']), lock(2, ['atk']), lock(3, ['hp', 'def']), lock(4, ['hp', 'spd'])]
+  const seqs = (stats: StatId[]) => conflictingLocks(locks, stats).map((l) => l.seq)
+
+  it('H 밖 능력치가 겹치면 교체 대상, H만 공유하면 아니다', () => {
+    expect(seqs(['spe'])).toEqual([1])
+    expect(seqs(['atk'])).toEqual([2])
+    expect(seqs(['hp', 'def'])).toEqual([3])
+    expect(seqs(['hp', 'spd'])).toEqual([4])
+    expect(seqs(['def'])).toEqual([3])
+    expect(seqs(['spa'])).toEqual([])
+    expect(conflictingLocks([lock(1, ['hp', 'def'])], ['hp', 'spd'])).toEqual([])
+  })
+
+  it('checkLockCandidate는 교체될 고정을 빼고 판정한다', () => {
+    // 기존 H+B는 H 30 이상에서만, 새 H+B 후보는 H 5 이하에서만 닿는다: 함께 세면 H가 없어 막히지만, 교체로 기존 쌍이 빠지면 들어간다
+    const old = pair('def', stairs((hp) => (hp >= 30 ? 0 : null)), null)
+    const fresh = pair('def', stairs((hp) => (hp <= 5 ? 10 : null)), null)
+    const cand = { lock: { kind: 'defense' as const, target: damageTarget('defense', 'new'), stage: 'guaranteed-survive' as const, stats: ['hp', 'def'] as StatId[] }, resolution: fresh }
+    expect(checkLockCandidate({ game, mySet: mySet(), locks: [lock(1, ['hp', 'def'])], resolutions: new Map([[1, old]]), candidate: cand })).toEqual({ kind: 'ok' })
+    expect(derive([lock(1, ['hp', 'def']), lock(2, ['hp', 'def'])], { 1: old, 2: fresh }).statuses.get(2)).toEqual({ kind: 'nature-conflict' })
+  })
+})
+
+describe('deriveLocks H 최대 배분(allocation h-max)', () => {
+  const pairLock = (seq: number, stage: 'low-roll-ohko' | 'guaranteed-survive', allocation?: 'h-max', defense: 'def' | 'spd' = 'def'): CutLock => ({
+    ...lock(seq, ['hp', defense]),
+    stage,
+    ...(allocation === undefined ? {} : { allocation }),
+  })
+  const pairNext = (defense: 'def' | 'spd', cur: Stairs, next: Stairs | null | undefined): LockResolution => ({
+    kind: 'ok',
+    options: { shape: 'pair', defense, neutral: cur, plus: null, ...(next === undefined ? {} : { next: { neutral: next, plus: null } }) },
+  })
+  const b20 = stairs((hp) => Math.max(0, 20 - hp))
+  const up26 = stairs((hp) => Math.max(0, 26 - hp))
+
+  it('단일 쌍: 남은 예산 안에서 단계를 정확히 내는(그 H의 B가 위 단계에 닿지 않는) 가장 큰 H와 그 H의 최소 B', () => {
+    // H 21~25는 B 0으로도 위 단계(26 − H > 0)에 닿지 않는다. H 26부터는 B 0에서 이미 위 단계 → H 25
+    const d = derive([pairLock(1, 'low-roll-ohko', 'h-max')], { 1: pairNext('def', b20, up26) })
+    expect(branch(d, 'out').lockedSp).toEqual({ hp: 25, def: 0 })
+    // 합 최소(배분 없음)는 H20 B0
+    expect(branch(derive([pairLock(1, 'low-roll-ohko')], { 1: pairNext('def', b20, up26) }), 'out').lockedSp).toEqual({ hp: 20, def: 0 })
+  })
+
+  it('위 단계가 없으면(확정견딤) H 최대 = 능력치당 최대, 위 단계 계단을 모르면(next 없음) 합 최소', () => {
+    expect(branch(derive([pairLock(1, 'guaranteed-survive', 'h-max')], { 1: pairNext('def', b20, undefined) }), 'out').lockedSp).toEqual({ hp: 32, def: 0 })
+    expect(branch(derive([pairLock(1, 'low-roll-ohko', 'h-max')], { 1: pairNext('def', b20, undefined) }), 'out').lockedSp).toEqual({ hp: 20, def: 0 })
+    // 위 단계에 어느 H에서도 닿지 않으면(null) 정확 검사는 늘 통과
+    expect(branch(derive([pairLock(1, 'low-roll-ohko', 'h-max')], { 1: pairNext('def', b20, null) }), 'out').lockedSp).toEqual({ hp: 32, def: 0 })
+  })
+
+  it('예산 = 66 − 다른 묶음 합. 예산 안에 성립하는 H가 없으면 합 최소', () => {
+    const locks = [lock(1, ['spe']), lock(2, ['atk']), pairLock(3, 'guaranteed-survive', 'h-max')]
+    const d = derive(locks, { 1: single('spe', 32, null), 2: single('atk', 20, null), 3: pairNext('def', stairs((hp) => Math.max(0, 10 - hp)), undefined) })
+    expect(branch(d, 'out').lockedSp).toEqual({ spe: 32, atk: 20, hp: 14, def: 0 })
+    // 예산 4: H + max(0, 4 − H) = 4라 어느 H든 4 → 가장 큰 H4 B0(합 66)
+    const tight = derive(locks, { 1: single('spe', 32, null), 2: single('atk', 30, null), 3: pairNext('def', stairs((hp) => Math.max(0, 4 - hp)), undefined) })
+    expect(branch(tight, 'out').lockedSp).toEqual({ spe: 32, atk: 30, hp: 4, def: 0 })
+    expect(branch(tight, 'out').lockedSum).toBe(66)
+    // 어느 H에서도 단계를 정확히 내지 못하면(위 단계가 B 0부터 닿음) 합 최소
+    const never = derive([pairLock(1, 'low-roll-ohko', 'h-max')], { 1: pairNext('def', b20, stairs(() => 0)) })
+    expect(branch(never, 'out').lockedSp).toEqual({ hp: 20, def: 0 })
+  })
+
+  it('H를 공유하는 두 쌍 중 하나가 H 최대면 묶음 전체가 H 최대(그 H에서 각 요구는 최소)', () => {
+    const b = stairs((hp) => Math.max(0, 16 - hp))
+    const dd = stairs((hp) => Math.max(0, 12 - Math.floor(hp / 2)))
+    const d = derive([pairLock(1, 'guaranteed-survive', 'h-max'), pairLock(2, 'guaranteed-survive', undefined, 'spd')], { 1: pairNext('def', b, undefined), 2: pairNext('spd', dd, undefined) })
+    expect(branch(d, 'out').lockedSp).toEqual({ hp: 32, def: 0, spd: 0 })
+    const plain = derive([pairLock(1, 'guaranteed-survive'), pairLock(2, 'guaranteed-survive', undefined, 'spd')], { 1: pairNext('def', b, undefined), 2: pairNext('spd', dd, undefined) })
+    expect(branch(plain, 'out').lockedSp).toEqual({ hp: 16, def: 0, spd: 4 })
+  })
+
+  it('SP 부족량(완화 모드)과 고정 가능 여부는 배분과 무관하게 합 최소로 센다', () => {
+    const res = {
+      1: single('spe', 32, 26),
+      2: pairNext('def', stairs((hp) => Math.max(0, 20 - hp)), undefined),
+    }
+    const cand = { lock: { kind: 'attack' as const, target: damageTarget('attack', 'c'), stage: 'guaranteed-ohko' as const, stats: ['atk'] as StatId[] }, resolution: single('atk', 30, 22) }
+    const resolutions = new Map(Object.entries(res).map(([k, v]) => [Number(k), v]))
+    const plainCheck = checkLockCandidate({ game, mySet: mySet(), locks: [lock(1, ['spe']), pairLock(2, 'guaranteed-survive')], resolutions, candidate: cand })
+    const hMaxCheck = checkLockCandidate({ game, mySet: mySet(), locks: [lock(1, ['spe']), pairLock(2, 'guaranteed-survive', 'h-max')], resolutions, candidate: cand })
+    expect(hMaxCheck).toEqual(plainCheck)
+    expect(plainCheck.kind).toBe('sp-short')
   })
 })

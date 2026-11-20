@@ -21,7 +21,11 @@ import {
   lockCheckText,
   lockDescription,
   lockDescriptionSpoken,
+  lockAllocationText,
+  lockChoiceText,
   lockOptionText,
+  pinEmptyText,
+  pinResultsLabel,
   lockStatusText,
   lockedStatText,
   lockSubjectView,
@@ -282,6 +286,7 @@ describe('변동 팝오버 문구', () => {
     expect(adjustOffText({ kind: 'off', reason: 'budget' })).toBe('SP 부족')
     expect(adjustOffText({ kind: 'off', reason: 'unreachable' })).toBe('닿지 않음')
     expect(adjustOffText({ kind: 'off', reason: 'no-branch' })).toBe('고정과 겹침')
+    expect(adjustOffText({ kind: 'off', reason: 'budget', over: 8 })).toBe('SP 부족(8)')
   })
 
   it('leadStats: lead 선택지의 능력치, 고를 수 없는 lead면 빈 목록', () => {
@@ -295,5 +300,34 @@ describe('변동 팝오버 문구', () => {
     ] as const
     const pair: AdjustResult = { label: 'guaranteed-survive', current: false, lead: 0, options: [{ kind: 'ok', stats: [{ stat: 'def', sp: 30, plus: false, locked: false }], hMax }] }
     expect(leadStats(pair)).toEqual(hMax)
+  })
+})
+
+describe('공·방 핀 메뉴·고정 목록 SP 문구(2026-11-21)', () => {
+  const stairs = (f: (hp: number) => number): number[] => Array.from({ length: 33 }, (_, hp) => f(hp))
+  const set: PokemonSet = { regulation: game.manifest.regulation.id, species: 'raichu', ability: 'static', nature: 'hardy', sp: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }, moves: [] }
+
+  it('핀 메뉴 이름·빈 목록', () => {
+    expect(pinResultsLabel('한카리아스')).toBe('컷 고정할 결과: 한카리아스')
+    expect(pinEmptyText(undefined)).toBe('고정할 수 있는 결과 없음')
+    expect(pinEmptyText(8)).toBe('고정할 수 있는 결과 없음 · SP 부족(8)')
+  })
+
+  it('lockChoiceText: 파생 갈래 값(상승 갈래 먼저, 같은 글자 한 번), H 최대 배분이 그대로 보인다', () => {
+    const res = new Map<number, LockResolution>([[1, single('spe', 20, 12)]])
+    const d = deriveLocks({ game, mySet: set, locks: [speedLock], resolutions: res, baseChoice: null })
+    expect(lockChoiceText(d, speedLock)).toBe('S12+ / S20')
+    const pair: LockResolution = { kind: 'ok', options: { shape: 'pair', defense: 'def', neutral: stairs((hp) => Math.max(0, 16 - hp)), plus: stairs((hp) => Math.max(0, 10 - hp)) } }
+    const hMax = { ...defenseLock, allocation: 'h-max' as const }
+    const dd = deriveLocks({ game, mySet: set, locks: [hMax], resolutions: new Map([[2, pair]]), baseChoice: null })
+    expect(lockChoiceText(dd, hMax)).toBe('H32 B0+ / H32 B0')
+    const plain = deriveLocks({ game, mySet: set, locks: [defenseLock], resolutions: new Map([[2, pair]]), baseChoice: null })
+    expect(lockChoiceText(plain, defenseLock)).toBe('H10 B0+ / H16 B0')
+  })
+
+  it('H 최대 표지(목록·읽기 이름)', () => {
+    expect(lockAllocationText(defenseLock)).toBeUndefined()
+    expect(lockAllocationText({ allocation: 'h-max' })).toBe('H 최대')
+    expect(lockDescriptionSpoken(game, { ...defenseLock, allocation: 'h-max' })).toMatch(/ · H 최대$/)
   })
 })

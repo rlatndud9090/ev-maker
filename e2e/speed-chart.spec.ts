@@ -546,6 +546,35 @@ test.describe('기준선과 상태(AC5, AC5b, AC6, AC8, AC25)', () => {
   })
 })
 
+test.describe('드래그 뒤 SP 확정(bugfix speed-sp-not-reflected)', () => {
+  test('슬라이더를 마우스로 끌어 새 값에 놓은 뒤 숫자 입력·−/+로 바꾸면 기준선 data-speed가 따라간다', async ({ page }) => {
+    await openSpeed(page)
+    const slider = mySet(page).getByRole('slider', { name: 'SP 스피드', exact: true })
+    const v0 = Number(await slider.inputValue())
+    const t1 = v0 === 12 ? 20 : 12
+    expect(await dragSlider(page, slider, t1)).toBe(t1)
+    await expect(spBox(page)).toHaveValue(String(t1))
+    // 드래그 확정 직후: 기준선 = 패널 실능치
+    await expect.poll(async () => (await band(page).getAttribute('data-speed')) === (await myStat(page).innerText()).trim()).toBe(true)
+    const atT1 = await band(page).getAttribute('data-speed')
+
+    // 숫자 입력으로 다른 값 확정: 기준선이 드래그로 놓은 값에 멈추지 않는다(수정 전 회귀)
+    const t2 = 5
+    await setMySp(page, t2)
+    await expect.poll(async () => (await band(page).getAttribute('data-speed')) === (await myStat(page).innerText()).trim()).toBe(true)
+    const atT2 = await band(page).getAttribute('data-speed')
+    expect(atT2).not.toBe(atT1)
+
+    // −/+ 버튼(두 번째 커밋 경로)도 같다
+    expect(await dragSlider(page, slider, t1)).toBe(t1)
+    await expect.poll(async () => await band(page).getAttribute('data-speed')).toBe(atT1)
+    await mySet(page).getByRole('button', { name: 'SP 스피드 1 올리기', exact: true }).click()
+    await expect(spBox(page)).toHaveValue(String(t1 + 1))
+    await expect.poll(async () => (await band(page).getAttribute('data-speed')) === (await myStat(page).innerText()).trim()).toBe(true)
+    expect(await band(page).getAttribute('data-speed')).not.toBe(atT1)
+  })
+})
+
 // ---------- 상세 ----------
 
 test.describe('배지 상세(AC7, AC10)', () => {

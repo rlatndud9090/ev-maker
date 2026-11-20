@@ -17,3 +17,10 @@ area: SP 구간 표
 **규칙:** 추가 배분·스피드 추가 배분·고정 항목을 비교하거나 거를 때는 상대 id만 보지 말고 출처(`source`: ladder/custom)를 함께 본다. 추가·삭제·고정 해제·연쇄 삭제가 모두 같은 키를 써야 한다.
 
 **왜:** 메타 월·매치 방식을 바꾸면 목록 밖 rosterId가 메타 항목 id와 같아질 수 있다. 출처를 빼고 비교하면 목록 밖 추가 배분이 조용히 메타 래더 배분으로 바뀌고 범위 밖 노출까지 일으킨다(ADR 설계 비교에서 발견).
+
+### G-261121-display-sp-two-copies: 드래그 표시 SP는 화면 스토어와 실행기 사본을 둘 다 비운다 (미확인)
+> 발견: 2026-11-21 · 유형: 잘못된추론 · area: SP 구간 표 · 출처: docs/raw/bugfix/speed-sp-not-reflected/bugfix.md · 코드: `src/app/ProductApp.tsx:onDisplaySp`, `src/app/components/MySetPanel.tsx:commit`, `src/app/executor.ts:setInput`
+
+**규칙:** 드래그 표시 SP는 화면 스토어(`displaySp`, 스피드 탭 구독)와 실행기 사본 두 곳에 있다. 실행기 `setInput`이 비우는 건 실행기 사본뿐이니, 화면 스토어는 확정(초안 변경) 때 따로 비운다.
+
+**왜:** 드래그를 새 값에서 놓은 뒤 화면 스토어가 남아, 스피드 탭 기준선이 숫자 입력·±에도 멈춰 있었다.
