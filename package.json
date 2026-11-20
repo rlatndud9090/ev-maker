@@ -16,7 +16,8 @@
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
     "gen:snapshot": "node scripts/data/build-snapshot.mjs",
     "gen:meta": "node scripts/data/build-meta.mjs",
-    "gen:images": "node scripts/data/gen-images.mjs"
+    "gen:images": "node scripts/data/gen-images.mjs",
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "@smogon/calc": "0.12.0",
@@ -39,6 +40,7 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
     "vite": "^8.0.12",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "wrangler": "^4.165.0"
   }
 }

@@ -40,3 +40,7 @@ authoring_rules: 위키 구조·영역(area)/섹션(section) 작성 규칙은 �
 - `2026-11-15` **스피드 탭 개편** — [PRD](../raw/feature/speed-tab-revamp/prd.md) · [ADR](../raw/feature/speed-tab-revamp/adr.md) · [Notes](../raw/feature/speed-tab-revamp/notes.md)
 - `2026-11-18` **포켓몬 추가 UI/UX 개선** — [PRD](../raw/feature/add-pokemon-ux/prd.md) · [ADR](../raw/feature/add-pokemon-ux/adr.md) · [Notes](../raw/feature/add-pokemon-ux/notes.md)
 - `2026-11-18` **컷 고정과 남은 SP 예산 기반 타 탭 재계산** — [PRD](../raw/feature/cut-lock-budget/prd.md) · [ADR](../raw/feature/cut-lock-budget/adr.md) · [Notes](../raw/feature/cut-lock-budget/notes.md)
+
+### 프로젝트 운영
+
+- `2026-11-20` **Cloudflare Workers 정적 배포 설정** — [Notes](../raw/chore/cf-deploy/notes.md)
