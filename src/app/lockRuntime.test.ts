@@ -89,7 +89,7 @@ describe('실행 세대: 스피드 고정 입력(AC16)', () => {
     if (other === undefined) return
     const s = locked(stable)
     const actions: AppAction[] = [
-      { type: 'add-speed-bundle', bundle: { opponentId: other.opponentId, sp: 7, nature: 'neutral' }, spMax: game.manifest.rules.spMaxPerStat },
+      { type: 'add-speed-bundle', bundle: { source: 'ladder', opponentId: other.opponentId, sp: 7, nature: 'neutral' }, spMax: game.manifest.rules.spMaxPerStat },
       { type: 'set-my-tailwind', on: true },
       { type: 'set-my-tailwind', on: false },
     ]
@@ -107,7 +107,7 @@ describe('실행 세대: 스피드 고정 입력(AC16)', () => {
     const target = moving ?? chart.badges[0]
     const seq = steps(base, [
       { type: 'set-my-tailwind', on: true },
-      { type: 'add-speed-bundle', bundle: { opponentId: target.opponentId, sp: 7, nature: 'neutral' }, spMax: game.manifest.rules.spMaxPerStat },
+      { type: 'add-speed-bundle', bundle: { source: 'ladder', opponentId: target.opponentId, sp: 7, nature: 'neutral' }, spMax: game.manifest.rules.spMaxPerStat },
       { type: 'set-roll-steps', steps: 2 },
       { type: 'set-my-tailwind', on: false },
       { type: 'set-top-n', topN: 5 },

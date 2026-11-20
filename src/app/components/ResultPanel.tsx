@@ -2,14 +2,20 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import type { PokemonSet } from '../../core'
 import {
   chosenOption,
+  damageAdditionQuery,
   groupCards,
   groupItems,
   isDamageTab,
+  judgeDamageAddition,
   lockTargetId,
   lockTargetKeyOf,
   sortByResult,
+  type AdditionTarget,
+  type AdditionVerdict,
   type CardGroup,
+  type CardInput,
   type CardView,
+  type Category,
   type CustomTarget,
   type CutLock,
   type DamageTab,
@@ -24,9 +30,10 @@ import { namesOf } from '../../ui/names'
 import { categoryBadge, progressText } from '../../ui/format'
 import { josa, koReason } from '../../ui/koErrors'
 import type { TabViewState } from '../executor'
+import type { DamageReveal } from '../reveal'
 import type { AppAction, MoveChoice } from '../state'
 import { useLockUi } from '../lockContext'
-import { CardItem } from './CardItem'
+import { CardItem, type AddStat } from './CardItem'
 import { OUTSIDE_FILTER_TEXT } from './lockText'
 import { moveNoticeText } from './text'
 import './lockRow.css'
@@ -60,6 +67,11 @@ interface Props {
   customPanel?: ReactNode
   /** 기술 선택 목록을 연 줄의 항목 카드 id(닫으면 빈 목록). 계산 입력이 아니라 실행기 수요다 */
   onMenuCards: (tab: Tab, cardIds: readonly string[]) => void
+  /** 카드 '직접 추가' 판정 입력: '포켓몬 추가' 패널과 같은 화면 메타 기준 */
+  addInput: CardInput
+  /** 패널에서 추가한 배분: 그 줄을 그 배분으로 고르고, 새 계산에 나타나면 스크롤·포커스한다 */
+  reveal: DamageReveal | null
+  onRevealed: () => void
 }
 
 /** 계산결과순 그룹 이름(글자): 판정 그룹은 "<배지 문구>까지 가능" */
@@ -115,7 +127,7 @@ function revealTarget(groups: readonly CardGroup[], tab: DamageTab, lock: CutLoc
   return null
 }
 
-export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySet, customTargets, pinnedBundles, sortMode, moveChoices, dispatch, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel, onMenuCards }: Props) {
+export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySet, customTargets, pinnedBundles, sortMode, moveChoices, dispatch, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel, onMenuCards, addInput, reveal, onRevealed }: Props) {
   const names = namesOf(game)
   // 배분 선택은 탭마다 따로(같은 포켓몬이라도 탭이 다르면 다른 행), 배분을 바꿔도 행이 유지되게 그룹 키로 둔다.
   const scoped = (groupKey: string) => JSON.stringify([tab, groupKey])
@@ -128,6 +140,36 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
     },
     [tab],
   )
+
+  // 행 콜백은 입력이 바뀌어도 참조가 같아야 한다(CardItem sameProps). 판정은 부를 때의 최신 입력으로 한다.
+  const addInputRef = useRef(addInput)
+  useLayoutEffect(() => {
+    addInputRef.current = addInput
+  }, [addInput])
+  const judgeAdd = useCallback(
+    (target: AdditionTarget, category: Category | null, stats: readonly AddStat[]): AdditionVerdict => {
+      if (!isDamageTab(tab)) return { kind: 'unavailable', reason: 'not-found' }
+      const q = damageAdditionQuery(addInputRef.current, tab, target)
+      if (q.kind === 'unavailable') return { kind: 'unavailable', reason: q.reason }
+      const c = q.categories.find((x) => x.category === category)
+      if (c === undefined) return { kind: 'unavailable', reason: 'no-key-stats' }
+      return judgeDamageAddition(
+        c,
+        Object.fromEntries(stats.map((s) => [s.stat, s.sp])),
+        addInputRef.current.game.manifest.rules.spMaxPerStat,
+        Object.fromEntries(stats.map((s) => [s.stat, s.nature])),
+      )
+    },
+    [tab],
+  )
+
+  // 추가 요청을 받으면 그리기 전에 그 줄의 선택을 새 배분으로 바꾼다(계산이 끝나면 그 배분이 보인다).
+  const [revealSeen, setRevealSeen] = useState<number | null>(null)
+  if (reveal !== null && reveal.tab === tab && reveal.nonce !== revealSeen) {
+    setRevealSeen(reveal.nonce)
+    const id = JSON.stringify([tab, reveal.groupKey])
+    setChosen((cur) => new Map(cur).set(id, reveal.cardId))
+  }
 
   const view = state.kind === 'view' ? state.view : undefined
   const groups = useMemo(() => (view === undefined ? [] : groupCards(view.cards, tab, pinnedBundles)), [view, tab, pinnedBundles])
@@ -190,11 +232,6 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
       live.textContent = `${names.species.label(g.group.opponent.id)}${berry}: ${bucketText(to.bucket)} 그룹으로 옮겼습니다.`
     }
   }, [sections, sortMode, tab, names, game])
-  // 추가 패널을 열면(패널의 포커스 이동보다 먼저) 목록 스크롤을 맨 위로: 패널이 고정된 진행 줄 밑에 숨지 않는다.
-  const hasCustomPanel = Boolean(customPanel)
-  useLayoutEffect(() => {
-    if (hasCustomPanel) panelRef.current?.closest('.result-scroll')?.scrollTo({ top: 0 })
-  }, [hasCustomPanel])
   const onFocus = (e: FocusEvent<HTMLDivElement>) => {
     lastFocus.current = e.target
   }
@@ -234,26 +271,26 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
 
   // 컷 고정: 고정 목록의 이동 요청
   const lockUi = useLockUi()
-  const { reveal, clearReveal, locks } = lockUi
+  const { reveal: lockReveal, clearReveal, locks } = lockUi
   // 이동 요청은 렌더 중 한 번만 처리하고(nonce), 요청 지우기·항목 선택·포커스는 커밋 뒤에 한다
   const [revealDone, setRevealDone] = useState<{ nonce: number; outside: number | null; cardId?: string; choose?: MoveChoice } | null>(null)
-  const revealLock = reveal === null ? undefined : locks.find((l) => l.seq === reveal.seq)
-  if (reveal !== null && revealLock !== undefined && revealDone?.nonce !== reveal.nonce && isDamageTab(tab) && revealLock.kind === tab && view !== undefined && !superseded) {
+  const revealLock = lockReveal === null ? undefined : locks.find((l) => l.seq === lockReveal.seq)
+  if (lockReveal !== null && revealLock !== undefined && revealDone?.nonce !== lockReveal.nonce && isDamageTab(tab) && revealLock.kind === tab && view !== undefined && !superseded) {
     const hit = revealTarget(groups, tab, revealLock)
     if (hit === null) {
       // 판정이 끝나기 전에는 아직 목록에 없을 수 있다
       if (view.status.kind !== 'ok' || view.complete) {
         const missing = lockUi.derivation?.statuses.get(revealLock.seq)?.kind === 'missing'
-        setRevealDone({ nonce: reveal.nonce, outside: missing ? null : revealLock.seq })
+        setRevealDone({ nonce: lockReveal.nonce, outside: missing ? null : revealLock.seq })
       }
     } else {
       const id = JSON.stringify([tab, hit.group.key])
       const choose = hit.item === undefined ? undefined : { tab, source: hit.group.opponent.source, opponentId: hit.group.opponent.id, key: hit.item }
-      setRevealDone({ nonce: reveal.nonce, outside: null, cardId: hit.card.id, choose })
+      setRevealDone({ nonce: lockReveal.nonce, outside: null, cardId: hit.card.id, choose })
       setChosen((cur) => (cur.get(id) === hit.card.id ? cur : new Map(cur).set(id, hit.card.id)))
     }
   }
-  const revealNonce = reveal?.nonce
+  const revealNonce = lockReveal?.nonce
   useEffect(() => {
     if (revealDone === null || revealDone.nonce !== revealNonce) return
     if (revealDone.choose !== undefined) dispatch({ type: 'choose-move', choice: revealDone.choose })
@@ -271,6 +308,25 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
     ;(li.querySelector<HTMLElement>('[data-testid="cut-pin"]') ?? li).focus({ preventScroll: true })
   })
   const outside = revealDone !== null && revealDone.outside !== null && locks.some((l) => l.seq === revealDone.outside)
+  // 추가 요청: 현재 세대 뷰에 그 배분 카드가 나오면 그 줄로 스크롤·포커스한다. 1·2단계가 끝났거나 계산이 멈췄는데(내 세트 오류·치명 오류) 없으면 버린다.
+  useEffect(() => {
+    if (reveal === null || reveal.tab !== tab) return
+    if (state.kind === 'fatal' && state.generation === generation) {
+      onRevealed()
+      return
+    }
+    if (view === undefined || superseded) return
+    const found = groups.some((g) => g.key === reveal.groupKey && g.options.some((o) => o.id === reveal.cardId))
+    if (!found) {
+      if (view.stage12Done || view.status.kind !== 'ok') onRevealed()
+      return
+    }
+    const li = panelRef.current?.querySelector<HTMLElement>(`[data-testid="card"][data-group-key="${CSS.escape(reveal.groupKey)}"]`)
+    if (li === null || li === undefined) return
+    li.scrollIntoView({ block: 'nearest' })
+    ;(li.querySelector<HTMLElement>('.bundle-btn') ?? li.querySelector<HTMLElement>('[data-testid="move-pick"]'))?.focus()
+    onRevealed()
+  }, [reveal, tab, state, generation, view, superseded, groups, onRevealed])
 
   return (
     <div
@@ -311,6 +367,7 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
           type="button"
           className="custom-add-btn"
           ref={customButtonRef}
+          aria-haspopup="dialog"
           aria-expanded={customOpen}
           aria-controls={customOpen ? customPanelId : undefined}
           onClick={onToggleCustom}
@@ -382,6 +439,7 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
                       onChooseItem={onChooseItem}
                       onResetItem={onResetItem}
                       onMenuCards={onMenu}
+                      judgeAdd={judgeAdd}
                     />
                   ))
                   if (sec.bucket === undefined) return items

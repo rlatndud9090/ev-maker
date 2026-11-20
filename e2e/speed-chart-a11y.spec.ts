@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { combo, dragSlider, mySet, openProduct, region, selectTab, waitComplete } from './helpers'
+import { addCustomTarget, combo, dragSlider, mySet, openProduct, selectTab, waitComplete } from './helpers'
 
 // 스피드 차트 접근성: 접근성 트리(목록·기준선 구분 항목·배지 접근 이름), 알림 영역 갱신 시점, 키보드 탐색, 태그 글자 대비, 도구 아이콘 기하(포켓몬 이미지와 겹치지 않고 글자 오른쪽).
 
@@ -22,7 +22,7 @@ async function openSpeed(page: Page, allFilters = true) {
   }
 }
 
-/** 스피드 탭 요약 알림 영역(상세의 "이미 있음" 안내는 뺀다) */
+/** 스피드 탭 요약 알림 영역(상세의 "이미 존재합니다"·입력 안내는 뺀다) */
 function liveRegion(page: Page): Locator {
   return page
     .getByRole('tabpanel')
@@ -128,14 +128,7 @@ test.describe('스피드 차트 접근성', () => {
   test('"프리셋 n" 표지: 목록 밖 타겟 배지 이름에 프리셋 번호가 들어간다', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
-    await page.getByRole('button', { name: '포켓몬 추가', exact: true }).click()
-    const panel = region(page, '목록 밖 포켓몬 추가')
-    await combo(panel, '추가할 포켓몬').fill('워시로토무')
-    await combo(panel, '추가할 포켓몬').press('Enter')
-    const group = panel.getByRole('group', { name: /^기술/ })
-    await combo(group, '기술 검색').fill('하이드로펌프')
-    await group.getByRole('checkbox', { name: '하이드로펌프', exact: true }).check()
-    await panel.getByRole('button', { name: '추가', exact: true }).click()
+    await addCustomTarget(page, '워시로토무', ['하이드로펌프'])
     await selectTab(page, '스피드')
     const preset = page.locator('[data-testid="speed-badge"][data-origin="preset"]')
     await expect(preset).toHaveCount(3)

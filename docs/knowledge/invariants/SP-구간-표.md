@@ -39,6 +39,16 @@ area: SP 구간 표
 
 **위반 시:** 날씨를 양쪽 공통 입력으로 넣으면 내 기준선까지 날씨가 걸리거나(내 쓱쓱이 비에서 ×2), 상대 세트의 날씨 무효 특성 처리와 섞여 "파트너가 날씨를 깐다고 가정한 상대 속도"라는 조건 배지 의미가 깨진다. 대미지 판정의 INV-261115-attacker-field-only와는 다른 축이다(스피드 날씨 배지는 가정 조건).
 
+### INV-261119-added-only-opponent: 표시 범위 밖 '추가분만' 상대는 사용자 추가 배분만 내고 씨앗 중복 기준을 빈 집합에서 시작한다
+> area: SP 구간 표 · 출처: docs/raw/feature/add-pokemon-ux/adr.md#결정-1 · 코드: `src/cards/plan.ts:opponentsOf`, `src/cards/plan.ts:userSeeds`, `src/cards/speedChart.ts:ladderSpeedOpponent`, `src/cards/range.ts` · 봉인: `src/cards/plan.test.ts` "1위·관측 묶음과 같은 SP를 넣어도 추가분만 상대에는 카드가 실제로 생긴다", `src/cards/speedChart.test.ts` "범위 밖 추가분만 상대: 1위 묶음과 같은 배분도 추가 배지가 되고, 추가 배분을 지우면 사라진다"
+
+**위반 시:** 범위 밖 포켓몬에 1위 값을 넣으면 판정은 ok인데 씨앗 단계가 관측 키로 걸러 카드·배지가 생기지 않거나, 반대로 관측·기본·조건 줄이 새어 상위 N 밖 포켓몬이 통째로 나타난다.
+
+### INV-261119-addition-judge-same-seeds: 배분 추가 판정은 화면 표시와 같은 씨앗 함수에서 낸 표시 키로만 한다
+> area: SP 구간 표 · 출처: docs/raw/feature/add-pokemon-ux/adr.md#결정-1 · 코드: `src/cards/addition.ts`, `src/cards/plan.ts:opponentSeeds`, `src/cards/speedChart.ts:ladderSpeedOpponent` · 봉인: `src/cards/plan.test.ts` "범위 밖 추가분만 상대와 목록 밖 추가 배분도 cards 키 = planTab 기본 카드 키", `src/cards/addition.test.ts`
+
+**위반 시:** 진입점(패널·배지 상세·카드 '직접 추가')이 자체 비교식을 쓰면 표시 규칙과 갈라져 "화면에 보이는데 추가됨" 또는 "안 보이는데 이미 존재합니다"가 생긴다.
+
 ### INV-261120-no-lock-identity: 고정이 없으면 카드 층 출력(옵션 없는 탭 뷰·스피드 차트·사다리·코어 스피드)은 변경 전과 바이트 단위로 같아야 하고, 봉인 fixture를 기능 작업으로 갱신하지 않는다
 > area: SP 구간 표 · 출처: docs/raw/feature/cut-lock-budget/adr.md#결정-18, docs/raw/feature/cut-lock-budget/adr.md#결정-3 · 코드: `src/cards/batch.ts:buildTabView`, `src/cards/speedChart.ts:buildSpeedChart`, `src/cards/natures.ts:natureVariants`, `src/core/speed.ts` · 봉인: `src/acceptance/no-lock-identity.test.ts` "무고정 동일성 지문(변경 전 코드로 봉인, 기능 작업이 fixture를 갱신하면 안 된다)"
 

@@ -23,7 +23,7 @@ const mySet: PokemonSet = {
 }
 const ROTOM: CustomTarget = { rosterId: 'rotomwash', moves: ['hydropump', 'poltergeist', 'electroweb'], edits: {} }
 const first = bo1.ranking[0]
-const added: AddedBundle[] = [{ tab: 'attack', opponentId: first.id, category: 'special', sp: { hp: 4, spd: 8 } }]
+const added: AddedBundle[] = [{ tab: 'attack', source: 'ladder', opponentId: first.id, category: 'special', sp: { hp: 4, spd: 8 } }]
 const input = (patch: Partial<CardInput> = {}): CardInput => cardInput({ mySet, filters: { topN: 15, selected: [] }, customTargets: [ROTOM], addedBundles: added, ...patch })
 
 function expected(plan: TabPlan, card: CardSpec): { key: string; ref: LockTargetRef }[] {

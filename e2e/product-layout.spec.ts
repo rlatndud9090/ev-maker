@@ -6,7 +6,8 @@ const listBox = (page: Page) => page.getByTestId('result-box')
 const listScroll = (page: Page) => page.getByTestId('result-scroll')
 
 // AC18: 폭 400px·1280px에서 본문 가로 스크롤 없음, 라벨·컨트롤 겹침 없음. 카드는 펼치지 않는다(R20, 변동 팝오버 배치는 product-adjust.spec.ts).
-const CONTROLS = 'main[data-app="product"] :is(label, h1, h2, legend, button, [role="tab"], select, input, [data-testid="meta-source"], [data-testid="sp-remaining"])'
+// '포켓몬 추가'는 뒤 화면 위에 겹쳐 뜨는 팝오버라 그 안의 컨트롤은 따로(팝오버 안끼리) 본다
+const CONTROLS = 'main[data-app="product"] :is(label, h1, h2, legend, button, [role="tab"], select, input, [data-testid="meta-source"], [data-testid="sp-remaining"]):not([role="dialog"] *)'
 
 for (const width of [400, 1280]) {
   test.describe(`제품 화면 ${width}px`, () => {
@@ -21,6 +22,7 @@ for (const width of [400, 1280]) {
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
       expect(overflow).toBeLessThanOrEqual(0)
       expect(await findOverlaps(page, CONTROLS)).toEqual([])
+      expect(await findOverlaps(page, '[role="dialog"] :is(label, h2, button, input)')).toEqual([])
       // 카드 줄: 기술 선택 버튼과 결과(배지 + 변동 버튼)가 겹치지 않고, 이름(폼 꼬리 포함)은 1280px에서 한 줄.
       const lineIssues = await page.evaluate((wide) => {
         const out: string[] = []

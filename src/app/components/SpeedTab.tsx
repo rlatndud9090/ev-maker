@@ -7,15 +7,16 @@ import {
   visibleBadges,
   type CustomTarget,
   type SpeedBaseline,
+  type SpeedChartInput,
 } from '../../cards'
-import { CoreError, CoreInputError, validateSet, type EvalOptions, type PokemonSet } from '../../core'
+import type { EvalOptions, PokemonSet } from '../../core'
 import type { Snapshot } from '../../data/schema'
-import type { MetaView } from '../../meta'
 import { namesOf } from '../../ui/names'
 import { toPokemonSet } from '../../ui/setDraft'
 import { useDisplaySp, type DisplaySpStore } from '../displaySp'
 import { useLockUi } from '../lockContext'
 import { SPEED_CHART_COMPLETE_MARK, SPEED_CHART_FIRST_MARK, markSpeedChart } from '../perf'
+import type { SpeedReveal } from '../reveal'
 import type { AppAction, AppState } from '../state'
 import { SpeedChart } from './SpeedChart'
 import { SpeedChartHead } from './SpeedChartHead'
@@ -23,7 +24,8 @@ import { rejectionText } from './speedText'
 
 interface Props {
   game: Snapshot
-  view: MetaView
+  /** 차트 모델 입력(앱이 '포켓몬 추가' 패널의 스피드 판정과 함께 쓴다) */
+  input: SpeedChartInput
   state: AppState
   mySet: PokemonSet
   displaySp: DisplaySpStore
@@ -36,37 +38,25 @@ interface Props {
   customButtonRef: Ref<HTMLButtonElement>
   customPanelId: string
   customPanel: ReactNode
+  reveal: SpeedReveal | null
+  onRevealed: () => void
 }
 
 const IGNORE_TOTAL: EvalOptions = { ignoreSpTotal: true }
-
-/** 내 계산 특성(메가면 메가 폼). 해석할 수 없으면 null */
-function abilityOf(game: Snapshot, set: PokemonSet, options?: EvalOptions): string | null {
-  try {
-    return validateSet(game, set, options).ability
-  } catch (e) {
-    if (e instanceof CoreError || e instanceof CoreInputError) return null
-    throw e
-  }
-}
 
 /** 알림 영역 글자: 확정 기준선의 내 실수치만(총수 없는 추월·동속 개수는 알리지 않는다, 사용자 피드백 2026-11-16) */
 const summaryText = (b: SpeedBaseline): string => (b.kind === 'ok' ? `내 스피드 ${b.speed}` : '')
 
 /** 스피드 탭: 내 세트의 특성만 입력으로 받는 배지 모델을 한 번 만들고, 기준선(표시 SP)만 드래그를 따라간다 */
-export function SpeedTab({ game, view, state, mySet, displaySp, dispatch, tabId, panelId, generation, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel }: Props) {
-  const { filters, myTailwind, added } = state.speedChart
+export function SpeedTab({ game, input, state, mySet, displaySp, dispatch, tabId, panelId, generation, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel, reveal, onRevealed }: Props) {
+  const { filters, myTailwind } = state.speedChart
   const shownSp = useDisplaySp(displaySp)
   // 고정 중 mySet은 계획 세트(합계 66 초과 가능)라 합계 검사를 끄고, 고정 능력치는 드래그를 따르지 않는다
   const lockUi = useLockUi()
   const locked = lockUi.locks.length > 0
   const evalOptions = locked ? IGNORE_TOTAL : undefined
   const lockedStats = locked ? (lockUi.derivation?.lockedStats ?? null) : undefined
-  const myAbility = useMemo(() => abilityOf(game, mySet, evalOptions), [game, mySet, evalOptions])
-  const model = useMemo(
-    () => buildSpeedChart({ game, view, myAbility, criteria: state.criteria, filters: state.filters, customTargets: state.customTargets, added }),
-    [game, view, myAbility, state.criteria, state.filters, state.customTargets, added],
-  )
+  const model = useMemo(() => buildSpeedChart(input), [input])
   const badges = useMemo(() => visibleBadges(model, filters), [model, filters])
   const nameOf = useMemo(() => {
     const names = namesOf(game)
@@ -126,6 +116,7 @@ export function SpeedTab({ game, view, state, mySet, displaySp, dispatch, tabId,
           type="button"
           className="custom-add-btn"
           ref={customButtonRef}
+          aria-haspopup="dialog"
           aria-expanded={customOpen}
           aria-controls={customOpen ? customPanelId : undefined}
           onClick={onToggleCustom}
@@ -149,6 +140,8 @@ export function SpeedTab({ game, view, state, mySet, displaySp, dispatch, tabId,
       <SpeedChart
         game={game}
         model={model}
+        input={input}
+        bundleShareMin={state.criteria.bundleShareMin}
         badges={badges}
         rows={rows}
         baseline={baseline}
@@ -158,6 +151,8 @@ export function SpeedTab({ game, view, state, mySet, displaySp, dispatch, tabId,
         customTargets={targets}
         dispatch={dispatch}
         empty={empty}
+        reveal={reveal}
+        onRevealed={onRevealed}
       />
     </div>
   )

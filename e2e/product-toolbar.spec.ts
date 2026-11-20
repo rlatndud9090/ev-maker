@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { cards, combo, findOverlaps, mySet, openProduct, region, selectTab, tabPanel, waitComplete, type ProductTab } from './helpers'
+import { addPanel, cards, combo, findOverlaps, mySet, openProduct, selectTab, tabPanel, waitComplete, type ProductTab } from './helpers'
 
 // 목록 위 설정 개편(사용자 요청 2026-11-12): 통계 설정 → 표시 설정 → 포켓몬 찾기 3줄, 정렬 토글(사용률/계산결과순),
 // 계산결과순 그룹 라벨, "포켓몬 추가"는 진행 줄 오른쪽 끝.
@@ -143,6 +143,8 @@ test.describe('설정 영역 3줄', () => {
   })
 
   test('최소 사용률: 카드 계산 기준 2종은 인라인으로 바로 반영(세대 +1·재계산), 스피드 차트 전용 2종(구애스카프·날씨 특성)은 세대 그대로, 범위 밖은 반영하지 않는다', async ({ page }) => {
+    // 전체 재계산을 5번 직렬로 기다려 기본 30s에 거의 붙는다(main 기준 약 29s).
+    test.setTimeout(90_000)
     await openProduct(page)
     await waitComplete(page)
     const stats = rowGroup(page, '통계 설정')
@@ -430,16 +432,18 @@ test.describe('포켓몬 추가 버튼', () => {
 
     await expect(button).toHaveAttribute('aria-expanded', 'false')
     await button.click()
-    const panel = region(page, '목록 밖 포켓몬 추가')
+    const panel = addPanel(page)
     await expect(panel).toBeVisible()
     await expect(button).toHaveAttribute('aria-expanded', 'true')
+    await expect(button).toHaveAttribute('aria-haspopup', 'dialog')
     await expect(button).toHaveAttribute('aria-controls', (await panel.getAttribute('id'))!)
     await expect(combo(panel, '추가할 포켓몬')).toBeFocused()
-    // 패널은 진행 줄 바로 아래(목록 위): 열린 후보 목록이 버튼을 가리지 않는다
+    // 팝오버는 버튼 바로 아래에 붙고 오른쪽 끝을 버튼에 맞춘다(열린 후보 목록이 버튼을 가리지 않는다)
     const panelBox = (await panel.boundingBox())!
-    const statusNow = (await status.boundingBox())!
-    expect(panelBox.y).toBeGreaterThanOrEqual(statusNow.y + statusNow.height - 1)
-    expect(panelBox.y - (statusNow.y + statusNow.height)).toBeLessThan(24)
+    const buttonNow = (await button.boundingBox())!
+    expect(panelBox.y).toBeGreaterThanOrEqual(buttonNow.y + buttonNow.height - 1)
+    expect(panelBox.y - (buttonNow.y + buttonNow.height)).toBeLessThan(16)
+    expect(Math.abs(panelBox.x + panelBox.width - (buttonNow.x + buttonNow.width))).toBeLessThanOrEqual(2)
     // 열린 후보 목록을 Escape로 닫은 뒤 [취소]
     await page.keyboard.press('Escape')
     await panel.getByRole('button', { name: '취소', exact: true }).click()
@@ -490,13 +494,13 @@ for (const width of [400, 1280]) {
       const button = page.getByTestId('panel-status').getByRole('button', { name: '포켓몬 추가', exact: true })
       await button.scrollIntoViewIfNeeded()
       await button.click()
-      const panel = region(page, '목록 밖 포켓몬 추가')
+      const panel = addPanel(page)
       const input = combo(panel, '추가할 포켓몬')
       await expect(input).toBeFocused()
       await input.fill('로토무')
       const listbox = page.getByRole('listbox').filter({ has: page.getByRole('option') }).first()
       await expect(listbox).toBeVisible()
-      await expect(panel.getByRole('heading', { name: '목록 밖 포켓몬 추가' })).toBeInViewport()
+      await expect(panel.getByRole('heading', { name: '포켓몬 추가' })).toBeInViewport()
       await expect(input).toBeInViewport({ ratio: 1 })
       // 입력이 고정 진행 줄·탭 줄 밑에 숨지 않는다(가운데를 누르면 그 입력)
       const onTop = (l: Locator) =>

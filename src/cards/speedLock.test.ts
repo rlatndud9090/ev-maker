@@ -152,7 +152,7 @@ describe('대상 없음·세트 오류', () => {
 
   it('필터와 무관하게 해석하고, 추가 배분 배지는 그 배분이 차트에 있는 동안만 해석된다', () => {
     const outside = bo1.ranking[60]
-    const added: SpeedAddedBundle[] = [{ opponentId: outside.id, sp: 7, nature: 'minus' }]
+    const added: SpeedAddedBundle[] = [{ source: 'ladder', opponentId: outside.id, sp: 7, nature: 'minus' }]
     const b = chart(bo1, added).badges.find((x) => x.origin === 'added' && x.opponentId === outside.id) as SpeedBadge
     expect(b).toBeDefined()
     const lock = lockOf(b)
@@ -189,7 +189,7 @@ describe('해석 서명(R16·AC16 기초)', () => {
   it('무관한 배분 추가와 내 랭크 변경은 해석·서명을 바꾸지 않는다', () => {
     const locks = [lockOf(fastest120(), 1), lockOf(semi120(), 2)]
     const base = resolve(locks)
-    const unrelated: SpeedAddedBundle[] = [{ opponentId: bo1.ranking[0].id, sp: 3, nature: 'neutral' }]
+    const unrelated: SpeedAddedBundle[] = [{ source: 'ladder', opponentId: bo1.ranking[0].id, sp: 3, nature: 'neutral' }]
     expect(speedLockSignature(resolve(locks, { added: unrelated }))).toBe(speedLockSignature(base))
     expect(resolve(locks, { mySet: { ...raichuY, boosts: { spe: 2 } } })).toEqual(base)
   })

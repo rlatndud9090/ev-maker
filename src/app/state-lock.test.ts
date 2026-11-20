@@ -388,7 +388,7 @@ describe('세대를 올리지 않는 액션', () => {
     const actions: AppAction[] = [
       { type: 'set-speed-filter', kind: 'tailwind', on: true },
       { type: 'set-my-tailwind', on: true },
-      { type: 'add-speed-bundle', bundle: { opponentId: 'x', sp: 10, nature: 'plus' }, spMax: 32 },
+      { type: 'add-speed-bundle', bundle: { source: 'ladder', opponentId: 'x', sp: 10, nature: 'plus' }, spMax: 32 },
       { type: 'reveal-lock', seq: 1 },
       { type: 'clear-reveal' },
       { type: 'dismiss-lock-trim' },

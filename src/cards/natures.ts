@@ -5,7 +5,7 @@ import type { NatureVariant, NatureVariants, SpOverride } from './types'
 
 type BoostableStat = Exclude<StatId, 'hp'>
 /** 상승 성격 하락 후보 순서: 특공·공격(흔한 고집·조심·겁쟁이·명랑 계열)을 먼저 */
-const MINUS_ORDER: readonly BoostableStat[] = ['spa', 'atk', 'def', 'spd', 'spe']
+export const MINUS_ORDER: readonly BoostableStat[] = ['spa', 'atk', 'def', 'spd', 'spe']
 
 const sortedIds = (game: Snapshot): string[] => Object.keys(game.data.natures).sort()
 const isNeutral = (n: NatureEntry): boolean => n.plus === undefined || n.plus === n.minus

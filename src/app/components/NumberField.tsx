@@ -17,13 +17,15 @@ interface Props {
   step?: number
   /** num-field에 덧붙일 클래스(예: 짧은 값 입력의 좁은 칸) */
   className?: string
+  /** 입력 칸 data-testid */
+  testId?: string
 }
 
 const parse = (text: string): number => (text.trim() === '' ? NaN : Number(text))
 const show = (v: number): string => (Number.isFinite(v) ? String(v) : '')
 
 /** 입력 중 문자열은 지역 상태로 두고, 포커스를 잃으면 확정 값 표시로 돌아간다. */
-export function NumberField({ label, ariaLabel, describedBy, value, toText = show, fromText = parse, onValue, min, max, step, className }: Props) {
+export function NumberField({ label, ariaLabel, describedBy, value, toText = show, fromText = parse, onValue, min, max, step, className, testId }: Props) {
   const [editing, setEditing] = useState<string | null>(null)
   return (
     <label className={className === undefined ? 'num-field' : `num-field ${className}`}>
@@ -33,6 +35,7 @@ export function NumberField({ label, ariaLabel, describedBy, value, toText = sho
         inputMode="decimal"
         aria-label={ariaLabel}
         aria-describedby={describedBy}
+        data-testid={testId}
         min={min}
         max={max}
         step={step}

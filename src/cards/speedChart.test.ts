@@ -4,7 +4,17 @@ import type { MetaEntry } from '../data/meta-schema'
 import type { MetaView } from '../meta'
 import { bundlesOf } from './bundles'
 import { presetKey } from './ids'
-import { buildSpeedChart, checkSpeedAddition, ladderBaseSet, scarfConditionOf, scarfFreeSet, type SpeedBadge, type SpeedChartInput } from './speedChart'
+import {
+  buildSpeedChart,
+  customSpeedOpponent,
+  ladderBaseSet,
+  ladderSpeedOpponent,
+  scarfConditionOf,
+  scarfFreeSet,
+  speedKey,
+  type SpeedBadge,
+  type SpeedChartInput,
+} from './speedChart'
 import { bundleLabel, bundleSpoken, visibleBadges } from './speedLadder'
 import { realData, syntheticEntry, syntheticView } from './testing'
 import { DEFAULT_CRITERIA, DEFAULT_SPEED_FILTERS, type CustomTarget } from './types'
@@ -189,7 +199,7 @@ describe('조건 배지 생성(AC9)', () => {
   })
 
   it('스카프 필터를 끄면 래더·추가 배지 중 구애스카프 장착 세트가 하나도 없다', () => {
-    const m = build({ filters: { topN: 200, selected: [] }, added: [{ opponentId: 'garchomp', sp: 0, nature: 'minus' }, { opponentId: 'hydreigon', sp: 10, nature: 'neutral' }] })
+    const m = build({ filters: { topN: 200, selected: [] }, added: [{ source: 'ladder', opponentId: 'garchomp', sp: 0, nature: 'minus' }, { source: 'ladder', opponentId: 'hydreigon', sp: 10, nature: 'neutral' }] })
     expect(m.badges.some((b) => b.set.item === 'choicescarf')).toBe(true)
     const shown = visibleBadges(m, { ...DEFAULT_SPEED_FILTERS, scarf: false, tailwind: true })
     expect(shown.filter((b) => b.set.item === 'choicescarf')).toEqual([])
@@ -229,7 +239,7 @@ describe('조건 배지 생성(AC9)', () => {
   })
 
   it('조건 배지는 기본 배지(1위 묶음)에만 붙고 추가한 배분에는 없다', () => {
-    const m = build({ added: [{ opponentId: 'garchomp', sp: 0, nature: 'minus' }] })
+    const m = build({ added: [{ source: 'ladder', opponentId: 'garchomp', sp: 0, nature: 'minus' }] })
     const chomp = of(m.badges, 'garchomp')
     const base = chomp.find((b) => b.origin === 'ladder' && b.condition.kind === 'none') as SpeedBadge
     for (const b of chomp.filter((x) => x.condition.kind !== 'none')) expect(b.bundle).toEqual(base.bundle)
@@ -314,8 +324,8 @@ describe('추가 배분(R15)', () => {
   it('목록 묶음은 점유율을 갖고, 직접 입력은 점유율 없이 기본 세트의 S만 바꾼다', () => {
     const m = build({
       added: [
-        { opponentId: 'garchomp', sp: 32, nature: 'plus' },
-        { opponentId: 'garchomp', sp: 20, nature: 'minus' },
+        { source: 'ladder', opponentId: 'garchomp', sp: 32, nature: 'plus' },
+        { source: 'ladder', opponentId: 'garchomp', sp: 20, nature: 'minus' },
       ],
     })
     const added = of(m.badges, 'garchomp').filter((b) => b.origin === 'added')
@@ -330,7 +340,7 @@ describe('추가 배분(R15)', () => {
   })
 
   it('SP 합이 넘치면 S 밖 능력치에서 덜어 합계를 지킨다', () => {
-    const m = build({ added: [{ opponentId: 'kingambit', sp: 20, nature: 'neutral' }] })
+    const m = build({ added: [{ source: 'ladder', opponentId: 'kingambit', sp: 20, nature: 'neutral' }] })
     const added = of(m.badges, 'kingambit').find((b) => b.origin === 'added') as SpeedBadge
     const sp = added.set.sp
     expect(sp.spe).toBe(20)
@@ -338,22 +348,53 @@ describe('추가 배분(R15)', () => {
     expect(() => validateSet(game, added.set)).not.toThrow()
   })
 
-  it('기본 배지·앞선 추가와 같은 배분, 형식 오류, 필터 밖 상대는 추가 배지를 만들지 않는다', () => {
+  it('기본 배지·앞선 추가와 같은 배분, 형식 오류는 추가 배지를 만들지 않고, 필터 밖 상대는 추가 배지만 생긴다', () => {
     const m = build({
       filters: { topN: 30, selected: [] },
       added: [
-        { opponentId: 'garchomp', sp: 32, nature: 'neutral' },
-        { opponentId: 'garchomp', sp: 10, nature: 'neutral' },
-        { opponentId: 'garchomp', sp: 10, nature: 'neutral' },
-        { opponentId: 'garchomp', sp: 33, nature: 'neutral' },
-        { opponentId: 'typhlosionhisui', sp: 10, nature: 'neutral' },
+        { source: 'ladder', opponentId: 'garchomp', sp: 32, nature: 'neutral' },
+        { source: 'ladder', opponentId: 'garchomp', sp: 10, nature: 'neutral' },
+        { source: 'ladder', opponentId: 'garchomp', sp: 10, nature: 'neutral' },
+        { source: 'ladder', opponentId: 'garchomp', sp: 33, nature: 'neutral' },
+        { source: 'ladder', opponentId: 'typhlosionhisui', sp: 10, nature: 'neutral' },
       ],
     })
-    expect(m.badges.filter((b) => b.origin === 'added').map((b) => [b.opponentId, b.bundle.sp, b.addedOrder])).toEqual([['garchomp', 10, 1]])
+    expect(m.badges.filter((b) => b.origin === 'added').map((b) => [b.opponentId, b.bundle.sp, b.addedOrder])).toEqual([
+      ['garchomp', 10, 1],
+      ['typhlosionhisui', 10, 4],
+    ])
+    expect(bo1.ranking.slice(0, 30).some((e) => e.id === 'typhlosionhisui')).toBe(false)
+    expect(of(m.badges, 'typhlosionhisui').map((b) => [b.origin, b.condition.kind])).toEqual([['added', 'none']])
+  })
+
+  it('범위 밖 추가분만 상대: 1위 묶음과 같은 배분도 추가 배지가 되고, 추가 배분을 지우면 사라진다', () => {
+    const e = entryOf(bo1, 'typhlosionhisui')
+    const top = bundlesOf(game, e, ['spe'], { bundleShareMin: 0 })[0].stats[0]
+    const m = build({ filters: { topN: 1, selected: [] }, added: [{ source: 'ladder', opponentId: e.id, sp: top.sp, nature: top.nature }] })
+    const badges = of(m.badges, e.id)
+    expect(badges.map((b) => [b.origin, b.source, b.condition.kind, b.bundle.sp, b.bundle.nature])).toEqual([['added', 'ladder', 'none', top.sp, top.nature]])
+    expect(m.options.has(e.id)).toBe(true)
+    expect(of(build({ filters: { topN: 1, selected: [] } }).badges, e.id)).toEqual([])
+  })
+
+  it('topN을 줄이면 범위에서 빠진 상대는 추가 배지만 남는다(선택 종 하나도 같다)', () => {
+    const second = bo1.ranking[1]
+    const added = [{ source: 'ladder' as const, opponentId: second.id, sp: 7, nature: 'neutral' as const }]
+    const wide = of(build({ filters: { topN: 2, selected: [] }, added }).badges, second.id)
+    expect(wide.some((b) => b.origin === 'ladder')).toBe(true)
+    const kept = wide.filter((b) => b.origin === 'added')
+    expect(kept).toHaveLength(1)
+    for (const filters of [
+      { topN: 1, selected: [] },
+      { topN: 30, selected: [bo1.ranking[0].id] },
+    ]) {
+      const narrow = of(build({ filters, added }).badges, second.id)
+      expect(narrow).toEqual(kept)
+    }
   })
 
   it('묶음 목록은 스냅숏 전 묶음(점유율 내림차순)이고 차트에 있는 묶음을 표시한다', () => {
-    const m = build({ added: [{ opponentId: 'garchomp', sp: 0, nature: 'minus' }] })
+    const m = build({ added: [{ source: 'ladder', opponentId: 'garchomp', sp: 0, nature: 'minus' }] })
     expect(m.options.get('garchomp')).toEqual([
       // 스카프 없는 세트(생명의구슬): 102족 기본 122 + SP, 보정 ×1.1·×0.9 내림
       { sp: 32, nature: 'neutral', share: 0.3392, speed: 154, onChart: true },
@@ -364,17 +405,6 @@ describe('추가 배분(R15)', () => {
       { sp: 0, nature: 'neutral', share: 0.0114, speed: 122, onChart: false },
       { sp: 10, nature: 'neutral', share: 0.011, speed: 132, onChart: false },
     ])
-  })
-
-  it('checkSpeedAddition: 형식·대상 오류는 invalid, 차트에 있으면 duplicate, 아니면 목록 여부와 함께 ok', () => {
-    const m = build({ added: [{ opponentId: 'garchomp', sp: 10, nature: 'neutral' }] })
-    expect(checkSpeedAddition(m, 'garchomp', 33, 'neutral', 32)).toEqual({ kind: 'invalid' })
-    expect(checkSpeedAddition(m, 'garchomp', 1.5, 'neutral', 32)).toEqual({ kind: 'invalid' })
-    expect(checkSpeedAddition(m, 'typhlosionhisui', 10, 'neutral', 32)).toEqual({ kind: 'invalid' })
-    expect(checkSpeedAddition(m, 'garchomp', 32, 'neutral', 32)).toEqual({ kind: 'duplicate' })
-    expect(checkSpeedAddition(m, 'garchomp', 10, 'neutral', 32)).toEqual({ kind: 'duplicate' })
-    expect(checkSpeedAddition(m, 'garchomp', 32, 'plus', 32)).toEqual({ kind: 'ok', listed: true })
-    expect(checkSpeedAddition(m, 'garchomp', 11, 'plus', 32)).toEqual({ kind: 'ok', listed: false })
   })
 })
 
@@ -435,12 +465,16 @@ describe('force(필터 밖 대상 하나만)', () => {
   it('상위 N 밖 래더 상대도 그 상대 배지·선택지만 전체 모델과 같게 만든다', () => {
     const outside = bo1.ranking[40]
     const added = [
-      { opponentId: outside.id, sp: 0, nature: 'neutral' as const },
-      { opponentId: bo1.ranking[0].id, sp: 0, nature: 'neutral' as const },
+      { source: 'ladder' as const, opponentId: outside.id, sp: 0, nature: 'neutral' as const },
+      { source: 'ladder' as const, opponentId: bo1.ranking[0].id, sp: 0, nature: 'neutral' as const },
     ]
     const full = build({ filters: { topN: 200, selected: [] }, added })
     const forced = build({ filters: { topN: 1, selected: [bo1.ranking[0].id] }, added, force: { opponentId: outside.id, source: 'ladder' } })
-    expect(build({ filters: { topN: 1, selected: [] }, added }).badges.some((b) => b.opponentId === outside.id)).toBe(false)
+    // 범위 밖 래더 상대는 추가 배지만 나오고(add-pokemon-ux 결정 1), force는 기본·조건 배지까지 전체로 만든다
+    const ranged = of(build({ filters: { topN: 1, selected: [] }, added }).badges, outside.id)
+    expect(ranged.length).toBeGreaterThan(0)
+    expect(ranged.every((b) => b.origin === 'added')).toBe(true)
+    expect(forced.badges.some((b) => b.origin === 'ladder')).toBe(true)
     expect(forced.badges.length).toBeGreaterThan(0)
     expect(forced.badges).toEqual(of(full.badges, outside.id))
     expect([...forced.options.keys()]).toEqual([outside.id])
@@ -460,3 +494,140 @@ describe('force(필터 밖 대상 하나만)', () => {
     expect(build({ customTargets, force: { opponentId: 'rotomwash', source: 'ladder' } }).badges).toEqual([])
   })
 })
+
+describe('상대 단위 배지 계산(ladderSpeedOpponent·customSpeedOpponent)', () => {
+  const chartInput = (partial: Partial<SpeedChartInput> = {}): SpeedChartInput => ({
+    game,
+    view: bo1,
+    myAbility: 'roughskin',
+    criteria: { ...DEFAULT_CRITERIA },
+    filters: { topN: 30, selected: [] },
+    customTargets: [],
+    added: [],
+    ...partial,
+  })
+  const shownOnChart = (badges: readonly SpeedBadge[], id: string) =>
+    new Set(of(badges, id).filter((b) => b.condition.kind === 'none' && b.origin !== 'preset').map((b) => speedKey(b.bundle.sp, b.bundle.nature)))
+
+  it('래더 shownKeys = buildSpeedChart 결과의 그 상대 기본·추가 배지 speedKey', () => {
+    const top = bo1.ranking.slice(0, 30)
+    const added = [
+      { source: 'ladder' as const, opponentId: top[0].id, sp: 0, nature: 'minus' as const },
+      { source: 'ladder' as const, opponentId: top[1].id, sp: 10, nature: 'neutral' as const },
+      { source: 'ladder' as const, opponentId: top[1].id, sp: 11, nature: 'plus' as const },
+    ]
+    const inp = chartInput({ added })
+    const m = buildSpeedChart(inp)
+    let withAdded = 0
+    for (const e of top) {
+      const r = ladderSpeedOpponent(inp, e)
+      if (r.kind === 'none') {
+        expect(of(m.badges, e.id), e.id).toEqual([])
+        continue
+      }
+      expect(new Set(r.shownKeys), e.id).toEqual(shownOnChart(m.badges, e.id))
+      expect(of(m.badges, e.id).filter((b) => b.origin !== 'preset')).toEqual([...(r.base === null ? [] : [r.base]), ...r.conditions, ...r.added])
+      expect(m.options.get(e.id)).toEqual(r.options)
+      if (r.added.length > 0) withAdded += 1
+    }
+    expect(withAdded).toBe(2)
+  })
+
+  it('범위 밖 상대 ladderSpeedOpponent(addedOnly): 기본·조건 배지 없이 1위 묶음만 알리고 shownKeys는 추가 배지 키뿐', () => {
+    const e = bo1.ranking[0]
+    const inp = chartInput({ added: [{ source: 'ladder', opponentId: e.id, sp: 3, nature: 'neutral' }] })
+    const inRange = ladderSpeedOpponent(inp, e)
+    const out = ladderSpeedOpponent(inp, e, true)
+    if (inRange.kind !== 'ok' || out.kind !== 'ok') throw new Error('kind')
+    expect(out.base).toBeNull()
+    expect(out.conditions).toEqual([])
+    expect(out.top).toEqual(inRange.base?.bundle)
+    expect([...out.shownKeys]).toEqual([speedKey(3, 'neutral')])
+    expect(out.added).toEqual(inRange.added)
+    expect(out.options.map((o) => o.speed)).toEqual(inRange.options.map((o) => o.speed))
+  })
+
+  it('목록 밖 shownKeys = 계산된 프리셋 기본 배지 speedKey', () => {
+    const target: CustomTarget = { rosterId: 'rotomwash', moves: ['hydropump'], edits: { [presetKey('speed', null, 1)]: { sp: { spe: 5 } } } }
+    const inp = chartInput({ customTargets: [target] })
+    const r = customSpeedOpponent(inp, target, 0)
+    const presets = r.badges.filter((b) => b.condition.kind === 'none')
+    expect(presets).toHaveLength(3)
+    expect(new Set(r.shownKeys)).toEqual(new Set(presets.map((b) => speedKey(b.bundle.sp, b.bundle.nature))))
+    expect(of(buildSpeedChart(inp).badges, 'rotomwash')).toEqual(r.badges)
+  })
+})
+
+describe('목록 밖 추가 배지', () => {
+  const rotom = (edits: CustomTarget['edits'] = {}): CustomTarget => ({ rosterId: 'rotomwash', moves: ['hydropump'], edits })
+  const addedOf = (badges: readonly SpeedBadge[]) => badges.filter((b) => b.origin === 'added' && b.opponentId === 'rotomwash')
+
+  it('프리셋 1 세트에서 S SP·부호만 바꾸고, 출처 custom·순위 0·입력 순번·목록 밖 표지를 단다', () => {
+    const target = rotom()
+    const m = build({
+      customTargets: [target],
+      added: [
+        { source: 'ladder', opponentId: 'garchomp', sp: 10, nature: 'neutral' },
+        { source: 'custom', opponentId: 'rotomwash', sp: 5, nature: 'minus' },
+      ],
+    })
+    const preset0 = m.badges.find((b) => b.origin === 'preset' && b.opponentId === 'rotomwash' && b.presetIndex === 0 && b.condition.kind === 'none')
+    if (preset0 === undefined) throw new Error('no preset 1 badge')
+    const [added] = addedOf(m.badges)
+    expect(added).toMatchObject({ source: 'custom', usageRank: 0, addedOrder: 1, listed: false, bundle: { sp: 5, nature: 'minus', share: null }, condition: { kind: 'none' }, filterKind: null })
+    expect(added.id).toBe(JSON.stringify(['added', 'rotomwash', null, 5, 'minus', 'none']))
+    expect(added.set).toMatchObject({ ability: preset0.set.ability, moves: preset0.set.moves, sp: { spe: 5 } })
+    expect(added.set.item).toBe(preset0.set.item)
+    expect(game.data.natures[added.set.nature].minus).toBe('spe')
+    expect(added.speed).toBe(finalSpeed(game, added.set))
+    expect(m.badges.filter((b) => b.origin === 'preset').every((b) => b.source === 'custom')).toBe(true)
+  })
+
+  it('프리셋과 같은 (SP, 부호)·앞선 추가와 같은 배분은 배지를 만들지 않고, 입력 부호를 따른다', () => {
+    const target = rotom()
+    const r0 = customSpeedOpponent(chartInputOf([target], []), target, 0)
+    const p = r0.badges.find((b) => b.presetIndex === 0 && b.condition.kind === 'none')
+    if (p === undefined) throw new Error('no preset 1 badge')
+    const added = [
+      { source: 'custom' as const, opponentId: 'rotomwash', sp: p.bundle.sp, nature: p.bundle.nature },
+      { source: 'custom' as const, opponentId: 'rotomwash', sp: 7, nature: 'plus' as const },
+      { source: 'custom' as const, opponentId: 'rotomwash', sp: 7, nature: 'plus' as const },
+      { source: 'custom' as const, opponentId: 'rotomwash', sp: 7, nature: 'neutral' as const },
+      { source: 'custom' as const, opponentId: 'rotomwash', sp: 33, nature: 'neutral' as const },
+    ]
+    const r = customSpeedOpponent(chartInputOf([target], added), target, 0)
+    expect(addedOf(r.badges).map((b) => [b.bundle.sp, b.bundle.nature, b.addedOrder])).toEqual([
+      [7, 'plus', 1],
+      [7, 'neutral', 3],
+    ])
+    expect(game.data.natures[addedOf(r.badges)[0].set.nature].plus).toBe('spe')
+    expect(r.shownKeys.has(speedKey(7, 'plus'))).toBe(true)
+  })
+
+  it('프리셋 1의 도구 편집을 따르고, 도구 표시는 스피드 배수를 건 도구뿐이다', () => {
+    const scarf = rotom({ [presetKey('speed', null, 0)]: { item: 'choicescarf' } })
+    const [a] = addedOf(build({ customTargets: [scarf], added: [{ source: 'custom', opponentId: 'rotomwash', sp: 4, nature: 'neutral' }] }).badges)
+    expect(a).toMatchObject({ set: { item: 'choicescarf' }, item: 'choicescarf' })
+    const plain = rotom({ [presetKey('speed', null, 0)]: { item: 'leftovers' } })
+    const [b] = addedOf(build({ customTargets: [plain], added: [{ source: 'custom', opponentId: 'rotomwash', sp: 4, nature: 'neutral' }] }).badges)
+    expect(b).toMatchObject({ set: { item: 'leftovers' }, item: null })
+    expect(a.speed).toBe(Math.floor(b.speed * 1.5))
+  })
+
+  it('목록 밖 출처 추가 배분은 래더 상대 배지를 만들지 않고, 래더 출처 추가는 목록 밖 타겟 배지를 만들지 않는다', () => {
+    const target = rotom()
+    const m = build({
+      filters: { topN: 1, selected: [] },
+      customTargets: [target],
+      added: [
+        { source: 'custom', opponentId: 'garchomp', sp: 4, nature: 'neutral' },
+        { source: 'ladder', opponentId: 'rotomwash', sp: 4, nature: 'neutral' },
+      ],
+    })
+    expect(m.badges.filter((b) => b.origin === 'added')).toEqual([])
+  })
+})
+
+function chartInputOf(customTargets: CustomTarget[], added: SpeedChartInput['added']): SpeedChartInput {
+  return { game, view: bo1, myAbility: 'roughskin', criteria: { ...DEFAULT_CRITERIA }, filters: { topN: 30, selected: [] }, customTargets, added }
+}

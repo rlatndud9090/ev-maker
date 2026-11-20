@@ -121,7 +121,7 @@ describe('groupCards: 사용자 추가 배분', () => {
     const plus: CardView = { ...obs, id: 'obs+', bundle: { ...obs.bundle, stats: [statsN[0], { ...statsN[1], nature: 'plus' }] } }
     const top = view({ id: 'top', opp: 'x', share: 0.6 })
     const [grp] = groupCards([top, plus, obs])
-    const userId = addedBundleCardId({ tab: 'attack', opponentId: 'x', category: 'physical' }, statsN)
+    const userId = addedBundleCardId({ tab: 'attack', source: 'ladder', opponentId: 'x', category: 'physical' }, statsN)
     expect(chosenOption(grp, 'attack', 'obs+').id).toBe('obs+')
     expect(chosenOption(grp, 'attack', undefined).id).toBe('top')
     expect(chosenOption(grp, 'attack', userId).id).toBe('obs')
@@ -197,6 +197,35 @@ describe('groupCards: 고정 배분', () => {
     const [back] = groupCards([hi, mid, lo], 'attack', pins)
     expect(ids(back.options)).toEqual(['lo', 'mid', 'hi'])
     expect(back.pinned).toEqual(['lo', 'mid'])
+  })
+
+  it('목록 밖 그룹: 직접 추가 배분이 고정으로 프리셋 앞(추가 순)에 오고 분류 기본이 되며, 추가가 없으면 프리셋 1이 기본', () => {
+    const p2 = view({ id: 'p2', opp: 'z', source: 'custom', preset: 2 })
+    const p0 = view({ id: 'p0', opp: 'z', source: 'custom', preset: 0 })
+    const p1 = view({ id: 'p1', opp: 'z', source: 'custom', preset: 1 })
+    const u1 = user({ id: 'u1', opp: 'z', source: 'custom', added: 1 })
+    const u0 = user({ id: 'u0', opp: 'z', source: 'custom', added: 0 })
+    const [g] = groupCards([p2, p0, p1, u1, u0], 'attack', [pin(u1), pin(u0)])
+    expect(ids(g.options)).toEqual(['u1', 'u0', 'p0', 'p1', 'p2'])
+    expect(g.pinned).toEqual(['u1', 'u0'])
+    expect(defaultOption(g).id).toBe('u1')
+    const [unpinned] = groupCards([p2, p0, p1, u1, u0], 'attack', [])
+    expect(ids(unpinned.options)).toEqual(['u0', 'u1', 'p0', 'p1', 'p2'])
+    expect(unpinned.pinned).toEqual(['u0', 'u1'])
+    const [noTab] = groupCards([p2, p1, u0, p0])
+    expect(ids(noTab.options)).toEqual(['u0', 'p0', 'p1', 'p2'])
+    const [presets] = groupCards([p2, p1, p0], 'attack', [])
+    expect(defaultOption(presets).id).toBe('p0')
+  })
+
+  it('목록 밖 프리셋과 같은 키의 custom 고정이 있어도 프리셋은 고정되지 않는다', () => {
+    const p0 = view({ id: 'p0', opp: 'z', source: 'custom', preset: 0 })
+    const p1 = view({ id: 'p1', opp: 'z', source: 'custom', preset: 1 })
+    const hidden: PinnedBundle = { tab: 'attack', source: 'custom', opponentId: 'z', category: 'physical', key: p1.bundle.key }
+    const [g] = groupCards([p0, p1], 'attack', [hidden])
+    expect(g.pinned).toEqual([])
+    expect(ids(g.options)).toEqual(['p0', 'p1'])
+    expect(defaultOption(g).id).toBe('p0')
   })
 
   it('고정 목록에 없는 직접 추가 배분도 고정으로 친다(고정 뒤, 추가 순)', () => {

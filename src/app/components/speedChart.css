@@ -85,7 +85,7 @@
   overscroll-behavior: contain;
   /* 세로 여백은 프레임 padding이 아니라 내용 쪽에 둔다: 띠가 프레임 끝에 틈 없이 붙어 뒤로 지나가는 줄이 비치지 않게 */
   padding: 0 0.75rem;
-  /* 기준선 띠 높이(SpeedChart가 --speed-band-h로 잰다): 포커스·펼친 상세가 끝에 붙은 띠 뒤로 숨지 않게 한다 */
+  /* 기준선 띠 높이(SpeedChart가 --speed-band-h로 잰다): 포커스한 배지가 끝에 붙은 띠 뒤로 숨지 않게 한다 */
   scroll-padding-block: calc(var(--speed-band-h, 2.4rem) + 0.25rem);
 }
 
@@ -144,7 +144,6 @@
 }
 
 .speed-detail {
-  grid-column: 1 / -1;
   display: grid;
   gap: 0.5rem;
   padding: 0.75rem;
@@ -320,10 +319,6 @@
   font-weight: 600;
 }
 
-.speed-band-detail {
-  display: block;
-}
-
 /* 목록 밖 타겟: 상태 면 위에 빗금 무늬를 겹쳐 래더 배지와 배경으로 구분(R10) */
 .product .speed-badge.pre {
   background-image: repeating-linear-gradient(135deg, rgba(127, 127, 140, 0.18) 0 4px, transparent 4px 8px);
@@ -357,14 +352,4 @@
 
 .speed-add-op em {
   font-style: normal;
-}
-
-/* 데스크톱: 상세는 배지 칸 시작선에 맞춰 들여 쓴다(400px은 들여쓰기 없음, ADR 결정 1) */
-@media (min-width: 60rem) {
-  .speed-row > .speed-detail {
-    grid-column: 2 / -1;
-  }
-  .speed-band-detail {
-    padding-left: calc(3rem + 0.4rem);
-  }
 }

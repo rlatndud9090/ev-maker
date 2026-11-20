@@ -1132,6 +1132,116 @@ td.src {
   gap: 0.5rem;
 }
 
+/* 검색 후보·선택 칩의 상태 태그("메타 목록"·"표시 범위 밖"·"추가됨") */
+.combo-tag {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--muted);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.add-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.5rem;
+  min-width: 0;
+}
+
+.add-chip .combo-tag {
+  margin-left: 0;
+}
+
+.product .add-chip .add-reset {
+  margin-left: auto;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.add-body,
+.add-form {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.add-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.add-observed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+
+/* 관측 줄: 배분 · 점유율 · (스피드 실수치) · 상태. 좁은 폭에서는 상태가 다음 줄로 내려간다 */
+.product .add-observed-op {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.75rem;
+  width: 100%;
+  text-align: left;
+}
+
+.add-observed-op b {
+  min-width: 3.5rem;
+}
+
+.add-observed-op em {
+  font-style: normal;
+  margin-left: auto;
+}
+
+.add-observed-op:disabled em {
+  color: var(--muted);
+}
+
+.add-direct {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+}
+
+.add-direct .num-field.sp-field {
+  width: auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.add-direct .num-field.sp-field input {
+  width: 3.2rem;
+}
+
+.add-direct .nat-btn {
+  padding-block: 0.25rem;
+}
+
+.add-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.add-msg {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--danger);
+}
+
 .tab-panel {
   display: grid;
   gap: 0.5rem;
@@ -1641,7 +1751,7 @@ img.mon-icon {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.2rem;
-  padding: 0.3rem 0.45rem 0.4rem;
+  padding: 0.3rem 0.3rem 0.4rem;
   margin-bottom: 0.15rem;
   border-bottom: 1px solid var(--border);
   font-size: 0.85rem;
@@ -1656,7 +1766,7 @@ img.mon-icon {
   display: inline-flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.3rem;
   white-space: nowrap;
 }
 
@@ -1669,7 +1779,7 @@ img.mon-icon {
 }
 
 .bundle-add input {
-  width: 2.6rem;
+  width: 2.2rem;
   padding: 0.05rem 0.25rem;
   font: inherit;
   font-size: 0.85rem;
@@ -1694,11 +1804,31 @@ img.mon-icon {
   white-space: nowrap;
 }
 
+.bundle-add-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.bundle-add .nat-btns {
+  gap: 0.1rem;
+}
+
+.product .bundle-add .nat-btn {
+  width: 1rem;
+  padding: 0.05rem 0;
+  font-size: 0.65rem;
+}
+
 .bundle-add-hint {
   flex-basis: 100%;
   font-size: 0.75rem;
   white-space: normal;
   color: var(--danger);
+}
+
+.bundle-add-hint:empty {
+  flex-basis: 0;
 }
 
 .card-line .card-headline,

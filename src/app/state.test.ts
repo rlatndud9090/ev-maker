@@ -159,7 +159,7 @@ describe('reducer', () => {
   })
 
   describe('사용자 추가 배분', () => {
-    const hb = (hp: number, def: number): AddedBundle => ({ tab: 'attack', opponentId: 'garchomp', category: 'physical', sp: { hp, def } })
+    const hb = (hp: number, def: number): AddedBundle => ({ tab: 'attack', source: 'ladder', opponentId: 'garchomp', category: 'physical', sp: { hp, def } })
     const add = (bundle: AddedBundle, keyStats: StatId[] = ['hp', 'def']): AppAction => ({ type: 'add-bundle', bundle, keyStats, spMax: 32 })
 
     it('0~32 정수·키 능력치 집합이 같을 때만 추가 순으로 담고 세대를 올린다', () => {
@@ -192,6 +192,24 @@ describe('reducer', () => {
       expect(otherCategory.addedBundles).toHaveLength(2)
     })
 
+    it('보정 부호: 규칙(H 무보정·상승/하락 각 하나·키 능력치만)을 어기면 무시, 같은 SP라도 부호가 다르면 따로, 무보정 항목은 빼고 담는다', () => {
+      const s = start()
+      for (const nature of [{ hp: 'plus' }, { spd: 'minus' }, JSON.parse('{"def":"up"}')] as const) expect(reducer(s, add({ ...hb(4, 8), nature }))).toBe(s)
+      const one = reducer(s, add({ ...hb(4, 8), nature: { hp: 'neutral', def: 'plus' } }))
+      expect(one.addedBundles).toEqual([{ ...hb(4, 8), nature: { def: 'plus' } }])
+      expect(one.pinnedBundles.map((p) => p.key)).toEqual(['[{"stat":"hp","sp":4,"nature":"neutral"},{"stat":"def","sp":8,"nature":"plus"}]'])
+      expect(reducer(one, add({ ...hb(4, 8), nature: { def: 'plus' } }))).toBe(one)
+      const two = reducer(one, add(hb(4, 8)))
+      expect(two.addedBundles).toEqual([{ ...hb(4, 8), nature: { def: 'plus' } }, hb(4, 8)])
+      const three = reducer(two, add({ ...hb(4, 8), nature: { def: 'minus' } }))
+      expect(three.addedBundles).toHaveLength(3)
+      // 무보정 명시는 부호 없음과 같은 배분
+      expect(reducer(three, add({ ...hb(4, 8), nature: { def: 'neutral' } }))).toBe(three)
+      const removed = reducer(three, { type: 'remove-bundle', bundle: { ...hb(4, 8), nature: { def: 'plus' } } })
+      expect(removed.addedBundles).toEqual([hb(4, 8), { ...hb(4, 8), nature: { def: 'minus' } }])
+      expect(removed.pinnedBundles).toHaveLength(2)
+    })
+
     it('삭제는 같은 배분만 지우고, 없으면 그대로', () => {
       const two = run(start(), add(hb(0, 32)), add(hb(32, 0)))
       const removed = reducer(two, { type: 'remove-bundle', bundle: hb(0, 32) })
@@ -203,6 +221,7 @@ describe('reducer', () => {
     // 직접 추가 배분의 고정 키 = 키 능력치 STAT_IDS 순·무보정 묶음 키(관측 묶음 키와 같은 형식)
     const pinOfHb = (hp: number, def: number, extra: Partial<PinnedBundle> = {}): PinnedBundle => ({
       tab: 'attack',
+      source: 'ladder',
       opponentId: 'garchomp',
       category: 'physical',
       key: JSON.stringify([
@@ -211,7 +230,7 @@ describe('reducer', () => {
       ]),
       ...extra,
     })
-    const observed = (key: string): PinnedBundle => ({ tab: 'attack', opponentId: 'garchomp', category: 'physical', key })
+    const observed = (key: string): PinnedBundle => ({ tab: 'attack', source: 'ladder', opponentId: 'garchomp', category: 'physical', key })
 
     it('추가는 고정도 함께(추가 순, 관측 고정과 한 목록), 같은 키 고정이 이미 있으면 고정을 겹치지 않는다', () => {
       const s = run(start(), { type: 'pin-bundle', pin: observed('obs-a') }, add(hb(0, 32)), add(hb(32, 0)))
@@ -276,6 +295,76 @@ describe('reducer', () => {
       const { game, bo1 } = realData()
       const s = reducer(start(), add(hb(0, 32)))
       expect(toCardInput(s, game, bo1).addedBundles).toEqual([hb(0, 32)])
+    })
+
+    describe('출처', () => {
+      const custom = (hp: number, def: number): AddedBundle => ({ ...hb(hp, def), source: 'custom' })
+      const customPin = (hp: number, def: number): PinnedBundle => pinOfHb(hp, def, { source: 'custom' })
+
+      it('같은 id·SP라도 출처가 다르면 별개 항목으로 추가되고 고정도 따로 붙는다', () => {
+        const s = run(start(), add(hb(4, 8)), add(custom(4, 8)))
+        expect(s.addedBundles).toEqual([hb(4, 8), custom(4, 8)])
+        expect(s.pinnedBundles).toEqual([pinOfHb(4, 8), customPin(4, 8)])
+        expect(reducer(s, add(custom(4, 8)))).toBe(s)
+      })
+
+      it('삭제·고정 해제는 같은 출처 항목만 지운다', () => {
+        const s = run(start(), add(hb(4, 8)), add(custom(4, 8)))
+        const removed = reducer(s, { type: 'remove-bundle', bundle: custom(4, 8) })
+        expect(removed.addedBundles).toEqual([hb(4, 8)])
+        expect(removed.pinnedBundles).toEqual([pinOfHb(4, 8)])
+        const unpinned = reducer(s, { type: 'unpin-bundle', pin: pinOfHb(4, 8) })
+        expect(unpinned.addedBundles).toEqual([custom(4, 8)])
+        expect(unpinned.pinnedBundles).toEqual([customPin(4, 8)])
+      })
+
+      it('고정은 출처를 담고, 출처만 다른 고정은 따로 붙는다', () => {
+        const s = run(start(), { type: 'pin-bundle', pin: observed('a') }, { type: 'pin-bundle', pin: { ...observed('a'), source: 'custom' } })
+        expect(s.pinnedBundles).toEqual([observed('a'), { ...observed('a'), source: 'custom' }])
+        const off = reducer(s, { type: 'unpin-bundle', pin: { ...observed('a'), source: 'custom' } })
+        expect(off.pinnedBundles).toEqual([observed('a')])
+      })
+
+      it('출처가 ladder·custom이 아니면 추가·고정을 무시한다', () => {
+        const s = start()
+        const badBundle: AddedBundle = JSON.parse(JSON.stringify({ ...hb(4, 8), source: 'other' }))
+        const badPin: PinnedBundle = JSON.parse(JSON.stringify({ ...observed('a'), source: 'other' }))
+        expect(reducer(s, add(badBundle))).toBe(s)
+        expect(reducer(s, { type: 'pin-bundle', pin: badPin })).toBe(s)
+      })
+
+      it('remove-custom-target은 그 rosterId의 custom 추가 배분·고정·스피드 추가를 함께 지우고 래더 항목은 남긴다', () => {
+        const rid = 'rotomwash'
+        const ladderAdded: AddedBundle = { ...hb(4, 8), opponentId: rid }
+        const customAdded: AddedBundle = { ...custom(4, 8), opponentId: rid }
+        const otherCustom: AddedBundle = { ...custom(4, 8), opponentId: 'gholdengo' }
+        const ladderSpeed: SpeedAddedBundle = { source: 'ladder', opponentId: rid, sp: 10, nature: 'neutral' }
+        const customSpeed: SpeedAddedBundle = { source: 'custom', opponentId: rid, sp: 10, nature: 'neutral' }
+        const s = run(
+          start(),
+          { type: 'add-custom-target', rosterId: rid, moves: ['hydropump'] },
+          { type: 'add-custom-target', rosterId: 'gholdengo', moves: ['makeitrain'] },
+          add(ladderAdded),
+          add(customAdded),
+          add(otherCustom),
+          { type: 'add-speed-bundle', bundle: ladderSpeed, spMax: 32 },
+          { type: 'add-speed-bundle', bundle: customSpeed, spMax: 32 },
+        )
+        const removed = reducer(s, { type: 'remove-custom-target', rosterId: rid })
+        expect(removed.customTargets.map((t) => t.rosterId)).toEqual(['gholdengo'])
+        expect(removed.addedBundles).toEqual([ladderAdded, otherCustom])
+        expect(removed.pinnedBundles).toEqual([pinOfHb(4, 8, { opponentId: rid }), pinOfHb(4, 8, { source: 'custom', opponentId: 'gholdengo' })])
+        expect(removed.speedChart.added).toEqual([ladderSpeed])
+        expect(removed.generation).toBe(s.generation + 1)
+      })
+
+      it('remove-custom-target에 지울 추가 항목이 없으면 다른 목록은 그대로 둔다', () => {
+        const s = run(start(), { type: 'add-custom-target', rosterId: 'rotomwash', moves: ['hydropump'] }, add(hb(4, 8)))
+        const removed = reducer(s, { type: 'remove-custom-target', rosterId: 'rotomwash' })
+        expect(removed.addedBundles).toBe(s.addedBundles)
+        expect(removed.pinnedBundles).toBe(s.pinnedBundles)
+        expect(removed.speedChart).toBe(s.speedChart)
+      })
     })
   })
 })
@@ -347,7 +436,7 @@ describe('상대 기술 추가·직접 선택 해제', () => {
 })
 
 describe('스피드 차트 상태', () => {
-  const b = (opponentId: string, sp: number, nature: SpeedAddedBundle['nature'] = 'neutral'): SpeedAddedBundle => ({ opponentId, sp, nature })
+  const b = (opponentId: string, sp: number, nature: SpeedAddedBundle['nature'] = 'neutral'): SpeedAddedBundle => ({ source: 'ladder', opponentId, sp, nature })
 
   it('스카프·날씨 특성 기준 변경은 세대를 올리지 않고 값만 바꾼다, 공격·방어 기준이 함께 바뀌면 올린다', () => {
     const s = start()
@@ -391,9 +480,18 @@ describe('스피드 차트 상태', () => {
     expect(reducer(removed, { type: 'remove-speed-bundle', bundle: b('garchomp', 20, 'plus') })).toBe(removed)
   })
 
+  it('같은 (상대, SP, 부호)라도 출처가 다르면 별개 항목이다(추가·삭제)', () => {
+    const custom: SpeedAddedBundle = { ...b('garchomp', 20), source: 'custom' }
+    const s = run(start(), { type: 'add-speed-bundle', bundle: b('garchomp', 20), spMax: 32 }, { type: 'add-speed-bundle', bundle: custom, spMax: 32 })
+    expect(s.speedChart.added).toEqual([b('garchomp', 20), custom])
+    expect(reducer(s, { type: 'remove-speed-bundle', bundle: custom }).speedChart.added).toEqual([b('garchomp', 20)])
+    const bad: SpeedAddedBundle = JSON.parse(JSON.stringify({ ...b('garchomp', 20), source: 'other' }))
+    expect(reducer(s, { type: 'add-speed-bundle', bundle: bad, spMax: 32 })).toBe(s)
+  })
+
   it('공격·방어 직접 추가·고정과 섞이지 않는다', () => {
     const s = start()
-    const atk: AddedBundle = { tab: 'attack', opponentId: 'garchomp', category: 'physical', sp: { hp: 32, def: 0 } }
+    const atk: AddedBundle = { tab: 'attack', source: 'ladder', opponentId: 'garchomp', category: 'physical', sp: { hp: 32, def: 0 } }
     const withAtk = reducer(s, { type: 'add-bundle', bundle: atk, keyStats: ['hp', 'def'], spMax: 32 })
     const both = reducer(withAtk, { type: 'add-speed-bundle', bundle: b('garchomp', 32), spMax: 32 })
     expect(both.addedBundles).toEqual(withAtk.addedBundles)
