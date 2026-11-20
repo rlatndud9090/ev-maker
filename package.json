@@ -17,7 +17,7 @@
     "gen:snapshot": "node scripts/data/build-snapshot.mjs",
     "gen:meta": "node scripts/data/build-meta.mjs",
     "gen:images": "node scripts/data/gen-images.mjs",
-    "deploy": "npm run build && wrangler pages deploy"
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "@smogon/calc": "0.12.0",

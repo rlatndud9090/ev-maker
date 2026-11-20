@@ -25,10 +25,3 @@ PokePaste 연동·요약 탭 작업에 앞서 앱을 공개 주소로 먼저 띄
 
 - `npm run build` 성공, dist 8.8M(5MB 넘는 단일 파일 없음 — Workers 자산 파일당 25MiB 한도 안)
 - `npx wrangler deploy --dry-run`: 자산 402개 인식, 바인딩 없음
-
-## 개정 (2026-11-20): Workers → Pages 전환
-
-- `*.workers.dev` 주소에는 계정 서브도메인이 들어가 길어서, 사용자가 Pages(`evmaker.pages.dev`)로 바꾸기로 했다. pokepast.es `/raw`가 CORS를 허용해 프록시가 필요 없어진 것도 이유다.
-- `wrangler.jsonc`는 Pages 형식(`name: evmaker`, `pages_build_output_dir: ./dist`)으로 바꾸고, `npm run deploy`는 `wrangler pages deploy`를 쓴다. 404.html이 없으면 Pages가 알아서 index.html로 돌려주므로 SPA 폴백 설정은 따로 두지 않는다.
-- 대시보드 연결: Workers & Pages → Pages → Connect to Git, 빌드 `npm run build`, 출력 `dist`, 브랜치 `main`.
-- 서버가 필요해지면 `functions/`(Pages Functions)나 서비스 바인딩한 별도 Worker로 붙인다.
