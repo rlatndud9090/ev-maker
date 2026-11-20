@@ -1,7 +1,7 @@
-// R11 내 포켓몬 교체·재계산 UX: 처음 고른 종 = 대표 세트, 종별 수동 세트 기억(AC31), 종 교체 시 펼침 접기·스크롤 유지(AC32).
+// R11 내 포켓몬 교체·재계산 UX: 처음 고른 종 = 대표 세트, 종별 수동 세트 기억(AC31), 재계산 뒤 스크롤 유지(AC32). 카드 펼침은 R20으로 없어졌다.
 import { readFileSync } from 'node:fs'
-import { expect, test, type Locator, type Page } from '@playwright/test'
-import { cards, combo, mySet, openProduct, selectTab, tabPanel, waitComplete } from './helpers'
+import { expect, test, type Page } from '@playwright/test'
+import { combo, mySet, openProduct, selectTab, tabPanel, waitComplete } from './helpers'
 
 interface Named { name: { ko: string; koLabel?: string } }
 const data = JSON.parse(readFileSync(new URL('../src/data/regulations/m-c/data.json', import.meta.url), 'utf8')) as {
@@ -29,8 +29,6 @@ const spBox = (page: Page, stat: keyof typeof STATS) => mySet(page).getByRole('s
 const moveBox = (page: Page, i: number) => combo(mySet(page), `기술 ${i + 1}`)
 const abilitySelect = (page: Page) => mySet(page).locator('label.chip', { hasText: '특성' }).locator('select')
 const itemBox = (page: Page) => combo(mySet(page), '도구')
-const cardLine = (card: Locator) => card.locator('button[aria-expanded]').first()
-const expandedCards = (page: Page) => tabPanel(page).locator('[data-testid="card"] button.card-toggle[aria-expanded="true"]')
 const scroller = (page: Page) => page.getByTestId('result-scroll')
 
 async function chooseSpecies(page: Page, text: string) {
@@ -85,16 +83,18 @@ test.describe('내 포켓몬 교체(R11)', () => {
     await itemBox(page).fill(label(data.items[other]))
     await itemBox(page).press('Enter')
     await expect(itemBox(page)).toHaveValue(label(data.items[other]))
-    const hp = a.representative.set.sp.hp === 0 ? '1' : '0'
-    await spBox(page, 'hp').fill(hp)
-    await expect(spBox(page, 'hp')).toHaveValue(hp)
+    // SP 입력은 남은 합계까지만 받으므로 대표 세트에서 SP가 있는 칸을 1 줄인다
+    const edited = (Object.keys(STATS) as (keyof typeof STATS)[]).find((s) => a.representative.set.sp[s] > 0)!
+    const editedSp = String(a.representative.set.sp[edited] - 1)
+    await spBox(page, edited).fill(editedSp)
+    await expect(spBox(page, edited)).toHaveValue(editedSp)
 
     await chooseSpecies(page, label(data.species[b.id]))
     await expectRepresentative(page, b)
 
     await chooseSpecies(page, label(data.species[a.id]))
     await expect(itemBox(page)).toHaveValue(label(data.items[other]))
-    await expect(spBox(page, 'hp')).toHaveValue(hp)
+    await expect(spBox(page, edited)).toHaveValue(editedSp)
     await expect(abilitySelect(page)).toHaveValue(a.representative.set.ability)
 
     // 처음 화면의 예시 세트 종으로 돌아오면 예시 세트 그대로(대표 세트로 덮지 않는다)
@@ -116,26 +116,6 @@ test.describe('내 포켓몬 교체(R11)', () => {
     // 원종으로 돌아오면 다시 고를 수 있다
     await chooseSpecies(page, label(data.species.gardevoir))
     await expect(abilitySelect(page)).toBeEnabled()
-  })
-
-  test('종을 바꾸면 재계산 뒤 펼친 카드가 접히고, SP만 바꾸면 펼침 유지(AC32)', async ({ page }) => {
-    await openProduct(page)
-    await waitComplete(page)
-    await cardLine(cards(page).nth(0)).click()
-    await cardLine(cards(page).nth(1)).click()
-    await expect(expandedCards(page)).toHaveCount(2)
-
-    let gen = await tabPanel(page).getAttribute('data-generation')
-    await mySet(page).getByRole('button', { name: 'SP HP 1 내리기', exact: true }).click()
-    await afterRecompute(page, gen)
-    await expect(expandedCards(page)).toHaveCount(2)
-
-    const target = defaultEntries().find((e) => e.id !== 'garchomp' && data.species[e.id] && !data.species[e.id].isMega)!
-    gen = await tabPanel(page).getAttribute('data-generation')
-    await chooseSpecies(page, label(data.species[target.id]))
-    await afterRecompute(page, gen)
-    await expect(expandedCards(page)).toHaveCount(0)
-    await expect(cards(page).first()).toBeVisible()
   })
 
   // 방어 탭은 재계산 중 기본 항목이 정해지기 전 카드를 숨겨 목록이 잠깐 짧아진다(고치기 전: scrollTop 900 → 185 근처로 줄었다).

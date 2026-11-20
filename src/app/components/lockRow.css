@@ -1,0 +1,66 @@
+/* 컷 고정 표시(스피드 배지 상세 갈래 줄·필터 밖 안내·고정된 스피드 배지): 사유 칩·갈래 줄. 색은 index.css 역할 토큰만 쓴다 */
+
+.lock-chip {
+  display: inline-block;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  padding: 0 0.4rem;
+  border: 1px dashed var(--control-border);
+  border-radius: 999px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.lock-chip.warn {
+  border-color: var(--danger-border);
+  color: var(--danger);
+}
+
+.lock-base-mark {
+  display: inline-block;
+  margin-left: 0.3rem;
+  font-size: 0.7rem;
+  padding: 0 0.3rem;
+  border: 1px solid var(--muted);
+  border-radius: 3px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* 갈래 줄: 목표 문구 자리의 들여쓴 목록 */
+.lock-branches {
+  list-style: none;
+  margin: 0.15rem 0 0.3rem;
+  padding: 0 0 0 0.75rem;
+  border-left: 2px solid var(--border);
+  display: grid;
+  gap: 0.15rem;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.lock-branch[data-status='no-drop-slot'],
+.lock-branch[data-status='pending'] {
+  color: var(--muted);
+}
+
+.lock-outside {
+  margin: 0.3rem 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.lock-outside:empty {
+  display: none;
+}
+
+/* 스피드: 고정된 배지 */
+.speed-badge.locked {
+  outline: 2px solid var(--lock);
+  outline-offset: 1px;
+}
+
+.speed-mark.locked {
+  background: var(--lock);
+  color: var(--on-lock);
+}

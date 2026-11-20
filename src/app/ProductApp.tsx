@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { TABS, type ErrorReason, type MetaSourceView, type SpeedChartInput, type Tab } from '../cards'
-import type { SpTable } from '../core'
+import type { EvalOptions, PokemonSet, SpTable } from '../core'
 import type { RegulationIndex, Snapshot } from '../data/schema'
 import type { MetaIndex, MetaSnapshot } from '../data/meta-schema'
 import { loadRegulationIndex, loadSnapshot } from '../data/loader'
@@ -17,6 +17,9 @@ import { abilityOf } from './myAbility'
 import type { Reveal, RevealRequest } from './reveal'
 import { initialState, moveSelections, reducer } from './state'
 import { useExecutor } from './useExecutor'
+import { LockUiContext, lockUiValue } from './lockContext'
+import { useLockRuntime } from './lockRuntime'
+import { baseLockedSp } from './spLimit'
 import { CustomTargetPanel } from './components/CustomTargetPanel'
 import { Popover } from './components/Popover'
 import { MySetPanel } from './components/MySetPanel'
@@ -95,6 +98,7 @@ export function ProductApp() {
 
 /** 탭을 바꿔도 '포켓몬 추가'는 열린 채 고른 포켓몬을 유지한다(탭 누름은 바깥 누름이 아니다) */
 const KEEP_OPEN_ON = '[role="tab"]'
+const IGNORE_TOTAL: EvalOptions = { ignoreSpTotal: true }
 
 function Workspace({ boot }: { boot: Boot }) {
   const { game } = boot
@@ -156,16 +160,18 @@ function Workspace({ boot }: { boot: Boot }) {
   }, [requestKey, meta, regulation, selection, game])
 
   const ready = meta.key === requestKey ? meta.view : undefined
-  const { draft, customTargets, generation, tab } = state
+  const { draft, customTargets, tab } = state
   // 탭 전환도 새 입력 객체를 만들지만 세대가 같아 실행기가 무시한다.
   const input = useMemo(() => (ready === undefined ? undefined : toCardInput(state, game, ready)), [ready, state, game])
+  // 실행기와 화면의 모든 세대 비교는 리듀서 세대가 아니라 실행 세대로 한다.
+  const { lockRun, runGeneration } = useLockRuntime(state, game, ready)
 
   useEffect(() => {
     executor.setActiveTab(tab)
   }, [executor, tab])
   useEffect(() => {
-    if (input !== undefined) executor.setInput(input, generation)
-  }, [executor, input, generation])
+    if (input !== undefined) executor.setInput(input, runGeneration, lockRun)
+  }, [executor, input, runGeneration, lockRun])
   // 직접 고른 기술은 계산 입력이 아니라 실행기에 수요로만 알린다(세대를 바꾸지 않는다).
   useEffect(() => {
     for (const t of TABS) executor.setSelections(t, moveSelections(state.moveChoices, t))
@@ -181,13 +187,40 @@ function Workspace({ boot }: { boot: Boot }) {
   )
   // 기술 선택 목록을 연 줄의 항목 변동 판정도 계산 입력이 아니라 수요다.
   const onMenuCards = useCallback((t: Tab, cardIds: readonly string[]) => executor.setMenuCards(t, cardIds), [executor])
+  // 조정 팝오버를 연 카드와 핀 단계 메뉴를 연 카드는 같은 고정 후보·조정 수요(setDetailCards)로 합쳐 알린다.
+  const [lockDemand] = useState(() => new Map<Tab, { adjust: readonly string[]; pin: readonly string[] }>())
+  const pushLockDemand = useCallback(
+    (t: Tab, patch: { adjust?: readonly string[]; pin?: readonly string[] }) => {
+      const next = { adjust: [], pin: [], ...lockDemand.get(t), ...patch }
+      lockDemand.set(t, next)
+      executor.setDetailCards(t, [...new Set([...next.adjust, ...next.pin])])
+    },
+    [executor, lockDemand],
+  )
+  const onAdjustCard = useCallback((t: Tab, cardId: string | null) => pushLockDemand(t, { adjust: cardId === null ? [] : [cardId] }), [pushLockDemand])
+  const onPinMenu = useCallback((t: Tab, cardId: string | null) => pushLockDemand(t, { pin: cardId === null ? [] : [cardId] }), [pushLockDemand])
+
+  const { locks, lockReveal, lockTrim } = state
+  const lockSnapshot = snapshot.locks
+  const lockUi = useMemo(
+    () => lockUiValue({ game, state: { draft, locks, lockReveal, lockTrim }, snapshot: lockSnapshot, runGeneration, dispatch, onAdjustCard, onPinMenu }),
+    [game, draft, locks, lockReveal, lockTrim, lockSnapshot, runGeneration, onAdjustCard, onPinMenu],
+  )
+  // 핀 고정·기준 갈래 변경 뒤 처음 나온 파생으로 초과를 한 번만 자동 조정한다(리듀서가 표지를 비워 다시 돌지 않는다).
+  const { lockFit } = state
+  const fitDerivation = lockUi.derivation
+  useEffect(() => {
+    if (lockFit !== null && fitDerivation !== null) dispatch({ type: 'fit-locks', token: lockFit, lockedSp: baseLockedSp(fitDerivation) })
+  }, [lockFit, fitDerivation])
+  const lockResolutions =
+    lockSnapshot !== null && !lockSnapshot.pending && lockSnapshot.generation === runGeneration && locks.length > 0 ? lockSnapshot.resolutions : undefined
 
   const reasons = useMemo(() => {
     const out: ErrorReason[] = []
     const seen = new Set<string>()
     for (const t of TABS) {
       const s = snapshot.tabs[t]
-      if (s.kind !== 'view' || s.superseded || s.generation !== generation || s.view.status.kind !== 'my-set-error') continue
+      if (s.kind !== 'view' || s.superseded || s.generation !== runGeneration || s.view.status.kind !== 'my-set-error') continue
       for (const r of s.view.status.reasons) {
         const k = JSON.stringify([r.code, r.field ?? null, r.message])
         if (!seen.has(k)) {
@@ -197,10 +230,16 @@ function Workspace({ boot }: { boot: Boot }) {
       }
     }
     return out
-  }, [snapshot, generation])
+  }, [snapshot, runGeneration])
 
-  const mySet = useMemo(() => toPokemonSet(game, draft).set, [game, draft])
-  const myAbility = useMemo(() => abilityOf(game, mySet), [game, mySet])
+  const draftSet = useMemo(() => toPokemonSet(game, draft).set, [game, draft])
+  // 고정 중 화면의 내 세트는 기준 갈래 계획 세트다(다시 계산하는 동안은 직전 계획 세트).
+  const [lastPlanSet, setLastPlanSet] = useState<PokemonSet | null>(null)
+  if (lockUi.planSet !== null && lockUi.planSet !== lastPlanSet) setLastPlanSet(lockUi.planSet)
+  if (locks.length === 0 && lastPlanSet !== null) setLastPlanSet(null)
+  const mySet = lockUi.planSet ?? (lockUi.pending ? lastPlanSet : null) ?? draftSet
+  // 고정 중 mySet은 계획 세트(합계 66 초과 가능)라 합계 검사를 끄고 특성을 본다
+  const myAbility = useMemo(() => abilityOf(game, mySet, locks.length > 0 ? IGNORE_TOTAL : undefined), [game, mySet, locks.length])
   const { added: speedAdded } = state.speedChart
   // 스피드 차트와 '포켓몬 추가' 스피드 판정이 같은 입력(화면 메타)을 쓴다
   const speedInput = useMemo(
@@ -212,7 +251,7 @@ function Workspace({ boot }: { boot: Boot }) {
   const active = snapshot.tabs[tab]
   // 재계산으로 카드가 잠시 숨는 동안(이전 세대 뷰 표시·새 세대 기본 항목 미확정)만 목록 박스가 높이를 붙잡아 스크롤 위치를 지킨다.
   // 이후 단계(스윕·변형)까지 붙잡으면 그 사이 카드를 접어도 빈 공간이 남는다.
-  const recomputing = active.kind === 'view' && (active.superseded || active.generation !== generation || !active.view.stage12Done)
+  const recomputing = active.kind === 'view' && (active.superseded || active.generation !== runGeneration || !active.view.stage12Done)
   const source = active.kind === 'view' ? active.view.source : sourceOf(meta.view.meta)
   const tabIdOf = (t: string) => `result-tab-${t}`
   const panelId = 'result-panel'
@@ -261,9 +300,10 @@ function Workspace({ boot }: { boot: Boot }) {
   )
 
   return (
+    <LockUiContext.Provider value={lockUi}>
     <div className="product-layout">
       <aside className="sidebar">
-        <MySetPanel game={game} view={meta.view} draft={draft} dispatch={dispatch} reasons={reasons} onDisplaySp={onDisplaySp} />
+        <MySetPanel game={game} view={meta.view} draft={draft} dispatch={dispatch} reasons={reasons} onDisplaySp={onDisplaySp} lockResolutions={lockResolutions} />
       </aside>
       <div className="results" ref={results}>
         <Toolbar
@@ -288,7 +328,7 @@ function Workspace({ boot }: { boot: Boot }) {
             dispatch={dispatch}
             tabId={tabIdOf(tab)}
             panelId={panelId}
-            generation={generation}
+            generation={runGeneration}
             customOpen={customOpen}
             onToggleCustom={toggleCustom}
             customButtonRef={customButton}
@@ -305,13 +345,12 @@ function Workspace({ boot }: { boot: Boot }) {
             tabId={tabIdOf(tab)}
             panelId={panelId}
             state={active}
-            generation={generation}
+            generation={runGeneration}
             mySet={mySet}
             customTargets={customTargets}
             pinnedBundles={state.pinnedBundles}
             sortMode={state.sortMode}
             moveChoices={state.moveChoices}
-            speciesGeneration={state.speciesGeneration}
             onMenuCards={onMenuCards}
             dispatch={dispatch}
             customOpen={customOpen}
@@ -327,5 +366,6 @@ function Workspace({ boot }: { boot: Boot }) {
         )}
       </div>
     </div>
+    </LockUiContext.Provider>
   )
 }

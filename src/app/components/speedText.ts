@@ -41,8 +41,8 @@ export function rejectionText(game: Snapshot, r: SpeedRejection, who: 'mine' | '
 
 export const presetMark = (b: Pick<Badge, 'presetIndex'>): string | undefined => (b.presetIndex === undefined ? undefined : `프리셋 ${b.presetIndex + 1}`)
 
-/** 배지 접근 이름: 이름 배분(성격 보정 글자) 조건, 실수치, 상태, 지닌 도구, 표지 */
-export function badgeLabel(game: Snapshot, b: Badge, status: SpeedStatus | null): string {
+/** 배지 접근 이름: 이름 배분(성격 보정 글자) 조건, 실수치, 상태, 지닌 도구, 표지. locked = 컷 고정 대상 */
+export function badgeLabel(game: Snapshot, b: Badge, status: SpeedStatus | null, locked = false): string {
   const names = namesOf(game)
   const tag = conditionTag(b.condition)
   const parts = [`${names.species.label(b.speciesId)} ${bundleSpoken(b.bundle.sp, b.bundle.nature)}${tag === undefined ? '' : ` ${tag}`}`, `실수치 ${b.speed}`]
@@ -52,6 +52,7 @@ export function badgeLabel(game: Snapshot, b: Badge, status: SpeedStatus | null)
   if (b.origin === 'added') parts.push('추가한 배분')
   const preset = presetMark(b)
   if (preset !== undefined) parts.push(preset)
+  if (locked) parts.push(LOCKED_MARK_TEXT)
   return parts.join(', ')
 }
 
@@ -70,6 +71,15 @@ function minSpPart(r: MinSp, plus: boolean): string {
 export function minSpText(r: { neutral: MinSp; plus: MinSp }): string {
   return `추월: ${minSpPart(r.neutral, false)} / ${minSpPart(r.plus, true)}`
 }
+
+/** 컷 고정 중 최소 S: 코어 예산 판단(남은 SP = 66 − 초안의 다른 능력치)을 지운다. 고정 중 예산은 갈래 줄에만 보인다 */
+export function lockedMinSp(r: { neutral: MinSp; plus: MinSp | null }): { neutral: MinSp; plus: MinSp } {
+  const strip = (m: MinSp): MinSp => (m.kind === 'over-budget' ? { kind: 'ok', sp: m.sp } : m)
+  return { neutral: strip(r.neutral), plus: r.plus === null ? { kind: 'impossible' } : strip(r.plus) }
+}
+
+/** 고정한 컷 자신(판정 행·방어 쌍·스피드 배지)의 표지 */
+export const LOCKED_MARK_TEXT = '고정됨'
 
 /** 배지 클릭 뒤 열린 상세: 같은 배지면 닫고, 아니면 그 배지로 연다 */
 export const toggleDetail = (open: string | null, clicked: string): string | null => (open === clicked ? null : clicked)

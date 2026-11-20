@@ -4,6 +4,7 @@ import type { BattleConditions, BoostTable, CoreErrorCode, MoveStatRefs, Pokemon
 import type { MatchType } from '../data/meta-schema'
 import type { Snapshot, StatId } from '../data/schema'
 import type { MetaView } from '../meta'
+import type { Branch, CutLock, LockDerivation, LockResolution, LockStage, Stairs } from './lock'
 
 export type Tab = 'attack' | 'defense' | 'speed'
 export const TABS: readonly Tab[] = ['attack', 'defense', 'speed']
@@ -143,7 +144,15 @@ export interface CardInput {
   addedBundles?: readonly AddedBundle[]
   /** 사용자가 추가한 상대 기술(방어 탭 래더 상대 전용, 추가 순). 없으면 빈 배열 */
   addedMoves?: readonly AddedMove[]
+  /** 컷 고정 계획. 없으면 고정 없는 기존 경로 그대로다 */
+  lock?: PlanLock
 }
+
+/**
+ * 컷 고정 계획 방식. 둘 다 내 세트 합계 검사를 끈다. lane = 고정 대상 해석용 미니 계획(행 성격은 laneNature),
+ * main = 기준 갈래 값이 이미 mySet에 적힌 탭 계획(행 성격은 rowNature, lockLane.lockedInput이 만든다).
+ */
+export type PlanLock = { mode: 'lane' } | { mode: 'main'; derivation: LockDerivation; base: Branch }
 
 export interface ErrorReason {
   code: CoreErrorCode | 'INPUT' | 'WHITE_HERB_MULTIHIT' | 'TARGET_MISMATCH'
@@ -214,6 +223,20 @@ export interface RowSpec {
   natures?: NatureVariants
   /** 계획 단계에서 확정된 계산 불가(하양허브 연속기 등) */
   error?: ErrorReason
+  /** 고정 계획의 스윕 행만 */
+  lock?: RowLockSpec
+}
+
+/**
+ * 고정 계획의 행·극단 필터 성격. nature = 그 행 세트에 쓴 행 성격, strict = 보는 능력치 v의 엄격 변형(plus null = 이 갈래에서 v 상승 불가,
+ * 이때 NatureVariants.plus에는 neutral id가 들어 있고 상승 변형 작업은 만들지 않는다). viewLocked = v(방어는 H 또는 B/D)가 고정 능력치.
+ */
+export interface RowLockSpec {
+  nature: string
+  /** 행 관여 능력치 밖에 하락 자리가 없어 갈래 성격 그대로 판정함 */
+  dropWarning?: true
+  strict: { neutral: string; plus: string | null }
+  viewLocked: boolean
 }
 
 export interface ExtremeSpec {
@@ -233,6 +256,8 @@ export interface ExtremeSpec {
   natures: NatureVariants
   dependsOn: readonly StatId[]
   basis?: RankBasis
+  /** 고정 계획만. 그 필터의 H·B/D 행과 같은 값 */
+  lock?: RowLockSpec
 }
 
 /**
@@ -381,7 +406,15 @@ export interface TabPlan {
   customTargetConflicts: readonly string[]
   /** 내 기술의 계산하지 않음 안내(분류 가변·내 HP 의존, 탭 안내) */
   notices: readonly MoveNotice[]
+  /** 고정 계획만(CardInput.lock이 있을 때) */
+  lock?: TabPlanLock
 }
+
+/** overTotal = 계획 세트 SP 합 − spTotal(0 이상, main은 derivation.overTotal 그대로) */
+export type TabPlanLock = { mode: 'lane'; overTotal: number } | { mode: 'main'; derivation: LockDerivation; base: Branch; overTotal: number }
+
+/** 갈래 재스윕·계단에서 계획 세트 대신 쓰는 내 능력치 SP(그 갈래 고정 SP 중 판정에 관여하는 것만) */
+export type SpOverride = Readonly<Partial<Record<StatId, number>>>
 
 // ---------- 행 작업과 결과 ----------
 
@@ -397,6 +430,10 @@ export type RowTask =
   | { kind: 'variant'; rowId: string; nature: NatureVariant }
   /** 방어 탭: 극단 필터(= 같은 기술·랭크 조건의 H행·B/D행 쌍)의 성격 변형별 H·B/D 최소 조합 */
   | { kind: 'pair'; filterId: string; nature: NatureVariant }
+  /** 고정 계획: 극단 필터의 성격 id·방어 순위(tierRank 'defense') 계단, H는 hpMin~최대만 */
+  | { kind: 'stairs'; filterId: string; nature: string; rank: number; hpMin: number; sp?: SpOverride }
+  /** 고정 계획: 행을 성격 id로 33칸 스윕(variant와 같은 계산) */
+  | { kind: 'branch'; rowId: string; nature: string; sp?: SpOverride }
 
 /**
  * 방어 2축 최소 조합 한 점. atLeast 이상 판정을 내는 (H, B/D) 중 SP 합이 최소, 동률이면 H가 큰 것.
@@ -431,6 +468,8 @@ export type RowTaskResult =
   | { kind: 'fixed'; fixedId: string; cell: CompactCell }
   /** points: 5단 방어 순위(나쁨 → 좋음) 중 SP 0~최대 안에서 가능한 것만, 순위 순 */
   | { kind: 'pair'; filterId: string; nature: NatureVariant; points: readonly PairPoint[] }
+  | { kind: 'stairs'; filterId: string; nature: string; rank: number; hpMin: number; stairs: Stairs | 'non-monotonic' }
+  | { kind: 'branch'; rowId: string; nature: string; cells: readonly CompactCell[] }
   | { kind: 'error'; task: RowTask; reason: ErrorReason }
 
 /** 키 = taskKey(task). sweep은 stage와 무관하게 같은 키, variant·pair는 성격 변형마다 다른 키 */
@@ -449,8 +488,11 @@ export interface PendingTasks {
   stage5: readonly RowTask[]
 }
 
-/** 캐시 값. 키에 작업 종류가 들어가 pair 키에는 PairPoint[], 그 밖에는 CompactCell[]만 담긴다(variant는 sweep과 같은 키 공간) */
-export type CachedJudgement = readonly CompactCell[] | readonly PairPoint[]
+/** 캐시 값. 키에 작업 종류가 들어가 pair 키에는 PairPoint[], stairs 키에는 StairsValue, 그 밖에는 CompactCell[]만 담긴다(variant·branch는 sweep과 같은 키 공간) */
+export type CachedJudgement = readonly CompactCell[] | readonly PairPoint[] | StairsValue
+export interface StairsValue {
+  stairs: Stairs | 'non-monotonic'
+}
 
 export interface JudgementCache {
   get(key: string): CachedJudgement | undefined
@@ -513,7 +555,39 @@ export interface RowView {
   best?: string
   /** 칸이 없는 내 SP 무관 판정 행(공격 탭 속임수)의 판정 칸(결과 배지용) */
   fixedCell?: CompactCell
+  /** 고정 계획만(방어 쌍은 CardView.pair.lock) */
+  lock?: RowLockView
 }
+
+/** 판정 행·방어 쌍의 컷 고정 표시 */
+export interface RowLockView {
+  control?: LockControl
+  /** 이 컷을 대상으로 하는 고정의 seq */
+  lockedBy?: readonly number[]
+  dropWarning?: true
+}
+
+/** 고정 조작: 그 탭의 고정 가능 단계 전부(LOCK_STAGES 순, 현재 판정과 무관)의 후보, 또는 컷 전체가 고정 불가인 이유 */
+export type LockControl = { kind: 'lockable'; stages: readonly LockStageCandidate[] } | { kind: 'blocked'; reason: 'depends-other-stat' | 'fixed-value' | 'unreachable-stage' }
+
+export interface LockStageCandidate {
+  stage: LockStage
+  candidate: LockCandidate
+}
+
+/**
+ * 카드 줄 핀(고정 조작 문맥만). control = 보이는 컷(공격 행·방어 쌍)의 조작. pending = 그 컷의 판정이 아직 없음,
+ * fixed-value = 보이는 판정이 SP와 무관(극단 필터 고정·고정 판정 행), unreachable-stage = SP로 결과가 바뀌어도 어느 고정 단계에도 닿지 않음, no-target = 고정할 판정 행이 없음(계산 불가 포함).
+ * lockedBy = 이 카드의 모든 행·필터 컷에 걸린 고정 seq(보이는 기술이 아니어도)
+ */
+export interface CardLockPin {
+  control: LockControl | { kind: 'pending' } | { kind: 'blocked'; reason: 'fixed-value' | 'no-target' }
+  lockedBy?: readonly number[]
+}
+
+/** computing.tasks = 후보 해석에 아직 없는 행 작업(갈래 재스윕·고정 단계 계단, 핀 메뉴·조정 팝오버 수요로 계산한다) */
+export type LockCandidate = { kind: 'ready'; lock: Omit<CutLock, 'seq'>; resolution: LockResolution } | { kind: 'computing'; tasks?: readonly RowTask[] }
+
 export interface TargetStat {
   stat: StatId
   sp: number
@@ -606,7 +680,71 @@ export interface CardView {
    * 방어 탭: 보이는 항목이 극단 필터를 통과한 쌍(rows = H 행·B/D 행)이면 있다. band = 내구 합계 띠(두 변형 쌍 결과가 나온 뒤에만),
    * error = 쌍 결과 오류, 또는 행·변형 스윕 오류로 쌍 작업이 끝내 생기지 않음(band 없음)
    */
-  pair?: { band?: SumBandView; error?: ErrorReason }
+  pair?: { band?: SumBandView; error?: ErrorReason; lock?: RowLockView }
+  /** 카드 줄 핀(조립 옵션 lockControls 또는 고정 계획일 때만) */
+  lockPin?: CardLockPin
+  /** 조정 팝오버 모델(조립 옵션 adjust이고 변동 가능한 공격 스윕 행·통과한 방어 쌍 카드만, adjust.adjustView) */
+  adjust?: AdjustView
+}
+
+/**
+ * 카드 하나(보이는 배분·기술·조건·도구 변형)의 조정 모델. ready = 목록 확정, computing = 결과 대기(tasks),
+ * locked = 조정할 능력치가 모두 고정(공격 v, 방어 그 쪽 B/D). computing·locked면 natures·results는 비어 있다.
+ */
+export interface AdjustView {
+  state: 'ready' | 'computing' | 'locked'
+  /** computing일 때 아직 결과가 없는 행 작업(중복 없음) */
+  tasks?: readonly RowTask[]
+  /** 2단 성격 선택지(순서 고정): 무보정 → v 상승 → (방어 B/D 한쪽 고정 중) 반대쪽 상승 */
+  natures: readonly AdjustNature[]
+  /** 1단 결과 목록: 그 탭 관점 좋은 결과부터(TIER_ORDER 역순). 예산 안에서 어느 선택지든 그 결과를 정확히 내는 것만 */
+  results: readonly AdjustResult[]
+  /** 적용 때 줄이지 않는 능력치(STAT_ORDER) = 조정 능력치 ∪ 판정이 의존하는 고정 밖 능력치 */
+  keep: readonly StatId[]
+  /** 그 판정에 관여하는 내 능력치(v 포함, STAT_ORDER). 무고정 적용의 성격 확인용 */
+  relevant: readonly StatId[]
+}
+
+export interface AdjustNature {
+  id: 'neutral' | 'plus' | 'other-plus'
+  /** 이 선택지의 상승 능력치(무보정 null) */
+  plus: Exclude<StatId, 'hp'> | null
+  /** 판정에 쓴 성격 id. 갈래가 없거나 그 갈래에 엄격 성격이 없으면 그 갈래(없으면 행) 성격 */
+  nature: string
+  /** 적용 뒤 기준 갈래 id(고정 없으면 null) */
+  branchId: string | null
+  /** 적용 뒤 활성 고정 능력치의 고정 SP(그 갈래 lockedSp, 고정 없으면 빈 객체) */
+  lockedSp: Readonly<Partial<Record<StatId, number>>>
+  /** 그 갈래가 파생에 없음(다른 고정에 무보정안 없음·하락 자리 없음·SP 합 초과). 모든 결과에서 꺼진다 */
+  off?: 'no-branch'
+}
+
+export interface AdjustResult {
+  label: RollTier
+  /** 카드 현재 결과와 같음 */
+  current: boolean
+  /** natures와 같은 순서·길이 */
+  options: readonly AdjustOption[]
+  /** 1단 SP 표기에 쓰는 선택지 index(ok 중 조정 능력치 SP 합이 가장 작은 것, 같으면 앞 선택지) */
+  lead: number
+}
+
+/**
+ * ok: stats = 합 최소 배분(조정 능력치 SP 합 최소), hMax = 방어 쌍에서 H가 고정 밖일 때 예산·능력치당 최대 안에서 H를 가장 높이고 그 H의 최소 B/D로
+ * 같은 결과를 정확히 내는 배분(합 최소보다 H가 높을 때만, 표기 순서·고정 표지는 stats와 같다).
+ * off: unreachable = SP 0~최대에서 그 결과를 정확히 내지 못함(건너뛰거나 더 좋은 결과가 먼저 남·성격 없음·결과 오류 포함), budget = 최소 SP가 예산 밖, no-branch = AdjustNature.off
+ */
+export type AdjustOption = { kind: 'ok'; stats: readonly AdjustStat[]; hMax?: readonly AdjustStat[] } | { kind: 'off'; reason: 'unreachable' | 'budget' | 'no-branch' }
+
+/** 성격 선택지 안의 배분: 합 최소(stats) · H 최대(hMax) */
+export type AdjustAllocation = 'min-sum' | 'h-max'
+
+/** 표기 순서 STAT_ORDER. locked = 고정 능력치(값은 그 갈래 고정 SP), plus = 그 선택지 상승 */
+export interface AdjustStat {
+  stat: StatId
+  sp: number
+  plus: boolean
+  locked: boolean
 }
 
 /** 기술 선택 목록의 항목 하나(그 카드 대표 세트 기준 현재 SP·성격 단건 판정) */

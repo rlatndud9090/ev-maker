@@ -113,6 +113,50 @@ export async function selectTab(page: Page, name: ProductTab) {
   await expect(tabPanel(page)).toHaveAttribute('data-tab', TAB_ID[name])
 }
 
+export type StatLabel = 'HP' | '공격' | '방어' | '특공' | '특방' | '스피드'
+export const NATURE_STATS = ['공격', '방어', '특공', '특방', '스피드'] as const
+
+export interface MySetInput {
+  species?: string
+  item?: string
+  moves?: readonly string[]
+  sp?: Partial<Record<StatLabel, number>>
+  /** null = 무보정(눌린 상승 버튼을 끈다) */
+  plus?: (typeof NATURE_STATS)[number] | null
+}
+
+/** 내 포켓몬 패널에 세트를 넣는다(종 → 도구 → 기술 → SP → 성격 순). 끝나면 새 세대가 다 계산될 때까지 기다린다. */
+export async function fillMySet(page: Page, s: MySetInput) {
+  const me = mySet(page)
+  const enter = async (name: string, text: string) => {
+    const box = combo(me, name)
+    await box.fill(text)
+    await box.press('Enter')
+    await expect(box).toHaveValue(text)
+  }
+  if (s.species !== undefined) await enter('종', s.species)
+  if (s.item !== undefined) await enter('도구', s.item)
+  for (const [i, m] of (s.moves ?? []).entries()) await enter(`기술 ${i + 1}`, m)
+  // SP 입력은 남은 합계까지만 받으므로 바꿀 칸을 먼저 비우고 채운다.
+  const spBoxes = Object.entries(s.sp ?? {}).map(([stat, v]) => [me.getByRole('spinbutton', { name: `SP ${stat} 숫자`, exact: true }), String(v)] as const)
+  for (const [box] of spBoxes) await box.fill('0')
+  for (const [box, v] of spBoxes) {
+    await box.fill(v)
+    await expect(box).toHaveValue(v)
+  }
+  if (s.plus !== undefined) {
+    for (const stat of NATURE_STATS) {
+      const b = me.getByRole('button', { name: `${stat} 성격 상승`, exact: true })
+      if (((await b.getAttribute('aria-pressed')) === 'true') !== (s.plus === stat)) await b.click()
+      await expect(b).toHaveAttribute('aria-pressed', String(s.plus === stat))
+    }
+  }
+  await waitComplete(page)
+}
+
+/** 내 포켓몬 패널의 컷 고정 목록(SP 블록 아래). 계산 중에는 머리에 "계산 중…"이 붙어 이름이 "컷 고정 계산 중…"이다 */
+export const lockList = (page: Page) => mySet(page).getByRole('region', { name: /^컷 고정( 계산 중…)?$/ })
+
 /** 슬라이더를 마우스로 끌어 값이 target이 된 것을 확인한 뒤 놓는다. 놓기 직전 값을 돌려준다. */
 export async function dragSlider(page: Page, slider: Locator, target: number): Promise<number> {
   await slider.scrollIntoViewIfNeeded()
@@ -132,6 +176,94 @@ export async function dragSlider(page: Page, slider: Locator, target: number): P
   await page.mouse.up()
   return cur
 }
+
+// ---------- 컷 고정 ----------
+
+/** 래더 배지 읽기 이름 "메가눈여아 S32 성격 상승, 실수치 189, …" */
+export const badge = (page: Page, name: RegExp) => page.getByTestId('speed-badge').and(page.getByRole('button', { name })).first()
+export const speedDetail = (page: Page) => page.getByTestId('speed-detail')
+/** 그 배지 앞 컷 고정 핀 */
+export const badgePin = (page: Page, name: RegExp) => page.locator('.speed-badge-item').filter({ has: badge(page, name) }).first().getByTestId('cut-pin')
+export const lockedSp = (page: Page, stat: string) => mySet(page).getByTestId(`sp-locked-${stat}`)
+
+export async function openBadge(page: Page, name: RegExp) {
+  if ((await tabPanel(page).getAttribute('data-tab')) !== 'speed') await selectTab(page, '스피드')
+  const b = badge(page, name)
+  await b.scrollIntoViewIfNeeded()
+  // 상세는 팝오버라 연 배지가 스크롤로 가려지면 저절로 닫힌다: 열린 상세 id는 한 번에 읽는다(사이에 닫혀도 기다리지 않게)
+  const openId = await page.evaluate(() => document.querySelector<HTMLElement>('[data-testid="speed-detail"]')?.dataset.badgeId ?? null)
+  if (openId === null || openId !== (await b.getAttribute('data-badge-id'))) await b.click()
+  await expect(speedDetail(page)).toBeVisible()
+}
+
+/** 배지 상세를 열고 그 배지 핀을 눌러 바로 고정한다(스피드는 단계가 추월 하나라 메뉴가 없다) */
+export async function lockBadge(page: Page, name: RegExp) {
+  await openBadge(page, name)
+  const pin = badgePin(page, name)
+  await expect(pin).toHaveAttribute('aria-pressed', 'false')
+  await pin.click()
+  await expect(pin).toHaveAttribute('aria-pressed', 'true')
+  await expect(pin.locator('xpath=..').getByTestId('cut-pin-menu')).toHaveCount(0)
+}
+
+/** 고정 중 계산이 끝날 때까지(목록 "계산 중…"이 사라지고 탭이 완료) */
+export async function settle(page: Page) {
+  await expect(lockList(page).getByRole('status')).toHaveCount(0, { timeout: 20_000 })
+  if ((await tabPanel(page).getAttribute('data-tab')) !== 'speed') await waitComplete(page)
+}
+
+/** 공격·방어 탭 기본 고정 단계(핀 메뉴 항목 글자) */
+const DEFAULT_STAGE: Readonly<Record<Exclude<ProductTab, '스피드'>, string>> = { 공격: '확정1타', 방어: '확정견딤' }
+
+/** 카드 줄 핀 메뉴의 그 단계 항목 */
+export const pinItem = (card: Locator, stage: string) => card.getByTestId('cut-pin-item').filter({ has: card.page().locator('.cut-pin-stage', { hasText: new RegExp(`^${stage}$`) }) })
+
+/** 그 상대·기술이 보이는 카드(카드 줄 data-move = 보이는 판정 행 기술) */
+export const moveCard = (page: Page, opponent: string, move: string) => cards(page).and(page.locator(`[data-opponent="${opponent}"][data-move="${move}"]`)).first()
+
+/** 공격·방어 탭에서 그 상대·기술이 보이는 카드의 줄 핀을 누르고 단계 메뉴에서 stage를 고른다. 고정한 카드를 돌려준다 */
+export async function lockRow(page: Page, tab: Exclude<ProductTab, '스피드'>, opponent: string, move: string, stage = DEFAULT_STAGE[tab]): Promise<Locator> {
+  if ((await tabPanel(page).getAttribute('data-tab')) !== (tab === '공격' ? 'attack' : 'defense')) await selectTab(page, tab)
+  await waitComplete(page)
+  const card = moveCard(page, opponent, move)
+  const pin = card.getByTestId('cut-pin')
+  await expect(pin, `${opponent} ${move} 컷 고정 핀`).toHaveAttribute('aria-pressed', 'false')
+  await pin.click()
+  const item = pinItem(card, stage)
+  await expect(item, `${opponent} ${move} ${stage} 고정 가능`).toHaveAttribute('data-enabled', 'true', { timeout: 15_000 })
+  await item.click()
+  await expect(pin).toHaveAttribute('aria-pressed', 'true')
+  await expect(card.getByTestId('cut-pin-menu')).toHaveCount(0)
+  await settle(page)
+  return card
+}
+
+// ---------- 변동 팝오버 ----------
+
+/** 카드 줄 "변동 ▾" 버튼 */
+export const adjustButton = (card: Locator) => card.getByTestId('adjust-button')
+
+/** 변동 팝오버(1단 결과 목록·2단 성격 선택이 같은 자리) */
+export const adjustMenu = (card: Locator) => card.getByTestId('adjust-menu')
+
+/** 변동 버튼을 눌러 팝오버를 연다(이미 열려 있으면 그대로). 팝오버를 돌려준다 */
+export async function openAdjust(card: Locator): Promise<Locator> {
+  const btn = adjustButton(card)
+  if ((await btn.getAttribute('aria-expanded')) !== 'true') await btn.click()
+  await expect(btn).toHaveAttribute('aria-expanded', 'true')
+  const menu = adjustMenu(card)
+  await expect(menu).toHaveAttribute('role', 'menu')
+  await expect(menu).toBeVisible()
+  return menu
+}
+
+/** 1단 결과 항목(배지 글자 "확정1타" 등) */
+export const adjustResult = (card: Locator, label: string) =>
+  card.getByTestId('adjust-result').filter({ has: card.page().locator('.ko-badge', { hasText: new RegExp(`^${label}$`) }) })
+
+/** 2단 성격 선택지(이름 "무보정" · "C 상승" · "B 보정" 등) */
+export const adjustNature = (card: Locator, name: string) =>
+  card.getByTestId('adjust-nature').filter({ has: card.page().locator('.adjust-nature-name', { hasText: new RegExp(`^${name}$`) }) })
 
 // ---------- '포켓몬 추가' 패널 ----------
 

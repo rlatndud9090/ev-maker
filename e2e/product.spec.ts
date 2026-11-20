@@ -1,22 +1,17 @@
 import { readFileSync } from 'node:fs'
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { addCustomTarget, addPanel, addOption, cards, combo, mySet, openProduct, region, resultTab, selectTab, tabPanel, waitComplete } from './helpers'
+import { addCustomTarget, addPanel, addOption, adjustButton, adjustMenu, cards, combo, mySet, openAdjust, openProduct, region, resultTab, selectTab, tabPanel, waitComplete } from './helpers'
 /** 상위 N 기본값(src/cards/types.ts DEFAULT_TOP_N과 같다) */
 const DEFAULT_TOP_N = 100
 
-/** 5단 판정 단계명(결과 배지·상세 공용) */
+/** 5단 판정 단계명(결과 배지·변동 목록 공용) */
 const TIER = '(확정1타|고난수1타|중난수1타|저난수1타|확정견딤)'
-const NEED = '( \\(다른 능력치에서 \\d+ 필요\\))?'
-/** 상세 목표 "<판정>: 최소 A32 / A15+"(무보정 / 상승), 한쪽 불가면 "무보정 불가"·"상승 불가". sps는 SP 묶음 패턴, label은 판정 이름 패턴. */
-// 두 선택지가 모두 불가인 문구는 계약(TargetView: 하나 이상 non-null) 밖이라 앞쪽 부정 전방탐색으로 막는다.
-const targetPattern = (sps: string, label = TIER): string => `${label}: (?!무보정 불가 / 상승 불가)(최소 ${sps}${NEED}|무보정 불가) / (${sps}\\+${NEED}|상승 불가)`
 
 const toolbarSpin = (page: Page, name: string) => page.getByRole('spinbutton', { name, exact: true })
 const customPanel = addPanel
 // 래더 상대 행. 방어 탭 화력 도구 행(PRD R14)만 뺀다(공격 탭 반감열매 행은 이전처럼 포함)
 const ladderCards = (page: Page) => cards(page).and(page.locator('[data-origin="ladder"]:not([data-power-item])'))
 const customCards = (page: Page) => cards(page).and(page.locator('[data-origin="custom"]'))
-const cardLine = (card: Locator) => card.locator('button[aria-expanded]').first()
 const bundleButton = (card: Locator) => card.locator('button.bundle-btn')
 const bundleMenu = (card: Locator) => card.getByRole('menu', { name: '노력치 배분', exact: true })
 
@@ -83,7 +78,7 @@ test.describe('제품 화면', () => {
     await expect(page.locator('main[data-app="product"]')).toHaveCount(0)
   })
 
-  test('카드 상세 행은 보이는 항목 하나의 행만(공격 1행, 방어 H행·B/D행 쌍 = 합계 판정 1개 또는 고정 1행): 모든 행이 같은 기술·같은 조건, 랭크·선공기 행은 따로 없다(PRD R7·AC15)', async ({ page }) => {
+  test('카드는 펼치지 않는다: 줄을 눌러도 상세가 없고, 카드 줄이 보이는 판정 행 하나(기술 배지·결과)를 보인다(PRD R20)', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     for (const tab of ['공격', '방어'] as const) {
@@ -93,27 +88,34 @@ test.describe('제품 화면', () => {
       }
       const all = await cards(page).all()
       expect(all.length, tab).toBeGreaterThan(3)
-      for (const card of all) {
-        await cardLine(card).click()
-        await expect(card.locator('.card-detail')).toBeVisible()
+      // 이름 칸은 버튼이 아니고 눌러도 아무것도 펼쳐지지 않는다
+      for (const card of all.slice(0, 5)) {
+        await card.locator('.card-name').click()
+        await expect(card.locator('.card-line')).not.toHaveAttribute('aria-expanded', /.*/)
       }
+      await expect(tabPanel(page).locator('.card-toggle, .card-chev, .card-detail, [data-testid="row"], [data-testid="band-cell"]')).toHaveCount(0)
+      // 상세와 함께 "(다른 능력치에서 n 필요)" 문구도 없다(R25)
+      await expect(tabPanel(page)).not.toContainText('다른 능력치에서')
       const byCard = await cards(page).evaluateAll((els) =>
         els.map((el) => ({
           id: (el as HTMLElement).dataset.cardId ?? '',
-          rows: [...el.querySelectorAll<HTMLElement>('[data-testid="row"]')].map((r) => ({ move: r.dataset.move ?? '', condition: r.dataset.condition ?? '', pair: r.dataset.pair === 'true' })),
+          headline: (el as HTMLElement).dataset.headline,
+          move: (el as HTMLElement).dataset.move ?? '',
+          labels: el.querySelectorAll('.card-line .card-headline [data-testid="move-label"]').length,
+          name: el.querySelector('.card-name')?.closest('button') !== null,
         })),
       )
       for (const c of byCard) {
-        expect(c.rows.length, c.id).toBeGreaterThan(0)
-        // 방어 탭 H 행·B/D 행 쌍은 상세에서 내구 합계 판정 하나로 보인다(R10)
-        expect(c.rows.length, c.id).toBe(1)
-        expect(new Set(c.rows.map((r) => JSON.stringify([r.move, r.condition]))).size, c.id).toBe(1)
+        expect(c.name, c.id).toBe(false)
+        if (c.headline !== 'row') continue
+        // 보이는 판정 행 하나: 카드 data-move = 그 기술, 기술 배지 하나
+        expect(c.move, c.id).not.toBe('')
+        expect(c.labels, c.id).toBe(1)
       }
-      if (tab === '방어') expect(byCard.some((c) => c.rows[0].pair)).toBe(true)
-      await expect(page.getByTestId('card-more')).toHaveCount(0)
     }
   })
-  test('상위 N 래더 상대는 판정 변화와 무관하게 탭마다 전부 한 행, 변동 가능 태그는 변화 있는 행에만, 기술 라벨은 모든 행(사용자 피드백 2026-11-12)', async ({ page }) => {
+
+  test('상위 N 래더 상대는 판정 변화와 무관하게 탭마다 전부 한 행, 변동 버튼은 변화 있는 행에만, 기술 라벨은 모든 행(사용자 피드백 2026-11-12, PRD R21)', async ({ page }) => {
     await openProduct(page)
     const topN = Number(await toolbarSpin(page, '상위 N').inputValue())
     expect(topN).toBe(DEFAULT_TOP_N)
@@ -134,7 +136,8 @@ test.describe('제품 화면', () => {
           opponent: (el as HTMLElement).dataset.opponent ?? '',
           variable: (el as HTMLElement).dataset.variable,
           headline: (el as HTMLElement).dataset.headline,
-          tag: el.querySelector('.card-line [data-testid="variable-tag"]')?.textContent ?? null,
+          tag: el.querySelector('.card-line [data-testid="adjust-button"]')?.textContent ?? null,
+          badge: el.querySelector('.card-line [data-testid="ko-badge"]')?.textContent ?? null,
           label: el.querySelector('.card-line [data-testid="move-label"]') !== null,
         })),
       )
@@ -147,24 +150,14 @@ test.describe('제품 화면', () => {
           continue
         }
         expect(l.headline, tab).toBe('row')
-        expect(l.tag, tab).toBe(l.variable === 'true' ? '변동 가능' : null)
+        expect(l.tag, `${tab} ${l.opponent}`).toBe(l.variable === 'true' ? '변동' : null)
         expect(l.label, tab).toBe(true)
       }
-      // 변동 가능 행은 상세 대표 행 판정 줄에도 표시(변화 없음 행에는 없다)
-      const v = ladderCards(page).and(page.locator('[data-variable="true"]')).first()
-      await cardLine(v).click()
-      await expect(v.locator('[data-testid="row"][data-variable="true"] [data-testid="row-variable"]').first()).toHaveText('변동 가능')
-      await expect(v.locator('[data-testid="row"][data-variable="false"] [data-testid="row-variable"]')).toHaveCount(0)
-      await cardLine(v).click()
-      const fixed = ladderCards(page).and(page.locator('[data-variable="false"]')).first()
-      await cardLine(fixed).click()
-      await expect(fixed.locator('[data-testid="row"]').first()).toBeVisible()
-      await expect(fixed.getByTestId('row-variable')).toHaveCount(0)
-      await cardLine(fixed).click()
+      await expect(tabPanel(page).getByTestId('variable-tag')).toHaveCount(0)
     }
   })
 
-  test('기술 배지 메뉴: 대도각참 기본 +2 도각참, 기습도 항목(표지 없음), 직접 고름·되돌리기, 배지를 눌러도 카드는 펼쳐지지 않는다(PRD R1·R5·AC10·AC11)', async ({ page }) => {
+  test('기술 배지 메뉴: 대도각참 기본 +2 도각참, 기습도 항목(표지 없음), 직접 고름·되돌리기, 고른 기술이 카드 줄 판정 행(PRD R1·R5·AC10·AC11)', async ({ page }) => {
     await openProduct(page)
     await selectTab(page, '방어')
     await waitComplete(page)
@@ -173,7 +166,6 @@ test.describe('제품 화면', () => {
     const pick = card.getByTestId('move-pick')
     await expect(pick).toHaveAccessibleName(/기술 선택/)
     await pick.click()
-    await expect(cardLine(card)).toHaveAttribute('aria-expanded', 'false')
     const menu = card.getByTestId('move-menu')
     await expect(menu).toBeVisible()
     const sd = JSON.stringify(['rank', 'opponent', 'move', 'swordsdance'])
@@ -195,7 +187,7 @@ test.describe('제품 화면', () => {
     await expect(chosen).toHaveAttribute('data-selected', 'true')
     await expect(chosen).toHaveAccessibleName(/직접 고름/)
     await expect(chosen.locator('.chosen-tag')).toHaveCount(0)
-    await expect(cardLine(card)).toHaveAttribute('aria-expanded', 'false')
+    await expect(card).toHaveAttribute('data-move', 'kowtowcleave')
     // SP를 바꿔도 유지된다
     const gen = async () => Number(await tabPanel(page).getAttribute('data-generation'))
     const before = await gen()
@@ -241,11 +233,8 @@ test.describe('제품 화면', () => {
     await expect(pick).toBeFocused()
     await expect(pick).toHaveAttribute('data-selected', 'true')
     await expect(pick).toHaveAccessibleName(/암석봉인 기술 선택 \(직접 고름\)/)
-    await expect(cardLine(card)).toHaveAttribute('aria-expanded', 'false')
-    await cardLine(card).click()
-    await expect(card.getByTestId('row').first()).toHaveAttribute('data-move', 'rocktomb')
-    await expect(card.getByTestId('row').first()).toBeVisible()
-    await cardLine(card).click()
+    await expect(card).toHaveAttribute('data-move', 'rocktomb')
+    await expect(card.getByTestId('ko-badge')).toBeVisible()
 
     // 내 포켓몬을 대도각참(악/강철, 바위 반감)으로 바꾸면 직접 선택은 풀리지만 추가한 기술은 남는다
     const species = combo(mySet(page), '종')
@@ -348,108 +337,7 @@ test.describe('제품 화면', () => {
     // 5% 미만(더스트슈트 3.8%)은 없다
     await expect(menu.locator('[data-move="gunkshot"]')).toHaveCount(0)
   })
-  test('펼친 상세: 공격 탭 행 0~32 띠·현재값(빗금 없음), 방어 탭 내구 합계 띠 0~64 하나(AC19·AC27~AC30)', async ({ page }) => {
-    await openProduct(page)
-    await waitComplete(page)
-    // 목표 문구는 간단행에 없고(사용자 피드백 2026-11-11) 펼친 상세 행에만 있다.
-    await expect(tabPanel(page).getByTestId('headline-target')).toHaveCount(0)
-    const withRow = cards(page).and(page.locator('[data-variable="true"]')).first()
-    await cardLine(withRow).click()
-    // AC27: 상세에 배분 목록·직접 추가 폼·기술 선택 버튼이 없다(간단행 배지에서만 고른다)
-    const detail = withRow.locator('.card-detail')
-    await expect(detail).toBeVisible()
-    await expect(detail.getByTestId('bundle-list')).toHaveCount(0)
-    await expect(detail.getByTestId('bundle-add')).toHaveCount(0)
-    await expect(detail.getByTestId('detail-move-pick')).toHaveCount(0)
-    await expect(detail.getByRole('button')).toHaveCount(0)
-    await expect(withRow.getByTestId('row-target').first()).toHaveText(new RegExp(`^ · ${targetPattern('A\\d+')}$`))
-    const row = withRow.getByTestId('row').filter({ has: page.getByTestId('band-cell') }).first()
-    // AC28: 제목은 기술 라벨뿐(행 종류 배지·근거·능력치 접두 없음)
-    await expect(row.locator('.row-head .row-title [data-testid="move-label"]')).toHaveCount(1)
-    await expect(row.locator('.row-kind, .row-basis')).toHaveCount(0)
-    await expect(row.locator('.row-head')).not.toContainText(' · ')
-    const cells = row.getByTestId('band-cell')
-    await expect(cells).toHaveCount(33)
-    await expect(row.locator('[aria-current="true"]')).toHaveCount(1)
-    // AC29: 빗금 칸·빗금 범례·"다른 능력치에서" 없음
-    await expect(row.locator('.cell.over, .over-key, [data-over-budget]')).toHaveCount(0)
-    await expect(detail).not.toContainText('다른 능력치에서')
-    await expect(detail).not.toContainText('빗금')
-    // 띠는 색 칸만(칸 안 숫자·기호 없음), 스크롤 상자 없이 한 줄. 아래 0·16·32 눈금.
-    await expect(row.locator('.band')).toHaveCount(1)
-    await expect(row.locator('.band-scroll')).toHaveCount(0)
-    expect(await cells.evaluateAll((els) => els.map((e) => e.textContent).join(''))).toBe('')
-    await expect(row.locator('.band-ticks')).toHaveText('01632')
-    // 칸 title = 그 칸 SP와 판정(칸 순서 = SP 0~32, title SP = data-sp)
-    const titles = await cells.evaluateAll((els) => els.map((e) => [Number((e as HTMLElement).dataset.sp), e.getAttribute('title') ?? '', (e as HTMLElement).dataset.category ?? '']))
-    expect(titles.map(([sp]) => sp)).toEqual(Array.from({ length: 33 }, (_, i) => i))
-    for (const [sp, title] of titles) expect(title).toMatch(new RegExp(`^SP ${sp}: ${TIER}$`))
-    // 같은 판정 칸은 같은 title 판정, 범례 범위와 칸 판정이 맞는다.
-    const spans = await row.locator('.band-legend .span').allTextContents()
-    for (const text of spans) {
-      const m = /^\s*(\d+)(?:~(\d+))? (.+)$/.exec(text)!
-      const from = Number(m[1])
-      const to = m[2] === undefined ? from : Number(m[2])
-      const labels = new Set(titles.filter(([sp]) => (sp as number) >= from && (sp as number) <= to).map(([, t]) => (t as string).replace(/^SP \d+: /, '')))
-      expect(labels.size, text).toBe(1)
-    }
-    // 판정은 색만이 아니라 텍스트 라벨로도 보인다(AC19). 현재 판정은 목표 문구와 같은 5단 단계명.
-    await expect(row.locator('.row-judge')).toHaveText(new RegExp(`현재 A\\d+ ${TIER} 변동 가능 · `))
-    // 띠 칸 색은 결과 배지와 같은 5색(판정 → 색 한 가지 대응, 다른 판정은 다른 색).
-    const tones = await cells.evaluateAll((els) => els.map((e) => [(e as HTMLElement).dataset.category, [...e.classList].find((c) => c.startsWith('ko-'))]))
-    const toneOf = new Map(tones.map(([c, t]) => [c, t]))
-    expect(toneOf.size).toBe(new Set(tones.map(([c, t]) => `${c}|${t}`)).size)
-    expect([...toneOf.values()].every((t) => t !== undefined)).toBe(true)
-    expect(new Set(toneOf.values()).size).toBe(toneOf.size)
-
-    // 방어 탭(AC30): 변동 카드 상세 = 내구 합계 띠 하나(0~64, 65칸), 현재 합계 칸, 현재 문구, 범례 "최소 H… B…"
-    await selectTab(page, '방어')
-    await waitComplete(page)
-    for (const width of [1280, 400]) {
-      await page.setViewportSize({ width, height: 900 })
-      const card = cards(page).and(page.locator('[data-variable="true"]')).first()
-      if ((await cardLine(card).getAttribute('aria-expanded')) !== 'true') await cardLine(card).click()
-      const d = card.locator('.card-detail')
-      await expect(d.getByTestId('bundle-list')).toHaveCount(0)
-      await expect(d.getByTestId('detail-move-pick')).toHaveCount(0)
-      await expect(d.getByTestId('row')).toHaveCount(1)
-      const pair = d.getByTestId('row')
-      await expect(pair).toHaveAttribute('data-pair', 'true')
-      await expect(pair.locator('.row-head')).not.toContainText(/H · |랭크|기본|%/)
-      await expect(d.locator('.band')).toHaveCount(1)
-      const sum = d.getByTestId('sum-band').getByTestId('band-cell')
-      await expect(sum).toHaveCount(65)
-      await expect(d.getByTestId('sum-band').locator('ol.band')).toHaveAttribute('aria-label', /^H\+[BD] 합계 0~64 판정$/)
-      expect(await sum.evaluateAll((els) => els.map((e) => Number((e as HTMLElement).dataset.sp)))).toEqual(Array.from({ length: 65 }, (_, i) => i))
-      await expect(d.locator('.band-ticks')).toHaveText('03264')
-      const current = d.getByTestId('sum-current')
-      await expect(current).toHaveText(new RegExp(`^. 현재 H(\\d+) [BD](\\d+)\\+? \\(합 (\\d+)\\) · ${TIER}( · 같은 합 최적 H\\d+ [BD]\\d+\\+? ${TIER})? 변동 가능$`))
-      const [, h, b, s] = /현재 H(\d+) [BD](\d+)\+? \(합 (\d+)\)/.exec((await current.textContent()) ?? '')!
-      expect(Number(s)).toBe(Number(h) + Number(b))
-      await expect(d.getByTestId('sum-band').locator('[aria-current="true"]')).toHaveAttribute('data-sp', s)
-      // 범례: 구간이 0부터 64까지 빈틈없이 이어지고, 구간 칸 판정과 맞으며, 0이 아닌 구간은 최소 분배를 보인다
-      const legend = await d.getByTestId('sum-legend').locator('.span').allTextContents()
-      expect(legend.length).toBeGreaterThan(1)
-      const cats = await sum.evaluateAll((els) => els.map((e) => e.getAttribute('title') ?? ''))
-      let next = 0
-      for (const text of legend) {
-        const m = new RegExp(`^\\s*(\\d+)(?:~(\\d+))? ${TIER}( → 최소 H\\d+ [BD]\\d+\\+? / (H\\d+ [BD]\\d+\\+|무보정 H\\d+ [BD]\\d+|상승 불가|무보정 불가))?$`).exec(text)
-        expect(m, text).not.toBeNull()
-        const from = Number(m![1])
-        const to = m![2] === undefined ? from : Number(m![2])
-        expect(from).toBe(next)
-        if (from > 0) expect(m![4], text).toBeDefined()
-        for (let t = from; t <= to; t++) expect(cats[t]).toBe(`합계 ${t}: ${m![3]}`)
-        next = to + 1
-      }
-      expect(next).toBe(65)
-      await expect(d).not.toContainText('다른 능력치에서')
-      await expect(d.locator('.cell.over, .over-key')).toHaveCount(0)
-      expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
-    }
-  })
-
-  test('펼친 상세: 간단행 배분 배지로 배분을 바꾸면 펼친 채로 상세 판정이 그 배분 기준으로 바뀐다(AC27)', async ({ page }) => {
+  test('간단행 배분 배지로 배분을 바꾸면 카드 줄 결과 배지가 그 배분 판정으로 바뀐다(AC27)', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     for (const tab of ['공격', '방어'] as const) {
@@ -481,18 +369,13 @@ test.describe('제품 화면', () => {
       }
       expect(found, `${tab}: 판정 단계가 다른 배분이 있는 행`).toBeDefined()
       const { row, id, tone, before } = found!
-      await cardLine(row).click()
-      const detail = row.locator('.card-detail')
-      // 상세 현재 판정 칩(판정 줄·고정 판정 줄) = 선택 배분의 결과 배지 단계
-      const chip = detail.locator('.row-judge .tier-chip, .row-fixed .tier-chip').first()
-      await expect(chip).toHaveClass(new RegExp(`\\b${before}\\b`))
+      // 카드 줄 결과 배지 = 선택 배분의 판정 단계(메뉴 항목 배지와 같은 색)
+      const badge = row.getByTestId('ko-badge')
+      await expect(badge).toHaveAttribute('data-tone', before.replace(/^ko-/, ''))
       await bundleButton(row).click()
       await bundleMenu(row).locator(`[role="menuitemradio"][data-card-id='${id.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}']`).click()
       await expect(row).toHaveAttribute('data-card-id', id)
-      await expect(cardLine(row)).toHaveAttribute('aria-expanded', 'true')
-      await expect(detail).toBeVisible()
-      await expect(chip).toHaveClass(new RegExp(`\\b${tone}\\b`))
-      await cardLine(row).click()
+      await expect(badge).toHaveAttribute('data-tone', tone.replace(/^ko-/, ''))
     }
   })
 
@@ -563,13 +446,16 @@ test.describe('제품 화면', () => {
     expect(defense.filter((c) => c === 'physical')).toHaveLength(3)
     await expect(customCards(page)).toHaveAttribute('data-category', 'special')
 
-    // 타겟 기술 편집은 공격 탭 커스텀 카드 상세에서 본다.
+    // 타겟 기술 편집은 공격 탭 커스텀 카드 줄의 "프리셋 편집" 토글로 연다(판정 상세는 없다, R20).
     await selectTab(page, '공격')
     await waitComplete(page)
     const card = customCards(page).first()
     const id = await card.getAttribute('data-card-id')
     const sameCard = cards(page).and(page.locator(`[data-card-id='${id}']`))
-    await cardLine(sameCard).click()
+    const presetEdit = sameCard.getByTestId('preset-edit')
+    await expect(presetEdit).toHaveAttribute('aria-expanded', 'false')
+    await presetEdit.click()
+    await expect(presetEdit).toHaveAttribute('aria-expanded', 'true')
 
     // 타겟 기술: 지우다 보면 마지막 1개의 해제 컨트롤은 비활성.
     const targetMoves = sameCard.getByRole('group', { name: '타겟 기술', exact: true })
@@ -593,21 +479,14 @@ test.describe('제품 화면', () => {
     // 공격 탭(내 기술 전부 물리): 상대 H·B만.
     for (const text of await ladderCards(page).locator('.card-bundle').allTextContents()) expect(text).toMatch(/^(H\d+[↑↓]?)?( ?B\d+[↑↓]?)? (\d+\.\d%|소수 배분)$/)
 
-    // 방어 탭 상대 랭크 수단(칼춤 등) 항목의 판정 행: 열어 보며 첫 랭크 행을 찾는다. 근거 문구·종류 배지·점유율 없이 "+2 기술" 라벨만.
+    // 방어 탭 상대 랭크 수단(칼춤 등) 항목이 보이는 카드 줄 판정 행: 근거 문구·종류 배지·점유율 없이 "+2 기술" 라벨만.
     await selectTab(page, '방어')
     await waitComplete(page)
-    let title: Locator | null = null
-    const n = await cards(page).count()
-    for (let i = 0; i < n && title === null; i++) {
-      const card = cards(page).nth(i)
-      await cardLine(card).click()
-      const rank = card.locator('[data-testid="row"][data-row-kind="rank"] .row-head')
-      if ((await rank.count()) > 0) title = rank.first()
-    }
-    expect(title).not.toBeNull()
-    await expect(title!.getByTestId('move-rank')).toHaveText(/^[+−]\d$/)
-    await expect(title!.locator('.row-basis, .row-kind')).toHaveCount(0)
-    await expect(title!).not.toContainText(/%|상대 |내 세트|H · /)
+    const title = cards(page).locator('.card-headline').filter({ has: page.getByTestId('move-rank') }).first()
+    await expect(title).toBeVisible()
+    await expect(title.getByTestId('move-rank')).toHaveText(/^[+−]\d$/)
+    await expect(title.locator('.row-basis, .row-kind')).toHaveCount(0)
+    await expect(title).not.toContainText(/%|상대 |내 세트|H · /)
   })
 
   test('세대 교체 중 이전 뷰는 data-superseded·"갱신 중"으로 표시된다(ADR 결정 3)', async ({ page }) => {
@@ -692,11 +571,11 @@ test.describe('제품 화면', () => {
     expect(order.filter((c) => c !== 'sr-only')).toEqual(['dark', 'move-rank num', 'move-name', 'bundle-caret'])
   })
 
-  test('간단행: 순위·사용률·보존·판정 기호·목표 문구 없음, 배분 라벨 + 비중, 타입 기술 라벨, 상세에 "최소 … / …+" 목표(사용자 피드백 2026-11-10·11-11)', async ({ page }) => {
+  test('간단행: 순위·사용률·보존·판정 기호·목표 문구 없음, 배분 라벨 + 비중, 타입 기술 라벨, 변동 목록에 결과별 최소 SP(사용자 피드백 2026-11-10·11-11, PRD R22)', async ({ page }) => {
     await openProduct(page)
     for (const [tab, target] of [
-      ['공격', new RegExp(`^${targetPattern('A\\d+')}$`)],
-      ['방어', new RegExp(`^${targetPattern('H\\d+ [BD]\\d+')}$`)],
+      ['공격', /^A\d+\+?$/],
+      ['방어', /^H\d+ [BD]\d+\+?$/],
     ] as const) {
       await selectTab(page, tab)
       await waitComplete(page)
@@ -713,23 +592,19 @@ test.describe('제품 화면', () => {
         return { smaller: parseFloat(share.fontSize) < parseFloat(stats.fontSize), differs: share.color !== stats.color, muted: muted !== '' }
       })
       expect(look).toEqual({ smaller: true, differs: true, muted: true })
-      // 간단행에는 목표 문구가 없다(사용자 피드백 2026-11-11). 행 대표 카드의 상세 대표 행에 그대로 있다.
+      // 간단행에는 목표 문구가 없다(사용자 피드백 2026-11-11). 결과별 최소 SP는 변동 팝오버 목록이 보인다(R22).
       await expect(tabPanel(page).getByTestId('headline-target')).toHaveCount(0)
       for (const text of lines) expect(text).not.toMatch(/최소 |무보정 불가/)
       const withLabel = ladderCards(page).filter({ has: page.getByTestId('move-label') })
       expect(await withLabel.count()).toBeGreaterThan(0)
-      const first = withLabel.and(page.locator('[data-variable="true"]')).first()
-      await cardLine(first).click()
-      if (tab === '방어') {
-        // 방어 탭은 목표 문구 대신 합계 띠 범례가 단계별 최소 분배를 보인다(R10)
-        await expect(first.getByTestId('sum-legend')).toContainText(/최소 H\d+ [BD]\d+\+? \/ /)
-        await expect(first.getByTestId('row-target')).toHaveCount(0)
-      } else {
-        const targets = await first.getByTestId('row-target').allTextContents()
-        expect(targets.length).toBeGreaterThan(0)
-        for (const t of targets) expect(t.replace(/^ · /, '')).toMatch(target)
-      }
-      await cardLine(first).click()
+      const first = withLabel.filter({ has: page.getByTestId('adjust-button') }).first()
+      const menu = await openAdjust(first)
+      await expect(menu.getByTestId('adjust-result').first()).toHaveAttribute('data-enabled', 'true', { timeout: 15_000 })
+      const leads = await menu.getByTestId('adjust-sps').evaluateAll((els) => els.map((e) => [...e.querySelectorAll('.adjust-sp')].map((x) => x.textContent).join(' ')))
+      expect(leads.length).toBeGreaterThan(0)
+      for (const t of leads) expect(t).toMatch(target)
+      await page.keyboard.press('Escape')
+      await expect(adjustMenu(first)).toHaveCount(0)
       const labels = tabPanel(page).getByTestId('move-label')
       await expect(labels.first()).toBeVisible()
       for (const el of await labels.all()) {
@@ -824,13 +699,13 @@ test.describe('제품 화면', () => {
     await expect(alert).not.toContainText(/[A-Z_]{6,}/)
     await expect(tabPanel(page).getByTestId('tab-error')).toContainText('내 세트 계산 불가')
 
-    // SP 숫자 입력은 클램프하지 않고 초과를 알린다.
+    // SP 숫자 입력도 슬라이더처럼 남은 합계까지만 받는다(H2 A32 S32 = 66이라 방어는 0).
     await move.fill('지진')
     await move.press('Enter')
-    await mySet(page).getByRole('spinbutton', { name: 'SP 방어 숫자', exact: true }).fill('10')
-    await expect(mySet(page).getByRole('alert').first()).toContainText('SP 합계 76')
-    await selectTab(page, '방어')
-    await expect(tabPanel(page).getByTestId('tab-error')).toContainText('SP 합계 76')
+    const def = mySet(page).getByRole('spinbutton', { name: 'SP 방어 숫자', exact: true })
+    await def.fill('10')
+    await expect(def).toHaveValue('0')
+    await expect(mySet(page).getByRole('alert')).toHaveCount(0)
   })
 
   test('카드 줄은 분류 라벨 대신 대표 행 현재 칸의 결과 배지, 변화 없음은 표시하지 않는다(사용자 피드백 2026-11-10)', async ({ page }) => {
@@ -887,9 +762,10 @@ test.describe('제품 화면', () => {
       await expect(tabPanel(page).locator('.card-line .cat')).toHaveCount(0)
       for (const text of await tabPanel(page).locator('.card-line').allTextContents()) expect(text).not.toMatch(/물리|특수/)
       await expect(tabPanel(page).getByTestId('no-change-summary')).toHaveCount(0)
-      // 커스텀 카드 상세까지 펼쳐도 "변화 없음" 문구가 없다.
-      await cardLine(customCards(page).first()).click()
-      await expect(customCards(page).first().locator('.card-detail')).toBeVisible()
+      // 커스텀 카드 프리셋 편집까지 열어도 "변화 없음" 문구가 없다.
+      const presetEdit = customCards(page).first().getByTestId('preset-edit')
+      if ((await presetEdit.getAttribute('aria-expanded')) !== 'true') await presetEdit.click()
+      await expect(presetEdit).toHaveAttribute('aria-expanded', 'true')
       await expect(tabPanel(page)).not.toContainText('변화 없음')
     }
 
@@ -899,8 +775,14 @@ test.describe('제품 화면', () => {
     const charizard = ladderCards(page).and(page.locator('[data-opponent="charizardmegay"]')).filter({ has: page.getByTestId('card-headline').filter({ hasText: '스톤샤워' }) })
     await expect(charizard.getByTestId('ko-badge')).toHaveText('확정1타')
     await expect(charizard.getByTestId('ko-badge')).toHaveAttribute('data-tone', 'red')
-    await expect(cardLine(charizard)).toHaveAccessibleName('메가리자몽Y')
-    await expect(cardLine(charizard)).toHaveAccessibleDescription(/스톤샤워.*확정1타/)
+    // 이미 탭 최선 결과(공격 확정1타)여도 변동 가능이면 더 낮은 결과를 보려고 변동 버튼이 있다. 이름 = 상대, 설명 = 결과 배지(PRD R21)
+    await expect(charizard).toHaveAttribute('data-variable', 'true')
+    await expect(adjustButton(charizard)).toHaveAccessibleName(/^변동: /)
+    await expect(adjustButton(charizard)).toHaveAccessibleDescription(/확정1타/)
+    const salamence = ladderCards(page).and(page.locator('[data-opponent="salamencemega"]')).filter({ has: page.getByTestId('card-headline').filter({ hasText: '드래곤클로' }) })
+    await expect(salamence.getByTestId('ko-badge')).toHaveText(/^저난수1타/)
+    await expect(adjustButton(salamence)).toHaveAccessibleName('변동: 메가보만다')
+    await expect(adjustButton(salamence)).toHaveAccessibleDescription(/저난수1타/)
 
     // F3 통과: 한카리아스 adamant(A32↑) 드래곤클로는 내 H2·B0에서 1타 확률 2/16(B3부터 확정견딤) → 고난수 견딤 기준 14(저난수 (16−14)/16 이하)라 저난수1타(연두).
     await selectTab(page, '방어')
@@ -980,7 +862,7 @@ test.describe('제품 화면', () => {
     await expect(badge).toHaveAttribute('data-tone', 'lime')
   })
 
-  test('키보드만으로 탭 전환·필터·카드 펼치기(AC18)', async ({ page }) => {
+  test('키보드만으로 탭 전환·필터·변동 팝오버 열고 닫기(AC18, PRD R26)', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     const attack = resultTab(page, '공격')
@@ -1005,13 +887,14 @@ test.describe('제품 화면', () => {
     expect(ranks.length).toBeGreaterThan(0)
     expect(ranks.every((r) => r.rank <= 5)).toBe(true)
 
-    // 카드 펼치기: Enter와 Space.
-    const line = cardLine(cards(page).first())
-    await line.focus()
+    // 변동 팝오버: Enter로 열고 Esc로 닫으면 버튼으로 돌아온다.
+    const button = adjustButton(cards(page).filter({ has: page.getByTestId('adjust-button') }).first())
+    await button.focus()
     await page.keyboard.press('Enter')
-    await expect(line).toHaveAttribute('aria-expanded', 'true')
-    await page.keyboard.press('Space')
-    await expect(line).toHaveAttribute('aria-expanded', 'false')
+    await expect(button).toHaveAttribute('aria-expanded', 'true')
+    await page.keyboard.press('Escape')
+    await expect(button).toHaveAttribute('aria-expanded', 'false')
+    await expect(button).toBeFocused()
   })
 })
 
@@ -1041,7 +924,7 @@ test.describe('포켓몬마다 한 행 + 노력치 배분 선택(사용자 피�
     }
   })
 
-  test('배분 배지 클릭 → 사용률 순 메뉴, 다른 배분을 고르면 행이 그 배분으로 바뀌고 펼침은 토글되지 않는다', async ({ page }) => {
+  test('배분 배지 클릭 → 사용률 순 메뉴, 다른 배분을 고르면 행이 그 배분으로 바뀐다', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     const row = await multiRow(page)
@@ -1080,18 +963,13 @@ test.describe('포켓몬마다 한 행 + 노력치 배분 선택(사용자 피�
     await expect(menu).toHaveCount(0)
     await expect(row).toHaveAttribute('data-card-id', nextId!)
     await expect(row.getByTestId('card-bundle')).toHaveText(texts[1])
-    await expect(cardLine(row)).toHaveAttribute('aria-expanded', 'false')
-    await expect(row.locator('.card-detail')).toBeHidden()
     await expect(button).toBeFocused()
 
-    // 펼친 채로 배지를 눌러도 접히지 않는다.
-    await cardLine(row).click()
-    await expect(cardLine(row)).toHaveAttribute('aria-expanded', 'true')
+    // 다시 첫 배분으로
     await button.click()
     await expect(menu).toBeVisible()
     await menu.getByRole('menuitemradio').first().click()
     await expect(row).toHaveAttribute('data-card-id', before.id!)
-    await expect(cardLine(row)).toHaveAttribute('aria-expanded', 'true')
   })
 
   test('메뉴: ↑/↓ 이동, Escape는 닫고 배지로 포커스, 바깥 클릭도 닫는다', async ({ page }) => {
@@ -1120,13 +998,11 @@ test.describe('포켓몬마다 한 행 + 노력치 배분 선택(사용자 피�
     await page.keyboard.press('Enter')
     await expect(menu).toHaveCount(0)
     await expect(row).toHaveAttribute('data-card-id', id!)
-    await expect(cardLine(row)).toHaveAttribute('aria-expanded', 'false')
 
     await button.click()
     await expect(menu).toBeVisible()
     await page.getByTestId('progress').click()
     await expect(menu).toHaveCount(0)
-    await expect(cardLine(row)).toHaveAttribute('aria-expanded', 'false')
   })
 
   test('직접 추가 폼 "H [ ] B [ ]▲▼ [추가]"는 드롭다운에서 한 줄(상세 목록은 없음, R9)(사용자 피드백 2026-11-12)', async ({ page }) => {
@@ -1148,11 +1024,8 @@ test.describe('포켓몬마다 한 행 + 노력치 배분 선택(사용자 피�
       expect(inMenu.spread, tab).toBeLessThanOrEqual(2)
       expect(inMenu.right, tab).toBeLessThanOrEqual(inMenu.boxRight + 0.5)
       await bundleMenu(row).press('Escape')
-      // 공격·방어 탭 상세에는 배분 목록·직접 추가 폼이 없다(R9, AC27)
-      await cardLine(row).click()
-      await expect(row.locator('.card-detail')).toBeVisible()
-      await expect(row.locator('.card-detail').getByTestId('bundle-add')).toHaveCount(0)
-      await cardLine(row).click()
+      // 직접 추가 폼은 배지 메뉴에만 있다(카드 상세는 R20으로 없다)
+      await expect(row.getByTestId('bundle-add')).toHaveCount(0)
     }
     // 드롭다운도 관여 능력치 3개 이상(칸 복제로 강제)이면 한 줄이고 메뉴·화면 안에 든다 — 1280px·400px.
     for (const width of [1280, 400]) {
@@ -1236,7 +1109,7 @@ test.describe('포켓몬마다 한 행 + 노력치 배분 선택(사용자 피�
     expect(await menuTotal(0.5)).toBeGreaterThan(15)
   })
 
-  test('묶음 기준 100%면 선택지가 하나라도 래더 배지는 버튼(직접 추가 폼), 상세에는 배분 목록 없음(R9)', async ({ page }) => {
+  test('묶음 기준 100%면 선택지가 하나라도 래더 배지는 버튼(직접 추가 폼), 배분 목록은 배지 메뉴에만(R9)', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     const min = toolbarSpin(page, 'SP 배분 최소(%)')
@@ -1253,9 +1126,7 @@ test.describe('포켓몬마다 한 행 + 노력치 배분 선택(사용자 피�
     await expect(menu.getByRole('menuitemradio')).toHaveCount(1)
     await expect(menu.getByTestId('bundle-add')).toBeVisible()
     await menu.press('Escape')
-    await cardLine(row).click()
-    await expect(row.locator('.card-detail')).toBeVisible()
-    // 공격 탭 상세에는 배분 목록이 없다(R9) — 고르기·추가는 위 배지 메뉴에서만
+    // 고르기·추가는 배지 메뉴에서만(R9) — 줄에 다른 배분 목록이 없다
     await expect(row.getByTestId('bundle-list')).toHaveCount(0)
   })
 })
@@ -1325,17 +1196,15 @@ test.describe('배분 직접 추가·고정(사용자 피드백 2026-11-12)', ()
     await spInput(row, 'HP').fill('0')
     await expect(addButton(row)).toBeEnabled()
 
-    // 폼 안 클릭·키 입력은 메뉴를 닫거나 행을 펼치지 않는다(↑↓는 숫자 칸 값만 바꾼다).
+    // 폼 안 클릭·키 입력은 메뉴를 닫지 않는다(↑↓는 숫자 칸 값만 바꾼다).
     await spInput(row, '방어').click()
     await spInput(row, '방어').fill('10')
     await page.keyboard.press('ArrowUp')
     await expect(spInput(row, '방어')).toHaveValue('11')
     await expect(spInput(row, '방어')).toBeFocused()
     await expect(menu).toBeVisible()
-    await expect(cardLine(row)).toHaveAttribute('aria-expanded', 'false')
     await addForm(row).click({ position: { x: 2, y: 2 } })
     await expect(menu).toBeVisible()
-    await expect(cardLine(row)).toHaveAttribute('aria-expanded', 'false')
   })
 
   /** 카드 id(JSON: 따옴표·역슬래시 포함)를 CSS 속성 선택자 문자열로 */
@@ -1539,9 +1408,8 @@ test.describe('배분 직접 추가·고정(사용자 피드백 2026-11-12)', ()
     await expect(row).toHaveAttribute('data-card-id', target.id)
     await expect(bundleButton(row)).not.toHaveClass(/pinned-bundle/)
     await expect(tabPanel(page)).toHaveAttribute('data-generation', generation!)
-    // 공격·방어 탭 상세에는 배분 목록(핀·Delete 키)이 없다
+    // 배분 목록(핀)은 배지 메뉴에만 있다
     await bundleMenu(row).press('Escape')
-    await cardLine(row).click()
     await expect(row.getByTestId('bundle-list')).toHaveCount(0)
   })
 
@@ -1606,9 +1474,8 @@ test.describe('배분 직접 추가·고정(사용자 피드백 2026-11-12)', ()
     await natButton(row, 'def', 'plus').click()
     await expect(natButton(row, 'def', 'plus')).toHaveAttribute('aria-pressed', 'true')
     await expect(natButton(row, 'def', 'minus')).toHaveAttribute('aria-pressed', 'false')
-    // 토글 클릭은 메뉴를 닫거나 행을 펼치지 않는다
+    // 토글 클릭은 메뉴를 닫지 않는다(행 펼침은 R20으로 없어졌다)
     await expect(bundleMenu(row)).toBeVisible()
-    await expect(cardLine(row)).toHaveAttribute('aria-expanded', 'false')
     await addButton(row).click()
     await waitComplete(page)
     await expect(row).toHaveAttribute('data-user-added', 'true')
@@ -1640,7 +1507,7 @@ test.describe('배분 직접 추가·고정(사용자 피드백 2026-11-12)', ()
     await expectAligned(bundleMenu(row), '프리셋 드롭다운')
   })
 
-  test('변동 가능이 아닌 배분도 선택지: 고르면 행 배지가 고정 판정·기술 라벨 유지·변동 태그 없음(펼치면 변화 없음 행)', async ({ page }) => {
+  test('변동 가능이 아닌 배분도 선택지: 고르면 행 배지가 고정 판정·기술 라벨 유지·변동 버튼 없음(PRD R21)', async ({ page }) => {
     await openProduct(page)
     await waitComplete(page)
     // 메뉴 항목 data-variable="false" = 그 배분은 내 SP·성격으로 판정이 바뀌지 않는다
@@ -1664,11 +1531,9 @@ test.describe('배분 직접 추가·고정(사용자 피드백 2026-11-12)', ()
     await expect(row).toHaveAttribute('data-variable', 'false')
     await expect(row).toHaveAttribute('data-headline', 'row')
     await expect(row.getByTestId('variable-tag')).toHaveCount(0)
+    await expect(adjustButton(row)).toHaveCount(0)
     await expect(row.getByTestId('move-label')).toBeVisible()
     await expect(row.getByTestId('ko-badge')).toHaveText(new RegExp(`^${TIER}`))
-    await cardLine(row).click()
-    await expect(row.locator('.card-detail .rows li').first()).toBeVisible()
-    await expect(row.locator('.card-detail .rows li .row-fixed').first()).toBeVisible()
   })
 })
 

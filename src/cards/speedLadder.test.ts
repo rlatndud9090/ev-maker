@@ -209,6 +209,41 @@ describe('최소 S(AC7b·AC8)', () => {
   })
 })
 
+describe('컷 고정 옵션(합계 검사 끔·성격 지정)', () => {
+  // H32 A32 S32 = 96 > 66
+  const over: PokemonSet = { ...chomp, sp: { ...chomp.sp, hp: 32 } }
+
+  it('옵션이 없거나 비어 있으면 결과가 같다', () => {
+    for (const target of [100, 136, 154, 400]) {
+      const base = minSpToPass(game, chomp, target, false)
+      expect(minSpToPass(game, chomp, target, false, {})).toEqual(base)
+      expect(minSpToPass(game, chomp, target, true, {})).toEqual(minSpToPass(game, chomp, target, true))
+    }
+    expect(speedBaseline(game, chomp, true, {})).toEqual(speedBaseline(game, chomp, true))
+  })
+
+  it('합계 초과 세트: 옵션이 없으면 무효, ignoreSpTotal이면 기준선·최소 S를 낸다', () => {
+    expect(speedBaseline(game, over, false)).toEqual({ kind: 'invalid' })
+    expect(minSpToPass(game, over, 136, false)).toBeNull()
+    expect(speedBaseline(game, over, false, { ignoreSpTotal: true })).toEqual(speedBaseline(game, chomp, false))
+    const r = minSpToPass(game, over, 136, false, { ignoreSpTotal: true })
+    expect(r?.neutral).toEqual(minSpToOutspeed(game, { ...over, nature: 'hardy' }, 136, { attacker: { tailwind: false } }, { ignoreSpTotal: true }))
+    expect(r?.neutral.kind).toBe('over-budget')
+  })
+
+  it('natures를 주면 그 두 성격으로 판정하고 plus null이면 상승 결과가 null이다', () => {
+    const target = 150
+    const r = minSpToPass(game, chomp, target, false, { natures: { neutral: 'adamant', plus: 'timid' } })
+    expect(r?.neutral).toEqual(minSpToOutspeed(game, { ...chomp, nature: 'adamant' }, target, { attacker: { tailwind: false } }))
+    expect(r?.plus).toEqual(minSpToOutspeed(game, { ...chomp, nature: 'timid' }, target, { attacker: { tailwind: false } }))
+    expect(minSpToPass(game, chomp, target, false, { natures: { neutral: 'hardy', plus: null } })).toEqual({ neutral: minSpToPass(game, chomp, target, false)?.neutral, plus: null })
+  })
+
+  it('랭크는 옵션과 무관하게 지운다', () => {
+    expect(minSpToPass(game, { ...over, boosts: { spe: 2 } }, 136, false, { ignoreSpTotal: true })).toEqual(minSpToPass(game, over, 136, false, { ignoreSpTotal: true }))
+  })
+})
+
 describe('키보드 탐색(AC20)', () => {
   const rows: LadderRow[] = [
     { speed: 300, badgeIds: ['a1', 'a2', 'a3'], baseline: false },

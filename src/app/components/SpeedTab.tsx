@@ -9,10 +9,12 @@ import {
   type SpeedBaseline,
   type SpeedChartInput,
 } from '../../cards'
-import type { PokemonSet } from '../../core'
+import type { EvalOptions, PokemonSet } from '../../core'
 import type { Snapshot } from '../../data/schema'
 import { namesOf } from '../../ui/names'
+import { toPokemonSet } from '../../ui/setDraft'
 import { useDisplaySp, type DisplaySpStore } from '../displaySp'
+import { useLockUi } from '../lockContext'
 import { SPEED_CHART_COMPLETE_MARK, SPEED_CHART_FIRST_MARK, markSpeedChart } from '../perf'
 import type { SpeedReveal } from '../reveal'
 import type { AppAction, AppState } from '../state'
@@ -40,6 +42,8 @@ interface Props {
   onRevealed: () => void
 }
 
+const IGNORE_TOTAL: EvalOptions = { ignoreSpTotal: true }
+
 /** 알림 영역 글자: 확정 기준선의 내 실수치만(총수 없는 추월·동속 개수는 알리지 않는다, 사용자 피드백 2026-11-16) */
 const summaryText = (b: SpeedBaseline): string => (b.kind === 'ok' ? `내 스피드 ${b.speed}` : '')
 
@@ -47,6 +51,11 @@ const summaryText = (b: SpeedBaseline): string => (b.kind === 'ok' ? `내 스피
 export function SpeedTab({ game, input, state, mySet, displaySp, dispatch, tabId, panelId, generation, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel, reveal, onRevealed }: Props) {
   const { filters, myTailwind } = state.speedChart
   const shownSp = useDisplaySp(displaySp)
+  // 고정 중 mySet은 계획 세트(합계 66 초과 가능)라 합계 검사를 끄고, 고정 능력치는 드래그를 따르지 않는다
+  const lockUi = useLockUi()
+  const locked = lockUi.locks.length > 0
+  const evalOptions = locked ? IGNORE_TOTAL : undefined
+  const lockedStats = locked ? (lockUi.derivation?.lockedStats ?? null) : undefined
   const model = useMemo(() => buildSpeedChart(input), [input])
   const badges = useMemo(() => visibleBadges(model, filters), [model, filters])
   const nameOf = useMemo(() => {
@@ -56,9 +65,25 @@ export function SpeedTab({ game, input, state, mySet, displaySp, dispatch, tabId
   const cmp = useMemo(() => compareInRow(nameOf), [nameOf])
 
   // 확정 SP 기준(알림 영역)과 드래그 중 표시 SP 기준(화면)을 나눈다
-  const confirmedBaseline = useMemo(() => speedBaseline(game, mySet, myTailwind), [game, mySet, myTailwind])
-  const shownSet = useMemo(() => (shownSp === null ? mySet : { ...mySet, sp: shownSp }), [mySet, shownSp])
-  const baseline: SpeedBaseline = useMemo(() => (shownSp === null ? confirmedBaseline : speedBaseline(game, shownSet, myTailwind)), [shownSp, confirmedBaseline, game, shownSet, myTailwind])
+  const confirmedBaseline = useMemo(() => speedBaseline(game, mySet, myTailwind, evalOptions), [game, mySet, myTailwind, evalOptions])
+  const shownSet = useMemo(() => {
+    if (shownSp === null || lockedStats === null) return mySet
+    if (lockedStats === undefined) return { ...mySet, sp: shownSp }
+    const sp = { ...shownSp }
+    for (const s of lockedStats) sp[s] = mySet.sp[s]
+    return { ...mySet, sp }
+  }, [mySet, shownSp, lockedStats])
+  const baseline: SpeedBaseline = useMemo(
+    () => (shownSet === mySet ? confirmedBaseline : speedBaseline(game, shownSet, myTailwind, evalOptions)),
+    [shownSet, mySet, confirmedBaseline, game, myTailwind, evalOptions],
+  )
+  // 고정 후보·갈래 예산의 내 세트(고정 전 값, 드래그 중이면 표시 SP)
+  const draft = state.draft
+  const lockSet = useMemo(() => {
+    if (!lockUi.enabled) return undefined
+    const set = toPokemonSet(game, draft).set
+    return shownSp === null ? set : { ...set, sp: shownSp }
+  }, [lockUi.enabled, game, draft, shownSp])
   const rows = useMemo(() => ladderRows(badges, baseline.kind === 'ok' ? baseline.speed : null, cmp), [badges, baseline, cmp])
   // 알림 영역은 확정 SP 기준(드래그 중에는 알리지 않는다)
   const summary = summaryText(confirmedBaseline)
@@ -121,6 +146,7 @@ export function SpeedTab({ game, input, state, mySet, displaySp, dispatch, tabId
         rows={rows}
         baseline={baseline}
         shownSet={shownSet}
+        lockSet={lockSet}
         myTailwind={myTailwind}
         customTargets={targets}
         dispatch={dispatch}

@@ -7,6 +7,8 @@ import {
   groupItems,
   isDamageTab,
   judgeDamageAddition,
+  lockTargetId,
+  lockTargetKeyOf,
   sortByResult,
   type AdditionTarget,
   type AdditionVerdict,
@@ -15,6 +17,8 @@ import {
   type CardView,
   type Category,
   type CustomTarget,
+  type CutLock,
+  type DamageTab,
   type GroupItem,
   type PinnedBundle,
   type ResultBucket,
@@ -28,8 +32,11 @@ import { josa, koReason } from '../../ui/koErrors'
 import type { TabViewState } from '../executor'
 import type { DamageReveal } from '../reveal'
 import type { AppAction, MoveChoice } from '../state'
+import { useLockUi } from '../lockContext'
 import { CardItem, type AddStat } from './CardItem'
+import { OUTSIDE_FILTER_TEXT } from './lockText'
 import { moveNoticeText } from './text'
+import './lockRow.css'
 
 interface Props {
   game: Snapshot
@@ -46,8 +53,6 @@ interface Props {
   sortMode: SortMode
   /** 직접 고른 기술 항목(모든 탭) */
   moveChoices: readonly MoveChoice[]
-  /** 마지막으로 내 포켓몬 종을 바꾼 세대(AppState speciesGeneration): 이 세대 이상 뷰가 보이면 그 전에 펼친 카드를 접는다 */
-  speciesGeneration: number
   dispatch: Dispatch<AppAction>
   /** 진행 줄 오른쪽 "포켓몬 추가"(목록 밖 타겟 추가 패널 열기·닫기) */
   customOpen: boolean
@@ -98,44 +103,34 @@ function SectionLabel({ id, bucket, count }: { id: string; bucket: ResultBucket;
 }
 
 const NO_ITEMS: readonly GroupItem[] = []
-const NONE: ReadonlySet<string> = new Set()
 
-/** 펼친 카드(at = 펼침을 마지막으로 바꿀 때 보이던 뷰 세대) */
-interface Expanded {
-  at: number
-  ids: ReadonlySet<string>
+interface RevealHit {
+  group: CardGroup
+  card: CardView
+  /** 보이는 항목을 바꿔야 하면 그 항목 키 */
+  item?: string
 }
 
-/** 종 교체 세대 이상 뷰가 보이는데 펼침이 그 전 것이면 모두 접힌 것으로 본다(재계산 뒤 접기). */
-const expandedNow = (e: Expanded, shownGeneration: number, speciesGeneration: number): ReadonlySet<string> =>
-  shownGeneration >= speciesGeneration && e.at < speciesGeneration ? NONE : e.ids
+/** 고정 대상 카드: 조립이 단 lockedBy(보이는 항목), 없으면 구조 키가 같은 배분 카드의 항목 */
+function revealTarget(groups: readonly CardGroup[], tab: DamageTab, lock: CutLock): RevealHit | null {
+  const has = (seqs: readonly number[] | undefined) => seqs?.includes(lock.seq) === true
+  for (const group of groups)
+    for (const card of group.options) if (card.rows.some((r) => has(r.lock?.lockedBy)) || has(card.pair?.lock?.lockedBy)) return { group, card }
+  const t = lock.target
+  if (t.kind === 'speed') return null
+  const id = lockTargetId(t)
+  for (const group of groups)
+    for (const card of group.options) {
+      if (lockTargetId(lockTargetKeyOf(tab, card, t.itemKey)) !== id || !card.items.some((i) => i.key === t.itemKey)) continue
+      return card.shownItem === t.itemKey ? { group, card } : { group, card, item: t.itemKey }
+    }
+  return null
+}
 
-export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySet, customTargets, pinnedBundles, sortMode, moveChoices, speciesGeneration, dispatch, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel, onMenuCards, addInput, reveal, onRevealed }: Props) {
+export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySet, customTargets, pinnedBundles, sortMode, moveChoices, dispatch, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel, onMenuCards, addInput, reveal, onRevealed }: Props) {
   const names = namesOf(game)
-  // 펼침·배분 선택은 탭마다 따로(같은 포켓몬이라도 탭이 다르면 다른 행), 배분을 바꿔도 펼침이 유지되게 그룹 키로 둔다.
+  // 배분 선택은 탭마다 따로(같은 포켓몬이라도 탭이 다르면 다른 행), 배분을 바꿔도 행이 유지되게 그룹 키로 둔다.
   const scoped = (groupKey: string) => JSON.stringify([tab, groupKey])
-  const shownGeneration = state.kind === 'idle' ? generation : state.generation
-  const [expandedState, setExpanded] = useState<Expanded>(() => ({ at: shownGeneration, ids: NONE }))
-  const expanded = expandedNow(expandedState, shownGeneration, speciesGeneration)
-  // 토글 콜백은 세대마다 바뀌지 않게(행 다시 그리기 방지) 세대를 ref로 읽는다.
-  const gens = useRef({ shown: shownGeneration, species: speciesGeneration })
-  useLayoutEffect(() => {
-    gens.current = { shown: shownGeneration, species: speciesGeneration }
-  }, [shownGeneration, speciesGeneration])
-  const onToggle = useCallback(
-    (groupKey: string) => {
-      const id = JSON.stringify([tab, groupKey])
-      const { shown, species } = gens.current
-      setExpanded((cur) => {
-        const next = new Set(expandedNow(cur, shown, species))
-        if (next.has(id)) next.delete(id)
-        else next.add(id)
-        // 종을 바꾼 뒤(새 뷰가 오기 전) 펼친 카드는 새 뷰가 와도 접지 않는다
-        return { at: Math.max(shown, species), ids: next }
-      })
-    },
-    [tab],
-  )
   // (탭, 줄) → 고른 배분 카드 id. 도구 변형 줄(화력 도구·반감열매)은 도구를 가정해 배분을 따로 고르므로 기본 줄과 공유하지 않는다. 없거나 사라졌으면 그 줄 기본 배분.
   const [chosen, setChosen] = useState<ReadonlyMap<string, string>>(() => new Map())
   const onSelect = useCallback(
@@ -274,6 +269,45 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
   const settled = state.kind === 'fatal' ? state.generation === generation : complete || (view !== undefined && !superseded && view.status.kind !== 'ok')
   const targetOf = (rosterId: string) => customTargets.find((t) => t.rosterId === rosterId)
 
+  // 컷 고정: 고정 목록의 이동 요청
+  const lockUi = useLockUi()
+  const { reveal: lockReveal, clearReveal, locks } = lockUi
+  // 이동 요청은 렌더 중 한 번만 처리하고(nonce), 요청 지우기·항목 선택·포커스는 커밋 뒤에 한다
+  const [revealDone, setRevealDone] = useState<{ nonce: number; outside: number | null; cardId?: string; choose?: MoveChoice } | null>(null)
+  const revealLock = lockReveal === null ? undefined : locks.find((l) => l.seq === lockReveal.seq)
+  if (lockReveal !== null && revealLock !== undefined && revealDone?.nonce !== lockReveal.nonce && isDamageTab(tab) && revealLock.kind === tab && view !== undefined && !superseded) {
+    const hit = revealTarget(groups, tab, revealLock)
+    if (hit === null) {
+      // 판정이 끝나기 전에는 아직 목록에 없을 수 있다
+      if (view.status.kind !== 'ok' || view.complete) {
+        const missing = lockUi.derivation?.statuses.get(revealLock.seq)?.kind === 'missing'
+        setRevealDone({ nonce: lockReveal.nonce, outside: missing ? null : revealLock.seq })
+      }
+    } else {
+      const id = JSON.stringify([tab, hit.group.key])
+      const choose = hit.item === undefined ? undefined : { tab, source: hit.group.opponent.source, opponentId: hit.group.opponent.id, key: hit.item }
+      setRevealDone({ nonce: lockReveal.nonce, outside: null, cardId: hit.card.id, choose })
+      setChosen((cur) => (cur.get(id) === hit.card.id ? cur : new Map(cur).set(id, hit.card.id)))
+    }
+  }
+  const revealNonce = lockReveal?.nonce
+  useEffect(() => {
+    if (revealDone === null || revealDone.nonce !== revealNonce) return
+    if (revealDone.choose !== undefined) dispatch({ type: 'choose-move', choice: revealDone.choose })
+    clearReveal()
+  }, [revealDone, revealNonce, dispatch, clearReveal])
+  // 대상 카드로 화면을 옮기고 그 카드 컷 고정 핀에 포커스(배분 전환이 그려진 뒤, 요청마다 한 번)
+  const revealFocused = useRef<number | null>(null)
+  useLayoutEffect(() => {
+    const cardId = revealDone?.cardId
+    if (revealDone === null || cardId === undefined || revealFocused.current === revealDone.nonce) return
+    const li = [...(panelRef.current?.querySelectorAll<HTMLElement>('[data-testid="card"]') ?? [])].find((el) => el.dataset.cardId === cardId)
+    if (li === undefined) return
+    revealFocused.current = revealDone.nonce
+    li.scrollIntoView({ block: 'nearest' })
+    ;(li.querySelector<HTMLElement>('[data-testid="cut-pin"]') ?? li).focus({ preventScroll: true })
+  })
+  const outside = revealDone !== null && revealDone.outside !== null && locks.some((l) => l.seq === revealDone.outside)
   // 추가 요청: 현재 세대 뷰에 그 배분 카드가 나오면 그 줄로 스크롤·포커스한다. 1·2단계가 끝났거나 계산이 멈췄는데(내 세트 오류·치명 오류) 없으면 버린다.
   useEffect(() => {
     if (reveal === null || reveal.tab !== tab) return
@@ -290,7 +324,7 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
     const li = panelRef.current?.querySelector<HTMLElement>(`[data-testid="card"][data-group-key="${CSS.escape(reveal.groupKey)}"]`)
     if (li === null || li === undefined) return
     li.scrollIntoView({ block: 'nearest' })
-    ;(li.querySelector<HTMLElement>('.bundle-btn') ?? li.querySelector<HTMLElement>('.card-toggle'))?.focus()
+    ;(li.querySelector<HTMLElement>('.bundle-btn') ?? li.querySelector<HTMLElement>('[data-testid="move-pick"]'))?.focus()
     onRevealed()
   }, [reveal, tab, state, generation, view, superseded, groups, onRevealed])
 
@@ -343,6 +377,11 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
         </button>
       </div>
       {customPanel}
+      {locks.length > 0 && (
+        <p className="lock-outside" role="status" data-testid="lock-outside">
+          {outside ? OUTSIDE_FILTER_TEXT : ''}
+        </p>
+      )}
       {view && (
         <>
           {view.status.kind === 'my-set-error' && (
@@ -381,7 +420,7 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
               {view.cards.length === 0 && !view.stage12Done && <p className="hint">카드를 계산하는 중…</p>}
               {/* 계산결과순 그룹 라벨은 같은 목록 안 제목 항목(li > h2)이라 행이 그룹을 옮겨도 다시 마운트되지 않는다.
                   목록은 listitem만 갖는다(role=presentation li는 ARIA list 규칙 위반). 라벨에는 포커스가 없어 키보드 순서는 행만,
-                  행 소속은 행 토글 버튼의 aria-describedby(그룹 제목 id)로 전한다. */}
+                  행 소속은 변동 버튼의 aria-describedby(그룹 제목 id)로 전한다. */}
               <ol className="cards" data-sort={sortMode}>
                 {sections.flatMap((sec) => {
                   const items = sec.items.map(({ group: g, card: c }) => (
@@ -392,8 +431,6 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
                       group={g}
                       card={c}
                       rollSteps={view.rollSteps}
-                      expanded={expanded.has(scoped(g.key))}
-                      onToggle={onToggle}
                       onSelect={onSelect}
                       target={c.opponent.source === 'custom' ? targetOf(c.opponent.id) : undefined}
                       dispatch={dispatch}

@@ -9,6 +9,8 @@ import { initialState, reducer, type AppAction, type AppState, type MoveChoice }
 
 const start = (): AppState => initialState('m-c')
 const run = (state: AppState, ...actions: AppAction[]): AppState => actions.reduce(reducer, state)
+const RULES = { spTotal: 66, spMaxPerStat: 32 }
+const commit = (stat: StatId, value: number): AppAction => ({ type: 'commit-sp', stat, value, rules: RULES, lockedSp: null })
 
 describe('initialState', () => {
   it('예시 세트·기본 메타·공격 탭·기본 기준·상위 DEFAULT_TOP_N·세대 0', () => {
@@ -94,11 +96,11 @@ describe('reducer', () => {
 
   it('드래그 확정은 세대를 올리고 같은 값 확정은 무변화', () => {
     const s = start()
-    const next = reducer(s, { type: 'commit-sp', stat: 'atk', value: 28 })
+    const next = reducer(s, commit('atk', 28))
     expect(next.draft.sp.atk).toBe('28')
     expect(next.generation).toBe(1)
-    expect(reducer(next, { type: 'commit-sp', stat: 'atk', value: 28 })).toBe(next)
-    expect(reducer(next, { type: 'commit-sp', stat: 'atk', value: NaN })).toBe(next)
+    expect(reducer(next, commit('atk', 28))).toBe(next)
+    expect(reducer(next, commit('atk', NaN))).toBe(next)
   })
 
   it('탭 전환은 세대를 바꾸지 않는다', () => {
@@ -411,7 +413,7 @@ describe('상대 기술 추가·직접 선택 해제', () => {
     const sp = reducer(s, { type: 'set-draft', draft: { ...s.draft, sp: { ...s.draft.sp, hp: '10' }, nature: 'jolly', natureMinusAuto: true } })
     expect(sp.generation).toBe(s.generation + 1)
     expect(sp.moveChoices).toBe(s.moveChoices)
-    expect(reducer(s, { type: 'commit-sp', stat: 'def', value: 4 }).moveChoices).toBe(s.moveChoices)
+    expect(reducer(s, commit('atk', 4)).moveChoices).toBe(s.moveChoices)
     for (const draft of [
       { ...s.draft, item: 'choiceband' },
       { ...s.draft, ability: 'sandveil' },
@@ -506,10 +508,10 @@ describe('스피드 차트 상태', () => {
 describe('toCardInput', () => {
   it('초안을 보정 없이 세트로 풀고 상태 값을 그대로 넘긴다', () => {
     const { game, bo1 } = realData()
-    const s = run(start(), { type: 'commit-sp', stat: 'hp', value: 10 }, { type: 'set-top-n', topN: 10 })
+    const s = run(start(), commit('atk', 10), { type: 'set-top-n', topN: 10 })
     const input = toCardInput(s, game, bo1)
     expect(input.mySet).toEqual(toPokemonSet(game, s.draft).set)
-    expect(input.mySet.sp.hp).toBe(10)
+    expect(input.mySet.sp.atk).toBe(10)
     expect(input.filters.topN).toBe(10)
     expect(input.view).toBe(bo1)
     const strict = run(s, { type: 'set-roll-steps', steps: 15 })
@@ -546,7 +548,7 @@ describe('종 교체(switch-species)', () => {
   it('종 기억·종 교체 세대는 계산 입력이 아니다, SP 변경은 종 교체 세대를 바꾸지 않는다', () => {
     const { game, bo1 } = realData()
     const s = reducer(start(), { type: 'switch-species', from: 'garchomp', to: 'sneasler', draft: sneasler })
-    const sp = reducer(s, { type: 'commit-sp', stat: 'hp', value: 5 })
+    const sp = reducer(s, commit('atk', 5))
     expect(sp.generation).toBe(s.generation + 1)
     expect(sp.speciesGeneration).toBe(s.speciesGeneration)
     expect(toCardInput(s, game, bo1)).toEqual(toCardInput({ ...s, draftCache: {}, speciesGeneration: 0 }, game, bo1))

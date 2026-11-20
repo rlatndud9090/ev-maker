@@ -144,6 +144,41 @@ describe('추월 역산(PRD F4)', () => {
       expect((err as CoreInputError).field).toBe('target')
     }
   })
+
+  describe('평가 옵션(ignoreSpTotal)', () => {
+    // H2 A32 B12 S32 = 78 > 66
+    const over = { ...base, sp: { hp: 2, atk: 32, def: 12, spa: 0, spd: 0, spe: 32 } }
+    const spTotalError = (f: () => unknown) => {
+      let err: unknown
+      try {
+        f()
+      } catch (e) {
+        err = e
+      }
+      expect(err).toBeInstanceOf(CoreError)
+      expect((err as CoreError).details.map((d) => d.code)).toContain('SP_TOTAL_EXCEEDED')
+    }
+
+    it('옵션이 없으면 합계 초과 세트는 SP_TOTAL_EXCEEDED', () => {
+      spTotalError(() => finalSpeed(MC, over))
+      spTotalError(() => minSpToOutspeed(MC, over, target))
+      spTotalError(() => minSpToOutspeed(MC, base, over))
+    })
+
+    it('옵션을 주면 합계 초과 세트도 판정하고, 예산은 66 기준 remaining(음수 가능)으로 낸다', () => {
+      const legal = { ...base, sp: { ...base.sp, spe: 32 } }
+      expect(finalSpeed(MC, over, undefined, 'attacker', { ignoreSpTotal: true })).toBe(finalSpeed(MC, legal))
+      expect(minSpToOutspeed(MC, over, target, undefined, { ignoreSpTotal: true })).toEqual({ kind: 'ok', sp: 11 })
+      const heavy = { ...over, sp: { ...over.sp, hp: 32 } }
+      expect(minSpToOutspeed(MC, heavy, target, undefined, { ignoreSpTotal: true })).toEqual({ kind: 'over-budget', sp: 11, remaining: -10 })
+      expect(minSpToOutspeed(MC, base, over, undefined, { ignoreSpTotal: true })).toEqual(minSpToOutspeed(MC, base, { ...over, sp: { ...over.sp, def: 0 } }))
+    })
+
+    it('합계 안 세트는 옵션 유무와 결과가 같다', () => {
+      expect(finalSpeed(MC, base, { attacker: { tailwind: true } }, 'attacker', {})).toBe(finalSpeed(MC, base, { attacker: { tailwind: true } }))
+      for (const t of [120, 134, 158]) expect(minSpToOutspeed(MC, base, t, undefined, { ignoreSpTotal: true })).toEqual(minSpToOutspeed(MC, base, t))
+    })
+  })
 })
 
 describe('스냅샷에 있는 추가 스피드 보정(퀵풋·서핑테일·검은철구)', () => {

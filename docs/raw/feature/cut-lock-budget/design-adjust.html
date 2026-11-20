@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>디자인 대안 비교 · 조정 팝오버</title>
+<!--
+  하네스 design-options 템플릿 (adr-helper 디자인 결정 레인).
+  - Claude 아티팩트가 아니다. 이 파일을 docs/raw/<type>/<slug>/design-options.html로
+    떨구고, 사용자가 브라우저에서 직접 연다(자기완결: 외부 CSS/JS/폰트/이미지 참조 없음).
+  - 이 파일을 그대로 cp로 목적지에 복사한 뒤, 채우기 구역만 Edit한다. 파일 전체를 Write로
+    다시 쓰지 않는다 — 고정된 CSS/JS/패널 스캐폴딩 재출력은 순수 출력 토큰 낭비다.
+  - 에이전트가 채우는 곳은 <section class="option"> 카드 안의 .mockup 영역과 data-label·라디오
+    value·.name(대안 이름으로 함께 일치)뿐이다. 카드를 복제/삭제해 대안 수(2개 이상)를 맞춘다.
+  - 사용자는 대안을 나란히 비교 → 베이스 라디오 선택 → 세부 수정 요구사항 작성 →
+    "요약 생성" → "복사"해서 에이전트에게 붙여넣는다(정적 파일이라 서버로 전송 불가 →
+    붙여넣기로 루프를 닫는다). 에이전트는 그 요약을 ADR 선택지/결정/선택 근거로 흡수한다.
+-->
+<style>
+  :root{
+    --bg:#f7f7f8; --fg:#1a1a1e; --muted:#5c5c66; --line:#d9d9e0; --card:#ffffff;
+    --accent:#3b5bdb; --accent-soft:#e7ecfb; --shadow:0 1px 3px rgba(0,0,0,.08);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#16161a; --fg:#ececf0; --muted:#9a9aa5; --line:#2c2c34; --card:#1e1e24;
+      --accent:#7a93f5; --accent-soft:#22283d; --shadow:0 1px 3px rgba(0,0,0,.4); }
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; padding:24px; background:var(--bg); color:var(--fg);
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif; }
+  header{ max-width:1200px; margin:0 auto 20px; }
+  h1{ font-size:20px; margin:0 0 6px; }
+  .lead{ color:var(--muted); margin:0 0 12px; }
+  .how{ background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:12px 16px; box-shadow:var(--shadow); }
+  .how ol{ margin:6px 0 0; padding-left:20px; } .how li{ margin:2px 0; }
+  .grid{ max-width:1200px; margin:0 auto; display:grid; gap:16px;
+    grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
+  .option{ background:var(--card); border:1px solid var(--line); border-radius:12px;
+    box-shadow:var(--shadow); display:flex; flex-direction:column; overflow:hidden; }
+  .option.selected{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft),var(--shadow); }
+  .option > header{ display:flex; align-items:center; gap:10px; padding:12px 14px;
+    border-bottom:1px solid var(--line); margin:0; }
+  .option > header label{ font-weight:600; cursor:pointer; display:flex; align-items:center; gap:8px; }
+  .option .name{ font-size:15px; }
+  .mockup{ padding:14px; min-height:160px; overflow-x:auto; }
+  /* 목업 안에서 쓰기 좋은 중립 프리미티브(원하면 무시하고 자유 HTML/CSS로 그려도 됨) */
+  .mockup .box{ border:1px dashed var(--line); border-radius:8px; padding:10px; margin:6px 0;
+    color:var(--muted); }
+  .mockup .bar{ height:12px; border-radius:6px; background:var(--line); margin:6px 0; }
+  .notes{ padding:12px 14px; border-top:1px solid var(--line); }
+  .notes label{ display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  textarea{ width:100%; min-height:64px; resize:vertical; border:1px solid var(--line);
+    border-radius:8px; padding:8px; background:var(--bg); color:var(--fg); font:inherit; }
+  .panel{ max-width:1200px; margin:18px auto 0; background:var(--card); border:1px solid var(--line);
+    border-radius:12px; padding:16px; box-shadow:var(--shadow); }
+  .panel label{ display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  button{ font:inherit; font-weight:600; border:1px solid var(--accent); background:var(--accent);
+    color:#fff; border-radius:8px; padding:8px 16px; cursor:pointer; }
+  button.secondary{ background:transparent; color:var(--accent); }
+  button:disabled{ opacity:.5; cursor:not-allowed; }
+  #summary{ width:100%; min-height:150px; margin-top:12px; white-space:pre; font-family:ui-monospace,
+    SFMono-Regular,Menlo,monospace; font-size:13px; }
+  .hint{ color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>디자인 대안 비교 — 조정 팝오버</h1>
+  <p class="lead">아래 대안을 비교하고, <b>베이스로 삼을 안 하나를 라디오로 선택</b>한 뒤,
+    <b>세부 수정 요구사항</b>을 적어 주세요.</p>
+  <div class="how">
+    <b>사용법</b>
+    <ol>
+      <li>각 대안을 나란히 비교합니다.</li>
+      <li>가장 마음에 드는 안의 <b>◉ 라디오</b>를 선택합니다(베이스 = 이 안을 출발점으로 발전).</li>
+      <li>대안별 칸과 아래 "전체 수정 요구사항"에 원하는 변경을 구체적으로 적습니다.</li>
+      <li><b>"요약 생성"</b>을 누르고 <b>"복사"</b>해서 에이전트에게 붙여넣습니다(이 파일은 정적이라
+        직접 전송되지 않습니다 — 붙여넣기로 전달).</li>
+    </ol>
+  </div>
+</header>
+
+<!-- ▼▼▼ 에이전트가 채우는 영역: 대안 카드(최소 2개). cp한 복사본에서 이 구역만 Edit한다.
+     카드를 복제/삭제해 개수를 맞추고, data-label·라디오 value·.name·.mockup을 이번 유닛의
+     실제 화면 배치로 채운다(value·data-label·.name은 대안 이름으로 함께 일치). ▼▼▼ -->
+<div class="grid" id="grid">
+
+  <style>
+    /* 이 비교 파일 전용: 대안 카드를 한 줄 전체 폭으로(데스크톱 카드 줄이 ~860px) */
+    .grid{ grid-template-columns:1fr; }
+    .mk-summary{ margin:0 0 10px; font-size:13px; color:var(--muted); }
+    .mk-scenes{ display:flex; flex-wrap:wrap; gap:14px; align-items:flex-start; }
+    .mk-scene{ margin:0; flex:1 1 880px; max-width:100%; overflow-x:auto; }
+    .mk-scene.mk-s-narrow{ flex:0 0 auto; }
+    .mk-scene figcaption{ font-size:12px; font-weight:600; color:var(--muted); margin:0 0 4px; }
+    .mk-note{ margin:4px 0 0; font-size:11.5px; color:var(--muted); border-left:3px dashed var(--line); padding-left:8px; max-width:860px; font-style:italic; }
+    /* 앱 토큰 재현(src/index.css) — 앱은 라이트/다크 모두 있으나 여기선 라이트 고정 */
+    .mk-stage{
+      --c-bg:#f7f7f8; --c-card:#fff; --c-surface:#f4f4f5; --c-text:#2b2b30; --c-muted:#64646b; --c-border:#e4e4e7;
+      --c-control:#8a8a90; --c-accent:#7b64c2; --c-accent-soft:rgba(123,100,194,.12); --c-accent-strong:#6a4fb0;
+      --c-danger:#c0392b; --c-lock:#2f7f95; --c-lock-soft:#e3f0f5; --c-ink:#3a2e22;
+      --c-shadow:0 4px 14px rgba(17,17,17,.12),0 1px 3px rgba(17,17,17,.08);
+      position:relative; background:var(--c-bg); color:var(--c-text); border:1px solid var(--line); border-radius:10px;
+      padding:10px; font-size:14px; line-height:1.45; width:880px; box-sizing:border-box;
+    }
+    .mk-s-narrow .mk-stage{ width:320px; padding:10px 8px; }
+    .mk-num{ font-variant-numeric:tabular-nums; }
+    /* 카드 줄 */
+    .mk-line{ display:grid; grid-template-columns:1.5rem 12.6rem 10.5rem 12rem 11rem; gap:.2rem .6rem; align-items:center;
+      padding:.5rem .6rem; background:var(--c-card); border:1px solid var(--c-border); border-radius:10px; }
+    .mk-pin{ display:inline-flex; justify-content:center; color:var(--c-muted); }
+    .mk-who{ display:flex; align-items:center; gap:.4rem; min-width:0; }
+    .mk-img{ width:2rem; height:2rem; border-radius:50%; background:var(--c-surface); border:1px solid var(--c-border);
+      display:inline-flex; align-items:center; justify-content:center; font-size:11px; color:var(--c-muted); flex:none; }
+    .mk-name{ font-weight:700; white-space:nowrap; }
+    .mk-bundle{ justify-self:start; border:1px solid var(--c-control); border-radius:6px; padding:.05rem .3rem .05rem .45rem; background:var(--c-card); white-space:nowrap; }
+    .mk-bundle i, .mk-move i{ font-style:normal; color:var(--c-muted); font-size:.75em; }
+    .mk-move{ justify-self:start; display:inline-flex; align-items:center; gap:.25rem; padding:.05rem .45rem .05rem .25rem; border:1px solid var(--t); border-radius:8px;
+      background:color-mix(in srgb,var(--t) 20%,#fff); font-weight:600; white-space:nowrap; }
+    .mk-move[data-t="el"]{ --t:#dfbc28; } .mk-move[data-t="gr"]{ --t:#a4733c; }
+    .mk-ti{ width:1rem; height:1rem; border-radius:50%; background:var(--t); display:inline-block; }
+    .mk-result{ display:inline-flex; align-items:center; gap:.3rem; white-space:nowrap; justify-self:start; }
+    .mk-ko{ font-size:.78rem; font-weight:700; padding:.05rem .45rem; border-radius:999px; color:var(--c-ink); white-space:nowrap; }
+    .mk-ko small{ font-size:.82em; font-weight:600; }
+    .mk-ko.mk-sm{ font-size:.72rem; padding:0 .4rem; }
+    .mk-red{ background:#f6b8b0; } .mk-orange{ background:#f9cc98; } .mk-yellow{ background:#f6e58d; } .mk-lime{ background:#cfeb98; } .mk-green{ background:#a9dcb0; }
+    /* "조정" 버튼: "변동 가능" 태그 자리, 같은 보라 테두리를 버튼으로 */
+    .mk-wrap{ position:relative; display:inline-flex; }
+    .mk-adj{ all:unset; box-sizing:border-box; font-size:.72rem; font-weight:700; line-height:1.5; padding:0 .45em; border:1px solid var(--c-accent);
+      border-radius:.25rem; color:var(--c-accent-strong); background:var(--c-card); cursor:pointer; }
+    .mk-adj[aria-expanded="true"]{ background:var(--c-accent-soft); box-shadow:0 0 0 2px var(--c-accent-soft); }
+    /* 팝오버: cut-pin-menu 모양 재사용 */
+    .mk-pop{ position:absolute; z-index:5; right:0; top:calc(100% + 3px); width:max-content; max-width:min(18rem,calc(320px - 1.5rem));
+      box-sizing:border-box; padding:.2rem; display:grid; gap:1px; background:var(--c-card); border:1px solid var(--c-border);
+      border-radius:8px; box-shadow:var(--c-shadow); white-space:normal; text-align:left; }
+    .mk-pophead{ font-size:.72rem; color:var(--c-muted); padding:.2rem .45rem .15rem; font-weight:600; }
+    .mk-back{ display:flex; align-items:center; gap:.35rem; color:var(--c-text); border-bottom:1px solid var(--c-border); padding-bottom:.3rem; margin-bottom:.1rem; }
+    .mk-backbtn{ all:unset; cursor:pointer; width:1.3rem; height:1.3rem; border-radius:5px; display:inline-flex; align-items:center; justify-content:center; font-size:1rem; color:var(--c-muted); }
+    .mk-backbtn:hover{ background:var(--c-accent-soft); }
+    .mk-hsp{ font-weight:700; font-size:.8rem; }
+    .mk-sub{ margin-left:auto; padding-left:.6rem; font-weight:500; }
+    .mk-item, .mk-subrow{ all:unset; box-sizing:border-box; display:flex; align-items:center; gap:.5rem; padding:.3rem .45rem; border-radius:6px;
+      font-size:.85rem; cursor:pointer; flex-wrap:wrap; }
+    .mk-item:hover, .mk-subrow:hover{ background:var(--c-accent-soft); }
+    .mk-item[aria-current="true"]{ box-shadow:inset 3px 0 0 var(--c-accent); }
+    .mk-sp{ font-weight:700; margin-left:auto; padding-left:.6rem; }
+    .mk-cur{ font-size:.68rem; font-weight:600; color:var(--c-accent-strong); border:1px solid var(--c-accent); border-radius:.25rem; padding:0 .3em; }
+    .mk-go, .mk-caret{ font-style:normal; color:var(--c-muted); width:.7rem; text-align:center; }
+    .mk-natname{ font-size:.78rem; color:var(--c-muted); min-width:3.2rem; }
+    .mk-natrow .mk-num, .mk-subrow .mk-num{ margin-left:auto; padding-left:.8rem; font-weight:700; }
+    .mk-item[aria-disabled="true"], .mk-subrow[aria-disabled="true"], .mk-seg[aria-disabled="true"]{ color:var(--c-muted); cursor:not-allowed; }
+    .mk-item[aria-disabled="true"]:hover, .mk-subrow[aria-disabled="true"]:hover{ background:var(--c-surface); }
+    [aria-disabled="true"] .mk-sp{ text-decoration:line-through; font-weight:500; }
+    .mk-why{ flex-basis:100%; font-size:.72rem; color:var(--c-danger); text-align:right; }
+    .mk-lockv{ display:inline-flex; align-items:center; gap:.15rem; color:var(--c-lock); background:var(--c-lock-soft); border-radius:4px; padding:0 .25rem; }
+    /* B: 인라인 펼침 */
+    .mk-pop-b .mk-item[aria-expanded="true"]{ background:var(--c-accent-soft); }
+    .mk-subs{ display:grid; gap:1px; margin:0 0 .2rem .9rem; padding-left:.4rem; border-left:2px solid var(--c-accent); }
+    .mk-subrow{ font-size:.82rem; padding:.25rem .45rem; }
+    .mk-foot{ font-size:.7rem; color:var(--c-muted); padding:.25rem .45rem .1rem; border-top:1px solid var(--c-border); margin-top:.1rem; }
+    /* C: 칩 패널 */
+    .mk-pop-c{ max-width:min(27rem,calc(320px - 1.5rem)); padding:.45rem .5rem .55rem; gap:.3rem; }
+    .mk-rowlabel{ font-size:.7rem; font-weight:600; color:var(--c-muted); }
+    .mk-rowlabel.mk-dim{ font-weight:400; font-style:italic; }
+    .mk-chips{ display:flex; flex-wrap:wrap; gap:.3rem; }
+    .mk-chip{ all:unset; box-sizing:border-box; display:inline-flex; align-items:center; gap:.3rem; padding:.18rem .4rem .18rem .25rem; border:1px solid var(--c-border);
+      border-radius:999px; font-size:.8rem; cursor:pointer; background:var(--c-card); }
+    .mk-chip .mk-sp{ margin:0; padding:0; }
+    .mk-chip:hover{ border-color:var(--c-accent); }
+    .mk-chip[aria-pressed="true"]{ border-color:var(--c-accent); box-shadow:0 0 0 2px var(--c-accent-soft); }
+    .mk-curdot{ width:.45rem; height:.45rem; border-radius:50%; background:var(--c-accent); }
+    .mk-segs{ display:flex; border:1px solid var(--c-control); border-radius:7px; overflow:hidden; }
+    .mk-seg{ all:unset; box-sizing:border-box; flex:1 1 0; display:flex; flex-direction:column; align-items:center; gap:.05rem; padding:.3rem .5rem;
+      cursor:pointer; text-align:center; font-size:.82rem; }
+    .mk-seg + .mk-seg{ border-left:1px solid var(--c-control); }
+    .mk-seg:hover{ background:var(--c-accent-soft); }
+    .mk-seg .mk-sp{ margin:0; padding:0; }
+    .mk-seg .mk-natname{ min-width:0; }
+    .mk-seg .mk-why{ text-align:center; font-size:.66rem; }
+    .mk-stack{ display:flex; flex-direction:column; align-items:center; font-weight:700; line-height:1.35; }
+    /* 320px 카드 줄: 앱의 좁은 화면 배치(1줄: 핀·이름·결과, 2줄: 배분·기술) */
+    .mk-line.mk-narrow{ grid-template-columns:1.5rem minmax(0,1fr) min-content; grid-template-areas:'pin who res' 'row2 row2 row2'; padding:.45rem .45rem; gap:.3rem .4rem; }
+    .mk-narrow .mk-pin{ grid-area:pin; } .mk-narrow .mk-who{ grid-area:who; } .mk-narrow .mk-result{ grid-area:res; flex-direction:column; align-items:flex-end; gap:.2rem; justify-self:end; }
+    .mk-row2{ grid-area:row2; display:flex; flex-wrap:wrap; gap:.3rem .4rem; align-items:center; }
+    .mk-narrow .mk-pop{ right:-.45rem; max-width:calc(320px - 1.5rem); }
+    .mk-narrow .mk-pop-c{ width:calc(320px - 1.5rem); }
+    .mk-narrow .mk-name{ white-space:normal; }
+  </style>
+
+
+  <section class="option" data-label="대안 A — 2단 교체 팝오버">
+    <header>
+      <label><input type="radio" name="base" value="대안 A — 2단 교체 팝오버" /><span class="name">대안 A — 2단 교체 팝오버</span></label>
+    </header>
+    <div class="mockup">
+      <p class="mk-summary">팝오버를 "조정" 버튼에 붙이고, 결과를 누르면 같은 자리에서 내용이 성격 선택으로 <b>교체</b>된다. 머리줄 ‹ 로 목록 복귀. 한 번에 한 단계만 보여 가장 좁고 단순하다.</p>
+      <div class="mk-scenes"><figure class="mk-scene"><figcaption>데스크톱 · 1단 결과 목록(공격 탭)</figcaption><div class="mk-stage" style="min-height:250px"><div class="mk-line"><span class="mk-pin"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 1.5h4l-.6 4 2.6 2.5v1.2H8.6V14L8 15l-.6-1V9.2H4V8l2.6-2.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span><span class="mk-who"><span class="mk-img">대</span><span class="mk-name">대쓰여너</span></span><span class="mk-bundle mk-num">H4 D28↑ <i>▾</i></span><span class="mk-move" data-t="el"><i class="mk-ti"></i>10만볼트 <i>▾</i></span><span class="mk-result"><span class="mk-ko mk-orange">고난수1타 <small>93.8%</small></span><span class="mk-wrap"><button type="button" class="mk-adj" aria-expanded="true">조정</button><div class="mk-pop" role="menu"><div class="mk-pophead">조정할 결과</div><button type="button" class="mk-item"><span class="mk-ko mk-red mk-sm">확정1타</span><span class="mk-num mk-sp">C28</span><i class="mk-go">›</i></button><button type="button" class="mk-item" aria-current="true"><span class="mk-ko mk-orange mk-sm">고난수1타</span><span class="mk-num mk-sp">C12</span><span class="mk-cur">현재</span><i class="mk-go">›</i></button><button type="button" class="mk-item"><span class="mk-ko mk-yellow mk-sm">중난수1타</span><span class="mk-num mk-sp">C6</span><i class="mk-go">›</i></button><button type="button" class="mk-item"><span class="mk-ko mk-lime mk-sm">저난수1타</span><span class="mk-num mk-sp">C2</span><i class="mk-go">›</i></button><button type="button" class="mk-item"><span class="mk-ko mk-green mk-sm">확정견딤</span><span class="mk-num mk-sp">C0</span><i class="mk-go">›</i></button></div></span></span></div></div><p class="mk-note">디자인 주석(화면 문구 아님): 고정 때문에 닿지 않는 결과는 목록에서 숨김. 예) S32·H20 고정이면 남은 예산 14 → 확정1타(C28)·고난수1타(C12)는 항목 자체가 없음.</p></figure><figure class="mk-scene"><figcaption>데스크톱 · 2단 성격 선택(확정1타 고른 뒤, 목록이 이 화면으로 바뀜)</figcaption><div class="mk-stage" style="min-height:170px"><div class="mk-line"><span class="mk-pin"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 1.5h4l-.6 4 2.6 2.5v1.2H8.6V14L8 15l-.6-1V9.2H4V8l2.6-2.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span><span class="mk-who"><span class="mk-img">대</span><span class="mk-name">대쓰여너</span></span><span class="mk-bundle mk-num">H4 D28↑ <i>▾</i></span><span class="mk-move" data-t="el"><i class="mk-ti"></i>10만볼트 <i>▾</i></span><span class="mk-result"><span class="mk-ko mk-orange">고난수1타 <small>93.8%</small></span><span class="mk-wrap"><button type="button" class="mk-adj" aria-expanded="true">조정</button><div class="mk-pop" role="menu"><div class="mk-pophead mk-back"><button type="button" class="mk-backbtn" aria-label="결과 목록으로">‹</button><span class="mk-ko mk-red mk-sm">확정1타</span><span class="mk-num mk-hsp">C28</span><span class="mk-sub">성격 선택</span></div><button type="button" class="mk-item mk-natrow"><span class="mk-natname">무보정</span><span class="mk-num mk-sp">C28</span></button><button type="button" class="mk-item mk-natrow"><span class="mk-natname">C 상승</span><span class="mk-num mk-sp">C20+</span></button></div></span></span></div></div></figure><figure class="mk-scene mk-s-narrow"><figcaption>320px · 1단</figcaption><div class="mk-stage" style="min-height:330px"><div class="mk-line mk-narrow"><span class="mk-pin"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 1.5h4l-.6 4 2.6 2.5v1.2H8.6V14L8 15l-.6-1V9.2H4V8l2.6-2.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span><span class="mk-who"><span class="mk-img">대</span><span class="mk-name">대쓰여너</span></span><span class="mk-row2"><span class="mk-bundle mk-num">H4 D28↑ <i>▾</i></span><span class="mk-move" data-t="el"><i class="mk-ti"></i>10만볼트 <i>▾</i></span></span><span class="mk-result"><span class="mk-ko mk-orange">고난수1타 <small>93.8%</small></span><span class="mk-wrap"><button type="button" class="mk-adj" aria-expanded="true">조정</button><div class="mk-pop" role="menu"><div class="mk-pophead">조정할 결과</div><button type="button" class="mk-item"><span class="mk-ko mk-red mk-sm">확정1타</span><span class="mk-num mk-sp">C28</span><i class="mk-go">›</i></button><button type="button" class="mk-item" aria-current="true"><span class="mk-ko mk-orange mk-sm">고난수1타</span><span class="mk-num mk-sp">C12</span><span class="mk-cur">현재</span><i class="mk-go">›</i></button><button type="button" class="mk-item"><span class="mk-ko mk-yellow mk-sm">중난수1타</span><span class="mk-num mk-sp">C6</span><i class="mk-go">›</i></button><button type="button" class="mk-item"><span class="mk-ko mk-lime mk-sm">저난수1타</span><span class="mk-num mk-sp">C2</span><i class="mk-go">›</i></button><button type="button" class="mk-item"><span class="mk-ko mk-green mk-sm">확정견딤</span><span class="mk-num mk-sp">C0</span><i class="mk-go">›</i></button></div></span></span></div></div></figure><figure class="mk-scene mk-s-narrow"><figcaption>320px · 2단(비활성 예시)</figcaption><div class="mk-stage" style="min-height:260px"><div class="mk-line mk-narrow"><span class="mk-pin"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 1.5h4l-.6 4 2.6 2.5v1.2H8.6V14L8 15l-.6-1V9.2H4V8l2.6-2.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span><span class="mk-who"><span class="mk-img">대</span><span class="mk-name">대쓰여너</span></span><span class="mk-row2"><span class="mk-bundle mk-num">H4 D28↑ <i>▾</i></span><span class="mk-move" data-t="el"><i class="mk-ti"></i>10만볼트 <i>▾</i></span></span><span class="mk-result"><span class="mk-ko mk-orange">고난수1타 <small>93.8%</small></span><span class="mk-wrap"><button type="button" class="mk-adj" aria-expanded="true">조정</button><div class="mk-pop" role="menu"><div class="mk-pophead mk-back"><button type="button" class="mk-backbtn" aria-label="결과 목록으로">‹</button><span class="mk-ko mk-red mk-sm">확정1타</span><span class="mk-num mk-hsp">C28</span><span class="mk-sub">성격 선택</span></div><button type="button" class="mk-item mk-natrow"><span class="mk-natname">무보정</span><span class="mk-num mk-sp">C28</span></button><button type="button" class="mk-item mk-natrow" aria-disabled="true"><span class="mk-natname">C 상승</span><span class="mk-num mk-sp">C20+</span><span class="mk-why">S 상승 고정과 겹침</span></button></div></span></span></div></div></figure><figure class="mk-scene"><figcaption>데스크톱 · 방어 탭 2단(D 고정, 확정견딤 H20 B12 고른 뒤)</figcaption><div class="mk-stage" style="min-height:200px"><div class="mk-line"><span class="mk-pin"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 1.5h4l-.6 4 2.6 2.5v1.2H8.6V14L8 15l-.6-1V9.2H4V8l2.6-2.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span><span class="mk-who"><span class="mk-img">한</span><span class="mk-name">한카리아스</span></span><span class="mk-bundle mk-num">A32↑ <i>▾</i></span><span class="mk-move" data-t="gr"><i class="mk-ti"></i>지진 <i>▾</i></span><span class="mk-result"><span class="mk-ko mk-lime">저난수1타 <small>12.5%</small></span><span class="mk-wrap"><button type="button" class="mk-adj" aria-expanded="true">조정</button><div class="mk-pop" role="menu"><div class="mk-pophead mk-back"><button type="button" class="mk-backbtn" aria-label="결과 목록으로">‹</button><span class="mk-ko mk-green mk-sm">확정견딤</span><span class="mk-num mk-hsp">H20 B12</span><span class="mk-sub">성격 선택</span></div><button type="button" class="mk-item mk-natrow"><span class="mk-natname">무보정</span><span class="mk-num">H20 B12 <span class="mk-lockv" title="고정됨"><svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><rect x="2" y="5.2" width="8" height="5.6" rx="1.2" fill="currentColor"/><path d="M3.8 5.2V3.8a2.2 2.2 0 0 1 4.4 0v1.4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>D16</span></span></button><button type="button" class="mk-item mk-natrow"><span class="mk-natname">B 보정</span><span class="mk-num">H12 B8+ <span class="mk-lockv" title="고정됨"><svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><rect x="2" y="5.2" width="8" height="5.6" rx="1.2" fill="currentColor"/><path d="M3.8 5.2V3.8a2.2 2.2 0 0 1 4.4 0v1.4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>D16</span></span></button><button type="button" class="mk-item mk-natrow"><span class="mk-natname">D 보정</span><span class="mk-num">H20 B12 <span class="mk-lockv" title="고정됨"><svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><rect x="2" y="5.2" width="8" height="5.6" rx="1.2" fill="currentColor"/><path d="M3.8 5.2V3.8a2.2 2.2 0 0 1 4.4 0v1.4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>D10+</span></span></button></div></span></span></div></div><p class="mk-note">디자인 주석: D가 다른 카드 핀으로 고정된 상태에서 물리 쪽 조정. 청록 자물쇠 값 = 고정 능력치(기준 갈래 값, 적용 후에도 고정 유지).</p></figure></div>
+    </div>
+    <div class="notes">
+      <label>대안 A 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="이 안에 대한 수정 요구사항…"></textarea>
+    </div>
+  </section>
+
+  <section class="option" data-label="대안 B — 한 팝오버 · 인라인 펼침">
+    <header>
+      <label><input type="radio" name="base" value="대안 B — 한 팝오버 · 인라인 펼침" /><span class="name">대안 B — 한 팝오버 · 인라인 펼침</span></label>
+    </header>
+    <div class="mockup">
+      <p class="mk-summary">팝오버 하나에 결과 목록을 두고, 항목을 누르면 그 바로 아래에 성격 선택지가 <b>펼쳐진다</b>. 다른 결과와 비교하며 고를 수 있지만 팝오버 높이가 늘어난다.</p>
+      <div class="mk-scenes"><figure class="mk-scene"><figcaption>데스크톱 · 결과 목록(닫힘)</figcaption><div class="mk-stage" style="min-height:250px"><div class="mk-line"><span class="mk-pin"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 1.5h4l-.6 4 2.6 2.5v1.2H8.6V14L8 15l-.6-1V9.2H4V8l2.6-2.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span><span class="mk-who"><span class="mk-img">대</span><span class="mk-name">대쓰여너</span></span><span class="mk-bundle mk-num">H4 D28↑ <i>▾</i></span><span class="mk-move" data-t="el"><i class="mk-ti"></i>10만볼트 <i>▾</i></span><span class="mk-result"><span class="mk-ko mk-orange">고난수1타 <small>93.8%</small></span><span class="mk-wrap"><button type="button" class="mk-adj" aria-expanded="true">조정</button><div class="mk-pop mk-pop-b" role="menu"><button type="button" class="mk-item" aria-expanded="false"><span class="mk-ko mk-red mk-sm">확정1타</span><span class="mk-num mk-sp">C28</span><i class="mk-caret">▾</i></button><button type="button" class="mk-item" aria-current="true" aria-expanded="false"><span class="mk-ko mk-orange mk-sm">고난수1타</span><span class="mk-num mk-sp">C12</span><span class="mk-cur">현재</span><i class="mk-caret">▾</i></button><button type="button" class="mk-item" aria-expanded="false"><span class="mk-ko mk-yellow mk-sm">중난수1타</span><span class="mk-num mk-sp">C6</span><i class="mk-caret">▾</i></button><button type="button" class="mk-item" aria-expanded="false"><span class="mk-ko mk-lime mk-sm">저난수1타</span><span class="mk-num mk-sp">C2</span><i class="mk-caret">▾</i></button><button type="button" class="mk-item" aria-expanded="false"><span class="mk-ko mk-green mk-sm">확정견딤</span><span class="mk-num mk-sp">C0</span><i class="mk-caret">▾</i></button><div class="mk-foot">고정 제외 남은 SP 34</div></div></span></span></div></div><p class="mk-note">디자인 주석(화면 문구 아님): 고정 때문에 닿지 않는 결과는 목록에서 숨김. 예) S32·H20 고정이면 남은 예산 14 → 확정1타(C28)·고난수1타(C12)는 항목 자체가 없음. 이 안은 하단 각주(남은 SP)로 숨김 이유를 은근히 알린다.</p></figure><figure class="mk-scene"><figcaption>데스크톱 · 확정1타 펼침(성격 하위 선택지)</figcaption><div class="mk-stage" style="min-height:320px"><div class="mk-line"><span class="mk-pin"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 1.5h4l-.6 4 2.6 2.5v1.2H8.6V14L8 15l-.6-1V9.2H4V8l2.6-2.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span><span class="mk-who"><span class="mk-img">대</span><span class="mk-name">대쓰여너</span></span><span class="mk-bundle mk-num">H4 D28↑ <i>▾</i></span><span class="mk-move" data-t="el"><i class="mk-ti"></i>10만볼트 <i>▾</i></span><span class="mk-result"><span class="mk-ko mk-orange">고난수1타 <small>93.8%</small></span><span class="mk-wrap"><button type="button" class="mk-adj" aria-expanded="true">조정</button><div class="mk-pop mk-pop-b" role="menu"><button type="button" class="mk-item" aria-expanded="true"><span class="mk-ko mk-red mk-sm">확정1타</span><span class="mk-num mk-sp">C28</span><i class="mk-caret">▴</i></button><div class="mk-subs" role="group" aria-label="확정1타 성격"><button type="button" class="mk-subrow"><span class="mk-natname">무보정</span><span class="mk-num mk-sp">C28</span></button><button type="button" class="mk-subrow"><span class="mk-natname">C 상승</span><span class="mk-num mk-sp">C20+</span></button></div><button type="button" class="mk-item" aria-current="true" aria-expanded="false"><span class="mk-ko mk-orange mk-sm">고난수1타</span><span class="mk-num mk-sp">C12</span><span class="mk-cur">현재</span><i class="mk-caret">▾</i></button><button type="button" class="mk-item" aria-expanded="false"><span class="mk-ko mk-yellow mk-sm">중난수1타</span><span class="mk-num mk-sp">C6</span><i class="mk-caret">▾</i></button><button type="button" class="mk-item" aria-expanded="false"><span class="mk-ko mk-lime mk-sm">저난수1타</span><span class="mk-num mk-sp">C2</span><i class="mk-caret">▾</i></button><button type="button" class="mk-item" aria-expanded="false"><span class="mk-ko mk-green mk-sm">확정견딤</span><span class="mk-num mk-sp">C0</span><i class="mk-caret">▾</i></button><div class="mk-foot">고정 제외 남은 SP 34</div></div></span></span></div></div></figure><figure class="mk-scene mk-s-narrow"><figcaption>320px · 펼침(비활성 예시)</figcaption><div class="mk-stage" style="min-height:420px"><div class="mk-line mk-narrow"><span class="mk-pin"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 1.5h4l-.6 4 2.6 2.5v1.2H8.6V14L8 15l-.6-1V9.2H4V8l2.6-2.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span><span class="mk-who"><span class="mk-img">대</span><span class="mk-name">대쓰여너</span></span><span class="mk-row2"><span class="mk-bundle mk-num">H4 D28↑ <i>▾</i></span><span class="mk-move" data-t="el"><i class="mk-ti"></i>10만볼트 <i>▾</i></span></span><span class="mk-result"><span class="mk-ko mk-orange">고난수1타 <small>93.8%</small></span><span class="mk-wrap"><button type="button" class="mk-adj" aria-expanded="true">조정</button><div class="mk-pop mk-pop-b" role="menu"><button type="button" class="mk-item" aria-expanded="true"><span class="mk-ko mk-red mk-sm">확정1타</span><span class="mk-num mk-sp">C28</span><i class="mk-caret">▴</i></button><div class="mk-subs" role="group" aria-label="확정1타 성격"><button type="button" class="mk-subrow"><span class="mk-natname">무보정</span><span class="mk-num mk-sp">C28</span></button><button type="button" class="mk-subrow" aria-disabled="true"><span class="mk-natname">C 상승</span><span class="mk-num mk-sp">C20+</span><span class="mk-why">S 상승 고정과 겹침</span></button></div><button type="button" class="mk-item" aria-current="true" aria-expanded="false"><span class="mk-ko mk-orange mk-sm">고난수1타</span><span class="mk-num mk-sp">C12</span><span class="mk-cur">현재</span><i class="mk-caret">▾</i></button><button type="button" class="mk-item" aria-expanded="false"><span class="mk-ko mk-yellow mk-sm">중난수1타</span><span class="mk-num mk-sp">C6</span><i class="mk-caret">▾</i></button><button type="button" class="mk-item" aria-expanded="false"><span class="mk-ko mk-lime mk-sm">저난수1타</span><span class="mk-num mk-sp">C2</span><i class="mk-caret">▾</i></button><button type="button" class="mk-item" aria-expanded="false"><span class="mk-ko mk-green mk-sm">확정견딤</span><span class="mk-num mk-sp">C0</span><i class="mk-caret">▾</i></button><div class="mk-foot">고정 제외 남은 SP 34</div></div></span></span></div></div></figure><figure class="mk-scene"><figcaption>데스크톱 · 방어 탭(역순 목록, 확정견딤 펼침)</figcaption><div class="mk-stage" style="min-height:330px"><div class="mk-line"><span class="mk-pin"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 1.5h4l-.6 4 2.6 2.5v1.2H8.6V14L8 15l-.6-1V9.2H4V8l2.6-2.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span><span class="mk-who"><span class="mk-img">한</span><span class="mk-name">한카리아스</span></span><span class="mk-bundle mk-num">A32↑ <i>▾</i></span><span class="mk-move" data-t="gr"><i class="mk-ti"></i>지진 <i>▾</i></span><span class="mk-result"><span class="mk-ko mk-lime">저난수1타 <small>12.5%</small></span><span class="mk-wrap"><button type="button" class="mk-adj" aria-expanded="true">조정</button><div class="mk-pop mk-pop-b" role="menu"><button type="button" class="mk-item" aria-expanded="true"><span class="mk-ko mk-green mk-sm">확정견딤</span><span class="mk-num mk-sp">H20 B12</span><i class="mk-caret">▴</i></button><div class="mk-subs" role="group" aria-label="확정견딤 성격"><button type="button" class="mk-subrow"><span class="mk-natname">무보정</span><span class="mk-num">H20 B12 <span class="mk-lockv" title="고정됨"><svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><rect x="2" y="5.2" width="8" height="5.6" rx="1.2" fill="currentColor"/><path d="M3.8 5.2V3.8a2.2 2.2 0 0 1 4.4 0v1.4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>D16</span></span></button><button type="button" class="mk-subrow"><span class="mk-natname">B 보정</span><span class="mk-num">H12 B8+ <span class="mk-lockv" title="고정됨"><svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><rect x="2" y="5.2" width="8" height="5.6" rx="1.2" fill="currentColor"/><path d="M3.8 5.2V3.8a2.2 2.2 0 0 1 4.4 0v1.4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>D16</span></span></button><button type="button" class="mk-subrow"><span class="mk-natname">D 보정</span><span class="mk-num">H20 B12 <span class="mk-lockv" title="고정됨"><svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><rect x="2" y="5.2" width="8" height="5.6" rx="1.2" fill="currentColor"/><path d="M3.8 5.2V3.8a2.2 2.2 0 0 1 4.4 0v1.4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>D10+</span></span></button></div><button type="button" class="mk-item" aria-current="true" aria-expanded="false"><span class="mk-ko mk-lime mk-sm">저난수1타</span><span class="mk-num mk-sp">H8 B4</span><span class="mk-cur">현재</span><i class="mk-caret">▾</i></button><button type="button" class="mk-item" aria-expanded="false"><span class="mk-ko mk-yellow mk-sm">중난수1타</span><span class="mk-num mk-sp">H4 B0</span><i class="mk-caret">▾</i></button><button type="button" class="mk-item" aria-expanded="false"><span class="mk-ko mk-orange mk-sm">고난수1타</span><span class="mk-num mk-sp">H0 B0</span><i class="mk-caret">▾</i></button><div class="mk-foot">D16 고정 · 남은 SP 50</div></div></span></span></div></div><p class="mk-note">디자인 주석: D가 다른 카드 핀으로 고정된 상태에서 물리 쪽 조정. 청록 자물쇠 값 = 고정 능력치(기준 갈래 값, 적용 후에도 고정 유지).</p></figure></div>
+    </div>
+    <div class="notes">
+      <label>대안 B 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="이 안에 대한 수정 요구사항…"></textarea>
+    </div>
+  </section>
+
+  <section class="option" data-label="대안 C — 칩 패널 · 2줄 세그먼트">
+    <header>
+      <label><input type="radio" name="base" value="대안 C — 칩 패널 · 2줄 세그먼트" /><span class="name">대안 C — 칩 패널 · 2줄 세그먼트</span></label>
+    </header>
+    <div class="mockup">
+      <p class="mk-summary">목록 대신 <b>가로 칩</b>으로 결과를 늘어놓고, 고르면 아래 줄에 성격 세그먼트가 나타난다. 두 단계가 한 패널에 함께 보이고 높이가 낮지만, 팝오버 폭이 넓다.</p>
+      <div class="mk-scenes"><figure class="mk-scene"><figcaption>데스크톱 · 결과 칩(선택 전)</figcaption><div class="mk-stage" style="min-height:200px"><div class="mk-line"><span class="mk-pin"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 1.5h4l-.6 4 2.6 2.5v1.2H8.6V14L8 15l-.6-1V9.2H4V8l2.6-2.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span><span class="mk-who"><span class="mk-img">대</span><span class="mk-name">대쓰여너</span></span><span class="mk-bundle mk-num">H4 D28↑ <i>▾</i></span><span class="mk-move" data-t="el"><i class="mk-ti"></i>10만볼트 <i>▾</i></span><span class="mk-result"><span class="mk-ko mk-orange">고난수1타 <small>93.8%</small></span><span class="mk-wrap"><button type="button" class="mk-adj" aria-expanded="true">조정</button><div class="mk-pop mk-pop-c"><div class="mk-rowlabel">결과</div><div class="mk-chips"><button type="button" class="mk-chip"><span class="mk-ko mk-red mk-sm">확정1타</span><span class="mk-num mk-sp">C28</span></button><button type="button" class="mk-chip"><span class="mk-curdot" title="현재"></span><span class="mk-ko mk-orange mk-sm">고난수1타</span><span class="mk-num mk-sp">C12</span></button><button type="button" class="mk-chip"><span class="mk-ko mk-yellow mk-sm">중난수1타</span><span class="mk-num mk-sp">C6</span></button><button type="button" class="mk-chip"><span class="mk-ko mk-lime mk-sm">저난수1타</span><span class="mk-num mk-sp">C2</span></button><button type="button" class="mk-chip"><span class="mk-ko mk-green mk-sm">확정견딤</span><span class="mk-num mk-sp">C0</span></button></div><div class="mk-rowlabel mk-dim">결과를 고르면 성격 선택이 나타남</div></div></span></span></div></div><p class="mk-note">디자인 주석(화면 문구 아님): 고정 때문에 닿지 않는 결과는 목록에서 숨김. 예) S32·H20 고정이면 남은 예산 14 → 확정1타(C28)·고난수1타(C12)는 항목 자체가 없음. 현재 결과는 칩 왼쪽 점.</p></figure><figure class="mk-scene"><figcaption>데스크톱 · 확정1타 선택 → 성격 세그먼트</figcaption><div class="mk-stage" style="min-height:300px"><div class="mk-line"><span class="mk-pin"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 1.5h4l-.6 4 2.6 2.5v1.2H8.6V14L8 15l-.6-1V9.2H4V8l2.6-2.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span><span class="mk-who"><span class="mk-img">대</span><span class="mk-name">대쓰여너</span></span><span class="mk-bundle mk-num">H4 D28↑ <i>▾</i></span><span class="mk-move" data-t="el"><i class="mk-ti"></i>10만볼트 <i>▾</i></span><span class="mk-result"><span class="mk-ko mk-orange">고난수1타 <small>93.8%</small></span><span class="mk-wrap"><button type="button" class="mk-adj" aria-expanded="true">조정</button><div class="mk-pop mk-pop-c"><div class="mk-rowlabel">결과</div><div class="mk-chips"><button type="button" class="mk-chip" aria-pressed="true"><span class="mk-ko mk-red mk-sm">확정1타</span><span class="mk-num mk-sp">C28</span></button><button type="button" class="mk-chip"><span class="mk-curdot" title="현재"></span><span class="mk-ko mk-orange mk-sm">고난수1타</span><span class="mk-num mk-sp">C12</span></button><button type="button" class="mk-chip"><span class="mk-ko mk-yellow mk-sm">중난수1타</span><span class="mk-num mk-sp">C6</span></button><button type="button" class="mk-chip"><span class="mk-ko mk-lime mk-sm">저난수1타</span><span class="mk-num mk-sp">C2</span></button><button type="button" class="mk-chip"><span class="mk-ko mk-green mk-sm">확정견딤</span><span class="mk-num mk-sp">C0</span></button></div><div class="mk-rowlabel">성격 · 누르면 적용</div><div class="mk-segs"><button type="button" class="mk-seg"><span class="mk-natname">무보정</span><span class="mk-num mk-sp">C28</span></button><button type="button" class="mk-seg"><span class="mk-natname">C 상승</span><span class="mk-num mk-sp">C20+</span></button></div></div></span></span></div></div></figure><figure class="mk-scene mk-s-narrow"><figcaption>320px · 칩 줄바꿈(비활성 예시)</figcaption><div class="mk-stage" style="min-height:330px"><div class="mk-line mk-narrow"><span class="mk-pin"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 1.5h4l-.6 4 2.6 2.5v1.2H8.6V14L8 15l-.6-1V9.2H4V8l2.6-2.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span><span class="mk-who"><span class="mk-img">대</span><span class="mk-name">대쓰여너</span></span><span class="mk-row2"><span class="mk-bundle mk-num">H4 D28↑ <i>▾</i></span><span class="mk-move" data-t="el"><i class="mk-ti"></i>10만볼트 <i>▾</i></span></span><span class="mk-result"><span class="mk-ko mk-orange">고난수1타 <small>93.8%</small></span><span class="mk-wrap"><button type="button" class="mk-adj" aria-expanded="true">조정</button><div class="mk-pop mk-pop-c"><div class="mk-rowlabel">결과</div><div class="mk-chips"><button type="button" class="mk-chip" aria-pressed="true"><span class="mk-ko mk-red mk-sm">확정1타</span><span class="mk-num mk-sp">C28</span></button><button type="button" class="mk-chip"><span class="mk-curdot" title="현재"></span><span class="mk-ko mk-orange mk-sm">고난수1타</span><span class="mk-num mk-sp">C12</span></button><button type="button" class="mk-chip"><span class="mk-ko mk-yellow mk-sm">중난수1타</span><span class="mk-num mk-sp">C6</span></button><button type="button" class="mk-chip"><span class="mk-ko mk-lime mk-sm">저난수1타</span><span class="mk-num mk-sp">C2</span></button><button type="button" class="mk-chip"><span class="mk-ko mk-green mk-sm">확정견딤</span><span class="mk-num mk-sp">C0</span></button></div><div class="mk-rowlabel">성격 · 누르면 적용</div><div class="mk-segs"><button type="button" class="mk-seg"><span class="mk-natname">무보정</span><span class="mk-num mk-sp">C28</span></button><button type="button" class="mk-seg" aria-disabled="true"><span class="mk-natname">C 상승</span><span class="mk-num mk-sp">C20+</span><span class="mk-why">S 상승 고정과 겹침</span></button></div></div></span></span></div></div></figure><figure class="mk-scene"><figcaption>데스크톱 · 방어 탭(D 고정, 확정견딤 선택)</figcaption><div class="mk-stage" style="min-height:270px"><div class="mk-line"><span class="mk-pin"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 1.5h4l-.6 4 2.6 2.5v1.2H8.6V14L8 15l-.6-1V9.2H4V8l2.6-2.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></span><span class="mk-who"><span class="mk-img">한</span><span class="mk-name">한카리아스</span></span><span class="mk-bundle mk-num">A32↑ <i>▾</i></span><span class="mk-move" data-t="gr"><i class="mk-ti"></i>지진 <i>▾</i></span><span class="mk-result"><span class="mk-ko mk-lime">저난수1타 <small>12.5%</small></span><span class="mk-wrap"><button type="button" class="mk-adj" aria-expanded="true">조정</button><div class="mk-pop mk-pop-c"><div class="mk-rowlabel">결과</div><div class="mk-chips"><button type="button" class="mk-chip" aria-pressed="true"><span class="mk-ko mk-green mk-sm">확정견딤</span><span class="mk-num mk-sp">H20 B12</span></button><button type="button" class="mk-chip"><span class="mk-curdot" title="현재"></span><span class="mk-ko mk-lime mk-sm">저난수1타</span><span class="mk-num mk-sp">H8 B4</span></button><button type="button" class="mk-chip"><span class="mk-ko mk-yellow mk-sm">중난수1타</span><span class="mk-num mk-sp">H4 B0</span></button><button type="button" class="mk-chip"><span class="mk-ko mk-orange mk-sm">고난수1타</span><span class="mk-num mk-sp">H0 B0</span></button></div><div class="mk-rowlabel">성격 · 누르면 적용</div><div class="mk-segs"><button type="button" class="mk-seg mk-seg-tall"><span class="mk-natname">무보정</span><span class="mk-num mk-stack"><span>H20</span><span>B12</span><span class="mk-lockv"><svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><rect x="2" y="5.2" width="8" height="5.6" rx="1.2" fill="currentColor"/><path d="M3.8 5.2V3.8a2.2 2.2 0 0 1 4.4 0v1.4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>D16</span></span></button><button type="button" class="mk-seg mk-seg-tall"><span class="mk-natname">B 보정</span><span class="mk-num mk-stack"><span>H12</span><span>B8+</span><span class="mk-lockv"><svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><rect x="2" y="5.2" width="8" height="5.6" rx="1.2" fill="currentColor"/><path d="M3.8 5.2V3.8a2.2 2.2 0 0 1 4.4 0v1.4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>D16</span></span></button><button type="button" class="mk-seg mk-seg-tall"><span class="mk-natname">D 보정</span><span class="mk-num mk-stack"><span>H20</span><span>B12</span><span class="mk-lockv"><svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><rect x="2" y="5.2" width="8" height="5.6" rx="1.2" fill="currentColor"/><path d="M3.8 5.2V3.8a2.2 2.2 0 0 1 4.4 0v1.4" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>D10+</span></span></button></div></div></span></span></div></div><p class="mk-note">디자인 주석: D가 다른 카드 핀으로 고정된 상태에서 물리 쪽 조정. 청록 자물쇠 값 = 고정 능력치(기준 갈래 값, 적용 후에도 고정 유지).</p></figure></div>
+    </div>
+    <div class="notes">
+      <label>대안 C 세부 수정 요구사항</label>
+      <textarea data-notes placeholder="이 안에 대한 수정 요구사항…"></textarea>
+    </div>
+  </section>
+
+</div>
+<!-- ▲▲▲ 에이전트가 채우는 영역 끝 ▲▲▲ -->
+
+<div class="panel">
+  <label for="overall">전체 수정 요구사항 (선택한 베이스를 어떻게 발전시킬지 · 공통 사항)</label>
+  <textarea id="overall" placeholder="예: 모바일 320px에서 컨트롤이 겹치지 않게, 결과 위계를 점수 > 순위 > 상세 순으로…"></textarea>
+  <div class="row">
+    <button id="gen">요약 생성</button>
+    <button id="copy" class="secondary" disabled>복사</button>
+    <span class="hint">요약을 복사해 에이전트 대화창에 붙여넣으세요.</span>
+  </div>
+  <textarea id="summary" readonly placeholder="여기에 붙여넣을 요약이 생성됩니다."></textarea>
+</div>
+
+<script>
+  (function(){
+    var grid = document.getElementById('grid');
+    grid.addEventListener('change', function(e){
+      if (e.target && e.target.name === 'base') {
+        document.querySelectorAll('.option').forEach(function(o){ o.classList.remove('selected'); });
+        var card = e.target.closest('.option');
+        if (card) card.classList.add('selected');
+      }
+    });
+
+    function build(){
+      var checked = document.querySelector('input[name="base"]:checked');
+      var base = checked ? checked.value : '(아직 선택 안 함)';
+      var overall = document.getElementById('overall').value.trim() || '(없음)';
+      var lines = [];
+      lines.push('=== 디자인 선택 요약 (에이전트에게 붙여넣기) ===');
+      lines.push('베이스로 선택: ' + base);
+      lines.push('전체 수정 요구사항:');
+      lines.push(overall);
+      lines.push('');
+      lines.push('대안별 메모:');
+      document.querySelectorAll('.option').forEach(function(o){
+        var label = o.getAttribute('data-label') || '(무명)';
+        var ta = o.querySelector('textarea[data-notes]');
+        var note = (ta && ta.value.trim()) ? ta.value.trim() : '(없음)';
+        lines.push('- ' + label + ': ' + note);
+      });
+      return lines.join('\n');
+    }
+
+    document.getElementById('gen').addEventListener('click', function(){
+      var out = document.getElementById('summary');
+      out.value = build();
+      document.getElementById('copy').disabled = false;
+    });
+
+    document.getElementById('copy').addEventListener('click', function(){
+      var out = document.getElementById('summary');
+      out.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(out.value).then(function(){}, function(){});
+      }
+      this.textContent = ok ? '복사됨 ✓' : '직접 선택해 복사(Ctrl/Cmd+C)';
+      var b = this; setTimeout(function(){ b.textContent = '복사'; }, 1800);
+    });
+  })();
+</script>
+</body>
+</html>

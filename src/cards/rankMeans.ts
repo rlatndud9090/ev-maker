@@ -5,6 +5,7 @@ import {
   moveStatRefs,
   validateSet,
   type BoostTable,
+  type EvalOptions,
   type PokemonSet,
   type ResolvedSet,
 } from '../core'
@@ -287,12 +288,12 @@ export function setMeans(r: Pick<ResolvedSet, 'ability' | 'set'>): MeansRef[] {
 /**
  * 내 능동 수단이 랭크 행을 더하는 탭(설정 칩 알림용). 반응 없는 기준으로 바뀐 내 능력치를 본다.
  * 공격 탭 = 내 공격기 공격 능력치, 방어 탭 = 내 B·D, 스피드 탭 = 내 S.
- * 내 세트가 무효면 빈 배열.
+ * 내 세트가 무효면 빈 배열. options는 세트 검증에 그대로 넘긴다(고정 중 합계 검사 끄기).
  */
-export function myMeansNotes(game: Snapshot, set: PokemonSet): Array<{ means: MeansRef; tabs: Tab[] }> {
+export function myMeansNotes(game: Snapshot, set: PokemonSet, options?: EvalOptions): Array<{ means: MeansRef; tabs: Tab[] }> {
   let me: ResolvedSet
   try {
-    me = validateSet(game, set)
+    me = validateSet(game, set, options)
   } catch (e) {
     if (e instanceof CoreError || e instanceof CoreInputError) return []
     throw e

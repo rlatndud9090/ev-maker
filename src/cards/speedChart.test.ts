@@ -457,6 +457,44 @@ describe('경계 실수치(AC12)', () => {
   })
 })
 
+describe('force(필터 밖 대상 하나만)', () => {
+  it('force가 없으면 기존 모델과 같다', () => {
+    expect(build({ force: undefined })).toEqual(build())
+  })
+
+  it('상위 N 밖 래더 상대도 그 상대 배지·선택지만 전체 모델과 같게 만든다', () => {
+    const outside = bo1.ranking[40]
+    const added = [
+      { source: 'ladder' as const, opponentId: outside.id, sp: 0, nature: 'neutral' as const },
+      { source: 'ladder' as const, opponentId: bo1.ranking[0].id, sp: 0, nature: 'neutral' as const },
+    ]
+    const full = build({ filters: { topN: 200, selected: [] }, added })
+    const forced = build({ filters: { topN: 1, selected: [bo1.ranking[0].id] }, added, force: { opponentId: outside.id, source: 'ladder' } })
+    // 범위 밖 래더 상대는 추가 배지만 나오고(add-pokemon-ux 결정 1), force는 기본·조건 배지까지 전체로 만든다
+    const ranged = of(build({ filters: { topN: 1, selected: [] }, added }).badges, outside.id)
+    expect(ranged.length).toBeGreaterThan(0)
+    expect(ranged.every((b) => b.origin === 'added')).toBe(true)
+    expect(forced.badges.some((b) => b.origin === 'ladder')).toBe(true)
+    expect(forced.badges.length).toBeGreaterThan(0)
+    expect(forced.badges).toEqual(of(full.badges, outside.id))
+    expect([...forced.options.keys()]).toEqual([outside.id])
+    expect(forced.options.get(outside.id)).toEqual(full.options.get(outside.id))
+  })
+
+  it('목록 밖 타겟은 그 타겟만 만들고 추가 순번(addedOrder)은 원래 순번이다', () => {
+    const customTargets: CustomTarget[] = [
+      { rosterId: 'raichualola', moves: ['agility'], edits: {} },
+      { rosterId: 'rotomwash', moves: ['hydropump'], edits: {} },
+    ]
+    const full = build({ customTargets })
+    const forced = build({ customTargets, force: { opponentId: 'rotomwash', source: 'custom' } })
+    expect(forced.badges.length).toBeGreaterThan(0)
+    expect(forced.badges).toEqual(of(full.badges, 'rotomwash'))
+    expect(forced.badges.every((b) => b.origin === 'preset' && b.addedOrder === 1)).toBe(true)
+    expect(build({ customTargets, force: { opponentId: 'rotomwash', source: 'ladder' } }).badges).toEqual([])
+  })
+})
+
 describe('상대 단위 배지 계산(ladderSpeedOpponent·customSpeedOpponent)', () => {
   const chartInput = (partial: Partial<SpeedChartInput> = {}): SpeedChartInput => ({
     game,

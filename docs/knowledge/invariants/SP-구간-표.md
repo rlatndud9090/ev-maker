@@ -48,3 +48,33 @@ area: SP 구간 표
 > area: SP 구간 표 · 출처: docs/raw/feature/add-pokemon-ux/adr.md#결정-1 · 코드: `src/cards/addition.ts`, `src/cards/plan.ts:opponentSeeds`, `src/cards/speedChart.ts:ladderSpeedOpponent` · 봉인: `src/cards/plan.test.ts` "범위 밖 추가분만 상대와 목록 밖 추가 배분도 cards 키 = planTab 기본 카드 키", `src/cards/addition.test.ts`
 
 **위반 시:** 진입점(패널·배지 상세·카드 '직접 추가')이 자체 비교식을 쓰면 표시 규칙과 갈라져 "화면에 보이는데 추가됨" 또는 "안 보이는데 이미 존재합니다"가 생긴다.
+
+### INV-261120-no-lock-identity: 고정이 없으면 카드 층 출력(옵션 없는 탭 뷰·스피드 차트·사다리·코어 스피드)은 변경 전과 바이트 단위로 같아야 하고, 봉인 fixture를 기능 작업으로 갱신하지 않는다
+> area: SP 구간 표 · 출처: docs/raw/feature/cut-lock-budget/adr.md#결정-18, docs/raw/feature/cut-lock-budget/adr.md#결정-3 · 코드: `src/cards/batch.ts:buildTabView`, `src/cards/speedChart.ts:buildSpeedChart`, `src/cards/natures.ts:natureVariants`, `src/core/speed.ts` · 봉인: `src/acceptance/no-lock-identity.test.ts` "무고정 동일성 지문(변경 전 코드로 봉인, 기능 작업이 fixture를 갱신하면 안 된다)"
+
+**위반 시:** 고정 필드·고정 중 예산·하락 경고·엄격 변형·합계 강등 같은 새 경로가 무고정 상태로 새어 들어와 고정을 한 번도 쓰지 않는 사용자의 판정이 조용히 바뀐다. 새 필드는 옵션(`options.adjust`·고정 입력·코어 맨 뒤 옵션 인자)이 있을 때만 붙인다. 화면에 더해지는 것은 첫 고정용 조작(핀·조정 버튼)뿐이다.
+
+### INV-261120-lock-stages-two-per-side: 공격·방어 컷 고정 단계는 LOCK_STAGES의 두 단계(공격 고난수1타·확정1타, 방어 저난수1타·확정견딤)만 두고 현재 판정과 무관하게 메뉴에 내며, 스피드는 선공 하나로 바로 고정한다
+> area: SP 구간 표 · 출처: docs/raw/feature/cut-lock-budget/adr.md#결정-6, docs/raw/feature/cut-lock-budget/adr.md#결정-17 · 코드: `src/cards/assemble.ts:LOCK_STAGES`, `src/cards/assemble.ts:lockControl` · 봉인: `src/cards/assemble-lock.test.ts` "AC11: …(현재 판정과 무관하게 두 단계)", "방어: 현재 판정이 고난수1타인 카드…도 두 단계 조작이고…"
+
+**위반 시:** "현재 + 1 단계"처럼 현재 판정에 묶으면 가장 약한 판정 구간 카드에 고정 수단이 사라지고(빌드 중 개정의 원인), 단계를 늘리면 핀 메뉴 후보 해석 작업이 단계 수만큼 늘어난다. 방어 "고난수견딤"은 화면에서 "저난수1타"로 표기한다.
+
+### INV-261120-lock-blocked-reason-split: 핀 고정 불가 사유는 "판정이 SP와 무관(fixed-value)"과 "어느 단계에도 닿지 않음(unreachable-stage)"을 구분하며, 모든 단계가 계산되고 SP 투자로 닿는 선택지가 하나도 없을 때만 막는다
+> area: SP 구간 표 · 출처: docs/raw/feature/cut-lock-budget/adr.md#결정-6 · 코드: `src/cards/assemble.ts:lockBlockedReason`, `src/cards/types.ts:CardLockPin`, `src/app/components/lockText.ts` · 봉인: `src/cards/assemble-lock.test.ts` "낮은 단계가 SP 0에서 이미 충족되면 fixed-value…", "어느 단계에도 닿지 않으면 … unreachable-stage"
+
+**위반 시:** 가장 낮은 단계가 SP 0에서 충족되는 카드(공격 탭도 방어 탭과 같이)를 "단계 미도달"로 안내하거나, 계산 중·일부 단계만 SP 0인 카드를 막아 고정할 수 있는 컷을 잃는다. 탭 사이 사유 문구가 어긋난다.
+
+### INV-261120-lock-nature-minus-avoid: 고정 중 갈래·행·레인·조정 성격은 lockNature 한 규칙으로 정하고, 하락은 고정·보는·관여 능력치에 두지 않는다
+> area: SP 구간 표 · 출처: docs/raw/feature/cut-lock-budget/adr.md#결정-4 · 코드: `src/cards/lockNature.ts:branchNature`, `src/cards/lockNature.ts:rowNature`, `src/cards/lockNature.ts:strictVariants`, `src/cards/lockNature.ts:laneNature` · 봉인: `src/cards/lockNature.test.ts` "속성: 결과 성격의 하락은 avoid·상승 밖이고…", "셸사이드암형(A·C·B·D 관여) + S 고정: 자리 없음 → 갈래 성격 그대로 + dropWarning"
+
+**위반 시:** 한 호출처라도 갈래 성격을 그대로 쓰거나 기존 자동 하락 규칙을 쓰면 하락이 보는·관여 능력치에 떨어져 손으로 맞춘 세트와 다른 표가 나온다. 자리가 없는 행은 빼지 않고 갈래 성격 그대로 계산하고 하락 경고 표지를 단다.
+
+### INV-261120-lock-overflow-trim-user-only: 합계 66 초과 자동 줄이기(고정 밖 능력치 H→A→B→C→D→S)는 사용자 조작(핀 고정·기준 갈래 변경·조정 적용) 직후 한 번만 하고, 재계산으로 생긴 초과는 경고 강등으로 둔다
+> area: SP 구간 표 · 출처: docs/raw/feature/cut-lock-budget/adr.md#결정-3, docs/raw/feature/cut-lock-budget/adr.md#결정-19 · 코드: `src/app/state.ts:reducer` (fit-locks·apply-adjust 액션, lockFit 토큰) · 봉인: `src/app/state-lock.test.ts` "R19 고정 초과 자동 조정(fit-locks)", `src/app/state-adjust.test.ts` "조정·keep 능력치는 두고 나머지를 H→S 순서로 줄여…"
+
+**위반 시:** 도구·특성 변경 같은 재계산마다 SP가 사용자 몰래 깎이거나, 반대로 사용자 조작 뒤 넘친 채로 남아 매번 손으로 줄여야 한다. 고정 능력치·조정·keep 능력치는 줄이지 않고, 기준 갈래가 없으면(null) 줄이지 않는다.
+
+### INV-261120-adjust-exact-result: 조정 팝오버의 결과 목록·선택지는 그 결과를 "정확히" 내는 선택지만 쓰고, 고르면 더 좋은 결과로 건너뛰는 선택지는 unreachable로 비활성한다
+> area: SP 구간 표 · 출처: docs/raw/feature/cut-lock-budget/adr.md#결정-19 · 코드: `src/cards/adjust.ts:adjustView`, `src/app/adjustAction.ts:adjustAction` · 봉인: `src/cards/adjust.test.ts` "상승 바닥(A0+)이 이미 더 좋은 결과면 낮은 결과에서 상승은 unreachable…", "비단조 칸에서도 각 결과의 SP는 그 결과 이상의 실제 최소이고, 더 좋은 결과와 같은 비용인 결과는 빠진다", `src/cards/adjust-acceptance.test.ts`
+
+**위반 시:** "이 결과의 최소 SP로 맞춘다"는 조정의 뜻이 깨져, 낮은 결과를 골랐는데 다른(더 좋은) 결과가 적용되거나 같은 비용의 낮은 결과가 목록에 중복으로 남는다. 최소 SP는 새 판정 규칙 없이 기존 변형 스윕·쌍 계단 산출물로만 계산한다.

@@ -84,8 +84,8 @@ test('목록 행: 이름 왼쪽 아이콘(장식)·열 정렬 유지, 이미지 
     await expect(first).toHaveAttribute('loading', 'lazy')
     await expect.poll(() => first.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(128)
   }
-  // 접근 이름은 이름 그대로(장식 이미지가 끼지 않음)
-  await expect(cards(page).first().locator('.card-toggle')).toHaveAccessibleName(/^\S/)
+  // 이름 칸 읽기는 이름 그대로(장식 이미지가 끼지 않음)
+  await expect(cards(page).first().locator('.card-who')).toHaveText(/^\S/)
 
   const pngs = images.filter((i) => /\.png(\?|$)/.test(i.url))
   expect(pngs.length).toBeGreaterThan(5)

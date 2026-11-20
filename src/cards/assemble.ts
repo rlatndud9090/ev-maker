@@ -1,13 +1,18 @@
-// 계획 + 행 작업 결과 → 탭 뷰. 판정을 다시 하지 않고 표시용 SP로 산술·조회만 한다. 비용 O(행 × 33).
+// 계획 + 행 작업 결과 → 탭 뷰. 판정을 다시 하지 않고 표시용 SP로 산술·조회만 한다. 비용 O(행 × 33 × 갈래).
+import { adjustView } from './adjust'
 import { conditionMovePower, type SpTable } from '../core'
 import type { Snapshot, StatId } from '../data/schema'
 import { cardItems, compareItems, itemStates, type CardItemRef, type ItemState } from './items'
+import { branchBudget, type Branch, type LockDerivation, type LockResolution, type LockStage, type Stairs } from './lock'
+import { strictVariants } from './lockNature'
+import { findLockTarget, lockTargetKeyOf } from './lockTarget'
 import { judgedMoveType } from './moveType'
 import {
   cardDefault,
   cardExplore,
   cardPending,
   filterState,
+  lockedHp,
   neededVariants,
   opponentKey,
   pairReady,
@@ -19,8 +24,9 @@ import {
   taskKey,
   type RowJudgements,
 } from './schedule'
+import { minSumWithFloors } from './stairs'
 import { tierRank, type JudgementSide, type RollTier } from '../core'
-import { cellLabel, pairTarget, singleTarget } from './target'
+import { cellLabel, firstCellAt, floorPairTarget, pairTarget, singleTarget } from './target'
 import { pairCurrentCategory, sumBandOf, type SumBandInput } from './sumBand'
 import { variantNature } from './natures'
 import { NATURE_VARIANTS } from './types'
@@ -32,13 +38,21 @@ import type {
   CompactCell,
   DefaultItemView,
   ErrorReason,
+  ExtremeSpec,
   Headline,
   ItemView,
+  CardLockPin,
+  LockCandidate,
+  LockControl,
+  LockStageCandidate,
   NatureVariant,
+  NatureVariants,
   PairPoint,
   PendingTasks,
   ResultMap,
   RowKind,
+  RowLockSpec,
+  RowLockView,
   RowSpec,
   RowTask,
   RowTaskResult,
@@ -58,6 +72,26 @@ interface Ctx {
   results: ResultMap
   displaySp: SpTable
   spSum: number
+  /** 고정 계획(main)만 */
+  lock?: LockCtx
+  /** 고정 조작(RowLockView.control·CardView.lockPin)을 낸다. 고정 계획이면 항상 참 */
+  controls: boolean
+  /** CardView.adjust를 낸다 */
+  adjust: boolean
+}
+
+interface LockCtx {
+  derivation: LockDerivation
+  base: Branch
+  /** refKey(행·필터) → 그 컷을 대상으로 하는 고정 seq(seq 순) */
+  targets: ReadonlyMap<string, readonly number[]>
+}
+
+export interface AssembleOptions {
+  /** 고정 없는 계획에서도 고정 조작(control)을 낸다. 고정 계획(main)은 이 값과 무관하게 낸다 */
+  lockControls?: boolean
+  /** 변동 가능 카드에 조정 모델(CardView.adjust)을 낸다 */
+  adjust?: boolean
 }
 
 interface CardBuild {
@@ -69,12 +103,38 @@ interface CardBuild {
   mySetReasons: ErrorReason[]
 }
 
+/** 보는 능력치 viewStats에 쓸 수 있는 예산. 고정 계획은 기준 갈래 예산(branchBudget, 0 아래는 0) */
+function availableOf(ctx: Ctx, viewStats: readonly StatId[]): number {
+  if (ctx.lock !== undefined) return branchBudget(ctx.lock.derivation, ctx.lock.base, ctx.displaySp, viewStats, ctx.plan.spTotal).remaining
+  return ctx.plan.spTotal - (ctx.spSum - viewStats.reduce((a, s) => a + ctx.displaySp[s], 0))
+}
+
+/** 갈래 b에서 고정된 능력치의 고정 SP(고정 아니면 undefined) */
+const lockedSpOf = (lock: LockCtx, b: Branch, stat: StatId): number | undefined =>
+  lock.derivation.lockedStats.includes(stat) ? (b.lockedSp[stat] ?? 0) : undefined
+
 function cellViews(ctx: Ctx, cells: readonly CompactCell[], stat: StatId): CellView[] {
-  const available = ctx.plan.spTotal - (ctx.spSum - ctx.displaySp[stat])
+  const available = availableOf(ctx, [stat])
   return cells.map((c) => {
     const need = Math.max(0, c.sp - available)
     return { ...c, overBudget: need > 0, need }
   })
+}
+
+/**
+ * 갈래 b에서 보는 능력치 v의 성격 선택지 사용 가능 여부(R5·결정 12와 같은 규칙: lockNatures의 allowPlus).
+ * neutral = v가 고정이고 상승이 v인 갈래만 쓸 수 없다. plus = 상승이 v이거나, 고정 밖이고 v가 고정이 아닐 때만.
+ */
+function usable(lock: LockCtx, b: Branch, v: StatId): Record<NatureVariant, boolean> {
+  const vLocked = lock.derivation.lockedStats.includes(v)
+  return { neutral: !(vLocked && b.plus === v), plus: b.plus === v || (b.plus === 'out' && !vLocked) }
+}
+
+/** 기준 목표에 쓰는 변형: 고정 계획이면 기준 갈래에서 쓸 수 있고 엄격 성격이 있는 것만 */
+function baseVariants(ctx: Ctx, lock: RowLockSpec | undefined, v: StatId): readonly NatureVariant[] {
+  if (ctx.lock === undefined || lock === undefined) return NATURE_VARIANTS
+  const ok = usable(ctx.lock, ctx.lock.base, v)
+  return NATURE_VARIANTS.filter((w) => ok[w] && lock.strict[w] !== null)
 }
 
 function boundariesOf(cells: readonly CellView[], current: number): BoundaryView[] {
@@ -130,23 +190,51 @@ const sideOf = (ctx: Ctx): JudgementSide => (ctx.plan.mySide === 'attacker' ? 'a
  * 필요한 변형 결과(방어 탭은 두 쌍 결과)가 다 나오기 전이나 그중 오류가 있으면 목표 없음(오류를 "불가"로 보이지 않는다).
  */
 function targetOf(ctx: Ctx, spec: RowSpec, stat: StatId, j: RowJudgements, at: CellView | undefined): TargetView | undefined {
-  const { plan } = ctx
   const side = sideOf(ctx)
   const label = at === undefined ? undefined : cellLabel(side, at)
   if (label === undefined || spec.natures === undefined || !j.variantsDone || j.variantError) return undefined
   const plusStat = spec.natures.stat
+  const allowed = baseVariants(ctx, spec.lock, plusStat)
   if (spec.gate === undefined) {
-    const views = (cells: readonly CompactCell[] | undefined) => (cells === undefined ? undefined : cellViews(ctx, cells, stat))
-    return singleTarget(side, stat, plusStat, label, { neutral: views(j.neutral), plus: views(j.plus) })
+    const views = (which: NatureVariant) => {
+      const cells = allowed.includes(which) ? j[which] : undefined
+      return cells === undefined ? undefined : cellViews(ctx, cells, stat)
+    }
+    return singleTarget(side, stat, plusStat, label, { neutral: views('neutral'), plus: views('plus') })
+  }
+  if (spec.lock?.viewLocked === true) {
+    const filterId = spec.gate
+    return floorPairTarget(label, plusStat, (which, rank) => (allowed.includes(which) ? baseStairsPoint(ctx, filterId, which, rank) : null), availableOf(ctx, ['hp', plusStat]))
   }
   const points: { neutral?: PairPoint[]; plus?: PairPoint[] } = {}
-  for (const nature of NATURE_VARIANTS) {
+  for (const nature of allowed) {
     const r = ctx.results.get(taskKey({ kind: 'pair', filterId: spec.gate, nature }))
     if (r === undefined || r.kind !== 'pair') return undefined
     points[nature] = [...r.points]
   }
   const current = { hp: ctx.displaySp.hp, defense: ctx.displaySp[plusStat] }
-  return pairTarget(points, label, plusStat, current, plan.spTotal - ctx.spSum)
+  return pairTarget(points, label, plusStat, current, availableOf(ctx, ['hp', plusStat]) - (current.hp + current.defense))
+}
+
+/** 고정 이상 범위(floors) 계단 점. 결과 대기 = undefined, 비단조 계단 = null, 오류 = onError */
+function stairsPoint(r: RowTaskResult | undefined, floors: { hp: number; defense: number }, onError: null | undefined): { hp: number; defense: number } | null | undefined {
+  if (r === undefined) return undefined
+  if (r.kind === 'error') return onError
+  if (r.kind !== 'stairs' || r.stairs === 'non-monotonic') return null
+  return minSumWithFloors(r.stairs, floors)
+}
+
+/** 갈래 b의 쌍 하한: 고정된 H·B/D는 그 고정 SP, 아니면 0 */
+const floorsOf = (lock: LockCtx, b: Branch, defense: StatId) => ({ hp: lockedSpOf(lock, b, 'hp') ?? 0, defense: lockedSpOf(lock, b, defense) ?? 0 })
+
+/** 계단 모드 필터의 기준 갈래 점(schedule baseStairsTasks의 키: 엄격 성격, H 하한 = 기준 갈래 고정 H). 오류는 대기로 본다(불가로 보이지 않는다) */
+function baseStairsPoint(ctx: Ctx, filterId: string, which: NatureVariant, rank: number): { hp: number; defense: number } | null | undefined {
+  const lock = ctx.lock
+  const spec = ctx.plan.filters[filterId]
+  const nature = spec.lock?.strict[which] ?? null
+  if (lock === undefined || nature === null) return null
+  const r = ctx.results.get(taskKey({ kind: 'stairs', filterId, nature, rank, hpMin: lockedHp(ctx.plan, lock.base) }))
+  return stairsPoint(r, floorsOf(lock, lock.base, spec.stats[1]), undefined)
 }
 
 /**
@@ -191,9 +279,10 @@ function pairBlocked(ctx: Ctx, card: CardSpec, filterId: string): ErrorReason | 
  */
 function pairBand(ctx: Ctx, card: CardSpec, filterId: string, rows: readonly RowView[]): NonNullable<CardView['pair']> {
   const spec = card.rowIds.map((id) => ctx.plan.rows[id]).find((r) => r.gate === filterId && r.natures !== undefined)
-  const points: Partial<Record<NatureVariant, readonly PairPoint[]>> = {}
+  const points: Record<NatureVariant, readonly PairPoint[]> = { neutral: [], plus: [] }
   let missing = false
-  for (const nature of NATURE_VARIANTS) {
+  // 고정 계획에서 엄격 상승이 없으면 상승 쌍 작업이 없다(띠의 다른 변형 범례는 비운다).
+  for (const nature of spec?.lock?.strict.plus === null ? (['neutral'] as const) : NATURE_VARIANTS) {
     const r = ctx.results.get(taskKey({ kind: 'pair', filterId, nature }))
     if (r?.kind === 'error') return { error: r.reason }
     if (r?.kind === 'pair') points[nature] = r.points
@@ -210,7 +299,7 @@ function pairBand(ctx: Ctx, card: CardSpec, filterId: string, rows: readonly Row
   const label = category === undefined ? undefined : cellLabel('defense', { category })
   const current: SumBandInput['current'] = { hp: ctx.displaySp.hp, defense: ctx.displaySp[defenseStat] }
   if (label !== undefined) current.label = label as RollTier
-  const band = sumBandOf({ points: points as Record<NatureVariant, readonly PairPoint[]>, nature: mine ?? 'neutral', fallback: mine === undefined, defenseStat, current, max: ctx.plan.spMaxPerStat })
+  const band = sumBandOf({ points, nature: mine ?? 'neutral', fallback: mine === undefined, defenseStat, current, max: ctx.plan.spMaxPerStat })
   if (mine === undefined) {
     const id = spec.defender.nature
     const all = ctx.plan.game.data.natures
@@ -218,6 +307,155 @@ function pairBand(ctx: Ctx, card: CardSpec, filterId: string, rows: readonly Row
     band.fallbackReason = entry !== undefined && entry.minus === defenseStat && entry.plus !== entry.minus ? 'minus' : 'other'
   }
   return { band }
+}
+
+// ---------- 컷 고정 표시 ----------
+
+const refKey = (kind: 'row' | 'filter', id: string): string => JSON.stringify([kind, id])
+
+/** 고정 계획(main)의 표시 문맥: 고정마다 findLockTarget으로 이 계획의 행·필터를 다시 찾는다 */
+function lockCtxOf(plan: TabPlan): LockCtx | undefined {
+  if (plan.lock?.mode !== 'main') return undefined
+  const { derivation, base } = plan.lock
+  const targets = new Map<string, number[]>()
+  for (const lock of derivation.locks) {
+    const ref = findLockTarget(plan, lock)
+    if (ref === null) continue
+    const k = 'rowId' in ref ? refKey('row', ref.rowId) : refKey('filter', ref.filterId)
+    targets.set(k, [...(targets.get(k) ?? []), lock.seq])
+  }
+  return { derivation, base, targets }
+}
+
+/** 공격·방어 탭의 고정 가능 단계(낮은 단계부터) */
+export const LOCK_STAGES: Readonly<Record<'attack' | 'defense', readonly LockStage[]>> = {
+  attack: ['high-roll-ohko', 'guaranteed-ohko'],
+  defense: ['low-roll-ohko', 'guaranteed-survive'],
+}
+
+/**
+ * 후보 고정의 두 성격(고정 없으면 성격 변형, 있으면 엄격 변형). 후보 판정은 보는 능력치 v에만 의존하므로(R1),
+ * 기준 갈래가 v 상승을 막아 엄격 상승이 없으면 행 성격에서 v 보정만 바꾼 상승 성격을 따로 고른다.
+ */
+function candidateNatures(ctx: Ctx, lock: RowLockSpec | undefined, natures: NatureVariants): { neutral: string; plus: string | null } {
+  if (lock === undefined) return { neutral: natures.neutral, plus: natures.plus }
+  if (lock.strict.plus !== null) return lock.strict
+  return { neutral: lock.strict.neutral, plus: strictVariants(ctx.plan.game, lock.nature, natures.stat, true, [natures.stat]).plus }
+}
+
+/** 공격 고정 후보: 단계 이상 최소 SP. 엄격 상승 칸이 계획에 없으면 갈래 재스윕(branch) 작업으로 computing */
+function attackCandidate(ctx: Ctx, card: CardSpec, spec: RowSpec, j: RowJudgements, itemKey: string, stage: LockStage): LockCandidate {
+  const stat = (spec.sweep as NonNullable<RowSpec['sweep']>).stat
+  const rank = tierRank('attack', stage)
+  const natures = candidateNatures(ctx, spec.lock, spec.natures as NatureVariants)
+  let plusCells: readonly CompactCell[] | null | undefined = j.plus
+  if (spec.lock !== undefined && spec.lock.strict.plus === null) {
+    if (natures.plus === null) plusCells = null
+    else {
+      const task: RowTask = { kind: 'branch', rowId: spec.id, nature: natures.plus }
+      const r = ctx.results.get(taskKey(task))
+      if (r === undefined) return { kind: 'computing', tasks: [task] }
+      plusCells = r.kind === 'branch' ? r.cells : null
+    }
+  }
+  const minOf = (cells: readonly CompactCell[] | null | undefined): number | null => (cells == null ? null : (firstCellAt('attack', cells, rank)?.sp ?? null))
+  const neutral = minOf(j.neutral)
+  const plus = minOf(plusCells)
+  const resolution: LockResolution = neutral === null && plus === null ? { kind: 'unreachable' } : { kind: 'ok', options: { shape: 'single', stat, neutral, plus } }
+  return { kind: 'ready', lock: { kind: 'attack', target: lockTargetKeyOf('attack', card, itemKey), stage, stats: [stat] }, resolution }
+}
+
+/** 방어 고정 후보: 고정 단계 계단(H 0부터, candidateNatures). 계단이 아직 없으면 computing(그 작업) */
+function defenseCandidate(ctx: Ctx, card: CardSpec, filter: ExtremeSpec, itemKey: string, stage: LockStage): LockCandidate {
+  const rank = tierRank('defense', stage)
+  const natures = candidateNatures(ctx, filter.lock, filter.natures)
+  const missing: RowTask[] = []
+  const pick = (nature: string | null): { value: Stairs | null } | { error: string } | undefined => {
+    if (nature === null) return { value: null }
+    const task: RowTask = { kind: 'stairs', filterId: filter.id, nature, rank, hpMin: 0 }
+    const r = ctx.results.get(taskKey(task))
+    if (r === undefined) {
+      if (!missing.some((t) => taskKey(t) === taskKey(task))) missing.push(task)
+      return undefined
+    }
+    if (r.kind === 'error') return { error: r.reason.message }
+    if (r.kind !== 'stairs') throw new Error(`계단 결과 종류가 ${r.kind}다`)
+    if (r.stairs === 'non-monotonic') return { error: 'non-monotonic' }
+    return { value: r.stairs.some((x) => x !== null) ? r.stairs : null }
+  }
+  const neutral = pick(natures.neutral)
+  const plus = pick(natures.plus)
+  if (neutral === undefined || plus === undefined) return { kind: 'computing', tasks: missing }
+  let resolution: LockResolution
+  if ('error' in neutral) resolution = { kind: 'unreachable', reason: neutral.error }
+  else if ('error' in plus) resolution = { kind: 'unreachable', reason: plus.error }
+  else if (neutral.value === null && plus.value === null) resolution = { kind: 'unreachable' }
+  else resolution = { kind: 'ok', options: { shape: 'pair', defense: filter.stats[1], neutral: neutral.value, plus: plus.value } }
+  return { kind: 'ready', lock: { kind: 'defense', target: lockTargetKeyOf('defense', card, itemKey), stage, stats: ['hp', filter.stats[1]] }, resolution }
+}
+
+const lockViewOrUndefined = (v: RowLockView): RowLockView | undefined => (Object.keys(v).length === 0 ? undefined : v)
+
+/** 공격 행의 고정 표시(조작·고정한 seq·하락 경고) */
+function rowLockView(ctx: Ctx, card: CardSpec, spec: RowSpec, j: RowJudgements, itemKey: string | undefined): RowLockView | undefined {
+  const lock = ctx.lock
+  const key = refKey('row', spec.id)
+  const out: RowLockView = {}
+  if (ctx.controls) {
+    const control = lockControl(ctx, spec.dependsOn, itemKey, (stage) => attackCandidate(ctx, card, spec, j, itemKey as string, stage))
+    if (control !== undefined) out.control = control
+  }
+  const lockedBy = lock?.targets.get(key)
+  if (lockedBy !== undefined) out.lockedBy = lockedBy
+  if (spec.lock?.dropWarning === true) out.dropWarning = true
+  return lockViewOrUndefined(out)
+}
+
+/** 고정 조작: 그 탭의 고정 가능 단계마다 후보(현재 판정·목표 단계와 무관). 컷이 다른 능력치에도 의존하면(R1) 전체 고정 불가 */
+function lockControl(ctx: Ctx, dependsOn: readonly StatId[], itemKey: string | undefined, candidate: (stage: LockStage) => LockCandidate): LockControl | undefined {
+  const side = sideOf(ctx)
+  if (itemKey === undefined || side === 'speed') return undefined
+  if (dependsOn.length > 0) return { kind: 'blocked', reason: 'depends-other-stat' }
+  const stages = LOCK_STAGES[side].map((stage) => ({ stage, candidate: candidate(stage) }))
+  const reason = lockBlockedReason(stages)
+  return reason === undefined ? { kind: 'lockable', stages } : { kind: 'blocked', reason }
+}
+
+/**
+ * 모든 단계가 계산됐고 SP를 투자해야 닿는 선택지가 없을 때의 고정 불가 이유(LOCK_STAGES 순).
+ * 가장 낮은 단계가 SP 0에서 이미 충족되면 판정이 SP와 무관(fixed-value), 어느 단계에도 닿지 않으면 unreachable-stage다.
+ */
+export function lockBlockedReason(stages: readonly LockStageCandidate[]): 'fixed-value' | 'unreachable-stage' | undefined {
+  const resolutions: LockResolution[] = []
+  for (const s of stages) {
+    if (s.candidate.kind !== 'ready' || spOf(s.candidate.resolution).some((sp) => sp > 0)) return undefined
+    resolutions.push(s.candidate.resolution)
+  }
+  return resolutions.some((r) => spOf(r).includes(0)) ? 'fixed-value' : 'unreachable-stage'
+}
+
+/** 해석의 닿는 선택지마다 H 0에서의 최소 SP(쌍은 계단 첫 값, null = 그 H에서 닿지 않음 → 투자 필요로 본다) */
+function spOf(resolution: LockResolution): number[] {
+  if (resolution.kind !== 'ok') return []
+  const o = resolution.options
+  if (o.shape === 'single') return [o.neutral, o.plus].filter((sp) => sp !== null)
+  return [o.neutral, o.plus].filter((stairs) => stairs !== null).map((stairs) => stairs[0] ?? Infinity)
+}
+
+/** 방어 쌍의 고정 표시(필터 단위, 조작·고정한 seq·하락 경고) */
+function pairLockView(ctx: Ctx, card: CardSpec, filterId: string, itemKey: string | undefined): RowLockView | undefined {
+  const lock = ctx.lock
+  const filter = ctx.plan.filters[filterId]
+  const key = refKey('filter', filterId)
+  const out: RowLockView = {}
+  if (ctx.controls) {
+    const control = lockControl(ctx, filter.dependsOn, itemKey, (stage) => defenseCandidate(ctx, card, filter, itemKey as string, stage))
+    if (control !== undefined) out.control = control
+  }
+  const lockedBy = lock?.targets.get(key)
+  if (lockedBy !== undefined) out.lockedBy = lockedBy
+  if (filter.lock?.dropWarning === true) out.dropWarning = true
+  return lockViewOrUndefined(out)
 }
 
 /** 칸들 중 그 관점 가장 유리한 판정(관점 순서 밖 범주는 건너뛴다). 없으면 undefined */
@@ -347,6 +585,23 @@ function itemViews(plan: TabPlan, refs: readonly CardItemRef[], states: readonly
  * 래더 카드는 기본 항목이 정해지고 그 1·2단계(양 끝·변화 스윕)가 끝난 뒤에만 낼 수 있다(기본 항목·분류 깜박임 방지).
  * 사용자가 고른 항목은 판정 전이어도 바로 낸다(행은 갱신 중).
  */
+/** 카드 줄 핀: 보이는 컷(방어 쌍·공격 행)의 조작, 없으면 그 이유. lockedBy는 카드의 모든 행·필터 컷에 걸린 고정이다 */
+function cardLockPin(ctx: Ctx, card: CardSpec, rows: readonly RowView[], pair: CardView['pair'], shownPending: boolean): CardLockPin {
+  const lock = ctx.lock
+  const keys = [...card.rowIds.map((id) => refKey('row', id)), ...card.filterIds.map((id) => refKey('filter', id))]
+  const lockedBy = lock === undefined ? [] : [...new Set(keys.flatMap((k) => lock.targets.get(k) ?? []))].sort((a, b) => a - b)
+  const control = pair?.lock?.control ?? rows.find((r) => r.lock?.control !== undefined)?.lock?.control
+  const pin: CardLockPin = { control: control ?? fallbackPin(rows, shownPending) }
+  if (lockedBy.length > 0) pin.lockedBy = lockedBy
+  return pin
+}
+
+function fallbackPin(rows: readonly RowView[], shownPending: boolean): CardLockPin['control'] {
+  if (shownPending || rows.some((r) => r.status === 'pending')) return { kind: 'pending' }
+  if (rows.length > 0 && rows.every((r) => (r.status === 'ok' || r.status === 'stale') && r.noChange)) return { kind: 'blocked', reason: 'fixed-value' }
+  return { kind: 'blocked', reason: 'no-target' }
+}
+
 function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: string | undefined): CardBuild {
   const { plan, results } = ctx
   const ladder = card.opponent.source === 'ladder'
@@ -363,6 +618,7 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
   if (card.state === 'error') {
     const headline = headlineOf(card, [])
     const view: CardView = { ...base, error: cardError(card), rows: [], headline, variable: false, items: [], selected: false }
+    if (ctx.controls) view.lockPin = cardLockPin(ctx, card, [], undefined, false)
     // 반감열매 변형의 해석 실패는 기본 카드가 같은 이유로 보이므로 따로 보이지 않는다.
     return { view, visible: card.berry === undefined, ready: true, mySetReasons: [] }
   }
@@ -386,7 +642,7 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
   }
   const filterDone = new Set<string>()
   /** 스윕 행 하나(방어 탭 필터 행이면 필터 상태까지) */
-  const pushRow = (rowId: string) => {
+  const pushRow = (rowId: string, itemKey?: string) => {
     const spec = plan.rows[rowId]
     if (spec.error !== undefined) {
       rows.push(bareRow(ctx, headOf(ctx.plan.game, spec), 'error', { error: spec.error }))
@@ -439,6 +695,10 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
       const best = bestReachable(ctx, spec, ends, j)
       if (best !== undefined) row.best = best
     }
+    if (spec.gate === undefined && (ctx.controls || ctx.lock !== undefined)) {
+      const lock = rowLockView(ctx, card, spec, j, itemKey)
+      if (lock !== undefined) row.lock = lock
+    }
     rows.push(row)
   }
   const pushFixed = (fixedId: string, order: number) => {
@@ -462,6 +722,7 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
     rows.sort((a, b) => a.order - b.order)
     const headline = headlineOf(card, rows, slotOrder(plan, card))
     const view: CardView = { ...base, rows, headline, variable: isVariable(rows), items: [], selected: false }
+    if (ctx.controls) view.lockPin = cardLockPin(ctx, card, rows, undefined, false)
     return { view, visible: rows.length > 0 || card.notices.length > 0, ready: ladder ? settled : true, mySetReasons: reasons }
   }
 
@@ -480,10 +741,14 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
       const head = c.target === 'row' ? headOf(ctx.plan.game, spec) : filterHead(c.id, spec)
       rows.push(bareRow(ctx, head, 'error', { error: fail(probeError.reason) }))
     } else if (c.target === 'row') {
-      pushRow(c.id)
+      pushRow(c.id, ref.key)
     } else if (c.target === 'filter') {
       for (const rowId of card.rowIds) if (plan.rows[rowId].gate === c.id) pushRow(rowId)
-      if (filterState(results, c.id).kind === 'passed') pair = pairBand(ctx, card, c.id, rows)
+      if (filterState(results, c.id).kind === 'passed') {
+        pair = pairBand(ctx, card, c.id, rows)
+        const lock = ctx.controls || ctx.lock !== undefined ? pairLockView(ctx, card, c.id, ref.key) : undefined
+        if (lock !== undefined) pair = { ...pair, lock }
+      }
     } else {
       pushFixed(c.id, fixedOrder)
     }
@@ -493,6 +758,12 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
   const view: CardView = { ...base, rows, headline, variable: isVariable(rows), items: itemViews(plan, refs, states), selected: isSelected }
   if (shown !== undefined) view.shownItem = shown
   if (pair !== undefined) view.pair = pair
+  if (ctx.controls) view.lockPin = cardLockPin(ctx, card, rows, pair, shown === undefined)
+  const current = headlineLabel(ctx, rows, headline)
+  if (ctx.adjust && view.variable && ref !== undefined && ref.candidate.target !== 'fixed') {
+    const adjust = adjustView({ plan, results, shown: { target: ref.candidate.target, id: ref.candidate.id }, displaySp: ctx.displaySp, current })
+    if (adjust !== undefined) view.adjust = adjust
+  }
   if (def.kind === 'ready') {
     const d: DefaultItemView = { key: def.key, viaPriority: def.viaPriority }
     if (def.fallback) d.fallback = true
@@ -505,6 +776,13 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
   const visible = (rows.length > 0 || card.notices.length > 0) && engaged
   const ready = isSelected || (def.kind === 'ready' && (!ladder || settled))
   return { view, visible, ready, mySetReasons: reasons }
+}
+
+/** 대표 행 현재 칸의 결과(대표 행이 없거나 그 관점 순서 밖이면 undefined) */
+function headlineLabel(ctx: Ctx, rows: readonly RowView[], headline: Headline): RollTier | undefined {
+  if (headline.kind !== 'row') return undefined
+  const category = rows.find((r) => r.id === headline.rowId)?.current.category
+  return category === undefined ? undefined : (cellLabel(sideOf(ctx), { category }) as RollTier | undefined)
 }
 
 /** 계획은 기본 행을 슬롯 순(공격 탭 내 기술 슬롯, 방어 탭 상대 기술 사용률 순)으로 먼저 쌓는다. */
@@ -559,13 +837,21 @@ export interface TabAssembler {
   pending(results: ResultMap, only?: (cardId: string) => boolean): PendingTasks
   /** 그 카드들의 모든 항목 변동 판정 작업(cardExplore, 카드 순 → 행 순) */
   explore(results: ResultMap, cardIds: ReadonlySet<string>): PendingTasks
+  /**
+   * 그 카드들의 보이는 고정 조작의 단계 중 계산 중 후보와 조정 모델(computing)이 기다리는 작업(갈래 재스윕·변형 stage4, 계단·쌍 stage5).
+   * 조작도 조정도 내지 않는 조립기면 비어 있다
+   */
+  candidates(results: ResultMap, cardIds: ReadonlySet<string>): PendingTasks
   assemble(results: ResultMap, displaySp?: SpTable): TabView
 }
 
 const sameSp = (a: SpTable, b: SpTable): boolean => STAT_KEYS.every((k) => a[k] === b[k])
 
-export function createTabAssembler(plan: TabPlan, initialSelections: ReadonlyMap<string, string> = new Map()): TabAssembler {
+export function createTabAssembler(plan: TabPlan, initialSelections: ReadonlyMap<string, string> = new Map(), options: AssembleOptions = {}): TabAssembler {
   const memo = new Map<string, CardMemo>()
+  const lock = lockCtxOf(plan)
+  const controls = lock !== undefined || options.lockControls === true
+  const adjust = options.adjust === true
   let builtSp: SpTable | null = null
   let selections = initialSelections
   const primary = primaryCardIds(plan)
@@ -612,6 +898,36 @@ export function createTabAssembler(plan: TabPlan, initialSelections: ReadonlyMap
       }
       return out
     },
+    candidates(results, cardIds) {
+      const out = { stage1: [] as RowTask[], stage2: [] as RowTask[], stage3: [] as RowTask[], stage4: [] as RowTask[], stage5: [] as RowTask[] }
+      if ((!controls && !adjust) || plan.status.kind !== 'ok' || cardIds.size === 0) return out
+      const sp = builtSp ?? plan.mySp
+      const ctx: Ctx = { plan, results, displaySp: sp, spSum: STAT_KEYS.reduce((sum, k) => sum + sp[k], 0), controls, adjust }
+      if (lock !== undefined) ctx.lock = lock
+      const seen = new Set<string>()
+      const pushTasks = (tasks: readonly RowTask[]) => {
+        for (const t of tasks) {
+          const k = taskKey(t)
+          if (results.has(k) || seen.has(k)) continue
+          seen.add(k)
+          out[t.kind === 'stairs' || t.kind === 'pair' ? 'stage5' : 'stage4'].push(t)
+        }
+      }
+      const push = (control: RowLockView['control']) => {
+        if (control?.kind !== 'lockable') return
+        for (const { candidate } of control.stages) if (candidate.kind === 'computing') pushTasks(candidate.tasks ?? [])
+      }
+      for (const card of plan.cards) {
+        if (!cardIds.has(card.id)) continue
+        const m = entry(card, results)
+        if (builtSp === null) builtSp = { ...sp }
+        m.build ??= buildCard(ctx, card, m.pending, selectedOf(card))
+        for (const row of m.build.view.rows) push(row.lock?.control)
+        push(m.build.view.pair?.lock?.control)
+        pushTasks(m.build.view.adjust?.tasks ?? [])
+      }
+      return out
+    },
     assemble(results, displaySp = plan.mySp) {
       if (builtSp === null || !sameSp(builtSp, displaySp)) {
         for (const m of memo.values()) delete m.build
@@ -638,7 +954,8 @@ export function createTabAssembler(plan: TabPlan, initialSelections: ReadonlyMap
       }
       if (plan.status.kind !== 'ok') return { ...shell, status: plan.status, cards: [] }
 
-      const ctx: Ctx = { plan, results, displaySp, spSum: STAT_KEYS.reduce((sum, k) => sum + displaySp[k], 0) }
+      const ctx: Ctx = { plan, results, displaySp, spSum: STAT_KEYS.reduce((sum, k) => sum + displaySp[k], 0), controls, adjust }
+      if (lock !== undefined) ctx.lock = lock
       const builds = plan.cards.map((card, i) => {
         const m = entries[i]
         m.build ??= buildCard(ctx, card, m.pending, selectedOf(card))
@@ -670,6 +987,12 @@ export function createTabAssembler(plan: TabPlan, initialSelections: ReadonlyMap
 }
 
 /** displaySp 기본값은 계획 시점 SP. 카드 순서는 계획 순서 그대로다(한 번 조립: 캐시 없음). */
-export function assembleTab(plan: TabPlan, results: ResultMap, displaySp: SpTable = plan.mySp, selections: ReadonlyMap<string, string> = new Map()): TabView {
-  return createTabAssembler(plan, selections).assemble(results, displaySp)
+export function assembleTab(
+  plan: TabPlan,
+  results: ResultMap,
+  displaySp: SpTable = plan.mySp,
+  selections: ReadonlyMap<string, string> = new Map(),
+  options: AssembleOptions = {},
+): TabView {
+  return createTabAssembler(plan, selections, options).assemble(results, displaySp)
 }

@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { cards, combo, mySet, openProduct, tabPanel, waitComplete } from './helpers'
+import { adjustButton, adjustMenu, cards, combo, mySet, openAdjust, openProduct, tabPanel, waitComplete } from './helpers'
 
 // 공격 탭 상대 도구(사용자 피드백 2026-11-12): 기합의띠는 고려하지 않고(기본 행 = 도구 없음), 도구 통계에 유의미한 반감열매는
 // 그 열매가 가장 센 기술에 발동할 때만 별도 행 "대쓰여너 (마코)".
@@ -30,16 +30,30 @@ async function chooseKingambit(page: Page) {
   await waitComplete(page)
 }
 
-/** 행을 펼쳐 상세의 기본 조건 도각참 행 칸 판정 목록 */
-async function kowtowCategories(row: Locator): Promise<string[]> {
-  const toggle = row.locator('.card-toggle')
-  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click()
-  const detail = row.getByTestId('row').and(row.locator('[data-move="kowtowcleave"][data-condition="base"]'))
-  await expect(detail).toHaveCount(1)
-  // 변화 없음 행은 칸이 없고 고정 판정만, 변동 행은 33칸
-  const cells = detail.getByTestId('band-cell')
-  if ((await cells.count()) === 0) return [(await detail.locator('.row-fixed').textContent()) ?? '']
-  return cells.evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.category ?? ''))
+/**
+ * 그 줄에 기본 조건 도각참 항목을 보이게 하고 카드 줄 판정을 읽는다: [결과 배지, 변동 목록 "결과 최소SP"…].
+ * 변동 목록은 내 SP·성격 조정으로 닿는 모든 결과(카드 상세 칸 띠 대신, R20·R22). 변동 없음 카드는 배지 하나뿐이다.
+ */
+async function kowtowJudgement(page: Page, row: Locator): Promise<string[]> {
+  const pick = row.getByTestId('move-pick')
+  await pick.click()
+  const items = row.getByTestId('move-menu').locator('[role="menuitemradio"]')
+  const keys = await items.evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.itemKey))
+  const at = keys.indexOf(JSON.stringify(['kowtowcleave', JSON.stringify(['base'])]))
+  expect(at, '기본 조건 도각참 항목').toBeGreaterThanOrEqual(0)
+  await items.nth(at).click()
+  await expect(row).toHaveAttribute('data-move', 'kowtowcleave')
+  await waitComplete(page)
+  const badge = ((await row.getByTestId('ko-badge').textContent()) ?? '').trim()
+  if ((await adjustButton(row).count()) === 0) return [badge]
+  const menu = await openAdjust(row)
+  await expect(menu.getByTestId('adjust-result').first()).toHaveAttribute('data-enabled', 'true', { timeout: 15_000 })
+  const results = await menu
+    .getByTestId('adjust-result')
+    .evaluateAll((els) => els.map((e) => `${(e as HTMLElement).dataset.label} ${[...e.querySelectorAll('.adjust-sp')].map((s) => s.textContent).join(' ')}`))
+  await page.keyboard.press('Escape')
+  await expect(adjustMenu(row)).toHaveCount(0)
+  return [badge, ...results]
 }
 
 test.describe('공격 탭 상대 도구: 기합의띠 없음 · 반감열매 별도 행', () => {
@@ -64,10 +78,9 @@ test.describe('공격 탭 상대 도구: 기합의띠 없음 · 반감열매 별
     await expect(megaRows.first()).toBeVisible()
     await expect(megaRows.locator('.item-mark')).toHaveCount(0)
     await expect(tabPanel(page).locator('[data-item-glyph="mega"]')).toHaveCount(0)
-    // 기본 행: 기합의띠를 고려하지 않아 생명의구슬 도각참 칸이 모두 확정견딤은 아니다(띠면 전부 확정견딤)
-    const baseCats = await kowtowCategories(base)
-    expect(baseCats.length).toBeGreaterThan(0)
-    expect(baseCats.every((c) => c === 'guaranteed-survive' || /확정견딤/.test(c))).toBe(false)
+    // 기본 행: 기합의띠를 고려하지 않아 생명의구슬 도각참이 어느 SP에서도 확정견딤인 것은 아니다(띠면 변동 없이 확정견딤 하나)
+    const baseJudge = await kowtowJudgement(page, base)
+    expect(baseJudge).not.toEqual(['확정견딤'])
 
     // 열매 행: 이름 오른쪽 열매 아이콘(포켓몬 이미지와 겹치지 않음), data-item-id, 접근 이름 "… 마코열매 지닌 경우"
     const berry = groupRow(page, COLBUR)
@@ -97,13 +110,14 @@ test.describe('공격 탭 상대 도구: 기합의띠 없음 · 반감열매 별
     expect(geo.markLeft).toBeGreaterThanOrEqual(geo.textRight - 0.5)
     expect(geo.markLeft).toBeGreaterThan(geo.monRight)
     expect(geo.size).toEqual([22, 22])
-    await expect(berry.locator('.card-toggle')).toHaveAccessibleName(/^대쓰여너.*마코열매 지닌 경우/)
+    // 카드 줄 이름 칸 읽기: "대쓰여너 마코열매 지닌 경우"(상세 안내 대신 이름 옆 도구 표지, R20)
+    await expect(berry.locator('.card-name')).toHaveText(/^대쓰여너\s*마코열매 지닌 경우$/)
     // 사용률 순: 원래 행 바로 뒤
     const keys = await cards(page).evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.groupKey))
     expect(keys.indexOf(JSON.stringify(COLBUR))).toBe(keys.indexOf(JSON.stringify(BASCULEGION)) + 1)
-    // 열매가 도각참을 반감해 같은 배분의 판정이 기본 행과 다르다
-    const berryCats = await kowtowCategories(berry)
-    expect(berryCats).not.toEqual(baseCats)
+    // 열매가 도각참을 반감해 판정(결과 배지·변동으로 닿는 결과와 최소 SP)이 기본 행과 다르다
+    const berryJudge = await kowtowJudgement(page, berry)
+    expect(berryJudge).not.toEqual(baseJudge)
 
     // 열매가 발동하는 기술이 없는 상대(고릴타 오카열매 5.0% — 불꽃 기술 없음)는 열매 행이 없다
     await expect(cards(page).and(page.locator('[data-opponent="rillaboom"]'))).toHaveCount(1)

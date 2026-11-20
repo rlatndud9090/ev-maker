@@ -5,8 +5,7 @@ import { cards, combo, findOverlaps, mySet, openProduct, selectTab, waitComplete
 const listBox = (page: Page) => page.getByTestId('result-box')
 const listScroll = (page: Page) => page.getByTestId('result-scroll')
 
-// AC18: 폭 400px·1280px에서 본문 가로 스크롤 없음, 라벨·컨트롤 겹침 없음. 0~32 띠는 상세 오른쪽 열 폭에 맞춰 줄어들어 스크롤이 없다
-// (사용자 피드백 2026-11-12: 칸 안 숫자·기호 없이 색만, 칸 사이 틈은 유지).
+// AC18: 폭 400px·1280px에서 본문 가로 스크롤 없음, 라벨·컨트롤 겹침 없음. 카드는 펼치지 않는다(R20, 변동 팝오버 배치는 product-adjust.spec.ts).
 // '포켓몬 추가'는 뒤 화면 위에 겹쳐 뜨는 팝오버라 그 안의 컨트롤은 따로(팝오버 안끼리) 본다
 const CONTROLS = 'main[data-app="product"] :is(label, h1, h2, legend, button, [role="tab"], select, input, [data-testid="meta-source"], [data-testid="sp-remaining"]):not([role="dialog"] *)'
 
@@ -14,49 +13,17 @@ for (const width of [400, 1280]) {
   test.describe(`제품 화면 ${width}px`, () => {
     test.use({ viewport: { width, height: 900 } })
 
-    test(`${width}px: 본문 가로 스크롤 0, 라벨·컨트롤 겹침 0, 띠도 가로 스크롤 없음(색 칸·틈 유지)`, async ({ page }) => {
+    test(`${width}px: 본문 가로 스크롤 0, 라벨·컨트롤 겹침 0`, async ({ page }) => {
       await openProduct(page)
       await selectTab(page, '방어')
       await waitComplete(page)
-      const card = cards(page).and(page.locator('[data-variable="true"]')).first()
-      await card.locator('button[aria-expanded]').first().click()
-      await expect(card.getByTestId('band-cell').first()).toBeVisible()
-      // 방어 탭 상세의 내구 합계 띠(R10): 65칸이 판정 영역 안에 다 들어오고(스크롤 상자 없음), 칸 안 글자 없음, 칸 사이 틈 1px 이상.
-      await expect(card.locator('.band-scroll')).toHaveCount(0)
-      const bands = await card.locator('.band').evaluateAll((els) =>
-        els.map((el) => {
-          const panel = el.closest('[data-testid="bundle-panel"]')!.getBoundingClientRect()
-          const cells = [...el.querySelectorAll('[data-testid="band-cell"]')].map((c) => c.getBoundingClientRect())
-          const scrollers = []
-          for (let p = el.parentElement; p && !p.matches('[data-testid="bundle-panel"]'); p = p.parentElement) if (p.scrollWidth > p.clientWidth + 1) scrollers.push(p.className)
-          const gaps = cells.slice(1).map((c, i) => c.left - cells[i].right)
-          return {
-            count: cells.length,
-            inside: cells.every((c) => c.left >= panel.left - 0.5 && c.right <= panel.right + 0.5),
-            bandFits: el.scrollWidth <= el.clientWidth + 1,
-            scrollers,
-            text: el.textContent,
-            minGap: Math.min(...gaps) >= 0.9,
-            sameRow: cells.every((c) => Math.abs(c.top - cells[0].top) < 0.5),
-            width: cells[0].width,
-          }
-        }),
-      )
-      expect(bands.length).toBeGreaterThan(0)
-      for (const b of bands) {
-        expect({ ...b, width: undefined }).toEqual({ count: 65, inside: true, bandFits: true, scrollers: [], text: '', minGap: true, sameRow: true, width: undefined })
-        expect(b.width).toBeGreaterThan(2)
-      }
       await page.getByRole('button', { name: '포켓몬 추가', exact: true }).click()
 
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
       expect(overflow).toBeLessThanOrEqual(0)
-      // 띠는 화면 안에 있다.
-      const leaks = await page.evaluate(() => [...document.querySelectorAll('.band')].filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1).length)
-      expect(leaks).toBe(0)
       expect(await findOverlaps(page, CONTROLS)).toEqual([])
       expect(await findOverlaps(page, '[role="dialog"] :is(label, h2, button, input)')).toEqual([])
-      // 접힌 줄: 기술 선택 버튼과 결과(배지 + 변동 가능)가 겹치지 않고, 이름(폼 꼬리 포함)은 1280px에서 한 줄.
+      // 카드 줄: 기술 선택 버튼과 결과(배지 + 변동 버튼)가 겹치지 않고, 이름(폼 꼬리 포함)은 1280px에서 한 줄.
       const lineIssues = await page.evaluate((wide) => {
         const out: string[] = []
         const lines = [...document.querySelectorAll('[data-testid="card"] .card-line')]
@@ -118,7 +85,6 @@ for (const width of [400, 1280]) {
       await openProduct(page)
       await selectTab(page, '방어')
       await waitComplete(page)
-      await cards(page).first().locator('button[aria-expanded]').first().click()
       const m = await listScroll(page).evaluate((el) => ({
         overflowY: getComputedStyle(el).overflowY,
         scrollHeight: el.scrollHeight,
@@ -138,13 +104,6 @@ for (const width of [400, 1280]) {
       })
       expect(gap.left).toBeGreaterThanOrEqual(16)
       expect(gap.right).toBeGreaterThanOrEqual(16)
-      // 줄 오른쪽 끝 펼침 화살표: 펼친 줄은 위로(data-open), 접힌 줄은 아래로, 카드 오른쪽 끝에 붙는다
-      const chev = cards(page).first().getByTestId('card-chev')
-      await expect(chev).toHaveAttribute('data-open', 'true')
-      await expect(cards(page).nth(1).getByTestId('card-chev')).toHaveAttribute('data-open', 'false')
-      const edge = await cards(page).first().evaluate((c) => c.getBoundingClientRect().right - c.querySelector('[data-testid="card-chev"]')!.getBoundingClientRect().right)
-      expect(edge).toBeGreaterThan(0)
-      expect(edge).toBeLessThan(24)
       // 넓은 화면: 작업 영역(main)이 첫 화면에 꼭 맞는다(페이지 스크롤은 푸터에 닿을 때만).
       if (width >= 1280) expect(m.mainBottom).toBeLessThanOrEqual(m.viewport)
       else expect(m.boxHeight).toBeGreaterThanOrEqual(m.viewport * 0.6)

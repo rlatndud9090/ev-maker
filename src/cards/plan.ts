@@ -36,7 +36,8 @@ import { TAB_MEANS_OWNERS, ladderMeans, rankMoveAllowed, rankVariants, setMeansC
 import type { BoostStat } from './rankMeans'
 import { mainMoves } from './items'
 import { natureForSigns, signOf, validKeySigns } from './keySigns'
-import { natureVariants } from './natures'
+import { laneNature, rowNature, strictVariants } from './lockNature'
+import { natureVariants, withNature } from './natures'
 import { myDependsOn, relevantStats } from './relevance'
 import {
   CATEGORY_ORDER,
@@ -56,9 +57,11 @@ import {
   type OpponentHeader,
   type PresetIndex,
   type RankBasis,
+  type RowLockSpec,
   type RowSpec,
   type DamageTab,
   type TabPlan,
+  type TabPlanLock,
   type TargetSource,
 } from './types'
 
@@ -453,6 +456,39 @@ class PlanBuilder {
     return natureVariants(this.game, this.mySet.nature, stat, this.tab === 'defense' ? rel.defender : rel.attacker)
   }
 
+  /**
+   * 고정 계획의 행 성격과 엄격 변형(고정 없으면 undefined). viewStats = 보는 능력치(공격 [v], 방어 ['hp', v]).
+   * 엄격 상승이 없으면 NatureVariants.plus는 neutral id다.
+   */
+  lockNatures(v: NatureVariants['stat'], viewStats: readonly StatId[], refs: MoveStatRefs | undefined, attackerAbility: string): { natures: NatureVariants; lock: RowLockSpec } | undefined {
+    const plan = this.input.lock
+    if (plan === undefined) return undefined
+    const rel = relevantStats(refs, attackerAbility)
+    const relevant = this.tab === 'defense' ? rel.defender : rel.attacker
+    let nature: string
+    let dropWarning = false
+    let allowPlus: boolean
+    let avoid: StatId[]
+    let viewLocked = false
+    if (plan.mode === 'lane') {
+      avoid = unique([v, ...relevant])
+      nature = laneNature(this.game, this.mySet.nature, v, relevant)
+      allowPlus = true
+    } else {
+      const locked = plan.derivation.lockedStats
+      avoid = unique([...locked, ...relevant, v])
+      const r = rowNature(this.game, plan.base.nature, plan.base.plus, avoid)
+      nature = r.nature
+      dropWarning = r.dropWarning
+      allowPlus = plan.base.plus === v || (plan.base.plus === 'out' && !locked.includes(v))
+      viewLocked = viewStats.some((s) => locked.includes(s))
+    }
+    const strict = strictVariants(this.game, nature, v, allowPlus, avoid)
+    const lock: RowLockSpec = { nature, strict: { neutral: strict.neutral, plus: strict.plus }, viewLocked }
+    if (dropWarning) lock.dropWarning = true
+    return { natures: { stat: v, neutral: strict.neutral, plus: strict.plus ?? strict.neutral }, lock }
+  }
+
   /** 이 탭이 보는 주인의 능동 수단만(TAB_MEANS_OWNERS) 랭크 변형으로 만든다. */
   variants(opp: Opponent, resolved: ResolvedSet, refs: CardRefStats) {
     const owners = TAB_MEANS_OWNERS[this.tab]
@@ -500,7 +536,14 @@ class PlanBuilder {
       }
       if (!extra.error) {
         spec.sweep = sweep
-        spec.natures = this.natures(sweep.stat as NatureVariants['stat'], refs, this.me.ability)
+        const v = sweep.stat as NatureVariants['stat']
+        const locked = this.lockNatures(v, [v], refs, this.me.ability)
+        if (locked === undefined) spec.natures = this.natures(v, refs, this.me.ability)
+        else {
+          spec.natures = locked.natures
+          spec.lock = locked.lock
+          spec.attacker = withNature(spec.attacker, locked.lock.nature)
+        }
       }
       return this.addRow(card, parts, spec)
     }
@@ -591,16 +634,19 @@ class PlanBuilder {
         if (basis) spec.basis = basis
         return this.candidate('row', this.addRow(card, parts, spec).id, slot.moveId, resolved, meta, added)
       }
-      const natures = this.natures(def, refs, ability)
+      const locked = this.lockNatures(def, ['hp', def], refs, ability)
+      const natures = locked === undefined ? this.natures(def, refs, ability) : locked.natures
+      const mine = locked === undefined ? defender : withNature(defender, locked.lock.nature)
       const f = this.addFilter(card, ['extreme', ...parts], {
         moveId: slot.moveId,
         attacker,
-        defender,
+        defender: mine,
         conditions,
         stats: ['hp', def],
         natures,
         dependsOn: myDependsOn({ refs, sweep: undefined }, 'defender', ['hp', def], ability),
         ...(basis ? { basis } : {}),
+        ...(locked ? { lock: locked.lock } : {}),
       })
       for (const stat of ['hp', def] as const) {
         const sweep = { side: 'defender' as const, stat }
@@ -610,7 +656,7 @@ class PlanBuilder {
           moveId: slot.moveId,
           sweep,
           attacker,
-          defender,
+          defender: mine,
           conditions,
           refs,
           dependsOn: myDependsOn({ refs, sweep }, 'defender', [], ability),
@@ -618,6 +664,7 @@ class PlanBuilder {
           natures,
         }
         if (basis) spec.basis = basis
+        if (locked) spec.lock = locked.lock
         this.addRow(card, [...parts, stat], spec)
       }
       return this.candidate('filter', f.id, slot.moveId, resolved, meta, added)
@@ -705,7 +752,19 @@ function withAdded(base: readonly string[], added: ReadonlySet<string>, entry: M
 const meansParts = (b: RankBasis): string[] => [b.owner, b.means.kind, b.means.id]
 
 function emptyPlan(input: CardInput, tab: DamageTab, mySp: SpTable, status: TabPlan['status'], conflicts: string[]): TabPlan {
-  return { ...planHead(input, tab, mySp), status, cards: [], rows: {}, filters: {}, fixed: {}, customTargetConflicts: conflicts, notices: [] }
+  return withPlanLock(input, mySp, { ...planHead(input, tab, mySp), status, cards: [], rows: {}, filters: {}, fixed: {}, customTargetConflicts: conflicts, notices: [] })
+}
+
+function withPlanLock(input: CardInput, mySp: SpTable, plan: TabPlan): TabPlan {
+  const lock = input.lock
+  if (lock === undefined) return plan
+  let info: TabPlanLock
+  if (lock.mode === 'main') info = { mode: 'main', derivation: lock.derivation, base: lock.base, overTotal: lock.derivation.overTotal }
+  else {
+    const sum = STAT_IDS.reduce((a, s) => a + (typeof mySp[s] === 'number' ? mySp[s] : 0), 0)
+    info = { mode: 'lane', overTotal: Math.max(0, sum - input.game.manifest.rules.spTotal) }
+  }
+  return { ...plan, lock: info }
 }
 
 function planHead(input: CardInput, tab: DamageTab, mySp: SpTable) {
@@ -809,7 +868,7 @@ function startPlan(input: CardInput, tab: DamageTab): { kind: 'ok'; b: PlanBuild
   const mySet = isPlainObject(raw) ? withBoosts(input.mySet, {}) : input.mySet
   let me: ResolvedSet
   try {
-    me = validateSet(input.game, mySet)
+    me = input.lock === undefined ? validateSet(input.game, mySet) : validateSet(input.game, mySet, { ignoreSpTotal: true })
   } catch (e) {
     return { kind: 'my-set-error', reasons: errorReasons(e) }
   }
@@ -898,7 +957,7 @@ export function planTab(input: CardInput, tab: DamageTab): TabPlan {
     }
   }
 
-  return {
+  return withPlanLock(input, mySp, {
     ...planHead(input, tab, mySp),
     status: { kind: 'ok' },
     cards: b.cards,
@@ -907,7 +966,7 @@ export function planTab(input: CardInput, tab: DamageTab): TabPlan {
     fixed: b.fixed,
     customTargetConflicts: conflicts,
     notices: tabNotices,
-  }
+  })
 }
 
 export interface OpponentCategorySeeds {

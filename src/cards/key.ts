@@ -2,7 +2,7 @@
 import { STAT_IDS, moveStatRefs } from '../core'
 import type { BattleConditions, MoveStatRefs, PokemonSet } from '../core'
 import type { Snapshot, StatId } from '../data/schema'
-import { variantNature, withNature } from './natures'
+import { variantNature, withNature, withSpOverride } from './natures'
 import { relevantStats } from './relevance'
 import type { NatureVariants, RowTask, TabPlan } from './types'
 
@@ -48,9 +48,12 @@ interface KeyParts {
   conditions: BattleConditions
   /** 양 끝·극단은 변형 성격 칸까지 담아 변형 id가 키에 들어간다 */
   natures: NatureVariants | null
+  /** 계단만: [순위, H 하한]. 없으면 키 튜플에 자리를 두지 않는다 */
+  extra?: readonly unknown[]
 }
 
 function partsOf(plan: TabPlan, task: RowTask): KeyParts {
+  const single: Record<string, boolean> = plan.lock === undefined ? {} : { ignoreSpTotal: true }
   if (task.kind === 'probe') {
     // 현재 세트 그대로라 관여 SP를 모두 넣는다(side는 judgeDamage 관점, 덮어쓰는 능력치 없음).
     const filter = task.target === 'filter' ? plan.filters[task.id] : undefined
@@ -61,7 +64,7 @@ function partsOf(plan: TabPlan, task: RowTask): KeyParts {
     if (moveId === undefined) throw new Error(`단건 판정 대상 ${task.id}에 기술이 없다`)
     return {
       kind: 'probe',
-      options: {},
+      options: single,
       side: filter !== undefined ? 'defender' : (row?.sweep?.side ?? 'attacker'),
       stats: [],
       attacker: spec.attacker,
@@ -72,15 +75,20 @@ function partsOf(plan: TabPlan, task: RowTask): KeyParts {
       natures: null,
     }
   }
-  if (task.kind === 'ends' || task.kind === 'sweep' || task.kind === 'variant') {
+  if (task.kind === 'ends' || task.kind === 'sweep' || task.kind === 'variant' || task.kind === 'branch') {
     const spec = plan.rows[task.rowId]
     if (spec?.sweep === undefined) throw new Error(`행 ${task.rowId}에 스윕 대상이 없다`)
     let { attacker, defender } = spec
-    if (task.kind === 'variant') {
-      if (spec.natures === undefined) throw new Error(`행 ${task.rowId}에 성격 변형이 없다`)
-      const nature = variantNature(spec.natures, task.nature)
-      if (plan.mySide === 'attacker') attacker = withNature(attacker, nature)
-      else defender = withNature(defender, nature)
+    if (task.kind === 'variant' || task.kind === 'branch') {
+      let nature: string
+      if (task.kind === 'branch') nature = task.nature
+      else {
+        if (spec.natures === undefined) throw new Error(`행 ${task.rowId}에 성격 변형이 없다`)
+        nature = variantNature(spec.natures, task.nature)
+      }
+      const sp = task.kind === 'branch' ? task.sp : undefined
+      if (plan.mySide === 'attacker') attacker = withSpOverride(withNature(attacker, nature), sp)
+      else defender = withSpOverride(withNature(defender, nature), sp)
     }
     return {
       kind: task.kind === 'ends' ? 'ends' : 'sweep',
@@ -93,6 +101,23 @@ function partsOf(plan: TabPlan, task: RowTask): KeyParts {
       refs: spec.refs,
       conditions: spec.conditions,
       natures: task.kind === 'ends' ? (spec.natures ?? null) : null,
+    }
+  }
+  if (task.kind === 'stairs') {
+    const spec = plan.filters[task.filterId]
+    if (spec === undefined) throw new Error(`극단 필터 ${task.filterId}가 계획에 없다`)
+    return {
+      kind: 'stairs',
+      options: { ignoreSpTotal: true },
+      side: 'defender',
+      stats: spec.stats,
+      attacker: spec.attacker,
+      defender: withSpOverride(withNature(spec.defender, task.nature), task.sp),
+      moveId: spec.moveId,
+      refs: moveStatRefs(plan.game, spec.moveId),
+      conditions: spec.conditions,
+      natures: null,
+      extra: [task.rank, task.hpMin],
     }
   }
   if (task.kind === 'extreme' || task.kind === 'pair') {
@@ -115,7 +140,7 @@ function partsOf(plan: TabPlan, task: RowTask): KeyParts {
   if (spec === undefined) throw new Error(`고정 판정 ${task.fixedId}가 계획에 없다`)
   return {
     kind: 'fixed',
-    options: {},
+    options: single,
     side: null,
     stats: [],
     attacker: spec.attacker,
@@ -148,5 +173,6 @@ export function judgementKey(plan: TabPlan, task: RowTask): string {
     canonical(p.conditions),
     p.natures === null ? null : [p.natures.stat, p.natures.neutral, p.natures.plus],
     ['rollSteps', plan.rollSteps],
+    ...(p.extra === undefined ? [] : [p.extra]),
   ])
 }
