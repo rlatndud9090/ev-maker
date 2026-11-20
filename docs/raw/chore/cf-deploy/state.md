@@ -14,3 +14,4 @@ stage: kickoff
 
 - 2026-11-20 kickoff: raw 골격 생성
 - 2026-11-20 implementing: wrangler.jsonc·deploy 스크립트 추가, 빌드·dry-run 확인
+- 2026-11-20 revised: Workers → Pages(evmaker) 전환, 사용자 요청으로 main 직접 푸시

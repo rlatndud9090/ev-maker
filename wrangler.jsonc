@@ -1,9 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "ev-maker",
+  "name": "evmaker",
   "compatibility_date": "2026-11-01",
-  "assets": {
-    "directory": "./dist",
-    "not_found_handling": "single-page-application"
-  }
+  "pages_build_output_dir": "./dist"
 }
