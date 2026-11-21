@@ -39,6 +39,20 @@ import {
 import { parseNumber, type SetDraft } from '../ui/setDraft'
 import { EXAMPLE_DRAFT } from './example'
 import { clampSp, fitUnlocked, type LockedSp, type SpRules } from './spLimit'
+import {
+  CLEARED_TRANSIENT,
+  PARTY_SIZE,
+  blankSlice,
+  draftSlice,
+  emptyParty,
+  isPartyIndex,
+  movedOrder,
+  sliceOf,
+  storedSlice,
+  type PartyHydration,
+  type PartyState,
+  type SlotSlice,
+} from './party'
 
 export interface AppState {
   regulation: string
@@ -113,6 +127,8 @@ export interface AppState {
    * 적용하고 비운다. 재계산으로 생긴 초과는 표지가 없어 줄이지 않는다
    */
   lockFit: number | null
+  /** 파티 6칸. 활성 칸의 조각(party.ts SlotSlice)은 위 최상위 필드가 진실이고 slots[active]는 null로 둔다 */
+  party: PartyState
 }
 
 export interface LockTrim {
@@ -254,6 +270,18 @@ export type AppAction =
       keep: readonly StatId[]
       rules: SpRules
     }
+  /** 그 칸을 활성으로(종 변경 경로를 타지 않아 고정이 남는다). 같은 칸이면 무시 */
+  | { type: 'party-select'; index: number }
+  /** 그 칸의 포켓몬 상태를 지운다. 활성 칸이면 빈 초안이 된다 */
+  | { type: 'party-clear-slot'; index: number }
+  /** from 칸을 to 자리로 옮긴다(사이 칸은 밀린다). 활성 칸은 같은 포켓몬을 따라간다 */
+  | { type: 'party-move'; from: number; to: number }
+  /** 6칸을 비우고 1번 칸을 활성으로 */
+  | { type: 'party-clear-all' }
+  /** 6칸을 주어진 초안으로 통째 교체(고정 없음, 앞 PARTY_SIZE개만, null·모자란 칸은 빈 칸). 1번 칸 활성. 전역 상대 목록은 그대로 */
+  | { type: 'party-import'; slots: readonly (SetDraft | null)[] }
+  /** 저장 복원: 보관함·활성 칸·최상위 조각과 주어진 전역 상대 목록을 통째로 세팅. 모양 검증은 호출자(persist) 몫 */
+  | { type: 'party-hydrate'; saved: PartyHydration }
 
 export function initialState(regulation: string): AppState {
   return {
@@ -283,6 +311,7 @@ export function initialState(regulation: string): AppState {
     lockRevealNonce: 0,
     lockTrim: null,
     lockFit: null,
+    party: emptyParty(),
   }
 }
 
@@ -432,7 +461,7 @@ function restoreNature(draft: SetDraft, saved: AppState['lockNature']): SetDraft
  * adding = 같은 조작에서 새로 고정하는 능력치(교체). 풀지 않고, 고정이 남으므로 성격도 돌려놓지 않는다
  */
 function releaseLocks(
-  state: AppState,
+  state: Pick<AppState, 'draft' | 'locks' | 'lockNature' | 'lockSpTotal'>,
   remaining: readonly CutLock[],
   lockedSp: Readonly<Partial<Record<StatId, number>>> = {},
   adding: readonly StatId[] = [],
@@ -553,11 +582,14 @@ export function reducer(state: AppState, action: AppAction): AppState {
       const pinnedBundles = state.pinnedBundles.filter((x) => !owned(x))
       const speedAdded = state.speedChart.added.filter((x) => !owned(x))
       const bumped = bump(state, addedBundles.length === state.addedBundles.length ? { customTargets: next } : { customTargets: next, addedBundles })
-      return {
-        ...bumped,
-        pinnedBundles: pinnedBundles.length === state.pinnedBundles.length ? state.pinnedBundles : pinnedBundles,
-        speedChart: speedAdded.length === state.speedChart.added.length ? state.speedChart : { ...state.speedChart, added: speedAdded },
-      }
+      return dropCustomLocks(
+        {
+          ...bumped,
+          pinnedBundles: pinnedBundles.length === state.pinnedBundles.length ? state.pinnedBundles : pinnedBundles,
+          speedChart: speedAdded.length === state.speedChart.added.length ? state.speedChart : { ...state.speedChart, added: speedAdded },
+        },
+        action.rosterId,
+      )
     }
     case 'edit-preset':
       return updateTarget(state, action.rosterId, (t) => ({ ...t, edits: { ...t.edits, [action.key]: { ...action.edit } } }))
@@ -619,8 +651,18 @@ export function reducer(state: AppState, action: AppAction): AppState {
       const addedMoves = state.addedMoves.filter((x) => !sameAddedMove(x, action))
       if (addedMoves.length === state.addedMoves.length) return state
       const target = defenseLadder(action.opponentId)
-      const moveChoices = state.moveChoices.filter((x) => !(sameTarget(x, target) && moveOfKey(x.key) === action.moveId))
-      return { ...bump(state, { addedMoves }), moveChoices: moveChoices.length === state.moveChoices.length ? state.moveChoices : moveChoices }
+      // 추가 기술은 전역이라 보관함 모든 칸의 선택도 같이 정리한다
+      const dropChoice = (choices: readonly MoveChoice[]): readonly MoveChoice[] => {
+        const kept = choices.filter((x) => !(sameTarget(x, target) && moveOfKey(x.key) === action.moveId))
+        return kept.length === choices.length ? choices : kept
+      }
+      const slots = state.party.slots.map((s) => {
+        if (s === null) return s
+        const moveChoices = dropChoice(s.moveChoices)
+        return moveChoices === s.moveChoices ? s : { ...s, moveChoices }
+      })
+      const party = slots.some((s, i) => s !== state.party.slots[i]) ? { ...state.party, slots } : state.party
+      return { ...bump(state, { addedMoves }), moveChoices: dropChoice(state.moveChoices), party }
     }
     case 'add-lock': {
       const l = action.lock
@@ -697,6 +739,112 @@ export function reducer(state: AppState, action: AppAction): AppState {
     }
     case 'apply-adjust':
       return applyAdjust(state, action)
+    case 'party-select': {
+      const { index } = action
+      if (!isPartyIndex(index) || index === state.party.active) return state
+      const slots = [...state.party.slots]
+      slots[state.party.active] = storedSlice(sliceOf(state))
+      const target = slots[index] ?? blankSlice()
+      slots[index] = null
+      return enterSlice(state, target, { slots, active: index })
+    }
+    case 'party-clear-slot': {
+      const { index } = action
+      if (!isPartyIndex(index)) return state
+      if (index === state.party.active) return storedSlice(sliceOf(state)) === null ? state : enterSlice(state, blankSlice(), state.party)
+      if (state.party.slots[index] === null) return state
+      const slots = [...state.party.slots]
+      slots[index] = null
+      return { ...state, party: { ...state.party, slots } }
+    }
+    case 'party-move': {
+      const { from, to } = action
+      if (!isPartyIndex(from) || !isPartyIndex(to) || from === to) return state
+      const order = movedOrder(from, to)
+      const { slots, active } = state.party
+      return { ...state, party: { slots: order.map((i) => (i === active ? null : slots[i])), active: order.indexOf(active) } }
+    }
+    case 'party-clear-all':
+      return enterSlice(state, blankSlice(), { slots: Array.from({ length: PARTY_SIZE }, () => null), active: 0 })
+    case 'party-import': {
+      if (!Array.isArray(action.slots)) return state
+      const slices = Array.from({ length: PARTY_SIZE }, (_, i) => {
+        const d = action.slots[i]
+        return d === null || d === undefined ? null : storedSlice(draftSlice(d))
+      })
+      const top = slices[0] ?? blankSlice()
+      slices[0] = null
+      return enterSlice(state, top, { slots: slices, active: 0 })
+    }
+    case 'party-hydrate':
+      return hydrate(state, action.saved)
+  }
+}
+
+/**
+ * 최상위에 slice를 올리고 party로 바꾼다. 일회성 신호는 비우고, 세대를 올리며 종을 바꾼 세대로 친다(펼친 카드 접기).
+ * 종 변경 액션을 거치지 않으므로 slice의 고정이 그대로 남는다
+ */
+function enterSlice(state: AppState, slice: SlotSlice, party: PartyState): AppState {
+  const generation = state.generation + 1
+  return { ...state, ...sliceOf(slice), ...CLEARED_TRANSIENT, party, generation, speciesGeneration: generation }
+}
+
+function hydrate(state: AppState, saved: PartyHydration): AppState {
+  if (typeof saved !== 'object' || saved === null || !Array.isArray(saved.slots)) return state
+  const active = isPartyIndex(saved.active) ? saved.active : 0
+  const slots = Array.from({ length: PARTY_SIZE }, (_, i) => saved.slots[i] ?? null)
+  const top = slots[active] ?? blankSlice()
+  slots[active] = null
+  const g = saved.globals ?? {}
+  const next = enterSlice(state, top, { slots, active })
+  return {
+    ...next,
+    customTargets: g.customTargets ?? state.customTargets,
+    addedBundles: g.addedBundles ?? state.addedBundles,
+    addedMoves: g.addedMoves ?? state.addedMoves,
+    pinnedBundles: g.pinnedBundles ?? state.pinnedBundles,
+    speedChart: g.speedAdded === undefined ? state.speedChart : { ...state.speedChart, added: g.speedAdded },
+  }
+}
+
+/**
+ * 목록 밖 타겟 rosterId를 대상으로 한 고정인지. 스피드 고정 키는 출처 대신 배지 origin만 가진다: 목록 밖 타겟의 배지는
+ * preset·added origin이고 rosterId는 메타 목록 밖 id라 래더 상대 id와 겹치지 않는다
+ */
+function targetsCustom(lock: CutLock, rosterId: string): boolean {
+  const t = lock.target
+  if (t.kind === 'speed') return t.origin !== 'ladder' && t.opponentId === rosterId
+  return t.source === 'custom' && t.opponentId === rosterId
+}
+
+/** 그 조각의 고정 중 keep 밖을 remove-lock과 같은 규칙(해제 복원·자르기, 0개면 고정 상태 비움)으로 푼다. 바뀐 게 없으면 null */
+function releaseSlice(slice: SlotSlice, keep: (l: CutLock) => boolean): { slice: SlotSlice; trims: LockTrim[] } | null {
+  const locks = slice.locks.filter(keep)
+  if (locks.length === slice.locks.length) return null
+  const { draft, trims } = releaseLocks(slice, locks)
+  if (locks.length > 0) return { slice: { ...slice, locks, draft }, trims }
+  return { slice: { ...slice, draft, locks: [], lockSeq: 1, lockBase: null, lockNature: null, lockSpTotal: null }, trims }
+}
+
+/** 최상위와 보관함 모든 칸에서 rosterId 대상 고정을 푼다 */
+function dropCustomLocks(state: AppState, rosterId: string): AppState {
+  const keep = (l: CutLock) => !targetsCustom(l, rosterId)
+  let party = state.party
+  const slots = party.slots.map((s) => (s === null ? s : (releaseSlice(s, keep)?.slice ?? s)))
+  if (slots.some((s, i) => s !== party.slots[i])) party = { ...party, slots }
+  const top = releaseSlice(sliceOf(state), keep)
+  if (top === null) return party === state.party ? state : { ...state, party }
+  const { slice, trims } = top
+  const kept = new Set(slice.locks.map((l) => l.seq))
+  return {
+    ...state,
+    ...slice,
+    party,
+    lockTrim: trims.length > 0 ? trims : null,
+    lockReveal: state.lockReveal !== null && kept.has(state.lockReveal.seq) ? state.lockReveal : null,
+    lockFit: slice.locks.length === 0 ? null : state.lockFit,
+    generation: state.generation + 1,
   }
 }
 

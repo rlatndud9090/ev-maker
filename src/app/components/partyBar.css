@@ -1,0 +1,208 @@
+/* 헤더 파티 줄: 왼쪽 정사각형 6칸, 오른쪽 링크 입력·가져오기·파티 비우기. 좁으면 입력 묶음이 다음 줄로 */
+.party-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  min-width: 0;
+}
+
+.party-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.party-slot {
+  position: relative;
+  flex: none;
+}
+
+.party-slot-frame {
+  position: relative;
+  width: 3.25rem;
+  aspect-ratio: 1;
+}
+
+.product .party-slot-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: var(--shadow-card);
+}
+
+.product .party-slot.is-empty .party-slot-btn {
+  border-style: dashed;
+  border-color: var(--control-border);
+  background: transparent;
+  box-shadow: none;
+}
+
+.product .party-slot.is-active .party-slot-btn {
+  border: 2px solid var(--accent);
+  background: var(--accent-soft);
+}
+
+.party-slot.is-active::after {
+  content: '';
+  position: absolute;
+  left: 25%;
+  right: 25%;
+  bottom: -5px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.party-slot.is-dragging {
+  opacity: 0.45;
+}
+
+.product .party-slot.is-drop-target .party-slot-btn {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+}
+
+.party-slot-frame[draggable='true'] {
+  cursor: grab;
+}
+
+.party-slot-empty {
+  color: var(--muted);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+/* 도구는 칸 오른쪽 아래에 겹친다 */
+.party-slot-btn .party-item {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+}
+
+/* 칸 비우기(×): 칸에 마우스를 올리거나 칸 안에 포커스가 있을 때만 보인다 */
+.product .party-slot-clear {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+/* 칸에 마우스·포커스가 없을 때는 자리도 차지하지 않는다(Tab은 칸 버튼에 온 뒤 ×로 이어진다). 터치 화면은 hover가 없어 늘 보인다 */
+@media (hover: hover) {
+  .party-slot:not(:hover, :focus-within) .party-slot-clear {
+    display: none;
+  }
+}
+
+.party-import {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.party-import input {
+  flex: 1 1 8rem;
+  width: auto;
+  min-width: 0;
+}
+
+.party-import button {
+  flex: none;
+  white-space: nowrap;
+}
+
+.party-error {
+  flex-basis: 100%;
+}
+
+.party-report {
+  flex-basis: 100%;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  font-size: 0.85rem;
+}
+
+.party-report-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.party-report h2 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.party-report ul {
+  margin: 0.25rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.party-report > ul {
+  padding-left: 0;
+  list-style: none;
+}
+
+.party-confirm {
+  padding: 0.75rem;
+}
+
+.party-confirm p {
+  margin: 0 0 0.6rem;
+}
+
+.party-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* 빈 활성 칸: 계산 결과 대신 안내 */
+.empty-slot-panel {
+  display: grid;
+  place-content: center;
+  gap: 0.25rem;
+  min-height: 10rem;
+  padding: 1.5rem;
+  text-align: center;
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+
+.empty-slot-panel p {
+  margin: 0;
+}
+
+.empty-slot-hint {
+  margin: 0.4rem 0 0;
+  padding: 0.3rem 0.5rem;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--text-strong);
+  font-size: 0.85rem;
+}

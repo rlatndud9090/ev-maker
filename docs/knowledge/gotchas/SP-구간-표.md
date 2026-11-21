@@ -18,6 +18,13 @@ area: SP 구간 표
 
 **왜:** 메타 월·매치 방식을 바꾸면 목록 밖 rosterId가 메타 항목 id와 같아질 수 있다. 출처를 빼고 비교하면 목록 밖 추가 배분이 조용히 메타 래더 배분으로 바뀌고 범위 밖 노출까지 일으킨다(ADR 설계 비교에서 발견).
 
+### G-261121-item-icon-full-snapshot: 도구 아이콘 받는 범위는 스냅샷 도구 전체로 두고, 판정 카드 표시 대상 집합과 혼동하지 않는다
+> 발견: 2026-11-21 · 유형: 규칙불충분 · area: SP 구간 표 · 출처: docs/raw/feature/party-pokepaste/notes.md (도구 아이콘 범위 확장) · 코드: `scripts/data/lib/images.mjs:itemIconIds`, `src/cards/iconTargets.ts` · 봉인: `src/ui/images.test.ts` "전 레귤레이션 판정 대상 집합(R14)은 받는 목록(스냅샷 도구 전체)의 부분집합이다"
+
+**규칙:** 받는 아이콘 목록(`itemIconIds(snapshots)`)은 현재 레귤레이션 스냅샷 도구 합집합이다. 판정 카드는 여전히 계산에 효과를 준 도구만 표시한다(INV-261117-relevant-item-only). 받는 목록을 판정 대상 집합으로 줄이거나, 표시 규칙을 받는 목록으로 넓히지 않는다. 범위를 바꾸면 `src/assets/item-icons/LICENSE`·`sources.config.json` 고지도 함께 고친다.
+
+**왜:** 파티 칸은 모든 지닌 도구를 그리는데 받는 목록이 판정 대상 42종뿐이라 자뭉열매·기합의띠·메가스톤 등 대부분이 가방 표지로 나왔다. 스냅샷 전체(166종)로 넓혀 해결했다.
+
 ### G-261121-display-sp-two-copies: 드래그 표시 SP는 화면 스토어와 실행기 사본을 둘 다 비운다 (미확인)
 > 발견: 2026-11-21 · 유형: 잘못된추론 · area: SP 구간 표 · 출처: docs/raw/bugfix/speed-sp-not-reflected/bugfix.md · 코드: `src/app/ProductApp.tsx:onDisplaySp`, `src/app/components/MySetPanel.tsx:commit`, `src/app/executor.ts:setInput`
 

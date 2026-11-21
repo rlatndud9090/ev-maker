@@ -1,0 +1,62 @@
+Starmie @ Mystic Water  
+Ability: Analytic  
+Level: 50  
+Shiny: Yes  
+EVs: 26 HP / 14 Def / 6 SpA / 20 Spe  
+Timid Nature  
+- Rapid Spin  
+- Recover  
+- Surf  
+- Psychic  
+
+Quaquaval @ Leftovers  
+Ability: Moxie  
+Level: 50  
+EVs: 16 HP / 10 Atk / 11 Def / 29 Spe  
+Adamant Nature  
+- Bulk Up  
+- Aqua Step  
+- Close Combat  
+- Substitute  
+
+Samurott-Hisui @ Choice Scarf  
+Ability: Sharpness  
+Level: 50  
+EVs: 32 Atk / 2 SpD / 32 Spe  
+Jolly Nature  
+- Ceaseless Edge  
+- Aqua Cutter  
+- Flip Turn  
+- Sucker Punch  
+
+Ceruledge @ Focus Sash  
+Ability: Weak Armor  
+Level: 50  
+EVs: 32 Atk / 2 SpD / 32 Spe  
+Adamant Nature  
+- Swords Dance  
+- Bitter Blade  
+- Poltergeist  
+- Shadow Sneak  
+
+Victor E. Belle (Victreebel-Mega) @ Victreebelite  
+Ability: Chlorophyll  
+Level: 50  
+Shiny: Yes  
+EVs: 32 HP / 2 SpA / 32 Spe  
+Timid Nature  
+- Strength Sap  
+- Giga Drain  
+- Toxic Spikes  
+- Encore  
+
+Hatterene (F) @ Sitrus Berry  
+Ability: Magic Bounce  
+Level: 50  
+EVs: 32 HP / 21 Def / 13 SpA  
+Quiet Nature  
+- Nuzzle  
+- Draining Kiss  
+- Future Sight  
+- Mystical Fire  
+

@@ -1,11 +1,147 @@
 {
   "entries": {
+    "abomasite": {
+      "file": "Bag_Abomasite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "986dc5c75130cbd91cc0dd89a3291a3e21276b63",
+      "sha256": "a53eff0e559c2e3211f496347c3049d2babc6e1fbc97a0204d791bacfcb85be6",
+      "uploadedAt": "2026-04-08T04:46:01Z",
+      "width": 128
+    },
+    "absolite": {
+      "file": "Bag_Absolite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "39ca581c0c9dc91f5eb1dd009cb1fbd0376c2cd3",
+      "sha256": "4511d0b818031e3d40455b188d957b82bbfba9fa41073e7aacba9645b3337a3a",
+      "uploadedAt": "2026-04-08T04:47:28Z",
+      "width": 128
+    },
+    "absolitez": {
+      "file": "Bag_Absolite_Z_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "7dbf23e9bfb965d5ef467cc67b6b9821c09f50ca",
+      "sha256": "299bc12cf16b1ff93fdaa04e2858d70f54cae6d7bfe1b1ed1c2f10eb3baa6f96",
+      "uploadedAt": "2026-09-09T06:16:16Z",
+      "width": 128
+    },
+    "aerodactylite": {
+      "file": "Bag_Aerodactylite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "d24637976f6b618d7625f17b5f53a83b95626587",
+      "sha256": "2b8496febc0fac7bfc29a2ffc0cfa40562970c5e94e4c7c1d3b90e86c53adf71",
+      "uploadedAt": "2026-04-08T04:44:51Z",
+      "width": 128
+    },
+    "aggronite": {
+      "file": "Bag_Aggronite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "43f4bb149744505ef41f109293f431c4e4c9c1f7",
+      "sha256": "6618aded3683b96db6c3226a28a7cc1fe528eefe2ca571b7d601f5f95e6a6342",
+      "uploadedAt": "2026-04-08T04:41:45Z",
+      "width": 128
+    },
+    "airballoon": {
+      "file": "Bag_Air_Balloon_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "17b6699695ed0c77c5692557b1717111c2ae8a81",
+      "sha256": "38d29501fafa627398616bf9ffd6e1b36a648730c4f59c0d24497cbb8695f525",
+      "uploadedAt": "2026-09-09T06:16:21Z",
+      "width": 48
+    },
+    "alakazite": {
+      "file": "Bag_Alakazite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "e2692cea9321afe5790b1478aa26348a84c43977",
+      "sha256": "c36d6591431d0c942e9a0ef000180dc957922834cbb6ec7a953710db2bf99777",
+      "uploadedAt": "2026-04-08T04:48:52Z",
+      "width": 128
+    },
+    "altarianite": {
+      "file": "Bag_Altarianite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "58e6cd182a543f9e569dca4a00ca6f03b0a6a611",
+      "sha256": "9c3ef79b061ed4c0a6654d5e5c6fc05bf73f2bbff52084a124905308cd310a4a",
+      "uploadedAt": "2026-04-08T04:53:44Z",
+      "width": 128
+    },
+    "ampharosite": {
+      "file": "Bag_Ampharosite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "603f77793f94c2b3c7c56cf432578bdcf9f47233",
+      "sha256": "dcb28d13211f28a5726192dad7ab623eafbaf4a9bcb53613854240c1f4f03835",
+      "uploadedAt": "2026-04-08T04:38:34Z",
+      "width": 128
+    },
+    "aspearberry": {
+      "file": "Bag_Aspear_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "0182b546567fbd109e350d97a26c16b71bc16d04",
+      "sha256": "ae28e2e871006babb62aa6538f188b83bb195a871c155bd36b81ae2e86d05e79",
+      "uploadedAt": "2026-04-08T04:24:37Z",
+      "width": 48
+    },
+    "audinite": {
+      "file": "Bag_Audinite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "11877328e2a15914715f7ac1e65ce70dc6b39b75",
+      "sha256": "760e553204b19446d65bc74456ec68eb2b43f34f8a61b103fb3d91088005a5fc",
+      "uploadedAt": "2026-04-08T04:54:37Z",
+      "width": 128
+    },
     "babiriberry": {
       "file": "Bag_Babiri_Berry_Champs_Sprite.png",
       "height": 48,
       "sha1": "e3afe74a9fefa163f5ce9d740af7bcf8552de3da",
       "sha256": "7492dcb7ef721f6e9e41275305512f43e0082910aea8ad5f6d2fbce45c4cb8be",
       "uploadedAt": "2026-04-08T04:34:45Z",
+      "width": 48
+    },
+    "banettite": {
+      "file": "Bag_Banettite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "265a80025896f889b6a6b9c45251958c928055dc",
+      "sha256": "9870b674cb2963fe41e6f82d5bc28a34560c1abe14fcee9819a71108c1f30664",
+      "uploadedAt": "2026-04-08T04:42:17Z",
+      "width": 128
+    },
+    "barbaracite": {
+      "file": "Bag_Barbaracite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "1069026e95ad9a0101f2f04db05db892ae2d2d32",
+      "sha256": "9346cb0be7970b33cdf4ed387ba90c6a2d7f57bf929cd725911fac37770b7382",
+      "uploadedAt": "2026-06-17T18:05:56Z",
+      "width": 128
+    },
+    "baxcalibrite": {
+      "file": "Bag_Baxcalibrite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "af6dfb2bc9f6e9a2d28e75f3454feb013a966e71",
+      "sha256": "8a3336f0a3c06840e181f5d10e98a0060dfef7070b96f21207273037f904c31f",
+      "uploadedAt": "2026-09-09T06:16:25Z",
+      "width": 128
+    },
+    "beedrillite": {
+      "file": "Bag_Beedrillite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "281c3a2bc1e54058d20282975b9114e385e1d6f7",
+      "sha256": "91bf03d64fca8ebd138e0e6a4e833dc224053ed0302631c4d3d4aff6a26fcda9",
+      "uploadedAt": "2026-04-08T04:59:40Z",
+      "width": 128
+    },
+    "bigroot": {
+      "file": "Bag_Big_Root_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "43326f24936c0f1b1a0b7607cdd44f1e66fe51bc",
+      "sha256": "65db077ae734f1fe740c86809a052cc1d43b9d76af2c6c0595d69dda3b78f363",
+      "uploadedAt": "2026-06-17T18:16:47Z",
+      "width": 48
+    },
+    "bindingband": {
+      "file": "Bag_Binding_Band_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "e26e6be2db83315ef036f00e3a52326f11528f3e",
+      "sha256": "96b60d47ec4a6d7126b6e967b018f75e4552825f36d4d27432e39300a8ca7297",
+      "uploadedAt": "2026-09-09T06:16:30Z",
       "width": 48
     },
     "blackbelt": {
@@ -24,6 +160,46 @@
       "uploadedAt": "2026-04-08T05:21:05Z",
       "width": 48
     },
+    "blastoisinite": {
+      "file": "Bag_Blastoisinite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "9678b5e7ed7b0ffa1e0b51fb3a67a58ab589a785",
+      "sha256": "350d66c121f192a1a0eaa634618ded27f84b9d60c60d4636916451c8d3339516",
+      "uploadedAt": "2026-04-08T04:40:11Z",
+      "width": 128
+    },
+    "blazikenite": {
+      "file": "Bag_Blazikenite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "471d4330fc5cb6c051306b853ac2d0b1c2f44b0e",
+      "sha256": "05a85dca71382c674eb0405ebae2ddb75b9fe9cc5af293aea8ef5a7048b08c88",
+      "uploadedAt": "2026-06-17T18:06:11Z",
+      "width": 128
+    },
+    "brightpowder": {
+      "file": "Bag_Bright_Powder_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "632492591410c6a9cea77f076d83b8575a693b28",
+      "sha256": "fd1aad1e63eaf753fb4c9b1dddcd7902509215b428237cbf4baa412599129dd8",
+      "uploadedAt": "2026-04-08T05:15:33Z",
+      "width": 48
+    },
+    "cameruptite": {
+      "file": "Bag_Cameruptite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "8c04b7a9e0e4e7ca86eed0ea97632d7966626e0b",
+      "sha256": "2eaaf0152f7068702445e6f5ec180dd83a25f3851775f007ff3a1ae4c259d569",
+      "uploadedAt": "2026-04-08T04:58:03Z",
+      "width": 128
+    },
+    "chandelurite": {
+      "file": "Bag_Chandelurite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "e2e71116c2d0fdad2783b3feef7536c03a3cc148",
+      "sha256": "765f4aa4a04764361a713edb22f27b206bbc7dc645acc0d50aa7b2bd985a6358",
+      "uploadedAt": "2026-04-08T05:07:22Z",
+      "width": 128
+    },
     "charcoal": {
       "file": "Bag_Charcoal_Champs_Sprite.png",
       "height": 48,
@@ -31,6 +207,22 @@
       "sha256": "08bf8fe75c77a805b5966317c0f313267bd320fcb5303d3c37fc74b51beb4f89",
       "uploadedAt": "2026-04-08T05:24:39Z",
       "width": 48
+    },
+    "charizarditex": {
+      "file": "Bag_Charizardite_X_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "c5373d9fc9dc47c457a4825eca33a1a757de4167",
+      "sha256": "3d2428f58fc63617303879e97e68c9d8e0434cd93c25d0953ae190de6c972c20",
+      "uploadedAt": "2026-04-08T04:39:30Z",
+      "width": 128
+    },
+    "charizarditey": {
+      "file": "Bag_Charizardite_Y_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "942607502dfaf9ecb32e32ffcf684fadaa8ef22e",
+      "sha256": "425e2e95f63d530e33673d1caf82b2eaeca7fbefba602f3b4fc4d694777de615",
+      "uploadedAt": "2026-04-08T04:48:04Z",
+      "width": 128
     },
     "chartiberry": {
       "file": "Bag_Charti_Berry_Champs_Sprite.png",
@@ -40,6 +232,30 @@
       "uploadedAt": "2026-04-08T04:33:15Z",
       "width": 48
     },
+    "cheriberry": {
+      "file": "Bag_Cheri_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "aaf8b27c4f63415607e221b9f587fc2fca4eefd7",
+      "sha256": "2f3b8a102c331989221500b2b0b6351dfb5147c23b36d80ccb8cfb2f744d910d",
+      "uploadedAt": "2026-04-08T04:21:38Z",
+      "width": 48
+    },
+    "chesnaughtite": {
+      "file": "Bag_Chesnaughtite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "54914fa3d202a6cd4e1dc4a2222a6600c5288cd3",
+      "sha256": "a8bfea22321cd32cd5fb745644b28d637d1481279c4bd1d1f901ee600a8dcbb7",
+      "uploadedAt": "2026-04-08T05:08:04Z",
+      "width": 128
+    },
+    "chestoberry": {
+      "file": "Bag_Chesto_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "0be840281b7bcde6037abaec41fa5f0d9d493ad9",
+      "sha256": "947d8bc511505827aee5574885c818e39dc50e218f398e986751a099bb0b8933",
+      "uploadedAt": "2026-04-08T04:22:14Z",
+      "width": 48
+    },
     "chilanberry": {
       "file": "Bag_Chilan_Berry_Champs_Sprite.png",
       "height": 48,
@@ -47,6 +263,14 @@
       "sha256": "ef5089e27a72879de3513276b13d84ffe9b48c9dc00b0a4c7b666d2afc206a75",
       "uploadedAt": "2026-04-08T04:35:08Z",
       "width": 48
+    },
+    "chimechite": {
+      "file": "Bag_Chimechite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "f41167deb4e5c42d220d320f88a21d810690198f",
+      "sha256": "8ccb6e580edaac07bd13c62e170db3ae628d8b546c93a67e73f08035d5ebec67",
+      "uploadedAt": "2026-04-08T05:11:46Z",
+      "width": 128
     },
     "choicescarf": {
       "file": "Bag_Choice_Scarf_Champs_Sprite.png",
@@ -64,6 +288,14 @@
       "uploadedAt": "2026-04-08T04:30:25Z",
       "width": 48
     },
+    "clefablite": {
+      "file": "Bag_Clefablite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "151f66842cdf2807bc0baf954bcd7f33012a4b8d",
+      "sha256": "0b073375424e05edf6fefab72205ec775f37625e41ec14bb2fd5062c002f719b",
+      "uploadedAt": "2026-04-08T05:00:46Z",
+      "width": 128
+    },
     "cobaberry": {
       "file": "Bag_Coba_Berry_Champs_Sprite.png",
       "height": 48,
@@ -80,6 +312,38 @@
       "uploadedAt": "2026-04-08T04:34:20Z",
       "width": 48
     },
+    "crabominite": {
+      "file": "Bag_Crabominite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "b8ef44dbcf1055a299ff7a8eef5445aed3d85c76",
+      "sha256": "9c8168fe6c7c55956854e06f6c57f3ddf3276dee1004f1b2b1ac310c34911f99",
+      "uploadedAt": "2026-04-08T05:13:24Z",
+      "width": 128
+    },
+    "damprock": {
+      "file": "Bag_Damp_Rock_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "cf781bb773d4ede5240744a58c0d91810df0d82f",
+      "sha256": "5b0c7943a788f1780bb390aef08abf5b3fe230aac3f60a97ab4db457759cf8e0",
+      "uploadedAt": "2026-06-17T18:17:00Z",
+      "width": 48
+    },
+    "delphoxite": {
+      "file": "Bag_Delphoxite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "cd99f2f1230209cc726836fb335b8550c999b2b3",
+      "sha256": "8b00556ab1b87087281bd5bfc41eeedcedab8b0ca694bb3b3f4e320e18026713",
+      "uploadedAt": "2026-04-08T05:08:37Z",
+      "width": 128
+    },
+    "dragalgite": {
+      "file": "Bag_Dragalgite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "2ed78fbacbfcea8540e5a1bf9bfd2afb125bb049",
+      "sha256": "1cd5ec7e9033e6079a8fc241cfd330a493325916d973894267867696804e9f23",
+      "uploadedAt": "2026-06-17T18:07:07Z",
+      "width": 128
+    },
     "dragonfang": {
       "file": "Bag_Dragon_Fang_Champs_Sprite.png",
       "height": 48,
@@ -87,6 +351,62 @@
       "sha256": "e932a07f238989ddf5146a12215c03ad51c52d91da5d7e72a87c0d2a21ac3e3e",
       "uploadedAt": "2026-04-08T05:25:22Z",
       "width": 48
+    },
+    "dragoninite": {
+      "file": "Bag_Dragoninite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "be6f75299f3e943d22ec0e1f6aa50b91062b4a78",
+      "sha256": "4db0bdb83909e5fd4b8f1d0613bcf96e0e7d59445d970454bb5e84344c92341c",
+      "uploadedAt": "2026-04-08T05:03:04Z",
+      "width": 128
+    },
+    "drampanite": {
+      "file": "Bag_Drampanite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "28b49fe2a023fec079b5b78ce8a25ed9c3c2e740",
+      "sha256": "f5fa79876733a78256ab3393168ada0f2e002709acf61f57d2f2fa6e6febd7a0",
+      "uploadedAt": "2026-04-08T05:11:02Z",
+      "width": 128
+    },
+    "eelektrossite": {
+      "file": "Bag_Eelektrossite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "8b138d5fcd6973f82b19d693a31f7ab238d16292",
+      "sha256": "a5073d336ccbf13866e971474cf212e98367d53d0d445e7fc8a5477994bc1552",
+      "uploadedAt": "2026-06-17T18:07:24Z",
+      "width": 128
+    },
+    "ejectbutton": {
+      "file": "Bag_Eject_Button_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "0d377fad2d19be5edac806d7a25a15906c58cb68",
+      "sha256": "293d857b510e850cbc684089b0198d799cd2f2569fd14a72ba9921e45029d674",
+      "uploadedAt": "2026-09-09T06:16:35Z",
+      "width": 48
+    },
+    "electricseed": {
+      "file": "Bag_Electric_Seed_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "fc4924fafcc2f0587e2a7a926624bc1f57c7b0d9",
+      "sha256": "987a87fb50811a46cd1c72b376e78db4e1d418d52c6c80f14312d0c617d2859c",
+      "uploadedAt": "2026-09-09T06:16:37Z",
+      "width": 48
+    },
+    "emboarite": {
+      "file": "Bag_Emboarite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "429dd9e59df55f1ed7f267a715a8268da0aca904",
+      "sha256": "4781e94bafd1198ab3b80671aef4fdd9ee093f1ea5bdb1e99c6333e6d8e0158f",
+      "uploadedAt": "2026-04-08T05:05:52Z",
+      "width": 128
+    },
+    "excadrite": {
+      "file": "Bag_Excadrite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "cd6857576eaf15c8d4a9f1786513ffc3d124883c",
+      "sha256": "92cb43da7909fc4182264d68c41c308e50900786daccdd131cdf94ca9ceb46d0",
+      "uploadedAt": "2026-04-08T05:06:45Z",
+      "width": 128
     },
     "expertbelt": {
       "file": "Bag_Expert_Belt_Champs_Sprite.png",
@@ -104,6 +424,150 @@
       "uploadedAt": "2026-04-08T05:27:40Z",
       "width": 48
     },
+    "falinksite": {
+      "file": "Bag_Falinksite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "3c307dc99ad907ad2a841c80b6fa55acbc05bd2b",
+      "sha256": "486a5b159f0797a1230451f66812a307d139b1d1cde430dbf6b2ba10178b4b2b",
+      "uploadedAt": "2026-06-17T18:07:41Z",
+      "width": 128
+    },
+    "feraligite": {
+      "file": "Bag_Feraligite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "07c14c4d94c45773fefc42f2f85dbcc09740ee1e",
+      "sha256": "47ddc55ff46cb81887ff3a0f1d95692786ab77d4b732032d8f6baf78d60bc1d5",
+      "uploadedAt": "2026-04-08T05:04:14Z",
+      "width": 128
+    },
+    "floettite": {
+      "file": "Bag_Floettite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "98474cd5d2c2592c8e724341bb8fe40b58631c85",
+      "sha256": "e4e3d75ecb4b09e0725ba62090e9fb4ea7c3b76c77381738017499758f0f7a25",
+      "uploadedAt": "2026-04-08T05:09:48Z",
+      "width": 128
+    },
+    "focusband": {
+      "file": "Bag_Focus_Band_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "ba6a633ca305fdbc509908b060d223c513be7fdc",
+      "sha256": "bfb54639520d7a916054095b402394bad5a6c284c9d113f3e485709e0e569f7c",
+      "uploadedAt": "2026-04-08T05:17:45Z",
+      "width": 48
+    },
+    "focussash": {
+      "file": "Bag_Focus_Sash_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "834f924b56bba3f9adf1101146cde5aadeebf93a",
+      "sha256": "6b0ac08ec95300ada483cd78cbc7fe63057742bd9f19534a1615f48d5aab9012",
+      "uploadedAt": "2026-04-08T05:26:38Z",
+      "width": 48
+    },
+    "froslassite": {
+      "file": "Bag_Froslassite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "1fcedb32a22843376e66a63468014641c7a38dac",
+      "sha256": "6537c4990893b9d1bc995a4e540138f72fd542086ee45de26283b6457e1864c6",
+      "uploadedAt": "2026-04-08T05:05:19Z",
+      "width": 128
+    },
+    "galladite": {
+      "file": "Bag_Galladite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "c203b538a76e4cb8c22e0d021e7173a0800292d1",
+      "sha256": "9ec62c00d1bf9b005a0a3d7a1b342337c0f739bb16d3992e4d7d34ef88ae207e",
+      "uploadedAt": "2026-04-08T04:54:12Z",
+      "width": 128
+    },
+    "garchompite": {
+      "file": "Bag_Garchompite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "ca5a5d95dce78622ae7e8e919dc004362eb025b9",
+      "sha256": "28f636b2ee633e8a48068046357b6a7658f903dda12cae4c0ac62472d0ef1789",
+      "uploadedAt": "2026-04-08T04:52:18Z",
+      "width": 128
+    },
+    "garchompitez": {
+      "file": "Bag_Garchompite_Z_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "3470cd21e8ff82cca4cd5650df8c31e79c0251a2",
+      "sha256": "17b520baaa45785b9b1c3bc196e634a3ed92e212f24464af68ee28e3f3500a24",
+      "uploadedAt": "2026-09-09T06:18:19Z",
+      "width": 128
+    },
+    "gardevoirite": {
+      "file": "Bag_Gardevoirite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "8216c8e1824297ee5baa8b2098ac0657fdbb8368",
+      "sha256": "15e21351eccdb699f15784bb7497d47b79ee451463741419e2e72690be18b856",
+      "uploadedAt": "2026-04-08T04:38:07Z",
+      "width": 128
+    },
+    "gengarite": {
+      "file": "Bag_Gengarite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "490aedd9877333e0811c9aedfe279e13d04b1c33",
+      "sha256": "6b7228ec0f2800c8503e0c2e31c4429700030cb8ae857ec992d9c65e3920f7d2",
+      "uploadedAt": "2026-04-08T04:37:18Z",
+      "width": 128
+    },
+    "glalitite": {
+      "file": "Bag_Glalitite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "68a28ec11cd5f33f5275beef2c69d9d1a245e989",
+      "sha256": "07286de78546a43b0a72387288eb6884e821a1351209fb5568d4f369cf39be1e",
+      "uploadedAt": "2026-04-08T04:57:18Z",
+      "width": 128
+    },
+    "glimmoranite": {
+      "file": "Bag_Glimmoranite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "3d7ebbdb602f63a889584f11d49f9b6f638e37c5",
+      "sha256": "772c0239f3e88e4d4e34bac3c344f81bfb5d2293fb83d1d71df7276e7c00835f",
+      "uploadedAt": "2026-04-08T05:14:20Z",
+      "width": 128
+    },
+    "golisopite": {
+      "file": "Bag_Golisopite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "1d3869cae44f71247fe497f380fd8ede935a8b16",
+      "sha256": "fb37ca744407d1cef9c19f24dc342d0856fcdc7cde26443577eba6c7eabe76ad",
+      "uploadedAt": "2026-09-09T06:18:21Z",
+      "width": 128
+    },
+    "golurkite": {
+      "file": "Bag_Golurkite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "ce6999b22706fce2aaa8deed6737b61a1bf13f2f",
+      "sha256": "35f2f6d8c014f72dafe21d27da3616ec6a6a93199bf150afa622e94f33a24aa6",
+      "uploadedAt": "2026-04-08T05:12:30Z",
+      "width": 128
+    },
+    "grassyseed": {
+      "file": "Bag_Grassy_Seed_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "f72014518fb5bebef48949f46f98430b5b1ce5a9",
+      "sha256": "fc14bb8ed8ebf66ba1d34480c05d6b190df482d264c20a6ba89536bf8d90701d",
+      "uploadedAt": "2026-09-09T06:18:21Z",
+      "width": 48
+    },
+    "greninjite": {
+      "file": "Bag_Greninjite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "603259bdb1a61adbc14e0380f0f2aae3abd22063",
+      "sha256": "3dd221fbd0bff89813f323ed177398426a29ef518b1e2c14fca041d766f8f7c1",
+      "uploadedAt": "2026-04-08T05:09:12Z",
+      "width": 128
+    },
+    "gyaradosite": {
+      "file": "Bag_Gyaradosite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "8ac1a2990510dec064350d6a985447a86a034d45",
+      "sha256": "2a6e27638434d672308e42a7297d8e4ec5b2f8ef9bc0465320227e587c7061c4",
+      "uploadedAt": "2026-04-08T04:47:04Z",
+      "width": 128
+    },
     "habanberry": {
       "file": "Bag_Haban_Berry_Champs_Sprite.png",
       "height": 48,
@@ -120,6 +584,46 @@
       "uploadedAt": "2026-04-08T05:20:11Z",
       "width": 48
     },
+    "hawluchanite": {
+      "file": "Bag_Hawluchanite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "d92377dad5223585e4a20ed7d5faf476dd2d99a7",
+      "sha256": "10fb7f9543b1cd2a8597583c997db9b6d79154bbf6a4fd3c7fd6a8237d0f19a7",
+      "uploadedAt": "2026-04-08T05:10:25Z",
+      "width": 128
+    },
+    "heatrock": {
+      "file": "Bag_Heat_Rock_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "0484be02a8c830c019e5de2dd1bf5f3fef069c40",
+      "sha256": "fda787f47c93889a458e1a2225a7499c14e0a44c61c49c456e901bdb45a90627",
+      "uploadedAt": "2026-06-17T18:17:27Z",
+      "width": 48
+    },
+    "heracronite": {
+      "file": "Bag_Heracronite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "0d8a2cc3ca1b32e3601b4ef097fb283b687ace6a",
+      "sha256": "7e9b9d510fe5d44ca562eefa28dc1be2153654fbd2403455fe678650cdcfbbf2",
+      "uploadedAt": "2026-04-08T04:49:30Z",
+      "width": 128
+    },
+    "houndoominite": {
+      "file": "Bag_Houndoominite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "50d32b493a15187ca60529fe5fee849292b1c153",
+      "sha256": "e913da28943bc4306e010714859d3503f35a02f044f1e6a75a8f8c8070492894",
+      "uploadedAt": "2026-04-08T04:41:17Z",
+      "width": 128
+    },
+    "icyrock": {
+      "file": "Bag_Icy_Rock_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "2d8066d46c812c279c5088c03f5da670ab7fee37",
+      "sha256": "596b5364dedc74554b838573edd4b6ef4b6b0ae7d738f3ede517c13cb124e2b8",
+      "uploadedAt": "2026-06-17T18:17:47Z",
+      "width": 48
+    },
     "ironball": {
       "file": "Bag_Iron_Ball_Champs_Sprite.png",
       "height": 48,
@@ -127,6 +631,14 @@
       "sha256": "6ccefeb31694f51c6da0544c7fcbdf2f8d2fbfff3ec4754ee843e8a340bac41c",
       "uploadedAt": "2026-06-17T18:18:03Z",
       "width": 48
+    },
+    "kangaskhanite": {
+      "file": "Bag_Kangaskhanite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "c62bf24d1da83509557a5d504a071bbfed61f74a",
+      "sha256": "6f7d834bd1d9406e8f2f0f5d9edbfaa62801d1d5c1e030abe464ab4b531e2d31",
+      "uploadedAt": "2026-04-08T04:46:32Z",
+      "width": 128
     },
     "kasibberry": {
       "file": "Bag_Kasib_Berry_Champs_Sprite.png",
@@ -144,12 +656,92 @@
       "uploadedAt": "2026-04-08T04:30:55Z",
       "width": 48
     },
+    "kingsrock": {
+      "file": "Bag_King's_Rock_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "51df4b009fdefc0bcb4c5817277eca0b09bb29b7",
+      "sha256": "ecadb1aef2a84569fd9f8025b6bb105239bfadf302ca57c0802930d7113f5568",
+      "uploadedAt": "2026-04-08T05:16:54Z",
+      "width": 48
+    },
+    "leek": {
+      "file": "Bag_Leek_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "f595ba1a2251631876c77c2fb74a8d9907a91923",
+      "sha256": "ef48686839a2c2a6d99bf07db20a20eb377b4523fc63db2ae6cbaa7425f601c9",
+      "uploadedAt": "2026-09-09T06:18:22Z",
+      "width": 48
+    },
+    "leftovers": {
+      "file": "Bag_Leftovers_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "bdd51f0a5bf66f880b675b16217b1ccc9b8c5ce4",
+      "sha256": "e0cc9c5c2e3b4fc9aa0d7e794c986c9430aa9d4dd4aa50772ad354b3314001d9",
+      "uploadedAt": "2026-04-08T05:18:59Z",
+      "width": 48
+    },
+    "leppaberry": {
+      "file": "Bag_Leppa_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "7a147ad342427d5809dcc15e316e0b8688019227",
+      "sha256": "1b9db497dd7fdf61ce1ff02db88e5e0415b98f6277790632c1bac119b43cabd7",
+      "uploadedAt": "2026-04-08T04:24:58Z",
+      "width": 48
+    },
     "lifeorb": {
       "file": "Bag_Life_Orb_Champs_Sprite.png",
       "height": 48,
       "sha1": "8452a42a3f675438d5feab4e7d62be52e280e16b",
       "sha256": "3c6ae69eaca6ef2e004f775e3349b4409e18121033834389a16ccc536df9c5fb",
       "uploadedAt": "2026-06-17T18:18:15Z",
+      "width": 48
+    },
+    "lightball": {
+      "file": "Bag_Light_Ball_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "f685da8299e12a9efb7f45c3f6666125a66edcfb",
+      "sha256": "8e949201663561ab15226f0b79448aae67338ce7882be2c2c2a34d17ffc6f61c",
+      "uploadedAt": "2026-04-08T05:19:37Z",
+      "width": 48
+    },
+    "lightclay": {
+      "file": "Bag_Light_Clay_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "c9e7ba611e895ef3fffe5e897b18b3b0ee58f983",
+      "sha256": "762139d4c2e8f4d476953ba71a89065b17347d2c6ecddf3cdf7d5a9fab3c6aaa",
+      "uploadedAt": "2026-06-17T18:18:28Z",
+      "width": 48
+    },
+    "lopunnite": {
+      "file": "Bag_Lopunnite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "0517771cfca12e3cdd5e30f01c229b56cebab54e",
+      "sha256": "0fb37a9968b385e86ac56ac6392407ea334037e4b605d2d28e313fb6e0eda514",
+      "uploadedAt": "2026-04-08T04:59:07Z",
+      "width": 128
+    },
+    "lucarionite": {
+      "file": "Bag_Lucarionite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "2997019a9382d56a66826f7242d55cf2993fc7cb",
+      "sha256": "e5ba1ad7312afd43320117c0cc3970e9813ecfad42c10f84854dc2dd4d7fc41b",
+      "uploadedAt": "2026-04-08T04:45:26Z",
+      "width": 128
+    },
+    "lucarionitez": {
+      "file": "Bag_Lucarionite_Z_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "c8be8b12db75d6da650d6f04d490e9fe26655ec5",
+      "sha256": "9962bedb704714362c90fd9448826f870390eeae591be1b836d75c2370740a70",
+      "uploadedAt": "2026-09-09T06:18:22Z",
+      "width": 128
+    },
+    "lumberry": {
+      "file": "Bag_Lum_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "62ac9d8e487fc4ed4dfcf231bf6ceb3718fb8d00",
+      "sha256": "dba49de05f6d0d09008fa90d9313d0c68ef21ed8b88934fbf9b054fc7364d9f2",
+      "uploadedAt": "2026-04-08T04:26:40Z",
       "width": 48
     },
     "magnet": {
@@ -160,6 +752,70 @@
       "uploadedAt": "2026-04-08T05:21:39Z",
       "width": 48
     },
+    "malamarite": {
+      "file": "Bag_Malamarite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "01090708b942c76d2bcc6be59b80ed4d91f8970f",
+      "sha256": "05d7b88288667f409f9c897c554ff7ae856294ab65cbf23262cced0155f5bdee",
+      "uploadedAt": "2026-06-17T18:08:21Z",
+      "width": 128
+    },
+    "manectite": {
+      "file": "Bag_Manectite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "c1ebd413ed5e0f0da2f86d47afeaff905ddd9f52",
+      "sha256": "bf11a9ec27af15dc96855d310344a30b0fe71b9329c7b55fdd9aed39bcdfd400",
+      "uploadedAt": "2026-04-08T04:50:07Z",
+      "width": 128
+    },
+    "mawilite": {
+      "file": "Bag_Mawilite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "8e4d002e482dc1d1aecd99f637e00cfaebca8a90",
+      "sha256": "edcc32415e64057ceb6706c5109c39bfd4fcc15a50a19cddc53f008a2fc5bf1c",
+      "uploadedAt": "2026-06-17T18:08:50Z",
+      "width": 128
+    },
+    "medichamite": {
+      "file": "Bag_Medichamite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "92f2609227654de56a34769c669a416d0a627dd6",
+      "sha256": "932824125b790973fdd02b5a545a0f5e8fe92cee1de7632a48eaf4eb33cf4c84",
+      "uploadedAt": "2026-04-08T04:40:44Z",
+      "width": 128
+    },
+    "meganiumite": {
+      "file": "Bag_Meganiumite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "694dd7e176fb7a8b1334d66977da6f7f0ebfd340",
+      "sha256": "5d035427832fa4b820767ebb4e14b6849bc610360f490ec199753ea3ee790c19",
+      "uploadedAt": "2026-04-08T05:03:35Z",
+      "width": 128
+    },
+    "mentalherb": {
+      "file": "Bag_Mental_Herb_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "bfaa89fbaa6e555fc17032cc27adb644372ba6ad",
+      "sha256": "1f47a7d266282bca6e5c8caa4fcd2e6eec3410aae31bb68a844274b7f9c7b601",
+      "uploadedAt": "2026-04-08T05:16:32Z",
+      "width": 48
+    },
+    "meowsticite": {
+      "file": "Bag_Meowsticite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "cd00f16e771c7e15618cf1cdbc032aafb02c72df",
+      "sha256": "02ff2b7f89be67e83484fd852edcc278f59ed25033b9755b4d2cedc59bf2db83",
+      "uploadedAt": "2026-04-08T05:12:57Z",
+      "width": 128
+    },
+    "metagrossite": {
+      "file": "Bag_Metagrossite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "3f2472c64810249293e2d77ced264f7858e0c07f",
+      "sha256": "0b8ba1d6a553027bc8c5579a750b42b6e0c1d993e3217dd63b7f298001188147",
+      "uploadedAt": "2026-06-17T18:09:12Z",
+      "width": 128
+    },
     "metalcoat": {
       "file": "Bag_Metal_Coat_Champs_Sprite.png",
       "height": 48,
@@ -168,12 +824,28 @@
       "uploadedAt": "2026-04-08T05:18:37Z",
       "width": 48
     },
+    "metronome": {
+      "file": "Bag_Metronome_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "aea2f6729219c1e4e04af0fec6881a5843f4d2aa",
+      "sha256": "c38ddbefcf5adbeeb7d796419ad1ad82db711408c4ca32e7686bbba2f544e374",
+      "uploadedAt": "2026-06-17T18:18:45Z",
+      "width": 48
+    },
     "miracleseed": {
       "file": "Bag_Miracle_Seed_Champs_Sprite.png",
       "height": 48,
       "sha1": "67b7f34364f92c99cc54f241f570d8935b530147",
       "sha256": "18a7d4b95e19d1131ec3d79d514b8d7782219c8ae28be624c0bd7a5cce82de09",
       "uploadedAt": "2026-04-08T05:20:47Z",
+      "width": 48
+    },
+    "mistyseed": {
+      "file": "Bag_Misty_Seed_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "906148d24ef977b1d48d170d34198ad18683e675",
+      "sha256": "6229d57f58d4d47f4b5b039e9622e852680e2d77f582441edb94b3bc7c9ab772",
+      "uploadedAt": "2026-09-09T06:18:23Z",
       "width": 48
     },
     "muscleband": {
@@ -200,12 +872,28 @@
       "uploadedAt": "2026-04-08T05:23:31Z",
       "width": 46
     },
+    "normalgem": {
+      "file": "Bag_Normal_Gem_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "3ad2cd723e30225d9d5a6600b0e6568382804fae",
+      "sha256": "4b38c803058af8e7b135b73bb48df5208e0d86443d68ef667ae2551342ea7b8e",
+      "uploadedAt": "2026-09-09T06:18:59Z",
+      "width": 48
+    },
     "occaberry": {
       "file": "Bag_Occa_Berry_Champs_Sprite.png",
       "height": 48,
       "sha1": "0d89617a6613780e7df5da311370ce6a9cf1f907",
       "sha256": "f8a6ebbcb1d165ac326747f5695d2077222d0c484b6788ea7db6e9f8dfbf555a",
       "uploadedAt": "2026-04-08T04:27:34Z",
+      "width": 48
+    },
+    "oranberry": {
+      "file": "Bag_Oran_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "a9e3c5b4e7ece06093eb25c4633f2c4657a8a46e",
+      "sha256": "17fa3e94f6864c22e3969373ddb59b971e9f3292fa8f5cccc4e6d879e831984a",
+      "uploadedAt": "2026-04-08T04:25:20Z",
       "width": 48
     },
     "passhoberry": {
@@ -224,12 +912,100 @@
       "uploadedAt": "2026-04-08T04:32:18Z",
       "width": 48
     },
+    "pechaberry": {
+      "file": "Bag_Pecha_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "f5690e4174daba16eddae34b05b2aee18ada15d9",
+      "sha256": "6de8b5e405a86e080e83aa158720fa982c41797db493c09d6c1d1c499f02ffe1",
+      "uploadedAt": "2026-04-08T04:22:37Z",
+      "width": 48
+    },
+    "persimberry": {
+      "file": "Bag_Persim_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "a07cfaace4b5355641668419eb12d009ea6442ea",
+      "sha256": "36783a41c5171427e766b24b3554fc89e33828cd2c40b319fd5255226ffe27b5",
+      "uploadedAt": "2026-04-08T04:25:55Z",
+      "width": 48
+    },
+    "pidgeotite": {
+      "file": "Bag_Pidgeotite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "bbb2e7ef4131cb95cd63d61b644317f7aa5eba5f",
+      "sha256": "f0d19959fb346893c98a8b9d73be7778dbc80db6bb4887963ed7f36b6ee5f490",
+      "uploadedAt": "2026-04-08T04:56:41Z",
+      "width": 128
+    },
+    "pinsirite": {
+      "file": "Bag_Pinsirite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "1b87c71812e8a7c89ddd527e48d653b90ecbaf0c",
+      "sha256": "5a860d6454e41069a53ce4fb70a964938fc25c12d309a0bdf829e2176d6743c3",
+      "uploadedAt": "2026-04-08T04:44:11Z",
+      "width": 128
+    },
     "poisonbarb": {
       "file": "Bag_Poison_Barb_Champs_Sprite.png",
       "height": 48,
       "sha1": "eaebe4132a0602f00d421a09b4f2d48421d2fea8",
       "sha256": "3a01d112a3d9caa721c15da558678779bf8cbf7f3477e523504102a5f2761766",
       "uploadedAt": "2026-04-08T05:22:48Z",
+      "width": 48
+    },
+    "psychicseed": {
+      "file": "Bag_Psychic_Seed_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "e67cfff65b92d9263b9bc526580cb17cdfeefd64",
+      "sha256": "f9badefe77916a34333b85f2725159c9ef76991129cdfb2f85cffab8ba5094aa",
+      "uploadedAt": "2026-09-09T06:18:57Z",
+      "width": 48
+    },
+    "pyroarite": {
+      "file": "Bag_Pyroarite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "e5043a4cb9e59aec889a3d8dc8b15e4b351c06ea",
+      "sha256": "703f02f5d08a608944e2c7b3d4c3e20a8d272c111d5380b02fd2750cc48e3abb",
+      "uploadedAt": "2026-06-17T18:09:42Z",
+      "width": 128
+    },
+    "quickclaw": {
+      "file": "Bag_Quick_Claw_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "6971b5d74dce6a48024905275f12e36936c6e18b",
+      "sha256": "0ce184d7996f95ddbe79c2bd612ad914359175858a0e6f06f73ab3fbf0b7d127",
+      "uploadedAt": "2026-04-08T05:16:12Z",
+      "width": 48
+    },
+    "raichunitex": {
+      "file": "Bag_Raichunite_X_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "ef38aaef898b88918af82a1418b482038498e045",
+      "sha256": "7f9a5f34494b53212f75896b032fffb1827889640c159677caa3fef5c3f4837f",
+      "uploadedAt": "2026-06-17T18:12:18Z",
+      "width": 128
+    },
+    "raichunitey": {
+      "file": "Bag_Raichunite_Y_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "cb2ef1cc8ee7c8ff615910c7661f7008d8c4c111",
+      "sha256": "ba728d15a198859a5e1aca4947d930898ae9f17e359def86634278adbc4efbec",
+      "uploadedAt": "2026-06-17T18:13:07Z",
+      "width": 128
+    },
+    "rawstberry": {
+      "file": "Bag_Rawst_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "e462a694db95e58bebf540a42e2100fe63416747",
+      "sha256": "d904a2d67a6edf9b45e1ed9b1b694539c1f44c057420d960c986972eac2eac84",
+      "uploadedAt": "2026-04-08T04:24:19Z",
+      "width": 48
+    },
+    "redcard": {
+      "file": "Bag_Red_Card_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "3a096aec0745cd9c5969d0e8a01e8add23b33315",
+      "sha256": "1e80016b69d6a660634de6af64d6970442ebfa1236c004ad016870b8804a852b",
+      "uploadedAt": "2026-09-09T06:18:55Z",
       "width": 48
     },
     "rindoberry": {
@@ -240,6 +1016,14 @@
       "uploadedAt": "2026-04-08T04:29:17Z",
       "width": 48
     },
+    "rockyhelmet": {
+      "file": "Bag_Rocky_Helmet_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "79224d52cbf8c5575cd3bf0c56477c86823c6f36",
+      "sha256": "23df9b6913ba95ea940c5d7999c3209710a1579fccd849725407ed43cbf5469d",
+      "uploadedAt": "2026-09-09T06:18:51Z",
+      "width": 48
+    },
     "roseliberry": {
       "file": "Bag_Roseli_Berry_Champs_Sprite.png",
       "height": 48,
@@ -248,12 +1032,100 @@
       "uploadedAt": "2026-04-08T04:35:49Z",
       "width": 48
     },
+    "sablenite": {
+      "file": "Bag_Sablenite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "0005258f0f31cac4c6005329ece709a15f35f2ff",
+      "sha256": "285ef507d240a56a892cd24257fb8c1ce922c7414f098094ff1f9dbeac65cac9",
+      "uploadedAt": "2026-04-08T04:53:07Z",
+      "width": 128
+    },
+    "salamencite": {
+      "file": "Bag_Salamencite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "f304d3d6f80f32c0f609b1b3a2f49e4b19a88d24",
+      "sha256": "9cd603390e07c75bf43a2a73dba971be75945fc7c2fa360622fb5805df86d28c",
+      "uploadedAt": "2026-09-09T06:18:48Z",
+      "width": 128
+    },
+    "sceptilite": {
+      "file": "Bag_Sceptilite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "e0ac4dd3cd3f8214255353d86421eae24ed77b88",
+      "sha256": "fa06496b3cac889d20e726eb9d2d728c2ae6a83e54d10cdc11287fba04e4ed84",
+      "uploadedAt": "2026-06-17T18:13:51Z",
+      "width": 128
+    },
+    "scizorite": {
+      "file": "Bag_Scizorite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "89b447d307806a94add80d4d3a8256ddcfd6bff6",
+      "sha256": "f8466b4e9f7ec76fedda3ff90577f03b9982c01154c3b7758c1524d5fd150814",
+      "uploadedAt": "2026-04-08T04:43:10Z",
+      "width": 128
+    },
+    "scolipite": {
+      "file": "Bag_Scolipite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "37777671461e23e1ca45b752325f5b2de428de71",
+      "sha256": "8b5c7685318995789b98852b797c2ba442acebefbeb9b1911d63de72bbc95757",
+      "uploadedAt": "2026-06-17T18:14:10Z",
+      "width": 128
+    },
+    "scopelens": {
+      "file": "Bag_Scope_Lens_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "601d7e0cda39d058fb83b8df99c2c0216f9e1426",
+      "sha256": "532e805a6114cc06a6bf84453eff9709982b6bb0c054a8c185bdbf23bad4bc96",
+      "uploadedAt": "2026-04-08T05:18:16Z",
+      "width": 48
+    },
+    "scovillainite": {
+      "file": "Bag_Scovillainite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "9b5364773bd3f2a3684c124cf6c71cdd33dbe717",
+      "sha256": "d10143e376e4ae213a1f68d5f5af3fb769c87ed0b29daa59d33a6fb948a49f8f",
+      "uploadedAt": "2026-04-08T05:13:53Z",
+      "width": 128
+    },
+    "scraftinite": {
+      "file": "Bag_Scraftinite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "a4b7ef5f710640fe5b2eb2cfdd87fd14bdb7c35c",
+      "sha256": "d96ad97c4ad3bfb7ea1bf97deb97655f852ec90a8f731c7150aae1181d859683",
+      "uploadedAt": "2026-06-17T18:15:07Z",
+      "width": 128
+    },
     "sharpbeak": {
       "file": "Bag_Sharp_Beak_Champs_Sprite.png",
       "height": 48,
       "sha1": "e1c6afe6ba57d464ae926d34de5503480bc20332",
       "sha256": "a9e2e12d0ace71099fe5ca3768f7bb94de6ee7823b86c6746ddc0065334d7b85",
       "uploadedAt": "2026-04-08T05:22:28Z",
+      "width": 48
+    },
+    "sharpedonite": {
+      "file": "Bag_Sharpedonite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "a63a7bfcca9a5f4b3b9e824c9f6b4812c6e05010",
+      "sha256": "4564968c6825e21086a7488750505b917798770f0f1444c93622f69ad33feaf5",
+      "uploadedAt": "2026-04-08T04:55:19Z",
+      "width": 128
+    },
+    "shedshell": {
+      "file": "Bag_Shed_Shell_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "8c5df045707db02204daaae16b24494e7460a9b5",
+      "sha256": "e48b4b5991e433c9fd8fa1707a5dee7451fe2b72e97906254bef0a7aa2386986",
+      "uploadedAt": "2026-06-17T18:19:08Z",
+      "width": 48
+    },
+    "shellbell": {
+      "file": "Bag_Shell_Bell_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "4c281d276f464c97f4919092a6e4b7ed94145bdc",
+      "sha256": "f2ed740101dda5463a1598b206666a6ccbb8383232fb01d846845c88ff842892",
+      "uploadedAt": "2026-04-08T05:26:05Z",
       "width": 48
     },
     "shucaberry": {
@@ -280,6 +1152,38 @@
       "uploadedAt": "2026-04-08T05:17:23Z",
       "width": 48
     },
+    "sitrusberry": {
+      "file": "Bag_Sitrus_Berry_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "431c97caedf5c3dfb3bbd1ee02f40674c0d032bb",
+      "sha256": "dbd9ff05ec19337f3c8642d7be3bdb0b7eca6df45f34b7b854f4f4a33b86e9cf",
+      "uploadedAt": "2026-04-08T04:27:01Z",
+      "width": 48
+    },
+    "skarmorite": {
+      "file": "Bag_Skarmorite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "38be47439cb1b062bd0d45820f3033c0a89e0c96",
+      "sha256": "097c24755beebc838146d66afbf686731c7e78805c81382054180cbb95f0d655",
+      "uploadedAt": "2026-04-08T05:04:43Z",
+      "width": 128
+    },
+    "slowbronite": {
+      "file": "Bag_Slowbronite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "31b7bb0e0f8962f7e5a1024d553e805badd5b879",
+      "sha256": "2df52091bbfa9c6f21db6c2852cd87b2687f96b96d763f4144edfd2883700b65",
+      "uploadedAt": "2026-04-08T04:55:48Z",
+      "width": 128
+    },
+    "smoothrock": {
+      "file": "Bag_Smooth_Rock_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "9e379cfd4817e02f94c384001fc20c6abcec253c",
+      "sha256": "7f5f4735b00e3afc5451822edf70a8429d181a6cc0a0deb54e163c2e6a0afad3",
+      "uploadedAt": "2026-06-17T18:19:19Z",
+      "width": 48
+    },
     "softsand": {
       "file": "Bag_Soft_Sand_Champs_Sprite.png",
       "height": 48,
@@ -296,12 +1200,52 @@
       "uploadedAt": "2026-04-08T05:23:51Z",
       "width": 48
     },
+    "staraptite": {
+      "file": "Bag_Staraptite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "6d08a71b3e53fb6f20d0f8dafe6631bb104d1733",
+      "sha256": "4773706ef615d0b2a6102025d2959c22455d39879bdc634bbd303fbdb3a523d8",
+      "uploadedAt": "2026-08-22T12:52:20Z",
+      "width": 128
+    },
+    "starminite": {
+      "file": "Bag_Starminite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "59832bd493572205277590f3c4dd4b16928c56d6",
+      "sha256": "f9566a9f0be9edb26ccc66ab0b666c466e928585f155b5990c01b0ad83ffb278",
+      "uploadedAt": "2026-04-08T05:01:46Z",
+      "width": 128
+    },
+    "steelixite": {
+      "file": "Bag_Steelixite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "5fa819f48808145844be04466c275b23df708c7e",
+      "sha256": "84936daae0ae8401f3ef14a73ed62ebf44bbabc27695054dfc949283db04e250",
+      "uploadedAt": "2026-04-08T04:56:12Z",
+      "width": 128
+    },
+    "swampertite": {
+      "file": "Bag_Swampertite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "cd374f8a96290c3728267f68bda0b3c86b696b0f",
+      "sha256": "c22e450832862ac2a6e46905c985ce31f85baaf83ee86d868a381235629b5549",
+      "uploadedAt": "2026-06-17T18:15:33Z",
+      "width": 128
+    },
     "tangaberry": {
       "file": "Bag_Tanga_Berry_Champs_Sprite.png",
       "height": 48,
       "sha1": "978034ab5b3cdb2cbc801165ee0aa107ffcdadc3",
       "sha256": "0f58df6f63a9adcbba6b347994f56cffb294aa81d5d35106ea6c2aaf76802f0b",
       "uploadedAt": "2026-04-08T04:32:58Z",
+      "width": 48
+    },
+    "terrainextender": {
+      "file": "Bag_Terrain_Extender_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "3d3a8cc810fce73ee7ed25b9f1bbf4b89a4fb03a",
+      "sha256": "7545fff4a2a993a1c213d90ffcad4017dcfd0a47b8da7d0921d4dd83f0da6698",
+      "uploadedAt": "2026-09-09T06:18:45Z",
       "width": 48
     },
     "twistedspoon": {
@@ -312,12 +1256,52 @@
       "uploadedAt": "2026-04-08T05:24:08Z",
       "width": 48
     },
+    "tyranitarite": {
+      "file": "Bag_Tyranitarite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "697003f324e64ee010f742a16106d4999292cca3",
+      "sha256": "d5ae118446710d5ede12b9c31c43a6b9c65c0b471b5b1375a055812544b5a30b",
+      "uploadedAt": "2026-04-08T04:42:45Z",
+      "width": 128
+    },
+    "venusaurite": {
+      "file": "Bag_Venusaurite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "c9e81d35b1e2060fcbc25238bc0e75fbe2215352",
+      "sha256": "228e3ab5d5fd2385a5f6efe468e82394248c54b9f6ecf3b1806372f278f46240",
+      "uploadedAt": "2026-04-08T04:38:58Z",
+      "width": 128
+    },
+    "victreebelite": {
+      "file": "Bag_Victreebelite_Champs_Sprite.png",
+      "height": 128,
+      "sha1": "3ee9f16d2381da40595b7ec65d0ca507c995306c",
+      "sha256": "ff9d8c70039ef845767900582cdc3193894e37b853d497d16b191cd980dd3e0e",
+      "uploadedAt": "2026-04-08T05:01:17Z",
+      "width": 128
+    },
     "wacanberry": {
       "file": "Bag_Wacan_Berry_Champs_Sprite.png",
       "height": 48,
       "sha1": "725e36350d8a709682f75b0be613e4ec20495f6b",
       "sha256": "ca6a3c188e6644d05367a4147fb17a26122da2b08004daacae655dbd612d29d5",
       "uploadedAt": "2026-04-08T04:28:55Z",
+      "width": 48
+    },
+    "whiteherb": {
+      "file": "Bag_White_Herb_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "462d621c26513504c085987ed90c5605192dbe13",
+      "sha256": "ec1cea796670a6a654756143cb5883432d651f5a5ffc1d6e9b5dd9df4a348496",
+      "uploadedAt": "2026-04-08T05:15:52Z",
+      "width": 48
+    },
+    "widelens": {
+      "file": "Bag_Wide_Lens_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "8c0f08f960dea664bc57776c8d151dc278548eed",
+      "sha256": "e9d6dd00add615b5c1e7152104830a5ea1668f5a2ca3c5d2662325e0c476b9c8",
+      "uploadedAt": "2026-06-17T18:19:34Z",
       "width": 48
     },
     "wiseglasses": {
@@ -334,6 +1318,14 @@
       "sha1": "8960dd7f2a719f14d27549bbb75f8c7fbb9fb280",
       "sha256": "4014d678560f682bebdd124511daa0b39e587002f54e476e7ee8b97c0d22a902",
       "uploadedAt": "2026-04-08T04:29:34Z",
+      "width": 48
+    },
+    "zoomlens": {
+      "file": "Bag_Zoom_Lens_Champs_Sprite.png",
+      "height": 48,
+      "sha1": "e68cf71b5fe4f1a0aa9b4342d932b66713505e3f",
+      "sha256": "07b7ee1f81f1a7809b1f5182fe96c82e59633843970d01c3f3437e47692adbdf",
+      "uploadedAt": "2026-06-17T18:20:08Z",
       "width": 48
     }
   },

@@ -79,6 +79,26 @@ area: SP 구간 표
 
 **위반 시:** "이 결과의 최소 SP로 맞춘다"는 조정의 뜻이 깨져, 낮은 결과를 골랐는데 다른(더 좋은) 결과가 적용되거나 같은 비용의 낮은 결과가 목록에 중복으로 남는다. 최소 SP는 새 판정 규칙 없이 기존 변형 스윕·쌍 계단 산출물로만 계산한다.
 
+### INV-261121-party-slice-key-role: AppState에 필드를 더하면 `KEY_ROLE`에 slot·transient·global 역할을 정하고, 칸 전환은 종 변경 경로를 거치지 않고 조각 교체로만 한다
+> area: SP 구간 표 · 출처: docs/raw/feature/party-pokepaste/adr.md#결정-1 · 코드: `src/app/party.ts:KEY_ROLE`, `src/app/party.ts:CLEARED_TRANSIENT`, `src/app/state.ts:enterSlice` · 봉인: `src/app/party.test.ts` "칸 조각 키", `src/app/state-party.test.ts` "전환은 고정을 풀지 않고 보관함에 그대로 둔다"
+
+**위반 시:** 세트 딸림 필드를 global로 두면 칸을 바꿔도 이전 칸 값이 따라오고(칸 사이 상태가 섞임), 일회성 연출 신호를 slot으로 두면 보관·저장되어 다른 칸에서 깜빡임이 재생된다. 칸 전환이 종 변경 액션을 타면 그 칸의 컷 고정이 풀린다.
+
+### INV-261121-party-generation-global: 세대 카운터(`generation`·`speciesGeneration`)는 칸 조각에 넣지 않는 전역 단조값이며 칸 전환·교체·복원 때마다 +1 한다
+> area: SP 구간 표 · 출처: docs/raw/feature/party-pokepaste/adr.md#결정-1 · 코드: `src/app/party.ts:KEY_ROLE`, `src/app/state.ts:enterSlice` · 봉인: `src/app/state-party.test.ts` "세대를 올리고 종 변경 세대로 치며 일회성 신호를 비운다, 탭은 그대로(R5)"
+
+**위반 시:** 실행기는 세대가 같으면 재계산을 건너뛰므로, 세대를 칸별로 보관·복원하거나 전환 때 올리지 않으면 다른 칸 세트로 바뀌어도 이전 칸 결과가 그대로 남는다.
+
+### INV-261121-custom-delete-lock-cascade: 커스텀 상대 삭제는 최상위(활성 칸)뿐 아니라 보관함 모든 칸의 그 상대 대상 고정까지 풀고, 고정이 모두 사라진 칸은 고정 상태를 초기화한다
+> area: SP 구간 표 · 출처: docs/raw/feature/party-pokepaste/adr.md#결정-2 · 코드: `src/app/state.ts:dropCustomLocks`, `src/app/state.ts:releaseSlice` · 봉인: `src/app/state-party.test.ts` "remove-custom-target 고정 연쇄(R12·A3)"
+
+**위반 시:** 비활성 칸에 사라진 상대를 가리키는 고정이 남아, 그 칸으로 전환하거나 저장을 복원할 때 대상 없는 고정이 남은 SP 예산 재계산을 왜곡하거나 고정 순번·기준 갈래가 남은 고정과 어긋난다.
+
+### INV-261121-persist-fail-closed: 저장 파티는 버전·JSON·모양 검사 중 하나라도 실패하면 통째로 버리고 기본 상태로 시작하며, 저장소 접근 예외는 삼켜 메모리로만 동작한다
+> area: SP 구간 표 · 출처: docs/raw/feature/party-pokepaste/adr.md#결정-3 · 코드: `src/app/persist.ts:loadPersisted`, `src/app/persist.ts:isPersisted`, `src/app/persist.ts:savePersisted`, `src/app/persist.ts:browserStorage` · 봉인: `src/app/persist.test.ts` "읽을 수 없는 저장은 버린다(R24)"
+
+**위반 시:** 부분 검증으로 일부만 살리면 모양이 틀린 칸이 리듀서·계산에 들어가 예외로 화면이 깨지고, 저장소 예외(사생활 모드·용량 초과)를 던지면 앱이 시작되지 않는다. 형식이 바뀌면 `VERSION`을 올려 옛 저장을 버린다.
+
 ### INV-261121-speed-lock-badge-one-rule: 스피드 고정↔배지 연결은 speedLockBadge 하나로만 찾는다
 > area: SP 구간 표 · 출처: docs/raw/feature/speed-bundles-pin-disable/adr.md#결정-2 · 코드: `src/cards/speedLock.ts:speedLockBadge`, `src/app/components/SpeedChart.tsx` · 봉인: `src/cards/speedLock.test.ts`
 

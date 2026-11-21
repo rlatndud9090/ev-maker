@@ -16,6 +16,8 @@ import { createDisplaySpStore } from './displaySp'
 import { abilityOf } from './myAbility'
 import type { Reveal, RevealRequest } from './reveal'
 import { initialState, moveSelections, reducer } from './state'
+import { activeSlotEmpty } from './party'
+import { usePartyPersistence } from './persist'
 import { useExecutor } from './useExecutor'
 import { LockUiContext, lockUiValue } from './lockContext'
 import { useLockRuntime } from './lockRuntime'
@@ -23,6 +25,8 @@ import { baseLockedSp } from './spLimit'
 import { CustomTargetPanel } from './components/CustomTargetPanel'
 import { Popover } from './components/Popover'
 import { MySetPanel } from './components/MySetPanel'
+import { PartyBar } from './components/PartyBar'
+import { EMPTY_SLOT_TEXT } from './components/partyText'
 import { ResultBox } from './components/ResultBox'
 import { ResultPanel } from './components/ResultPanel'
 import { SpeedTab } from './components/SpeedTab'
@@ -70,14 +74,6 @@ export function ProductApp() {
   return (
     <>
     <main data-app="product" className="product">
-      <header className="product-header">
-        <h1>SP 구간 판정</h1>
-        {game && (
-          <p className="hint">
-            {game.manifest.regulation.name} · 레벨 {game.manifest.rules.level} · SP 능력치당 {game.manifest.rules.spMaxPerStat}, 합계 {game.manifest.rules.spTotal}
-          </p>
-        )}
-      </header>
       {loaded.status === 'loading' && (
         <p className="hint" role="status">
           데이터를 불러오는 중…
@@ -99,11 +95,14 @@ export function ProductApp() {
 /** 탭을 바꿔도 '포켓몬 추가'는 열린 채 고른 포켓몬을 유지한다(탭 누름은 바깥 누름이 아니다) */
 const KEEP_OPEN_ON = '[role="tab"]'
 const IGNORE_TOTAL: EvalOptions = { ignoreSpTotal: true }
+const NO_REASONS: readonly ErrorReason[] = []
 
 function Workspace({ boot }: { boot: Boot }) {
   const { game } = boot
   const regulation = game.manifest.regulation.id
   const [state, dispatch] = useReducer(reducer, regulation, initialState)
+  usePartyPersistence(state, dispatch, game)
+  const emptySlot = activeSlotEmpty(state)
   const { executor, snapshot } = useExecutor()
   // 패널은 탭마다 다른 트리에 다시 그려지므로 열림·고른 포켓몬을 여기 둔다. autoFocus = 이번 열기에서 아직 검색창에 포커스하지 않음
   const [addPanel, setAddPanel] = useState<{ open: boolean; rosterId: string | null; autoFocus: boolean }>({ open: false, rosterId: null, autoFocus: false })
@@ -307,9 +306,21 @@ function Workspace({ boot }: { boot: Boot }) {
 
   return (
     <LockUiContext.Provider value={lockUi}>
+    <header className="product-header">
+      <PartyBar state={state} game={game} dispatch={dispatch} />
+    </header>
     <div className="product-layout">
       <aside className="sidebar">
-        <MySetPanel game={game} view={meta.view} draft={draft} dispatch={dispatch} reasons={reasons} onDisplaySp={onDisplaySp} lockResolutions={lockResolutions} />
+        <MySetPanel
+          game={game}
+          view={meta.view}
+          draft={draft}
+          dispatch={dispatch}
+          reasons={emptySlot ? NO_REASONS : reasons}
+          onDisplaySp={onDisplaySp}
+          lockResolutions={lockResolutions}
+          emptySlot={emptySlot}
+        />
       </aside>
       <div className="results" ref={results}>
         <Toolbar
@@ -324,7 +335,14 @@ function Workspace({ boot }: { boot: Boot }) {
           panelId={panelId}
         />
         {metaError && <Errors title="메타 통계를 불러오지 못했습니다" lines={metaError} />}
-        {tab === 'speed' ? (
+        {emptySlot ? (
+          <div role="tabpanel" id={panelId} aria-labelledby={tabIdOf(tab)} tabIndex={0} className="empty-slot-panel" data-testid="empty-slot-panel" data-tab={tab}>
+            <p>
+              <strong>{EMPTY_SLOT_TEXT}</strong>
+            </p>
+            <p className="hint">왼쪽 설정의 종 입력에서 포켓몬을 검색하면 이 칸의 계산 결과가 나옵니다.</p>
+          </div>
+        ) : tab === 'speed' ? (
           <SpeedTab
             game={game}
             input={speedInput}

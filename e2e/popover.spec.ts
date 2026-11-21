@@ -161,7 +161,7 @@ test.describe('팝오버 1280px', () => {
     // 바깥 빈 곳 클릭 → 닫히고 버튼으로
     await button.click()
     await expect(panel).toBeVisible()
-    await page.locator('h1').click()
+    await page.locator('.my-set h2').click()
     await expect(panel).toHaveCount(0)
     await expect(button).toBeFocused()
     expect(await pageOverflow(page)).toBeLessThanOrEqual(0)
@@ -203,7 +203,7 @@ test.describe('팝오버 1280px', () => {
     // 바깥 빈 곳 클릭 → 닫히고 배지로
     await badge.click()
     await expect(pop).toBeVisible()
-    await page.locator('h1').click()
+    await page.locator('.my-set h2').click()
     await expect(pop).toHaveCount(0)
     await expect(badge).toBeFocused()
 

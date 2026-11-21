@@ -5,10 +5,10 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   HAND_POKEAPI_IDS,
-  ITEM_ICON_IDS,
   KNOWN_SAME_IMAGE,
   bagSpriteFile,
   bulbaImageInfoUrl,
+  itemIconIds,
   needsDownload,
   parseBulbaImageInfo,
   resolvePokeapiIds,
@@ -44,7 +44,12 @@ const pngIds = (dir: string) =>
     .sort()
 
 const regulations = (readProjectJson('src/data/regulations/index.json') as { regulations: { id: string }[] }).regulations
-const snapshots = regulations.map((r) => readProjectJson(`src/data/regulations/${r.id}/data.json`) as Parameters<typeof rosterOf>[0][number])
+const snapshots = regulations.map(
+  (r) => readProjectJson(`src/data/regulations/${r.id}/data.json`) as Parameters<typeof rosterOf>[0][number] & { items: Record<string, unknown> },
+)
+// gen:images가 받는 도구 = 스냅샷 도구 전체
+const ITEM_IDS = itemIconIds(snapshots)
+const snapshotItemIds = new Set(snapshots.flatMap((d) => Object.keys(d.items)))
 // gen:images와 같은 방식으로 메타(사용률) 등장 종 id를 모은다
 const metaIndex = readProjectJson('src/data/meta/index.json') as { regulations: Record<string, { file: string; month: string; match: MatchType }[]> }
 const metaIds = Object.values(metaIndex.regulations).flatMap((items) =>
@@ -205,11 +210,19 @@ describe('생성 매니페스트·번들 이미지', () => {
     for (const k of Object.keys(HAND_POKEAPI_IDS)) expect(pokemonManifest.entries[k]?.via, k).toBe('hand')
   })
 
-  it('도구 아이콘 대상 = 반감열매 18종 + 화력 도구 22종 + 스피드 배수 도구 2종(R14), 전부 받았고 앱에서 해석된다', () => {
-    expect([...ITEM_ICON_IDS].sort()).toEqual([...Object.keys(RESIST_BERRIES), ...POWER_ITEMS, 'choicescarf', 'ironball'].sort())
-    expect(itemManifest.missing).toEqual([])
-    expect(Object.keys(itemManifest.entries).sort()).toEqual(pngIds(ITEM_DIR))
-    for (const id of ITEM_ICON_IDS) {
+  it('도구 아이콘 대상 = 현재 스냅샷들의 도구 전체(파티 칸 표시용), 반감열매·화력 도구·스피드 배수 도구(R14)를 포함한다', () => {
+    expect([...ITEM_IDS]).toEqual([...snapshotItemIds].sort())
+    for (const id of [...Object.keys(RESIST_BERRIES), ...POWER_ITEMS, 'choicescarf', 'ironball']) expect(ITEM_IDS, id).toContain(id)
+  })
+
+  it('대상은 받은 것(entries)과 원천에 없는 것(missing)으로 빠짐없이 나뉘고, 받은 것은 전부 앱에서 해석된다', () => {
+    const got = Object.keys(itemManifest.entries)
+    const missed = itemManifest.missing.map((m) => m.id)
+    expect([...got, ...missed].sort()).toEqual([...ITEM_IDS])
+    expect(got.filter((id) => missed.includes(id))).toEqual([])
+    for (const m of itemManifest.missing) expect(m.reason, m.id).not.toBe('')
+    expect(got.sort()).toEqual(pngIds(ITEM_DIR))
+    for (const id of got) {
       expect(itemIconUrl(id), id).toBeTypeOf('string')
       const e = itemManifest.entries[id]
       expect(e.file).toMatch(/^Bag_.+_Champs_Sprite\.png$/)
@@ -224,7 +237,7 @@ describe('생성 매니페스트·번들 이미지', () => {
   it('없는 id·undefined는 undefined(화면은 빈 자리·가방 표지 폴백)', () => {
     expect(pokemonIconUrl('notapokemon')).toBeUndefined()
     expect(pokemonIconUrl(undefined)).toBeUndefined()
-    expect(itemIconUrl('quickclaw')).toBeUndefined()
+    expect(itemIconUrl('notanitem')).toBeUndefined()
     expect(itemIconUrl(undefined)).toBeUndefined()
   })
 
@@ -262,17 +275,16 @@ describe('R14 아이콘 대상 집합 대조(AC19)', () => {
     expect(missing).toEqual([])
   })
 
-  it('받는 목록(ITEM_ICON_IDS)은 전 레귤레이션 대상 집합의 합집합과 같다(표시하지 않는 도구는 받지 않는다)', () => {
-    const union = new Set(perRegulation.flatMap(({ targets }) => [...targets.keys()]))
-    expect([...ITEM_ICON_IDS].sort()).toEqual([...union].sort())
-    expect(Object.keys(itemManifest.entries).sort()).toEqual([...union].sort())
+  it('전 레귤레이션 판정 대상 집합(R14)은 받는 목록(스냅샷 도구 전체)의 부분집합이다', () => {
+    const union = [...new Set(perRegulation.flatMap(({ targets }) => [...targets.keys()]))]
+    expect(union.filter((id) => !ITEM_IDS.includes(id))).toEqual([])
   })
 
-  it('판정에 관여하지 않는 도구(먹다남은음식·기합의띠 등)는 받지 않고 가방 표지로 그린다', () => {
+  it('판정에 관여하지 않는 도구(먹다남은음식·기합의띠 등)도 파티 칸 표시용으로 받는 목록에 들지만, 판정 대상 집합(표시 규칙)에는 없다', () => {
     for (const id of ['leftovers', 'focussash', 'sitrusberry', 'lightclay', 'damprock', 'widelens', 'whiteherb', 'rockyhelmet']) {
-      expect(ITEM_ICON_IDS, id).not.toContain(id)
-      expect(existsSync(join(ITEM_DIR, `${id}.png`)), id).toBe(false)
-      expect(itemGlyphOf(id), id).toEqual({ kind: 'bag' })
+      if (!snapshotItemIds.has(id)) continue
+      expect(ITEM_IDS, id).toContain(id)
+      for (const { id: reg, targets } of perRegulation) expect(targets.has(id), `${reg}:${id}`).toBe(false)
     }
   })
 
@@ -285,7 +297,8 @@ describe('R14 아이콘 대상 집합 대조(AC19)', () => {
   it('받은 그림이 없는 임의 도구는 공통 가방 표지로 그린다', () => {
     for (const { id: reg, game } of perRegulation) {
       const outside = Object.keys(game.data.items).filter((id) => itemIconUrl(id) === undefined)
-      expect(outside.length, reg).toBeGreaterThan(0)
+      // 스냅샷 도구 중 그림이 없는 것은 원천에 없어 manifest.missing에 남은 것뿐이다
+      expect(outside.filter((id) => !itemManifest.missing.some((m) => m.id === id)), reg).toEqual([])
       for (const id of outside) expect(itemGlyphOf(id), `${reg}:${id}`).toEqual({ kind: 'bag' })
     }
     expect(itemGlyphOf('notanitem')).toEqual({ kind: 'bag' })
