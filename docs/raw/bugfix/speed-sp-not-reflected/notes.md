@@ -334,3 +334,7 @@ export function pinMenuView(input: {
 - **핀 메뉴 = 변동 모양 모델 + 같은 컴포넌트**: `cards pinMenuView`가 "그 선택을 실제로 건 뒤의 파생"으로 변동과 같은 모양(결과 × 성격 선택지, H 최대)의 모델을 낸다. 화면은 `AdjustMenu`(variant pin)와 `useAdjustMenu` 훅(열림·단계·포커스·위치·키보드)을 변동 팝오버와 공유한다. 고정 목록 SP는 파생 갈래 값으로 보이고 H 최대 고정에는 "H 최대" 표지를 단다.
 - 기각: 성격을 고정에 저장(▲·갈래와 이중 조작), 변동 격자 값 재사용(H 공유 합치기·교체·H 최대에서 메뉴 값과 실제 고정 값이 어긋남), 메뉴 복사(키보드·위치 규칙이 두 벌로 갈라짐), 겹치는 고정을 막기만 하기(사용자는 교체를 골랐다), `add-lock` 뒤 `set-lock-base`를 따로 보내기(세대가 두 번 오르고 중간 상태에서 자동 조정이 다른 갈래로 한 번 돈다).
 - 상세 설계: `docs/raw/bugfix/speed-sp-not-reflected/notes.md` "설계 (B)(C)".
+
+## 배포 체크 실패 (2026-11-21)
+
+- PR 브랜치의 Workers Builds가 `npx wrangler preview` 단계에서 실패했다: wrangler 설정에 `previews` 블록이 없었다(빌드 자체는 성공). `wrangler.jsonc`에 빈 `"previews": {}`를 넣었다. main 배포(`npx wrangler deploy`)와는 무관하다.
