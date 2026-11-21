@@ -407,6 +407,8 @@ async function measureItemMarks(page: Page): Promise<ItemMarkSample[]> {
   return page.evaluate(() => {
     const out: ItemMarkSample[] = []
     for (const el of document.querySelectorAll<HTMLElement>('.item-mark')) {
+      // 헤더 파티 칸의 도구 아이콘은 칸 오른쪽 아래에 겹쳐 붙이는 다른 규칙(party-pokepaste R3)
+      if (el.closest('[data-testid="party-bar"]')) continue
       const r = el.getBoundingClientRect()
       if (r.width === 0 || r.height === 0) continue
       const scope = el.closest('.speed-badge, .card-who, .detail-item, .speed-detail-head, .speed-unsupported li') ?? el.parentElement!

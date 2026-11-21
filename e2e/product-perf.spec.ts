@@ -61,6 +61,15 @@ declare global {
  * clickTab이 있으면 공격 탭 첫 카드 사건을 본 MutationObserver 콜백 안에서 바로 그 탭을 누른다.
  * 테스트 쪽 대기는 CDP 왕복만큼 늦어 "직후"가 흐려지므로 페이지 안에서 누른다.
  */
+/** 매 로드를 첫 방문으로 재도록 저장된 파티(ev-maker:party)를 지운다 */
+function clearSavedParty() {
+  try {
+    localStorage.removeItem('ev-maker:party')
+  } catch {
+    // 저장소를 못 쓰면 지울 것도 없다
+  }
+}
+
 function installProbe(clickTab: string | null) {
   const probe: Probe = { panel: [], panelAppearedAt: null, longTasks: [], pointerup: [], clickedAt: null }
   window.__probe = probe
@@ -211,6 +220,7 @@ for (const name of ['공격', '방어'] as const) {
   test(`반응성 ${name} 탭: 처음 열기·주 능력치 슬라이더 놓기 각 ${RUNS}회`, async ({ page, browser }) => {
     test.setTimeout(240_000)
     await page.addInitScript(installProbe, name === '공격' ? null : name)
+    await page.addInitScript(clearSavedParty)
     const opens: Run[] = []
     const slides: Run[] = []
     for (let i = 0; i < RUNS; i++) {
@@ -585,6 +595,7 @@ async function measureAdjustOpen(page: Page): Promise<AdjustOpen> {
 test(`컷 고정 3개(스피드·공격·H 포함 방어 쌍, 필터 밖 1건) 탭별 첫 결과 ≤ 무고정 중앙값 × ${LOCK_FIRST_RATIO_LIMIT} · Long Task ≤ ${LONG_TASK_LIMIT_MS}ms (${LOCK_RUNS}회씩 교대)`, async ({ page, browser }) => {
   test.setTimeout(600_000)
   await page.addInitScript(installProbe, null)
+  await page.addInitScript(clearSavedParty)
   await page.addInitScript(() => {
     const w = window as unknown as { __inputAt: number }
     w.__inputAt = 0

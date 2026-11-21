@@ -19,6 +19,7 @@ import { Combobox } from './Combobox'
 import { PokemonIcon } from './PokemonIcon'
 import { TAB_LABEL, meansLabel } from './text'
 import { LockList } from './LockList'
+import { EMPTY_SLOT_TEXT } from './partyText'
 import { clampSp, spLimit, type LockedSp } from '../spLimit'
 import { LOCKED_MINUS_TEXT, LOCKED_SP_TEXT, NO_OUT_PLUS_TEXT, NO_PLUS_BRANCH_TEXT, NO_NEUTRAL_BRANCH_TEXT, lockStatusText, lockedStatText, overTotalText, statusSpoken, trimsText } from './lockText'
 import './lockPanel.css'
@@ -35,6 +36,8 @@ interface Props {
   onDisplaySp: (sp: SpTable | null) => void
   /** 지금 실행 세대의 컷 고정 해석(고정이 없거나 계산 중이면 undefined) */
   lockResolutions?: ReadonlyMap<number, LockResolution>
+  /** 활성 파티 칸이 비었음(종 입력 아래 안내) */
+  emptySlot?: boolean
 }
 
 const IGNORE_TOTAL = { ignoreSpTotal: true } as const
@@ -65,7 +68,7 @@ function FieldAlerts({ game, reasons, field, set }: { game: Snapshot; reasons: r
   )
 }
 
-export function MySetPanel({ game, view, draft, dispatch, reasons, onDisplaySp, lockResolutions }: Props) {
+export function MySetPanel({ game, view, draft, dispatch, reasons, onDisplaySp, lockResolutions, emptySlot = false }: Props) {
   const uid = useId()
   const headRef = useRef<HTMLHeadingElement>(null)
   const lockUi = useLockUi()
@@ -297,6 +300,11 @@ export function MySetPanel({ game, view, draft, dispatch, reasons, onDisplaySp, 
               <PokemonIcon speciesId={speciesId} size={56} className="my-mon-icon" />
               <Combobox label="종" hideLabel index={speciesIndex} value={draft.species} placeholder="포켓몬 검색(메가 폼 포함)" labelOf={names.species.label} onCommit={onSpecies} />
             </div>
+            {emptySlot && (
+              <p className="empty-slot-hint" data-testid="empty-slot-hint">
+                {EMPTY_SLOT_TEXT}
+              </p>
+            )}
             <FieldAlerts game={game} reasons={reasons} field="species" set={set} />
             <FieldAlerts game={game} reasons={reasons} field="mega" set={set} />
           </div>

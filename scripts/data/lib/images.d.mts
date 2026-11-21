@@ -38,7 +38,7 @@ export function sameImageGroups(
   entries: Readonly<Record<string, { sha256: string }>>,
   known?: readonly (readonly string[])[],
 ): { known: string[][]; unexpected: string[][] }
-export const ITEM_ICON_IDS: readonly string[]
+export function itemIconIds(snapshots: readonly { items?: Record<string, unknown> }[]): readonly string[]
 
 export function rosterOf(
   snapshots: readonly { species: Record<string, { num: number; name?: { en?: string }; baseSpecies?: string; isMega?: boolean }> }[],

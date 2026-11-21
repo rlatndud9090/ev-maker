@@ -622,7 +622,7 @@ test.describe('배지 상세(AC7, AC10)', () => {
     // 바깥 클릭
     await badgeById(page, scarf.id).click()
     await expect(detail(page)).toBeVisible()
-    await page.locator('h1').click()
+    await page.locator('.my-set h2').click()
     await expect(detail(page)).toHaveCount(0)
     // 열린 채 다른 배지 클릭 → 그 배지 상세
     const other = list.find((b) => b.id !== scarf.id && b.speed !== scarf.speed)!
@@ -718,7 +718,7 @@ test.describe('AC7 터치(400px)', () => {
     await second.tap()
     await expect(detail(page)).toHaveCount(1)
     await expect(detail(page)).toHaveAttribute('data-badge-id', (await second.getAttribute('data-badge-id'))!)
-    await page.locator('h1').tap()
+    await page.locator('.my-set h2').tap()
     await expect(detail(page)).toHaveCount(0)
   })
 })
@@ -1020,11 +1020,13 @@ test.describe('차트에서 배분 추가(AC26)', () => {
     await expectAddedOnly()
     await page.getByRole('button', { name: '선택 비우기', exact: true }).click()
     await expectRestored()
-    // 새로고침이면 사라진다
+    // 새로고침해도 남는다(파티 저장, party-pokepaste R22)
+    const addedCount = await added.count()
+    expect(addedCount).toBeGreaterThan(0)
     await page.reload()
     await expect(page.locator('main[data-app="product"]')).toBeVisible()
     await selectTab(page, '스피드')
     await expect(badges(page).first()).toBeVisible()
-    await expect(added).toHaveCount(0)
+    await expect(added).toHaveCount(addedCount)
   })
 })
