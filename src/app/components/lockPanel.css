@@ -233,3 +233,11 @@
   grid-row: 2;
   justify-self: start;
 }
+
+/* H 최대 배분 고정 표지(단계 배지 뒤) */
+.lock-item .lock-alloc {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}

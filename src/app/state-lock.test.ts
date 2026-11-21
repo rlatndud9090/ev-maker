@@ -68,11 +68,85 @@ describe('add-lock', () => {
     expect(s.draft).toEqual(EXAMPLE_DRAFT)
   })
 
-  it('같은 (대상, 단계)는 무시하고 단계가 다르면 받는다', () => {
+  it('같은 (대상, 단계, 배분)은 무시하고, 같은 능력치의 다른 단계·다른 대상은 교체한다(seq 새로, 고정 1개)', () => {
     const s = run(start(), add(attackLock()))
     expect(reducer(s, add(attackLock()))).toBe(s)
-    const other = reducer(s, add({ ...attackLock(), stage: 'high-roll-ohko' }))
-    expect(other.locks).toHaveLength(2)
+    const stage = reducer(s, add({ ...attackLock(), stage: 'high-roll-ohko' }))
+    expect(stage.locks.map((l) => [l.seq, l.stage])).toEqual([[2, 'high-roll-ohko']])
+    const target = reducer(stage, add(attackLock('other')))
+    expect(target.locks.map((l) => [l.seq, l.target.opponentId])).toEqual([[3, 'other']])
+    const speed = run(start(), add(speedLock('a')), add(speedLock('b')))
+    expect(speed.locks.map((l) => [l.seq, l.target.opponentId])).toEqual([[2, 'b']])
+    // 배분이 다르면 같은 대상·단계라도 교체한다
+    const def = run(start(), add(defenseLock()))
+    const hMax = reducer(def, add({ ...defenseLock(), allocation: 'h-max' }))
+    expect(hMax.locks.map((l) => [l.seq, l.allocation])).toEqual([[2, 'h-max']])
+    expect(reducer(hMax, add({ ...defenseLock(), allocation: 'h-max' }))).toBe(hMax)
+  })
+
+  it('교체 규칙: H 밖 능력치가 겹치면 교체(종류가 달라도), H만 공유하는 방어 쌍은 함께 남는다', () => {
+    const pairs = run(start(), add(defenseLock('a', 'def')), add(defenseLock('b', 'spd')))
+    expect(pairs.locks.map((l) => l.stats)).toEqual([
+      ['hp', 'def'],
+      ['hp', 'spd'],
+    ])
+    const hb = reducer(pairs, add(defenseLock('c', 'def')))
+    expect(hb.locks.map((l) => [l.seq, l.target.opponentId])).toEqual([
+      [2, 'b'],
+      [3, 'c'],
+    ])
+    const bodyPress = reducer(hb, add({ ...attackLock('d'), stats: ['def'] }))
+    expect(bodyPress.locks.map((l) => [l.seq, l.kind, l.stats])).toEqual([
+      [2, 'defense', ['hp', 'spd']],
+      [4, 'attack', ['def']],
+    ])
+    expect(run(start(), add(speedLock()), add(attackLock())).locks).toHaveLength(2)
+  })
+
+  it('교체는 액션 한 번: 세대 +1 한 번·자동 조정 대기, 첫 고정 직전 성격 유지, 다시 고정되는 S는 초안 값 그대로', () => {
+    const s = run(start(), add(speedLock('a')), commit('def', 12, { spe: 20 }), { type: 'set-draft', draft: { ...start().draft, nature: 'adamant' } })
+    expect(s.draft.sp.spe).toBe('32')
+    const next = reducer(s, { type: 'add-lock', lock: speedLock('b'), spTotal: SP_TOTAL, lockedSp: { spe: 20 } })
+    expect(next.generation).toBe(s.generation + 1)
+    expect(next.lockFit).toBe(next.generation)
+    expect(next.lockNature).toEqual(s.lockNature)
+    expect(next.draft).toBe(s.draft)
+    expect(next.lockTrim).toBeNull()
+    expect(next.lockSpTotal).toBe(SP_TOTAL)
+  })
+
+  it('바디프레스 B가 H+B를 교체하면 풀리는 H는 복원되고 66을 넘으면 잘린다', () => {
+    const h20b14 = withSp(EXAMPLE_DRAFT, { hp: '20', atk: '0', def: '14', spe: '32' })
+    const s = run(start(), { type: 'set-draft', draft: h20b14 }, add(defenseLock()), commit('atk', 20, { hp: 0, def: 0, spe: 0 }))
+    // 실제 세트: H0 A20 B? S32. B를 바디프레스로 다시 고정(B는 기준 갈래 값 0으로 센다): H20 + A20 + B0 + S32 = 72 → H 14
+    const next = reducer(s, { type: 'add-lock', lock: { ...attackLock('bp'), stats: ['def'] }, spTotal: SP_TOTAL, lockedSp: { hp: 0, def: 0 } })
+    expect(next.locks.map((l) => l.stats)).toEqual([['def']])
+    expect(next.lockTrim).toEqual([{ stat: 'hp', from: 20, to: 14 }])
+    expect(next.draft.sp).toMatchObject({ hp: '14', def: '14' })
+  })
+
+  it('교체 해제 자르기는 새 고정 능력치를 addingSp(고정 뒤 값)로 센다: 교체 전 기준 갈래 값(B30)으로 세어 H를 더 자르지 않는다', () => {
+    const h20b14 = withSp(EXAMPLE_DRAFT, { hp: '20', atk: '0', def: '14', spe: '32' })
+    const s = run(start(), { type: 'set-draft', draft: h20b14 }, add(defenseLock()), commit('atk', 20, { hp: 0, def: 30, spe: 0 }))
+    const bodyPress = { ...attackLock('bp'), stats: ['def'] } satisfies Omit<CutLock, 'seq'>
+    // 교체 전 값으로 세면 H20 + A20 + B30 + S32 = 102 → H 0
+    expect(reducer(s, { type: 'add-lock', lock: bodyPress, spTotal: SP_TOTAL, lockedSp: { hp: 20, def: 30 } }).lockTrim).toEqual([{ stat: 'hp', from: 20, to: 0 }])
+    // 새 고정 B0으로 세면 H20 + A20 + B0 + S32 = 72 → H 14
+    const next = reducer(s, { type: 'add-lock', lock: bodyPress, spTotal: SP_TOTAL, lockedSp: { hp: 20, def: 30 }, addingSp: { def: 0 } })
+    expect(next.lockTrim).toEqual([{ stat: 'hp', from: 20, to: 14 }])
+    expect(next.draft.sp.hp).toBe('14')
+  })
+
+  it('base는 기준 갈래를 바꾸고, 같은 고정이라도 기준이 다르면 다시 건다. 교체된 고정의 이동 요청은 버린다', () => {
+    const s = run(start(), add(attackLock()))
+    const based = reducer(s, { type: 'add-lock', lock: attackLock(), spTotal: SP_TOTAL, base: 'plus:atk' })
+    expect(based.lockBase).toBe('plus:atk')
+    expect(based.locks.map((l) => l.seq)).toEqual([2])
+    expect(reducer(based, { type: 'add-lock', lock: attackLock(), spTotal: SP_TOTAL, base: 'plus:atk' })).toBe(based)
+    const revealed = run(start(), add(speedLock('a')), add(attackLock()), { type: 'reveal-lock', seq: 1 })
+    expect(revealed.lockReveal?.seq).toBe(1)
+    expect(reducer(revealed, add(speedLock('b'))).lockReveal).toBeNull()
+    expect(reducer(revealed, add({ ...defenseLock() })).lockReveal?.seq).toBe(1)
   })
 
   it('형식이 틀리면 무시한다(종류·단계·능력치 모양·대상 종류·합계 상한)', () => {
@@ -93,6 +167,15 @@ describe('add-lock', () => {
       { ...defenseLock(), kind: 'speed' },
     ]
     for (const lock of bad) expect(reducer(s, add(lock))).toBe(s)
+    const badAlloc = [
+      { ...speedLock(), allocation: 'h-max' },
+      { ...attackLock(), allocation: 'h-max' },
+      { ...defenseLock(), allocation: 'min-sum' },
+      { ...defenseLock(), allocation: 'x' },
+    ] as unknown as Omit<CutLock, 'seq'>[]
+    for (const lock of badAlloc) expect(reducer(s, add(lock))).toBe(s)
+    expect(reducer(s, add({ ...defenseLock(), allocation: 'h-max' })).locks[0].allocation).toBe('h-max')
+    expect(reducer(s, { type: 'add-lock', lock: speedLock(), spTotal: SP_TOTAL, base: 1 as unknown as string })).toBe(s)
     for (const spTotal of [0, -1, 1.5, NaN]) expect(reducer(s, { type: 'add-lock', lock: speedLock(), spTotal })).toBe(s)
     expect(reducer(s, add({ ...defenseLock(), stage: 'low-roll-ohko' })).locks).toHaveLength(1)
     expect(reducer(s, add({ ...attackLock(), stats: ['def'] })).locks).toHaveLength(1)
@@ -203,15 +286,17 @@ describe('AC6 해제 복원', () => {
     expect(reducer(s, { type: 'remove-lock', seq: 1 }).draft.sp.spe).toBe('0')
   })
 
-  it('같은 능력치 고정이 남아 있으면 그 능력치는 풀리지 않는다', () => {
-    const s = run(start(), add(speedLock('a')), add(speedLock('b')), commit('def', 12, { spe: 20 }))
-    const next = reducer(s, { type: 'remove-lock', seq: 1 })
-    expect(next.draft.sp.spe).toBe('32')
-    expect(next.lockTrim).toBeNull()
-    expect(reducer(next, commit('spe', 1, { spe: 20 }))).toBe(next)
-  })
-
   const h20b14 = withSp(EXAMPLE_DRAFT, { hp: '20', atk: '0', def: '14', spe: '32' })
+
+  it('같은 능력치(H) 고정이 남아 있으면 그 능력치는 풀리지 않는다: H+B만 풀면 H는 고정 유지, B만 복원', () => {
+    const s = run(start(), { type: 'set-draft', draft: h20b14 }, add(defenseLock('a', 'def')), add(defenseLock('b', 'spd')), commit('atk', 20, { hp: 0, def: 0, spd: 0 }))
+    const next = reducer(s, { type: 'remove-lock', seq: 1, lockedSp: { hp: 0, def: 0, spd: 0 } })
+    expect(next.locks.map((l) => l.seq)).toEqual([2])
+    // H(고정 유지)는 기준 갈래 값 0으로 세어 H0 A20 B14 D0 S32 = 66 → 자르지 않는다
+    expect(next.lockTrim).toBeNull()
+    expect(next.draft.sp).toEqual({ hp: '20', atk: '20', def: '14', spa: '0', spd: '0', spe: '32' })
+    expect(reducer(next, commit('hp', 1, { hp: 0, spd: 0 }))).toBe(next)
+  })
 
   it('방어 쌍 고정을 풀면 두 능력치를 함께 복원하고 B부터 자른다', () => {
     const s = run(start(), { type: 'set-draft', draft: h20b14 }, add(defenseLock()), commit('atk', 20, { hp: 0, def: 0, spe: 0 }))
@@ -432,6 +517,22 @@ describe('R19 고정 초과 자동 조정(fit-locks)', () => {
     expect(reducer(item, { type: 'fit-locks', token: item.generation, lockedSp: { spe: 40 } })).toBe(item)
     const trimmed = fit(run(start(), add(speedLock())), { spe: 40 })
     expect(reducer(trimmed, { type: 'fit-locks', token: trimmed.generation, lockedSp: { spe: 40 } })).toBe(trimmed)
+  })
+
+  it('교체의 해제 자르기 알림에 뒤이은 자동 조정 자르기를 합친다(같은 능력치는 처음 값 → 마지막 값)', () => {
+    const h20b14 = withSp(EXAMPLE_DRAFT, { hp: '20', atk: '0', def: '14', spe: '32' })
+    const s = run(start(), { type: 'set-draft', draft: h20b14 }, add(defenseLock()), commit('atk', 20, { hp: 0, def: 0, spe: 0 }))
+    const replaced = reducer(s, { type: 'add-lock', lock: { ...attackLock('bp'), stats: ['def'] }, spTotal: SP_TOTAL, lockedSp: { hp: 0, def: 0 }, addingSp: { def: 0 } })
+    expect(replaced.lockTrim).toEqual([{ stat: 'hp', from: 20, to: 14 }])
+    // 파생 B10: H14 + A20 + B10 + S32 = 76 → H 14→4
+    expect(fit(replaced, { def: 10 }).lockTrim).toEqual([{ stat: 'hp', from: 20, to: 4 }])
+    // 파생 B30: 96 → H 14→0, A 20→4
+    expect(fit(replaced, { def: 30 }).lockTrim).toEqual([
+      { stat: 'hp', from: 20, to: 0 },
+      { stat: 'atk', from: 20, to: 4 },
+    ])
+    // 알림을 닫은 뒤라면 자동 조정 자르기만
+    expect(fit(reducer(replaced, { type: 'dismiss-lock-trim' }), { def: 10 }).lockTrim).toEqual([{ stat: 'hp', from: 14, to: 4 }])
   })
 
   it('지난 표지(token 불일치)는 무시한다', () => {

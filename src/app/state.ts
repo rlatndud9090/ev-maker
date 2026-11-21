@@ -10,6 +10,7 @@ import {
   DEFAULT_TOP_N,
   MAX_CUSTOM_MOVES,
   baseConditionOf,
+  conflictingLocks,
   addedBundleIdentity,
   addedBundlePin,
   isSpValue,
@@ -205,10 +206,22 @@ export type AppAction =
   /** 추가한 기술 삭제. 그 기술이 직접 선택돼 있으면(랭크 후 항목 포함) 선택도 해제. 없으면 무시 */
   | { type: 'remove-move'; opponentId: string; moveId: string }
   /**
-   * 컷 고정 추가(seq 부여). 형식(종류·단계·능력치 모양·대상 종류)이 맞지 않거나 같은 (대상, 단계)가 있으면 무시.
-   * spTotal = 레귤레이션 SP 합계 상한(첫 고정 때만 기억). 고정 가능·상태 판정은 호출자(cards checkLockCandidate) 몫이다
+   * 컷 고정 추가(seq 부여). 형식(종류·단계·능력치 모양·대상 종류·배분)이 맞지 않으면 무시.
+   * H 밖 능력치가 겹치는 기존 고정(cards conflictingLocks)은 같은 액션에서 해제한다(같은 능력치는 고정 하나, 사용자 결정 2026-11-21):
+   * 해제는 remove-lock과 같은 경로(복원·자르기)이고, 새 고정이 다시 고정하는 능력치는 복원도 자르기도 하지 않는다.
+   * 교체할 고정이 새 고정과 같은 (대상, 단계, 배분) 하나뿐이고 base가 없거나 지금 기준 갈래와 같으면 상태 그대로.
+   * spTotal = 레귤레이션 SP 합계 상한(첫 고정 때만 기억). base = 고를 기준 갈래 id(없으면 그대로). lockedSp = 지금 기준 갈래 고정 SP(해제 자르기용, remove-lock과 같다).
+   * addingSp = 새 고정을 건 뒤 기준 갈래의 고정 SP(핀 메뉴에 보인 값). 해제 자르기에서 lockedSp보다 먼저 센다(교체 전 값으로 세면 풀리는 능력치를 필요 이상 자른다).
+   * 고정 가능·상태 판정은 호출자(cards checkLockCandidate·pinMenuView) 몫이다
    */
-  | { type: 'add-lock'; lock: Omit<CutLock, 'seq'>; spTotal: number }
+  | {
+      type: 'add-lock'
+      lock: Omit<CutLock, 'seq'>
+      spTotal: number
+      base?: string
+      lockedSp?: Readonly<Partial<Record<StatId, number>>>
+      addingSp?: Readonly<Partial<Record<StatId, number>>>
+    }
   /**
    * 고정 해제. 없으면 무시. 마지막 고정이 풀린 능력치는 초안 값으로 돌아가고, 초안 SP 합이 lockSpTotal을 넘으면 그 능력치를
    * 나중에 만든 고정의 능력치부터 max(0, lockSpTotal − 나머지)로 자르고 lockTrim에 남긴다. 고정이 0개면 고정 상태를 모두 비운다.
@@ -223,7 +236,7 @@ export type AppAction =
   | { type: 'dismiss-lock-trim' }
   /**
    * 고정 초과 자동 조정. token이 lockFit과 같을 때만 고정 밖 능력치를 H→A→B→C→D→S 순으로 줄여 합계를 lockSpTotal에 맞추고
-   * lockTrim에 남긴다. lockedSp = 그 세대 파생의 기준 갈래 고정 SP(null = 기준 갈래 없음: 줄이지 않는다). 어느 쪽이든 lockFit을 비운다
+   * lockTrim에 남긴다(같은 조작의 해제 자르기가 lockTrim에 있으면 합친다). lockedSp = 그 세대 파생의 기준 갈래 고정 SP(null = 기준 갈래 없음: 줄이지 않는다). 어느 쪽이든 lockFit을 비운다
    */
   | { type: 'fit-locks'; token: number; lockedSp: LockedSp | null }
   /**
@@ -365,6 +378,7 @@ const NON_HP_STATS: readonly StatId[] = ['atk', 'def', 'spa', 'spd', 'spe']
 function validLock(l: Omit<CutLock, 'seq'>): boolean {
   if (typeof l !== 'object' || l === null || typeof l.target !== 'object' || l.target === null || l.target.kind !== l.kind) return false
   if (!Array.isArray(l.stats)) return false
+  if (l.allocation !== undefined && l.kind !== 'defense') return false
   const [a, b] = l.stats
   switch (l.kind) {
     case 'speed':
@@ -372,7 +386,9 @@ function validLock(l: Omit<CutLock, 'seq'>): boolean {
     case 'attack':
       return ATTACK_LOCK_STAGES.includes(l.stage) && l.stats.length === 1 && NON_HP_STATS.includes(a)
     case 'defense':
-      return DEFENSE_LOCK_STAGES.includes(l.stage) && l.stats.length === 2 && a === 'hp' && (b === 'def' || b === 'spd')
+      return (
+        DEFENSE_LOCK_STAGES.includes(l.stage) && l.stats.length === 2 && a === 'hp' && (b === 'def' || b === 'spd') && (l.allocation === undefined || l.allocation === 'h-max')
+      )
     default:
       return false
   }
@@ -411,22 +427,25 @@ function restoreNature(draft: SetDraft, saved: AppState['lockNature']): SetDraft
 }
 
 /**
- * remaining만 남기고 나머지 고정을 푼 초안과 자르기. 풀린 능력치(남은 고정에 없음)는 그 능력치를 쓰던 고정의 seq 역순으로,
- * 같은 고정 안에서는 stats 뒤쪽부터 자른다. 초안 SP에 숫자가 아닌 칸이 있으면 합을 알 수 없어 자르지 않는다
+ * remaining만 남기고 나머지 고정을 푼 초안과 자르기. 풀린 능력치(남은 고정에도 adding에도 없음)는 그 능력치를 쓰던 고정의 seq 역순으로,
+ * 같은 고정 안에서는 stats 뒤쪽부터 자른다. 초안 SP에 숫자가 아닌 칸이 있으면 합을 알 수 없어 자르지 않는다.
+ * adding = 같은 조작에서 새로 고정하는 능력치(교체). 풀지 않고, 고정이 남으므로 성격도 돌려놓지 않는다
  */
 function releaseLocks(
   state: AppState,
   remaining: readonly CutLock[],
   lockedSp: Readonly<Partial<Record<StatId, number>>> = {},
+  adding: readonly StatId[] = [],
 ): { draft: SetDraft; trims: LockTrim[] } {
   const keep = lockedStatsOf(remaining)
+  for (const s of adding) keep.add(s)
   const order: StatId[] = []
   for (const l of state.locks.filter((x) => !remaining.includes(x)).sort((x, y) => y.seq - x.seq)) {
     for (const s of [...l.stats].reverse()) if (!keep.has(s) && !order.includes(s)) order.push(s)
   }
   const cap = state.lockSpTotal
   const trims: LockTrim[] = []
-  let draft = remaining.length === 0 ? restoreNature(state.draft, state.lockNature) : state.draft
+  let draft = remaining.length === 0 && adding.length === 0 ? restoreNature(state.draft, state.lockNature) : state.draft
   if (cap === null) return { draft, trims }
   for (const stat of order) {
     const total = (Object.keys(draft.sp) as StatId[]).reduce((a, s) => a + (keep.has(s) ? (lockedSp[s] ?? parseNumber(draft.sp[s])) : parseNumber(draft.sp[s])), 0)
@@ -438,6 +457,17 @@ function releaseLocks(
     draft = { ...draft, sp: { ...draft.sp, [stat]: String(to) } }
   }
   return { draft, trims }
+}
+
+/** 앞선 자르기(같은 조작의 해제 자르기)에 뒤 자르기를 합친다. 같은 능력치는 처음 값 → 마지막 값 하나로 */
+function mergeTrims(prev: readonly LockTrim[] | null, next: readonly LockTrim[]): LockTrim[] {
+  const out = [...(prev ?? [])]
+  for (const t of next) {
+    const i = out.findIndex((x) => x.stat === t.stat)
+    if (i < 0) out.push(t)
+    else out[i] = { stat: t.stat, from: out[i].from, to: t.to }
+  }
+  return out
 }
 
 const CLEARED_LOCKS = { locks: [], lockSeq: 1, lockBase: null, lockNature: null, lockSpTotal: null, lockReveal: null, lockFit: null } as const satisfies Partial<AppState>
@@ -594,16 +624,25 @@ export function reducer(state: AppState, action: AppAction): AppState {
     }
     case 'add-lock': {
       const l = action.lock
-      if (!validLock(l) || !isPositiveInt(action.spTotal)) return state
-      if (state.locks.some((x) => x.stage === l.stage && sameLockTarget(x.target, l.target))) return state
+      if (!validLock(l) || !isPositiveInt(action.spTotal) || (action.base !== undefined && typeof action.base !== 'string')) return state
+      const replaced = conflictingLocks(state.locks, l.stats)
+      const same = replaced.length === 1 && replaced[0].stage === l.stage && replaced[0].allocation === l.allocation && sameLockTarget(replaced[0].target, l.target)
+      if (same && (action.base === undefined || action.base === state.lockBase)) return state
+      const remaining = replaced.length === 0 ? state.locks : state.locks.filter((x) => !replaced.includes(x))
+      const { draft, trims } = releaseLocks(state, remaining, { ...action.lockedSp, ...action.addingSp }, l.stats)
       const lock: CutLock = { seq: state.lockSeq, kind: l.kind, target: l.target, stage: l.stage, stats: [...l.stats] }
+      if (l.allocation !== undefined) lock.allocation = l.allocation
+      const lockReveal = state.lockReveal !== null && replaced.some((x) => x.seq === state.lockReveal?.seq) ? null : state.lockReveal
       return {
         ...state,
-        locks: [...state.locks, lock],
+        draft,
+        locks: [...remaining, lock],
         lockSeq: state.lockSeq + 1,
+        lockBase: action.base ?? state.lockBase,
         lockNature: state.lockNature ?? natureOf(state.draft),
         lockSpTotal: state.lockSpTotal ?? action.spTotal,
-        lockTrim: null,
+        lockTrim: trims.length > 0 ? trims : null,
+        lockReveal,
         generation: state.generation + 1,
         lockFit: state.generation + 1,
       }
@@ -654,7 +693,7 @@ export function reducer(state: AppState, action: AppAction): AppState {
       if (trims.length === 0) return cleared
       const draft = { ...state.draft, sp: { ...state.draft.sp } }
       for (const t of trims) draft.sp[t.stat] = String(t.to)
-      return { ...cleared, draft, lockTrim: trims, generation: state.generation + 1 }
+      return { ...cleared, draft, lockTrim: mergeTrims(state.lockTrim, trims), generation: state.generation + 1 }
     }
     case 'apply-adjust':
       return applyAdjust(state, action)

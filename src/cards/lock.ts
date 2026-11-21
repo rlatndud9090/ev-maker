@@ -1,5 +1,5 @@
 // 컷 고정 도메인 코어: 고정 타입, 갈래·합치기·상태 파생, 갈래 예산. 판정은 하지 않고 해석 결과(선택지 SP·계단)를 입력으로 받는다.
-import type { PokemonSet } from '../core'
+import { TIER_ORDER, tierRank, type PokemonSet } from '../core'
 import type { Snapshot, StatId } from '../data/schema'
 import { branchNature, type BranchPlus } from './lockNature'
 import type { NatureSign, SpeedBadgeOrigin } from './speedChart'
@@ -39,6 +39,11 @@ export interface CutLock {
   stage: LockStage
   /** 공격·스피드 [stat], 방어 ['hp', 'def' | 'spd'] */
   stats: readonly StatId[]
+  /**
+   * 방어 쌍 배분(방어만). 없으면 합 최소. 'h-max' = 다른 고정을 뺀 예산·능력치당 최대 안에서 H를 가장 높이고 그 H의 최소 B/D로
+   * 고정 단계를 정확히 내는 배분(사용자 결정 2026-11-21, 핀 메뉴 2단)
+   */
+  allocation?: 'h-max'
 }
 
 /** 인덱스 = H SP 0~최대, 값 = 그 H에서 단계에 닿는 최소 B/D SP(null = 불가) */
@@ -46,7 +51,17 @@ export type Stairs = readonly (number | null)[]
 
 export type LockOptions =
   | { shape: 'single'; stat: StatId; neutral: number | null; plus: number | null }
-  | { shape: 'pair'; defense: 'def' | 'spd'; neutral: Stairs | null; plus: Stairs | null }
+  | {
+      shape: 'pair'
+      defense: 'def' | 'spd'
+      neutral: Stairs | null
+      plus: Stairs | null
+      /**
+       * 고정 단계 한 단계 위(순위 + 1)의 계단(같은 두 성격, null = 어느 H에서도 닿지 않음). H 최대 배분의 단계 정확 검사에만 쓴다.
+       * 위 단계가 있는데 없으면(계산하지 않음·오류) H 최대를 검사할 수 없어 합 최소로 둔다
+       */
+      next?: { neutral: Stairs | null; plus: Stairs | null }
+    }
 
 export type LockResolution = { kind: 'ok'; options: LockOptions } | { kind: 'set-error' } | { kind: 'missing' } | { kind: 'unreachable'; reason?: string }
 
@@ -106,6 +121,15 @@ export function lockTargetId(t: LockTargetKey): string {
 
 export const sameLockTarget = (a: LockTargetKey, b: LockTargetKey): boolean => lockTargetId(a) === lockTargetId(b)
 
+/**
+ * 새 고정(stats)과 H 밖 능력치가 겹치는 기존 고정. 새 고정을 걸면 이들은 해제된다(같은 능력치는 고정 하나, 사용자 결정 2026-11-21).
+ * H만 공유하는 방어 쌍(H+B·H+D)은 겹치지 않는다
+ */
+export function conflictingLocks(locks: readonly CutLock[], stats: readonly StatId[]): CutLock[] {
+  const own = stats.filter((s) => s !== 'hp')
+  return locks.filter((l) => l.stats.some((s) => s !== 'hp' && own.includes(s)))
+}
+
 /** 상승안이 가는 능력치(H 단일 고정은 상승 대상이 아니다) */
 function plusStatOf(o: LockOptions): Exclude<StatId, 'hp'> | null {
   if (o.shape === 'pair') return o.plus === null ? null : o.defense
@@ -117,15 +141,26 @@ interface Usable {
   options: LockOptions
 }
 
-type Need = { shape: 'single'; stat: StatId; sp: number } | { shape: 'pair'; defense: 'def' | 'spd'; stairs: Stairs }
+/** 쌍: hMax = H 최대 배분 고정(단계 정확 검사가 가능할 때만), next = 한 단계 위 계단(null = 위 단계가 없거나 닿지 않음) */
+type Need = { shape: 'single'; stat: StatId; sp: number } | { shape: 'pair'; defense: 'def' | 'spd'; stairs: Stairs; hMax: boolean; next: Stairs | null }
 
-function needOf(o: LockOptions, usePlus: boolean): Need | null {
+/** 방어 고정 단계에 한 단계 위가 있는지 */
+const hasUpperStage = (stage: LockStage): boolean => {
+  const order = TIER_ORDER.defense as readonly string[]
+  return order.includes(stage) && tierRank('defense', stage) + 1 < order.length
+}
+
+function needOf(o: LockOptions, usePlus: boolean, lock: Pick<CutLock, 'stage' | 'allocation'>): Need | null {
   if (o.shape === 'single') {
     const sp = usePlus ? o.plus : o.neutral
     return sp === null ? null : { shape: 'single', stat: o.stat, sp }
   }
   const stairs = usePlus ? o.plus : o.neutral
-  return stairs === null ? null : { shape: 'pair', defense: o.defense, stairs }
+  if (stairs === null) return null
+  const upper = hasUpperStage(lock.stage)
+  const next = upper ? (o.next === undefined ? undefined : usePlus ? o.next.plus : o.next.neutral) : null
+  const hMax = lock.allocation === 'h-max' && next !== undefined
+  return { shape: 'pair', defense: o.defense, stairs, hMax, next: next ?? null }
 }
 
 const statsOfOptions =(o: LockOptions): StatId[] => (o.shape === 'single' ? [o.stat] : ['hp', o.defense])
@@ -153,45 +188,67 @@ function groupNeeds(needs: readonly Need[]): Need[][] {
   return [...groups.values()]
 }
 
+type PairNeed = Extract<Need, { shape: 'pair' }>
+
+/** 쌍이 든 묶음의 H 한 값에서 능력치별 SP와 합. 그 H에서 닿지 않거나 능력치당 최대를 넘으면 null */
+function groupAt(group: readonly Need[], hp: number, spMax: number): { sum: number; sp: Partial<Record<StatId, number>> } | null {
+  const pairs = group.filter((n): n is PairNeed => n.shape === 'pair')
+  const singleMax = (s: StatId): number => group.reduce((m, n) => (n.shape === 'single' && n.stat === s ? Math.max(m, n.sp) : m), 0)
+  const defenses = STAT_ORDER.filter((s) => s !== 'hp' && group.some((n) => (n.shape === 'pair' ? n.defense === s : n.stat === s)))
+  const sp: Partial<Record<StatId, number>> = { hp }
+  let sum = hp
+  for (const d of defenses) {
+    let need = singleMax(d)
+    for (const p of pairs) {
+      if (p.defense !== d) continue
+      const v = p.stairs[hp] ?? null
+      if (v === null) return null
+      need = Math.max(need, v)
+    }
+    if (need > spMax) return null
+    sp[d] = need
+    sum += need
+  }
+  return { sum, sp }
+}
+
 /** 묶음의 능력치별 SP. 쌍이 있으면 H 0~spMax 중 합 최소(동률 H 큰 쪽). 불가면 null */
 function mergeGroup(group: readonly Need[], spMax: number): Partial<Record<StatId, number>> | null {
-  const pairs = group.filter((n): n is Extract<Need, { shape: 'pair' }> => n.shape === 'pair')
   const singles = group.filter((n): n is Extract<Need, { shape: 'single' }> => n.shape === 'single')
-  const singleMax = (s: StatId): number => singles.reduce((m, n) => (n.stat === s ? Math.max(m, n.sp) : m), 0)
   if (singles.some((n) => n.sp > spMax || n.sp < 0)) return null
-  if (pairs.length === 0) {
+  if (!group.some((n) => n.shape === 'pair')) {
     const out: Partial<Record<StatId, number>> = {}
     for (const n of singles) out[n.stat] = Math.max(out[n.stat] ?? 0, n.sp)
     return out
   }
-  const defenses = STAT_ORDER.filter((s) => s !== 'hp' && group.some((n) => (n.shape === 'pair' ? n.defense === s : n.stat === s)))
-  const hpFloor = singleMax('hp')
+  const hpFloor = singles.reduce((m, n) => (n.stat === 'hp' ? Math.max(m, n.sp) : m), 0)
   let best: { sum: number; sp: Partial<Record<StatId, number>> } | null = null
   for (let hp = hpFloor; hp <= spMax; hp++) {
-    const sp: Partial<Record<StatId, number>> = { hp }
-    let sum = hp
-    let ok = true
-    for (const d of defenses) {
-      let need = singleMax(d)
-      for (const p of pairs) {
-        if (p.defense !== d) continue
-        const v = p.stairs[hp] ?? null
-        if (v === null) {
-          ok = false
-          break
-        }
-        need = Math.max(need, v)
-      }
-      if (!ok || need > spMax) {
-        ok = false
-        break
-      }
-      sp[d] = need
-      sum += need
-    }
-    if (ok && (best === null || sum <= best.sum)) best = { sum, sp }
+    const at = groupAt(group, hp, spMax)
+    if (at !== null && (best === null || at.sum <= best.sum)) best = at
   }
   return best === null ? null : best.sp
+}
+
+/**
+ * H 최대 쌍이 든 묶음: H를 spMax부터 내려가며 묶음 합 ≤ budget이고, H 최대 쌍마다 그 H의 B/D가 한 단계 위(next)에 닿지 않는(단계 정확)
+ * 가장 큰 H. 그 H에서 각 요구는 최소다. 없으면 합 최소(mergeGroup)로 둔다(변동 defenseHMax와 같은 뜻, 사용자 결정 2026-11-21)
+ */
+function mergeGroupHMax(group: readonly Need[], spMax: number, budget: number): Partial<Record<StatId, number>> | null {
+  const singles = group.filter((n): n is Extract<Need, { shape: 'single' }> => n.shape === 'single')
+  if (singles.some((n) => n.sp > spMax || n.sp < 0)) return null
+  const hpFloor = singles.reduce((m, n) => (n.stat === 'hp' ? Math.max(m, n.sp) : m), 0)
+  const hMaxPairs = group.filter((n): n is PairNeed => n.shape === 'pair' && n.hMax)
+  for (let hp = spMax; hp >= hpFloor; hp--) {
+    const at = groupAt(group, hp, spMax)
+    if (at === null || at.sum > budget) continue
+    const exact = hMaxPairs.every((p) => {
+      const up = p.next?.[hp] ?? null
+      return up === null || up > (at.sp[p.defense] ?? 0)
+    })
+    if (exact) return at.sp
+  }
+  return mergeGroup(group, spMax)
 }
 
 function branchesOf(game: Snapshot, mySet: PokemonSet, usable: readonly Usable[], ignoreTotal: boolean): Branch[] {
@@ -209,7 +266,7 @@ function branchesOf(game: Snapshot, mySet: PokemonSet, usable: readonly Usable[]
     let ok = true
     for (const { lock, options } of usable) {
       const usePlus = plus !== 'out' && plusStatOf(options) === plus
-      const need = needOf(options, usePlus)
+      const need = needOf(options, usePlus, lock)
       if (need === null) {
         ok = false
         break
@@ -221,8 +278,22 @@ function branchesOf(game: Snapshot, mySet: PokemonSet, usable: readonly Usable[]
     const nature = branchNature(game, mySet.nature, plus, avoid)
     if (nature === null) continue
     const lockedSp: Partial<Record<StatId, number>> = {}
-    for (const g of groupNeeds(needs)) {
+    // H 최대 쌍이 든 묶음(쌍은 모두 H를 공유하므로 많아야 하나)은 다른 묶음 합을 뺀 예산으로 나중에 정한다. 완화 모드(SP 부족량)는 합 최소로 센다
+    const groups = groupNeeds(needs)
+    const hMaxGroups = ignoreTotal ? [] : groups.filter((g) => g.some((n) => n.shape === 'pair' && n.hMax))
+    for (const g of groups) {
+      if (hMaxGroups.includes(g)) continue
       const merged = mergeGroup(g, spMaxPerStat)
+      if (merged === null) {
+        ok = false
+        break
+      }
+      Object.assign(lockedSp, merged)
+    }
+    if (!ok) continue
+    for (const g of hMaxGroups) {
+      const used = STAT_ORDER.reduce((a, s) => a + (lockedSp[s] ?? 0), 0)
+      const merged = mergeGroupHMax(g, spMaxPerStat, spTotal - used)
       if (merged === null) {
         ok = false
         break
@@ -294,17 +365,18 @@ export function deriveLocks({ game, mySet, locks, resolutions, baseChoice }: Der
 
 export type LockCheck = { kind: 'ok' } | { kind: 'sp-short'; over: number } | { kind: 'nature-conflict' } | { kind: 'unreachable' }
 
-/** 후보를 seq = 최대 + 1로 더해 deriveLocks로 판정한 후보의 상태 */
+/** 후보를 seq = 최대 + 1로 더해 deriveLocks로 판정한 후보의 상태. 후보가 교체할 고정(conflictingLocks)은 빼고 판정한다 */
 export function checkLockCandidate(
   input: Omit<DeriveLocksInput, 'baseChoice'> & { baseChoice?: string | null; candidate: { lock: Omit<CutLock, 'seq'>; resolution: LockResolution } },
 ): LockCheck {
   const seq = input.locks.reduce((m, l) => Math.max(m, l.seq), 0) + 1
   const resolutions = new Map(input.resolutions)
   resolutions.set(seq, input.candidate.resolution)
+  const replaced = conflictingLocks(input.locks, input.candidate.lock.stats)
   const d = deriveLocks({
     game: input.game,
     mySet: input.mySet,
-    locks: [...input.locks, { ...input.candidate.lock, seq }],
+    locks: [...input.locks.filter((l) => !replaced.includes(l)), { ...input.candidate.lock, seq }],
     resolutions,
     baseChoice: input.baseChoice ?? null,
   })

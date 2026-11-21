@@ -212,17 +212,43 @@ export async function settle(page: Page) {
   if ((await tabPanel(page).getAttribute('data-tab')) !== 'speed') await waitComplete(page)
 }
 
-/** 공격·방어 탭 기본 고정 단계(핀 메뉴 항목 글자) */
+/** 공격·방어 탭 기본 고정 단계(핀 메뉴 결과 배지 글자) */
 const DEFAULT_STAGE: Readonly<Record<Exclude<ProductTab, '스피드'>, string>> = { 공격: '확정1타', 방어: '확정견딤' }
 
-/** 카드 줄 핀 메뉴의 그 단계 항목 */
-export const pinItem = (card: Locator, stage: string) => card.getByTestId('cut-pin-item').filter({ has: card.page().locator('.cut-pin-stage', { hasText: new RegExp(`^${stage}$`) }) })
+/** 핀 메뉴 결과 배지 글자 → 단계 id(data-label) */
+export const PIN_STAGE_ID: Readonly<Record<string, string>> = {
+  확정1타: 'guaranteed-ohko',
+  고난수1타: 'high-roll-ohko',
+  확정견딤: 'guaranteed-survive',
+  저난수1타: 'low-roll-ohko',
+}
+
+/** 카드 줄 핀 메뉴(변동과 같은 2단, 1단 결과 → 2단 성격·배분) */
+export const pinMenu = (card: Locator) => card.getByTestId('cut-pin-menu')
+
+/** 카드 줄 핀 메뉴 1단의 그 단계 결과 항목 */
+export const pinItem = (card: Locator, stage: string) => pinMenu(card).locator(`[data-testid="adjust-result"][data-label="${PIN_STAGE_ID[stage] ?? stage}"]`)
+
+/** 핀 메뉴 2단 선택지: nature = 'neutral' | 'plus' | 'other-plus', alloc = 합 최소(성격 항목) · H 최대(아래 들여쓴 항목) */
+export const pinNature = (card: Locator, nature: string, alloc: 'min-sum' | 'h-max' = 'min-sum') =>
+  pinMenu(card).locator(`[data-testid="${alloc === 'h-max' ? 'adjust-hmax' : 'adjust-nature'}"][data-nature="${nature}"]`)
 
 /** 그 상대·기술이 보이는 카드(카드 줄 data-move = 보이는 판정 행 기술) */
 export const moveCard = (page: Page, opponent: string, move: string) => cards(page).and(page.locator(`[data-opponent="${opponent}"][data-move="${move}"]`)).first()
 
-/** 공격·방어 탭에서 그 상대·기술이 보이는 카드의 줄 핀을 누르고 단계 메뉴에서 stage를 고른다. 고정한 카드를 돌려준다 */
-export async function lockRow(page: Page, tab: Exclude<ProductTab, '스피드'>, opponent: string, move: string, stage = DEFAULT_STAGE[tab]): Promise<Locator> {
+/**
+ * 공격·방어 탭에서 그 상대·기술이 보이는 카드의 줄 핀을 누르고, 메뉴 1단에서 stage 결과 → 2단에서 성격(nature)·배분(alloc)을 고른다.
+ * 기본값(무보정·합 최소)은 기준 갈래를 바꾸지 않는 고정이다. 고정한 카드를 돌려준다
+ */
+export async function lockRow(
+  page: Page,
+  tab: Exclude<ProductTab, '스피드'>,
+  opponent: string,
+  move: string,
+  stage = DEFAULT_STAGE[tab],
+  nature = 'neutral',
+  alloc: 'min-sum' | 'h-max' = 'min-sum',
+): Promise<Locator> {
   if ((await tabPanel(page).getAttribute('data-tab')) !== (tab === '공격' ? 'attack' : 'defense')) await selectTab(page, tab)
   await waitComplete(page)
   const card = moveCard(page, opponent, move)
@@ -230,10 +256,13 @@ export async function lockRow(page: Page, tab: Exclude<ProductTab, '스피드'>,
   await expect(pin, `${opponent} ${move} 컷 고정 핀`).toHaveAttribute('aria-pressed', 'false')
   await pin.click()
   const item = pinItem(card, stage)
-  await expect(item, `${opponent} ${move} ${stage} 고정 가능`).toHaveAttribute('data-enabled', 'true', { timeout: 15_000 })
+  await expect(item, `${opponent} ${move} ${stage} 고정 가능`).toBeVisible({ timeout: 15_000 })
   await item.click()
+  const option = pinNature(card, nature, alloc)
+  await expect(option, `${opponent} ${move} ${stage} ${nature} ${alloc}`).toHaveAttribute('data-enabled', 'true')
+  await option.click()
   await expect(pin).toHaveAttribute('aria-pressed', 'true')
-  await expect(card.getByTestId('cut-pin-menu')).toHaveCount(0)
+  await expect(pinMenu(card)).toHaveCount(0)
   await settle(page)
   return card
 }

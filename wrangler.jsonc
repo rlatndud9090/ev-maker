@@ -5,5 +5,7 @@
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application"
-  }
+  },
+  // PR 브랜치 빌드의 `npx wrangler preview`가 요구한다(비어 있어도 된다).
+  "previews": {}
 }

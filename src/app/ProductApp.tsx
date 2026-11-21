@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { TABS, type ErrorReason, type MetaSourceView, type SpeedChartInput, type Tab } from '../cards'
 import type { EvalOptions, PokemonSet, SpTable } from '../core'
 import type { RegulationIndex, Snapshot } from '../data/schema'
@@ -185,6 +185,10 @@ function Workspace({ boot }: { boot: Boot }) {
     },
     [executor, displaySp],
   )
+  // 확정으로 초안이 바뀌면 화면용 표시 SP도 비운다(실행기 setInput은 자기 사본만 비운다). 칠하기 전에 비워 드래그 전 값으로 튀지 않는다.
+  useLayoutEffect(() => {
+    displaySp.set(null)
+  }, [displaySp, draft])
   // 기술 선택 목록을 연 줄의 항목 변동 판정도 계산 입력이 아니라 수요다.
   const onMenuCards = useCallback((t: Tab, cardIds: readonly string[]) => executor.setMenuCards(t, cardIds), [executor])
   // 조정 팝오버를 연 카드와 핀 단계 메뉴를 연 카드는 같은 고정 후보·조정 수요(setDetailCards)로 합쳐 알린다.
@@ -200,11 +204,11 @@ function Workspace({ boot }: { boot: Boot }) {
   const onAdjustCard = useCallback((t: Tab, cardId: string | null) => pushLockDemand(t, { adjust: cardId === null ? [] : [cardId] }), [pushLockDemand])
   const onPinMenu = useCallback((t: Tab, cardId: string | null) => pushLockDemand(t, { pin: cardId === null ? [] : [cardId] }), [pushLockDemand])
 
-  const { locks, lockReveal, lockTrim } = state
+  const { locks, lockBase, lockReveal, lockTrim } = state
   const lockSnapshot = snapshot.locks
   const lockUi = useMemo(
-    () => lockUiValue({ game, state: { draft, locks, lockReveal, lockTrim }, snapshot: lockSnapshot, runGeneration, dispatch, onAdjustCard, onPinMenu }),
-    [game, draft, locks, lockReveal, lockTrim, lockSnapshot, runGeneration, onAdjustCard, onPinMenu],
+    () => lockUiValue({ game, state: { draft, locks, lockBase, lockReveal, lockTrim }, snapshot: lockSnapshot, runGeneration, dispatch, onAdjustCard, onPinMenu }),
+    [game, draft, locks, lockBase, lockReveal, lockTrim, lockSnapshot, runGeneration, onAdjustCard, onPinMenu],
   )
   // 핀 고정·기준 갈래 변경 뒤 처음 나온 파생으로 초과를 한 번만 자동 조정한다(리듀서가 표지를 비워 다시 돌지 않는다).
   const { lockFit } = state

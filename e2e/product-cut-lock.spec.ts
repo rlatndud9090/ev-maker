@@ -20,6 +20,8 @@ import {
   openBadge,
   openProduct,
   pinItem,
+  pinMenu,
+  pinNature,
   selectTab,
   settle,
   speedDetail,
@@ -67,6 +69,9 @@ async function expectFocusOnFirstSelectable(items: Locator): Promise<number> {
   await expect(items.nth(at)).toBeFocused()
   return at
 }
+
+/** 핀 메뉴 항목의 조정 능력치 SP 글자 "H32 B0+"(고정 표지 능력치 제외) */
+const spsText = async (item: Locator): Promise<string> => (await item.locator('.adjust-sp:not(.adjust-sp-locked)').allTextContents()).map((t) => t.trim()).join(' ')
 
 /** 카드가 펼쳐지지 않았다(상세·펼침 버튼이 없고 열린 팝업도 없다) */
 async function expectNotExpanded(card: Locator) {
@@ -235,7 +240,7 @@ test.describe('컷 고정', () => {
     // S31 / S18+ → 메가앱솔Z 드래곤클로 A20+(상승으로만) → 비비용 155(S20+로만): 상승 자리가 겹친다
     await lockBadge(page, NINETALES_152)
     await settle(page)
-    await lockRow(page, '공격', 'absolmegaz', 'dragonclaw')
+    await lockRow(page, '공격', 'absolmegaz', 'dragonclaw', '확정1타', 'plus')
     await openBadge(page, VIVILLON_155)
     const vivillon = badgePin(page, VIVILLON_155)
     await vivillon.click()
@@ -387,24 +392,20 @@ test.describe('컷 고정', () => {
     await expect(sPlus).toHaveAttribute('aria-pressed', 'false')
     await expect(spBox(page, '스피드')).toHaveValue('19')
 
-    // 상승으로만 닿는 S 고정을 더하면 고정 밖 갈래가 사라져 S ▲는 켜진 채 비활성, 고정 밖 ▲도 켤 수 없다
+    // 상승으로만 닿는 S 고정으로 바꾸면(같은 S라 몰드류 고정을 교체, 2026-11-21) 고정 밖 갈래가 사라져 S ▲는 켜진 채 비활성, 고정 밖 ▲도 켤 수 없다
     await lockBadge(page, VIVILLON_155)
     await settle(page)
+    await expect(lockList(page).locator('.lock-item')).toHaveCount(1)
+    await expect(badgePin(page, MOLDURYU_140)).toHaveAttribute('aria-pressed', 'false')
     await expect(sPlus).toHaveAttribute('aria-pressed', 'true')
     await expect(sPlus).toBeDisabled()
     await expect(natureBtn(page, '특공', '상승')).toBeDisabled()
     await expect(lockedSp(page, 'spe')).toHaveText('SP 스피드 고정됨: S20+')
 
-    // 해제 버튼("×", 읽기 이름 "…고정 해제")도 키보드로: 지운 자리 다음 항목(없으면 목록 머리·패널)으로 포커스가 간다
+    // 해제 버튼("×", 읽기 이름 "…고정 해제")도 키보드로: 마지막 항목을 지우면 목록 머리·패널로 포커스가 간다
     const removeVivillon = lockList(page).getByRole('button', { name: /비비용 .* 고정 해제$/ })
     await expect(removeVivillon).toHaveText('×')
     await removeVivillon.focus()
-    await page.keyboard.press('Enter')
-    await expect(lockList(page).locator('.lock-item')).toHaveCount(1)
-    await settle(page)
-    await expect(sPlus).toBeEnabled()
-    const last = lockList(page).getByRole('button', { name: /고정 해제$/ })
-    await last.focus()
     await page.keyboard.press('Enter')
     await expect(lockList(page)).toHaveCount(0)
     await expect(spBox(page, '스피드')).toHaveValue('32')
@@ -450,7 +451,7 @@ test.describe('컷 고정', () => {
     await expect(speedDetail(page)).not.toContainText('남은 SP')
   })
 
-  test('R2: 모든 카드 줄에 포켓몬 이미지 앞 핀, 빈 핀은 단계 메뉴(키보드·현재 판정 무관), 고르면 찬 핀, 찬 핀은 해제, 카드를 펼치지 않는다', async ({ page }) => {
+  test('R2: 모든 카드 줄에 포켓몬 이미지 앞 핀, 빈 핀은 변동과 같은 2단 메뉴(키보드·현재 판정 무관), 고르면 찬 핀, 찬 핀은 해제, 카드를 펼치지 않는다', async ({ page }) => {
     await selectTab(page, '공격')
     await waitComplete(page)
     const n = await cards(page).count()
@@ -472,31 +473,51 @@ test.describe('컷 고정', () => {
 
     await pin.focus()
     await page.keyboard.press('Enter')
-    const menu = card.getByRole('menu')
+    const menu = pinMenu(card)
     await expect(menu).toBeVisible()
+    await expect(menu).toHaveAttribute('role', 'menu')
+    await expect(menu).toHaveAttribute('aria-label', /^컷 고정할 결과: /)
     await expect(pin).toHaveAttribute('aria-expanded', 'true')
     await expect(card.locator('.card-detail')).toHaveCount(0)
-    const items = menu.getByRole('menuitem')
-    await expect(items).toHaveCount(2)
-    await expect(items.locator('.cut-pin-stage')).toHaveText(['고난수1타', '확정1타'])
-    // 단계마다 선택지 SP 또는 고를 수 없는 이유(계산 중은 곧 풀린다)
-    await expect(menu.getByText('계산 중')).toHaveCount(0, { timeout: 15_000 })
-    for (const t of await items.locator('.cut-pin-detail').allInnerTexts()) expect(t).toMatch(/^(최소 A\d+( \/ A\d+\+)?|A\d+\+|도달 불가|SP 부족\(\d+\)|성격 충돌)$/)
-    const at = await expectFocusOnFirstSelectable(items)
-    await page.keyboard.press('ArrowDown')
-    await expect(items.nth((at + 1) % 2)).toBeFocused()
-    await page.keyboard.press('ArrowDown')
-    await expect(items.nth(at)).toBeFocused()
+    // 1단: 고정 가능 단계 중 고를 수 있는 결과만(좋은 단계부터), 결과 배지 + SP + ›
+    await expect(menu.getByText('계산 중…')).toHaveCount(0, { timeout: 15_000 })
+    const results = menu.getByTestId('adjust-result')
+    const labels = await results.evaluateAll((els) => els.map((e) => e.getAttribute('data-label')))
+    expect(labels.length).toBeGreaterThan(0)
+    expect(['guaranteed-ohko', 'high-roll-ohko'].filter((l) => labels.includes(l))).toEqual(labels)
+    for (const r of await results.all()) expect(await spsText(r)).toMatch(/^[ABC]\d+\+?$/)
+    await expect(results.first()).toBeFocused()
+    if (labels.length > 1) {
+      await page.keyboard.press('ArrowDown')
+      await expect(results.nth(1)).toBeFocused()
+      await page.keyboard.press('ArrowUp')
+      await expect(results.first()).toBeFocused()
+    }
+    // → 로 2단(성격 선택), ← 로 뒤로(고른 결과로 포커스)
+    await page.keyboard.press('ArrowRight')
+    await expect(menu).toHaveAttribute('data-stage', 'nature')
+    const natures = menu.getByTestId('adjust-nature')
+    await expect(natures).toHaveCount(2)
+    await expect(natures.locator('.adjust-nature-name')).toHaveText(['무보정', /^[ABC] 상승$/])
+    await expectFocusOnFirstSelectable(menu.getByRole('menuitem').and(page.locator(':not([data-testid="adjust-back"])')))
+    await page.keyboard.press('ArrowLeft')
+    await expect(menu).toHaveAttribute('data-stage', 'result')
+    await expect(results.first()).toBeFocused()
     await page.keyboard.press('Escape')
     await expect(menu).toHaveCount(0)
     await expect(pin).toBeFocused()
     await expectNotExpanded(card)
 
     await pin.click()
-    const ok = items.and(page.locator('[data-enabled="true"]')).first()
-    await expect(ok).toBeVisible({ timeout: 15_000 })
-    const stage = await ok.locator('.cut-pin-stage').innerText()
-    await ok.click()
+    const first = results.first()
+    await expect(first).toBeVisible({ timeout: 15_000 })
+    const stage = (await first.locator('.ko-badge').innerText()).trim()
+    await first.click()
+    const ok = menu.locator('[data-testid="adjust-nature"][data-enabled="true"]').first()
+    const shown = await spsText(ok)
+    // 키보드로 고른다: 재계산으로 카드가 다시 붙어도 포커스는 핀으로 돌아온다(변동 버튼과 같다)
+    await ok.focus()
+    await page.keyboard.press('Enter')
     await expect(pin).toHaveAttribute('aria-pressed', 'true')
     await expect(pin).toHaveAccessibleName(/^컷 고정 해제: /)
     await expect(pin).toHaveAttribute('title', new RegExp(`^컷 고정 고정됨: ${stage}`))
@@ -505,6 +526,9 @@ test.describe('컷 고정', () => {
     await expect(lockList(page).locator('.lock-desc')).toContainText(stage)
     await expectNotExpanded(card)
     await settle(page)
+    // 메뉴에 보인 고정 능력치 SP가 고정 목록 SP 중 하나다(그 선택을 건 파생 값)
+    await expect(lockList(page).locator('.lock-sp')).toContainText(shown)
+    await expect(pin).toBeFocused()
 
     await pin.click()
     await expect(pin).toHaveAttribute('aria-pressed', 'false')
@@ -512,25 +536,35 @@ test.describe('컷 고정', () => {
     await expectNotExpanded(card)
   })
 
-  test('R2: 방어 카드 핀 메뉴는 저난수1타(고난수견딤)·확정견딤이고, 계단이 없던 단계도 메뉴를 열면 계산돼 풀린다', async ({ page }) => {
+  test('R2: 방어 카드 핀 메뉴는 확정견딤·저난수1타(고난수견딤) 중 고를 수 있는 결과이고, 계단이 없던 단계도 메뉴를 열면 계산돼 풀린다', async ({ page }) => {
     await selectTab(page, '방어')
     await waitComplete(page)
     const n = await cards(page).count()
     await expect(cards(page).getByTestId('cut-pin')).toHaveCount(n)
     const card = cards(page).and(page.locator('[data-opponent="garchomp"]')).filter({ has: page.locator('[data-testid="cut-pin"]:not([aria-disabled])') }).first()
     await card.getByTestId('cut-pin').click()
-    const items = card.getByRole('menuitem')
-    await expect(items.locator('.cut-pin-stage')).toHaveText(['저난수1타', '확정견딤'])
-    await expect(card.getByRole('menu').getByText('계산 중')).toHaveCount(0, { timeout: 15_000 })
-    for (const t of await items.locator('.cut-pin-detail').allInnerTexts()) expect(t).toMatch(/^(최소 H\d+ [BD]\d+( \/ H\d+ [BD]\d+\+)?|H\d+ [BD]\d+\+|도달 불가|SP 부족\(\d+\)|성격 충돌|계산 불가)$/)
-    // 계산 중에 연 메뉴도 풀린 뒤 Enter가 고를 수 있는 항목에 닿는다
-    await expectFocusOnFirstSelectable(items)
+    const menu = pinMenu(card)
+    await expect(menu.getByText('계산 중…')).toHaveCount(0, { timeout: 15_000 })
+    const results = menu.getByTestId('adjust-result')
+    const labels = await results.evaluateAll((els) => els.map((e) => e.getAttribute('data-label')))
+    expect(labels.length).toBeGreaterThan(0)
+    expect(['guaranteed-survive', 'low-roll-ohko'].filter((l) => labels.includes(l))).toEqual(labels)
+    for (const r of await results.all()) expect(await spsText(r)).toMatch(/^H\d+ [BD]\d+\+?$/)
+    // 계산 중에 연 메뉴도 풀린 뒤 첫 고를 수 있는 결과에 포커스가 닿는다
+    await expect(results.first()).toBeFocused()
     await expect(pinItem(card, '확정견딤')).toBeVisible()
+    await pinItem(card, '확정견딤').click()
+    // 2단: 무보정/B·D 상승, 고를 수 있는 선택지에 H 최대가 있으면 합 최소·H 최대 두 항목
+    await expect(menu.getByTestId('adjust-nature').locator('.adjust-nature-name')).toHaveText(['무보정', /^[BD] 상승$/])
+    for (const h of await menu.getByTestId('adjust-hmax').all()) {
+      await expect(h).toContainText('H 최대')
+      await expect(menu.locator(`[data-testid="adjust-nature"][data-nature="${await h.getAttribute('data-nature')}"]`)).toContainText('합 최소')
+    }
     await page.keyboard.press('Escape')
-    await expect(card.getByRole('menu')).toHaveCount(0)
+    await expect(menu).toHaveCount(0)
   })
 
-  test('R2: 현재 판정이 고난수1타인 방어 카드(대도각참 생명의구슬 +2 기습)도 이미지 앞 핀 메뉴로 두 단계 모두 고정·해제한다', async ({ page }) => {
+  test('R2: 현재 판정이 고난수1타인 방어 카드(대도각참 생명의구슬 +2 기습)도 이미지 앞 핀 메뉴로 고를 수 있는 결과마다 고정·해제한다', async ({ page }) => {
     await selectTab(page, '방어')
     await waitComplete(page)
     const card = cards(page).and(page.locator('[data-opponent="kingambit"][data-power-item="lifeorb"]'))
@@ -542,17 +576,25 @@ test.describe('컷 고정', () => {
     expect(pinBox!.x + pinBox!.width).toBeLessThanOrEqual(iconBox!.x)
     await expect(pin).not.toHaveAttribute('aria-disabled', /.*/)
 
-    for (const stage of ['저난수1타', '확정견딤']) {
+    await pin.click()
+    await expect(pinMenu(card).getByText('계산 중…')).toHaveCount(0, { timeout: 15_000 })
+    const labels = await pinMenu(card)
+      .getByTestId('adjust-result')
+      .evaluateAll((els) => els.map((e) => e.getAttribute('data-label')))
+    expect(labels).toContain('guaranteed-survive')
+    await page.keyboard.press('Escape')
+    const STAGE_TEXT: Record<string, string> = { 'guaranteed-survive': '확정견딤', 'low-roll-ohko': '저난수1타' }
+    for (const label of labels) {
+      const stage = STAGE_TEXT[label as string]
       await pin.click()
-      const items = card.getByTestId('cut-pin-item')
-      await expect(items.locator('.cut-pin-stage')).toHaveText(['저난수1타', '확정견딤'])
       const item = pinItem(card, stage)
-      await expect(item).toHaveAttribute('data-enabled', 'true', { timeout: 15_000 })
-      await expect(item.locator('.cut-pin-detail')).toHaveText(/^최소 H\d+ B\d+( \/ H\d+ B\d+\+)?$/)
+      await expect(item).toBeVisible({ timeout: 15_000 })
+      expect(await spsText(item)).toMatch(/^H\d+ B\d+\+?$/)
       await item.click()
+      await pinMenu(card).locator('[data-testid="adjust-nature"][data-enabled="true"]').first().click()
       await expect(pin).toHaveAttribute('aria-pressed', 'true')
       await expect(pin).toHaveAttribute('title', new RegExp(`^컷 고정 고정됨: ${stage}`))
-      await expect(card.getByTestId('cut-pin-menu')).toHaveCount(0)
+      await expect(pinMenu(card)).toHaveCount(0)
       await expect(lockList(page).locator('.lock-desc')).toContainText(stage)
       await expectNotExpanded(card)
       await settle(page)
@@ -678,7 +720,24 @@ test.describe('컷 고정', () => {
     await expect(lockedSp(page, 'def')).toHaveText(/^SP 방어 고정됨: B\d+(\+)?( \/ B\d+\+?)?$/)
   })
 
-  test('AC12·AC16: H를 공유하는 방어 쌍 고정 두 개가 함께 활성이고, 하락 자리가 없는 카드는 결과 배지 툴팁·읽기 설명으로 경고한다', async ({ page }) => {
+  test('AC12·AC17: H를 공유하는 방어 쌍(H+B·H+D) 고정 두 개가 함께 활성이고, 같은 B의 다른 H+B를 걸면 H+B만 교체한다', async ({ page }) => {
+    await lockRow(page, '방어', 'garchomp', 'dragonclaw')
+    await lockRow(page, '방어', 'floettemega', 'dazzlinggleam')
+    await expect(lockList(page).locator('.lock-item')).toHaveCount(2)
+    await expect(lockList(page).getByTestId('lock-status')).toHaveCount(0)
+    await expect(lockedSp(page, 'hp')).toHaveText(/^SP HP 고정됨: H\d+( \/ H\d+)*$/)
+    await expect(lockedSp(page, 'def')).toBeVisible()
+    await expect(lockedSp(page, 'spd')).toBeVisible()
+    // 같은 B를 쓰는 다른 H+B(대도각참 엎드려베기)를 걸면 한카리아스 H+B를 풀고, H+D는 남는다(2026-11-21 사용자 결정)
+    await lockRow(page, '방어', 'kingambit', 'kowtowcleave')
+    await expect(lockList(page).locator('.lock-item')).toHaveCount(2)
+    await expect(moveCard(page, 'garchomp', 'dragonclaw').getByTestId('cut-pin')).toHaveAttribute('aria-pressed', 'false')
+    await expect(moveCard(page, 'floettemega', 'dazzlinggleam').getByTestId('cut-pin')).toHaveAttribute('aria-pressed', 'true')
+    await expect(lockList(page).locator('.lock-item[data-lock-kind="defense"]')).toHaveCount(2)
+    await expect(lockList(page).getByTestId('lock-status')).toHaveCount(0)
+  })
+
+  test('AC16: 하락 자리가 없는 카드는 결과 배지 툴팁·읽기 설명으로 경고한다', async ({ page }) => {
     await fillMySet(page, { moves: [...EXAMPLE_MOVES.slice(0, 3), '용성군'] })
     // S·A·C·H+B를 모두 고정하면 S 상승 갈래의 하락은 D뿐이라, 특수기를 맞는 H+D 행은 하락 자리가 없다
     await lockBadge(page, MOLDURYU_140)
@@ -686,10 +745,13 @@ test.describe('컷 고정', () => {
     await lockRow(page, '공격', 'garchomp', 'dragonclaw')
     await lockRow(page, '공격', 'kommoo', 'dracometeor', '고난수1타')
     await lockRow(page, '방어', 'garchomp', 'dragonclaw')
-    await lockRow(page, '방어', 'kingambit', 'kowtowcleave')
-    await expect(lockList(page).locator('.lock-item')).toHaveCount(5)
+    await expect(lockList(page).locator('.lock-item')).toHaveCount(4)
     await expect(lockList(page).getByTestId('lock-status')).toHaveCount(0)
-    await expect(lockedSp(page, 'hp')).toHaveText(/^SP HP 고정됨: H\d+( \/ H\d+)*$/)
+    // 기준 갈래를 S 상승으로(고정 밖 갈래는 성격 무보정이라 하락이 없다)
+    const sPlus = natureBtn(page, '스피드', '상승')
+    if ((await sPlus.getAttribute('aria-pressed')) !== 'true') await sPlus.click()
+    await settle(page)
+    await expect(sPlus).toHaveAttribute('aria-pressed', 'true')
 
     await selectTab(page, '방어')
     await waitComplete(page)
@@ -1046,5 +1108,108 @@ test.describe('컷 고정', () => {
     await expect(lockList(page).locator('.lock-item')).toHaveCount(1)
     await selectTab(page, '스피드')
     await expect(badgePin(page, MOLDURYU_140)).toHaveAttribute('aria-pressed', 'true')
+  })
+  test('AC17: 스피드 배지를 차례로 고정하면 나중 것 하나만 남고(교체), 공격도 같은 능력치 다른 카드를 고정하면 교체한다', async ({ page }) => {
+    await lockBadge(page, MOLDURYU_140)
+    await settle(page)
+    await lockBadge(page, NINETALES_152)
+    await settle(page)
+    await expect(lockList(page).locator('.lock-item')).toHaveCount(1)
+    await expect(lockList(page).locator('.lock-desc')).toHaveAttribute('title', /^나인테일 /)
+    await expect(badgePin(page, MOLDURYU_140)).toHaveAttribute('aria-pressed', 'false')
+    await expect(badgePin(page, NINETALES_152)).toHaveAttribute('aria-pressed', 'true')
+    await removeAllLocks(page)
+    await expect(spBox(page, '스피드')).toHaveValue('32')
+
+    // 공격: 한카리아스 드래곤클로(A) 뒤 다른 A 카드
+    await lockRow(page, '공격', 'garchomp', 'dragonclaw')
+    // 같은 A를 쓰는 메가앱솔Z 드래곤클로(상승으로만 닿는다)를 고정하면 한카리아스 고정을 교체한다
+    const card = await lockRow(page, '공격', 'absolmegaz', 'dragonclaw', '확정1타', 'plus')
+    await expect(lockList(page).locator('.lock-item')).toHaveCount(1)
+    await expect(lockList(page).locator('.lock-desc')).toHaveAttribute('title', /^메가앱솔Z /)
+    await expect(moveCard(page, 'garchomp', 'dragonclaw').getByTestId('cut-pin')).toHaveAttribute('aria-pressed', 'false')
+    await expect(card.getByTestId('cut-pin')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  test('AC18: 방어 핀 2단 D 상승·H 최대를 고르면 고정 줄·고정 목록 SP가 메뉴 값이고 D ▲가 눌린다, 공격 상승·무보정도 메뉴 값 그대로', async ({ page }) => {
+    await selectTab(page, '방어')
+    await waitComplete(page)
+    const card = moveCard(page, 'floettemega', 'dazzlinggleam')
+    await card.getByTestId('cut-pin').click()
+    await pinItem(card, '저난수1타').click()
+    const hMax = pinNature(card, 'plus', 'h-max')
+    await expect(hMax).toHaveAttribute('data-enabled', 'true')
+    const shown = await spsText(hMax)
+    const [h, d] = shown.split(' ')
+    expect(h).toMatch(/^H\d+$/)
+    expect(d).toMatch(/^D\d+\+$/)
+    // H 최대가 합 최소보다 H가 크다
+    const minSum = await spsText(pinNature(card, 'plus'))
+    expect(Number(h.slice(1))).toBeGreaterThan(Number(minSum.split(' ')[0].slice(1)))
+    await hMax.click()
+    await expect(card.getByTestId('cut-pin')).toHaveAttribute('aria-pressed', 'true')
+    await settle(page)
+    await expect(spBox(page, 'HP')).toHaveValue(h.slice(1))
+    await expect(spBox(page, '특방')).toHaveValue(d.slice(1, -1))
+    await expect(natureBtn(page, '특방', '상승')).toHaveAttribute('aria-pressed', 'true')
+    await expect(lockList(page).getByTestId('lock-alloc')).toHaveText('H 최대')
+    await expect(lockList(page).locator('.lock-sp')).toContainText(`${h} ${d}`)
+    await removeAllLocks(page)
+
+    // 공격 상승: 고정 줄 A = 메뉴 값, A ▲ 눌림. 무보정: 메뉴 값, 기준 갈래는 고정 밖(A ▲ 꺼짐)
+    await selectTab(page, '공격')
+    await waitComplete(page)
+    const atk = moveCard(page, 'garchomp', 'dragonclaw')
+    for (const nature of ['plus', 'neutral'] as const) {
+      await atk.getByTestId('cut-pin').click()
+      await pinItem(atk, '확정1타').click()
+      const option = pinNature(atk, nature)
+      await expect(option).toHaveAttribute('data-enabled', 'true')
+      const sp = await spsText(option)
+      await option.click()
+      await settle(page)
+      await expect(spBox(page, '공격')).toHaveValue(sp.replace(/^A/, '').replace('+', ''))
+      await expect(natureBtn(page, '공격', '상승')).toHaveAttribute('aria-pressed', nature === 'plus' ? 'true' : 'false')
+      await removeAllLocks(page)
+    }
+  })
+
+  test('@layout 공·방 핀 메뉴 1단·2단이 화면·목록 스크롤 박스에 잘리지 않고 페이지 가로 스크롤이 없다', async ({ page }) => {
+    for (const tab of ['공격', '방어'] as const) {
+      await selectTab(page, tab)
+      await waitComplete(page)
+      const card = cards(page).filter({ has: page.locator('[data-testid="cut-pin"]:not([aria-disabled])') }).first()
+      const id = await card.getAttribute('data-card-id')
+      const fixed = cards(page).and(page.locator(`[data-card-id="${id!.replace(/["\\]/g, '\\$&')}"]`))
+      await fixed.getByTestId('cut-pin').scrollIntoViewIfNeeded()
+      await fixed.getByTestId('cut-pin').click()
+      const menu = pinMenu(fixed)
+      await expect(menu.getByText('계산 중…')).toHaveCount(0, { timeout: 15_000 })
+      for (const stage of ['result', 'nature'] as const) {
+        if (stage === 'nature') await menu.getByTestId('adjust-result').first().click()
+        await expect(menu).toHaveAttribute('data-stage', stage)
+        const clip = await menu.evaluate((el) => {
+          const r = el.getBoundingClientRect()
+          let { left, top, right, bottom } = { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }
+          for (let p = el.parentElement; p; p = p.parentElement) {
+            const cs = getComputedStyle(p)
+            if (cs.overflowX === 'visible' && cs.overflowY === 'visible') continue
+            const c = p.getBoundingClientRect()
+            left = Math.max(left, c.left)
+            top = Math.max(top, c.top)
+            right = Math.min(right, c.right)
+            bottom = Math.min(bottom, c.bottom)
+          }
+          const wide = [...el.querySelectorAll('[role="menuitem"]')].filter((m) => m.scrollWidth > m.clientWidth + 1).length
+          return { inside: r.left >= left - 0.5 && r.right <= right + 0.5 && r.top >= top - 0.5 && r.bottom <= bottom + 0.5, rect: [r.left, r.top, r.right, r.bottom], box: [left, top, right, bottom], wide }
+        })
+        expect(clip.inside, `${tab} ${stage} ${JSON.stringify(clip)}`).toBe(true)
+        expect(clip.wide, `${tab} ${stage} 항목 글자 넘침`).toBe(0)
+        expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0)
+      }
+      await page.keyboard.press('Escape')
+      await expect(menu).toHaveCount(0)
+      await expect(fixed.getByTestId('cut-pin')).toBeFocused()
+    }
   })
 })
