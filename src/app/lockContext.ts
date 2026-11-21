@@ -2,6 +2,7 @@
 import { createContext, useContext, type Dispatch } from 'react'
 import {
   checkLockCandidate,
+  pinDisabledReason,
   pinMenuView,
   type AdjustAllocation,
   type AdjustView,
@@ -11,6 +12,7 @@ import {
   type LockCheck,
   type LockDerivation,
   type LockResolution,
+  type PinEmptyReason,
   type PinMenuView,
   type Tab,
 } from '../cards'
@@ -38,6 +40,12 @@ export interface LockUi {
   addLock(lock: Omit<CutLock, 'seq'>): void
   /** 공·방 카드 핀 메뉴 모델(cards pinMenuView). 고정 파생·후보가 계산 중이면 computing */
   pinMenu(tab: Tab, pin: CardLockPin): PinMenuView
+  /**
+   * 빈 핀이 고를 수 있는 선택지가 없다고 판정됐으면 그 이유(핀 비활성). 고정이 없거나 고정 파생·단계 후보가 하나라도 계산 중이거나
+   * 찬 핀·고정 불가 핀이면 undefined(활성). 같은 Provider 값 안에서 단계 후보 목록(조립 결과 객체)마다 메모한다.
+   * viewCurrent = 그 핀이 든 탭 뷰가 지금 실행 세대의 뷰인가(밀려난 뷰의 이전 세대 후보를 새 세대 고정·초안으로 판정하지 않는다, R6). false면 활성
+   */
+  pinDisabled(tab: Tab, pin: CardLockPin, viewCurrent: boolean): PinEmptyReason | undefined
   /** 핀 메뉴에서 고른 결과·성격 선택지·배분의 고정을 더한다(교체·기준 갈래·자동 조정 대기까지 add-lock 한 번). 고를 수 없는 선택지·없는 H 최대·계산 중에는 무시 */
   pinLock(view: PinMenuView, result: number, option: number, allocation: AdjustAllocation): void
   removeLock(seq: number): void
@@ -68,6 +76,7 @@ export const NO_LOCK_UI: LockUi = {
   check: () => ({ kind: 'computing' }),
   addLock: noop,
   pinMenu: () => PIN_COMPUTING,
+  pinDisabled: () => undefined,
   pinLock: noop,
   removeLock: noop,
   setBase: noop,
@@ -81,6 +90,8 @@ export const NO_LOCK_UI: LockUi = {
 }
 
 export const LockUiContext = createContext<LockUi>(NO_LOCK_UI)
+/** 카드 목록의 탭 뷰가 지금 실행 세대의 뷰인가(ResultPanel이 준다, 밀려난 뷰 = false). 핀 비활성 판정(pinDisabled)의 viewCurrent */
+export const ViewCurrentContext = createContext(false)
 
 export const useLockUi = (): LockUi => useContext(LockUiContext)
 
@@ -105,6 +116,21 @@ export function lockUiValue({ game, state, snapshot, runGeneration, dispatch, on
   const pending = hasLocks && current === null
   const spTotal = game.manifest.rules.spTotal
   const derivation = hasLocks ? (current?.derivation ?? null) : null
+  const pinMenu = (tab: Tab, pin: CardLockPin): PinMenuView => {
+    if (pending || tab === 'speed' || pin.control.kind !== 'lockable') return PIN_COMPUTING
+    return pinMenuView({
+      game,
+      mySet: toPokemonSet(game, state.draft).set,
+      locks: state.locks,
+      resolutions: hasLocks ? (current?.resolutions ?? NO_RESOLUTIONS) : NO_RESOLUTIONS,
+      lockBase: state.lockBase,
+      side: tab,
+      stages: pin.control.stages,
+      ...(pin.current === undefined ? {} : { current: pin.current }),
+    })
+  }
+  // 판정 메모: 단계 후보 목록 객체 키(후보가 계산 중 → 준비로 바뀌면 새 객체라 처음 본 "계산 중 = 활성"이 굳지 않는다). null = 활성
+  const disabledMemo = new WeakMap<object, PinEmptyReason | null>()
   /** 지금 실행 세대의 기준 갈래(해제 자르기에서 남은 고정 능력치를 이 값으로 센다) */
   const baseBranch = () => {
     const d = hasLocks ? current?.derivation : undefined
@@ -130,18 +156,19 @@ export function lockUiValue({ game, state, snapshot, runGeneration, dispatch, on
       const base = baseBranch()
       dispatch(base === undefined ? { type: 'add-lock', lock, spTotal } : { type: 'add-lock', lock, spTotal, lockedSp: base.lockedSp })
     },
-    pinMenu(tab, pin) {
-      if (pending || tab === 'speed' || pin.control.kind !== 'lockable') return PIN_COMPUTING
-      return pinMenuView({
-        game,
-        mySet: toPokemonSet(game, state.draft).set,
-        locks: state.locks,
-        resolutions: hasLocks ? (current?.resolutions ?? NO_RESOLUTIONS) : NO_RESOLUTIONS,
-        lockBase: state.lockBase,
-        side: tab,
-        stages: pin.control.stages,
-        ...(pin.current === undefined ? {} : { current: pin.current }),
-      })
+    pinMenu,
+    pinDisabled(tab, pin, viewCurrent) {
+      // 밀려난(이전 세대) 뷰의 후보는 판정하지 않는다: 새 세대 뷰가 나오면 그 후보(계산 중 → 준비)로 판정한다.
+      // 고정이 없으면 다른 고정과의 충돌·SP 부족이 없고 도달 불가는 고정 불가 핀(blocked)이 다룬다(판정하는 경로와 같은 결과, 단위 테스트로 고정)
+      if (!viewCurrent || !hasLocks || pending || tab === 'speed' || (pin.lockedBy?.length ?? 0) > 0) return undefined
+      const control = pin.control
+      if (control.kind !== 'lockable' || control.stages.some((s) => s.candidate.kind !== 'ready')) return undefined
+      let r = disabledMemo.get(control)
+      if (r === undefined) {
+        r = pinDisabledReason(pinMenu(tab, pin)) ?? null
+        disabledMemo.set(control, r)
+      }
+      return r ?? undefined
     },
     pinLock: (view, result, option, allocation) => {
       if (pending) return

@@ -10,6 +10,7 @@ import {
   speedBadgeLockKey,
   speedBranchLines,
   speedDropWarning,
+  speedLockBadge,
   speedLockCandidate,
   speedLockSignature,
   type ResolveSpeedLocksInput,
@@ -314,5 +315,64 @@ describe('스피드 배지 갈래 줄(R8, AC2 스피드 쪽)', () => {
     const [, out] = lines(d, fastest120(), mySp(), true)
     expect(spOfOption(out.neutral)).toBe(0)
     expect(spOfOption(out.plus)).toBe(0)
+  })
+})
+
+describe('AC9: 고정 해석은 화면과 같은 SP 배분 기준으로 배지를 다시 만든다(speed-bundles-pin-disable 결정 2)', () => {
+  const chomp = (bundleShareMin: number, added: readonly SpeedAddedBundle[] = []) =>
+    buildSpeedChart({ game, view: bo1, myAbility: 'static', criteria: { ...DEFAULT_CRITERIA, bundleShareMin }, filters: { topN: 200, selected: [] }, customTargets: [], added }).badges.filter(
+      (b) => b.opponentId === 'garchomp' && b.condition.kind === 'none',
+    )
+  const second: SpeedAddedBundle = { source: 'ladder', opponentId: 'garchomp', sp: 0, nature: 'minus' }
+
+  it('2위 기본 배지 고정은 같은 기준에서 ok, 기준을 올려 빠지면 missing, 같은 배분 추가 기록이 있으면 ok로 이어지고 최소 SP가 같다', () => {
+    const b = chomp(0.05).find((x) => x.origin === 'ladder' && x.bundle.sp === 0 && x.bundle.nature === 'minus')
+    if (b === undefined) throw new Error('2위 기본 배지 없음')
+    const lock = lockOf(b)
+    const at = (bundleShareMin: number, added: readonly SpeedAddedBundle[] = []) => resolve([lock], { criteria: { ...DEFAULT_CRITERIA, bundleShareMin }, added }).get(1)
+    const ok = at(0.05)
+    expect(ok?.kind).toBe('ok')
+    expect(at(0.2)).toEqual({ kind: 'missing' })
+    expect(at(0.2, [second])).toEqual(ok)
+  })
+
+  it('추가 배지에 건 고정은 기준을 낮춰 기본 배지에 흡수돼도 ok이고 최소 SP가 같다', () => {
+    const added = chomp(0.2, [second]).find((x) => x.origin === 'added')
+    if (added === undefined) throw new Error('추가 배지 없음')
+    const lock = lockOf(added)
+    const high = resolve([lock], { criteria: { ...DEFAULT_CRITERIA, bundleShareMin: 0.2 }, added: [second] }).get(1)
+    const low = resolve([lock], { criteria: { ...DEFAULT_CRITERIA, bundleShareMin: 0.05 }, added: [second] }).get(1)
+    expect(high?.kind).toBe('ok')
+    expect(low).toEqual(high)
+    expect(chomp(0.05, [second]).some((x) => x.origin === 'added')).toBe(false)
+  })
+
+  it('기준 변경으로 기본↔추가가 바뀌어도 차트 배지 대상(speedLockBadge)·갈래 줄의 자기 고정 판정이 해석과 같은 배지로 이어진다', () => {
+    const derive = (lock: CutLock, r: ReadonlyMap<number, LockResolution>) => deriveLocks({ game, mySet: raichuY, locks: [lock], resolutions: r, baseChoice: null })
+    const lines = (d: LockDerivation, badge: SpeedBadge) => speedBranchLines({ game, mySet: raichuY, derivation: d, badge, myTailwind: false, mySp: sp(), spTotal: game.manifest.rules.spTotal })
+    const isSecond = (x: SpeedBadge) => x.bundle.sp === 0 && x.bundle.nature === 'minus'
+    // 추가 → 기본: 추가 배지에 건 고정은 기준을 낮추면 그 기본 배지를 가리킨다
+    const added = chomp(0.2, [second]).find((x) => x.origin === 'added')
+    if (added === undefined) throw new Error('추가 배지 없음')
+    const addedLock = lockOf(added)
+    const low = chomp(0.05, [second])
+    const ladder = low.find((x) => x.origin === 'ladder' && isSecond(x))
+    if (ladder === undefined || addedLock.target.kind !== 'speed') throw new Error('기본 배지 없음')
+    expect(speedLockBadge(low, addedLock.target)?.id).toBe(ladder.id)
+    const dAdded = derive(addedLock, resolve([addedLock], { criteria: { ...DEFAULT_CRITERIA, bundleShareMin: 0.05 }, added: [second] }))
+    expect(lines(dAdded, ladder)).toEqual([])
+    // 기본 → 추가: 2위 기본 배지에 건 고정은 기준을 올리면(추가 기록 있음) 그 추가 배지를 가리킨다
+    const ladderLock = lockOf(ladder)
+    const high = chomp(0.2, [second])
+    const addedHigh = high.find((x) => x.origin === 'added' && isSecond(x))
+    if (addedHigh === undefined || ladderLock.target.kind !== 'speed') throw new Error('추가 배지 없음')
+    expect(speedLockBadge(high, ladderLock.target)?.id).toBe(addedHigh.id)
+    const dLadder = derive(ladderLock, resolve([ladderLock], { criteria: { ...DEFAULT_CRITERIA, bundleShareMin: 0.2 }, added: [second] }))
+    expect(lines(dLadder, addedHigh)).toEqual([])
+    // 다른 배지는 대상이 아니다(같은 상대의 1위 배지는 갈래 줄이 있다)
+    const top = high.find((x) => x.origin === 'ladder')
+    if (top === undefined) throw new Error('1위 배지 없음')
+    expect(speedLockBadge([top], ladderLock.target)).toBeUndefined()
+    expect(lines(dLadder, top).length).toBeGreaterThan(0)
   })
 })

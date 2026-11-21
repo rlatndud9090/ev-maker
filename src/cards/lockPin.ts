@@ -23,7 +23,12 @@ export interface PinMenuView extends Pick<AdjustView, 'state' | 'natures' | 'res
   picks: readonly (readonly (PinPick | null)[])[]
   /** ready인데 결과가 하나도 없을 때, 끈 이유 중 SP 부족의 최소 초과량 */
   emptyOver?: number
+  /** ready인데 결과가 하나도 없을 때 핀 전체의 이유: SP 부족(최소 초과량) > 성격 충돌(칸 하나라도) > 일반 */
+  empty?: PinEmptyReason
 }
+
+/** 고를 수 있는 선택지가 없는 핀의 이유(핀 비활성·빈 메뉴 문구) */
+export type PinEmptyReason = { kind: 'sp-short'; over: number } | { kind: 'nature-conflict' } | { kind: 'none' }
 
 export interface PinMenuInput {
   game: Snapshot
@@ -173,8 +178,13 @@ export function pinMenuView(input: PinMenuInput): PinMenuView {
   const results: AdjustResult[] = []
   const picks: (PinPick | null)[][] = []
   let emptyOver: number | undefined
+  let conflict = false
   grid.forEach((cells, r) => {
-    for (const c of cells) if (c.option.kind === 'off' && c.option.over !== undefined) emptyOver = Math.min(emptyOver ?? Infinity, c.option.over)
+    for (const c of cells) {
+      if (c.option.kind !== 'off') continue
+      if (c.option.over !== undefined) emptyOver = Math.min(emptyOver ?? Infinity, c.option.over)
+      if (c.option.reason === 'no-branch') conflict = true
+    }
     const lead = cells[preferred]?.option.kind === 'ok' ? preferred : cells.reduce((best, c, i) => (cells[best].option.kind !== 'ok' || (c.option.kind === 'ok' && c.cost < cells[best].cost) ? i : best), 0)
     if (cells[lead].option.kind !== 'ok') return
     const label = ordered[r].stage as RollTier
@@ -182,6 +192,15 @@ export function pinMenuView(input: PinMenuInput): PinMenuView {
     picks.push(cells.map((c) => c.pick))
   })
   const view: PinMenuView = { state: 'ready', natures, results, picks }
-  if (results.length === 0 && emptyOver !== undefined) view.emptyOver = emptyOver
+  if (results.length === 0) {
+    if (emptyOver !== undefined) view.emptyOver = emptyOver
+    view.empty = emptyOver !== undefined ? { kind: 'sp-short', over: emptyOver } : conflict ? { kind: 'nature-conflict' } : { kind: 'none' }
+  }
   return view
+}
+
+/** 핀 비활성 이유: 메뉴 모델이 준비됐고 고를 수 있는 결과가 하나도 없을 때만(계산 중이면 undefined = 활성) */
+export function pinDisabledReason(view: PinMenuView): PinEmptyReason | undefined {
+  if (view.state !== 'ready' || view.results.length > 0) return undefined
+  return view.empty ?? { kind: 'none' }
 }

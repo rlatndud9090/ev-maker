@@ -1,6 +1,6 @@
 // 컷 고정 화면 문구(순수 함수). 갈래·예산·상태 값은 cards 파생 결과를 그대로 받아 글자로만 바꾼다.
 import { BASE_CONDITION_ID, bundleLabel, bundleSpoken, minSumWithFloors, type CutLock, type LockCheck, type LockDerivation } from '../../cards'
-import type { AdjustAllocation, AdjustNature, AdjustOption, AdjustResult, AdjustStat, LockCandidate, LockResolution, LockStage, LockStatus, SpeedBranchLine, SpeedBranchOption, SpeedLockCandidate, Tab } from '../../cards'
+import type { AdjustAllocation, AdjustNature, AdjustOption, AdjustResult, AdjustStat, LockCandidate, LockResolution, LockStage, LockStatus, PinEmptyReason, SpeedBranchLine, SpeedBranchOption, SpeedLockCandidate, Tab } from '../../cards'
 import type { Snapshot, StatId } from '../../data/schema'
 import { STAT_SHORT, bundleText, categoryBadge, judgementText, type BundleStatLike, type KoBadge } from '../../ui/format'
 import { namesOf } from '../../ui/names'
@@ -23,6 +23,7 @@ export const NO_NEUTRAL_BRANCH_TEXT = '상승 없이 닿는 선택지 없음'
 export const NO_OUT_PLUS_TEXT = '고정에 상승이 필요해 고정 밖 상승 불가'
 export const BASE_MARK_TEXT = '표 기준'
 export const NATURE_CONFLICT_DETAIL = '상승이 필요한 고정이 겹침'
+export const NATURE_CONFLICT_TEXT = '성격 충돌'
 
 const PLUS_MARK = '+'
 
@@ -181,7 +182,7 @@ export function lockStatusText(status: LockStatus): StatusText | undefined {
     case 'unreachable':
       return status.reason === undefined ? { text: '도달 불가' } : { text: '계산 불가', detail: UNREACHABLE_REASON[status.reason] ?? status.reason }
     case 'nature-conflict':
-      return { text: '성격 충돌', detail: NATURE_CONFLICT_DETAIL }
+      return { text: NATURE_CONFLICT_TEXT, detail: NATURE_CONFLICT_DETAIL }
     case 'sp-short':
       return { text: spShortText(status.over) }
   }
@@ -199,7 +200,7 @@ export function lockCheckText(check: LockCheckView | LockCheck): StatusText | un
     case 'sp-short':
       return { text: spShortText(check.over) }
     case 'nature-conflict':
-      return { text: '성격 충돌', detail: NATURE_CONFLICT_DETAIL }
+      return { text: NATURE_CONFLICT_TEXT, detail: NATURE_CONFLICT_DETAIL }
     case 'unreachable':
       return { text: '도달 불가' }
   }
@@ -255,6 +256,16 @@ export function pinStageView(stage: LockStage, candidate: LockCandidate | SpeedL
   const c = check(candidate)
   if (c.kind === 'ok' && candidate.kind === 'ready') return { stage, label, detail: candidateOptionsText(candidate.resolution) ?? '', lock: candidate.lock }
   return { stage, label, detail: lockCheckText(c)?.text ?? '' }
+}
+
+/**
+ * 스피드 배지 빈 핀의 비활성 이유(메뉴 한 줄 문구와 같다: 도달 불가·성격 충돌·SP 부족(n)·내 세트 오류·스피드 미지원).
+ * 바로 고정할 수 있거나 고정 해석이 계산 중이면 undefined(활성)
+ */
+export function speedPinDisabledText(candidate: SpeedLockCandidate, check: (c: LockCandidate) => LockCheckView): string | undefined {
+  if (candidate.kind === 'blocked') return blockedText(candidate.reason)
+  const c = check(candidate)
+  return c.kind === 'ok' || c.kind === 'computing' ? undefined : lockCheckText(c)?.text
 }
 
 /** 카드 줄 핀의 읽기 이름 "컷 고정: 한카리아스" · "컷 고정 해제: 한카리아스" */
@@ -413,6 +424,21 @@ export const pinResultsLabel = (subject: string): string => `${LOCK_NAME}할 결
 
 /** 빈 목록 "고정할 수 있는 결과 없음 · SP 부족(8)" */
 export const pinEmptyText = (over: number | undefined): string => (over === undefined ? PIN_EMPTY_TEXT : `${PIN_EMPTY_TEXT} · ${spShortText(over)}`)
+
+/** 고를 것이 없는 핀의 이유(비활성 핀 툴팁·읽기 설명): "SP 부족(8)" · "성격 충돌" · "고정할 수 있는 결과 없음" */
+export function pinEmptyReasonText(reason: PinEmptyReason): string {
+  switch (reason.kind) {
+    case 'sp-short':
+      return spShortText(reason.over)
+    case 'nature-conflict':
+      return NATURE_CONFLICT_TEXT
+    case 'none':
+      return PIN_EMPTY_TEXT
+  }
+}
+
+/** 빈 목록 문구(핀 이유와 같은 우선순위): "고정할 수 있는 결과 없음 · 성격 충돌" */
+export const pinEmptyMenuText = (reason: PinEmptyReason): string => (reason.kind === 'none' ? PIN_EMPTY_TEXT : `${PIN_EMPTY_TEXT} · ${pinEmptyReasonText(reason)}`)
 
 /** 성격 선택지 이름: "무보정" · "C 상승" · 방어 3방향(반대쪽 상승 선택지가 있음)은 "B 보정"/"D 보정" */
 export function adjustNatureName(natures: readonly AdjustNature[], nature: AdjustNature): string {

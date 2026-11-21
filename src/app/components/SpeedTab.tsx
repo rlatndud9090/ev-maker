@@ -11,7 +11,6 @@ import {
 } from '../../cards'
 import type { EvalOptions, PokemonSet } from '../../core'
 import type { Snapshot } from '../../data/schema'
-import { namesOf } from '../../ui/names'
 import { toPokemonSet } from '../../ui/setDraft'
 import { useDisplaySp, type DisplaySpStore } from '../displaySp'
 import { useLockUi } from '../lockContext'
@@ -58,11 +57,7 @@ export function SpeedTab({ game, input, state, mySet, displaySp, dispatch, tabId
   const lockedStats = locked ? (lockUi.derivation?.lockedStats ?? null) : undefined
   const model = useMemo(() => buildSpeedChart(input), [input])
   const badges = useMemo(() => visibleBadges(model, filters), [model, filters])
-  const nameOf = useMemo(() => {
-    const names = namesOf(game)
-    return (id: string) => names.species.label(id)
-  }, [game])
-  const cmp = useMemo(() => compareInRow(nameOf), [nameOf])
+  const cmp = useMemo(() => compareInRow(), [])
 
   // 확정 SP 기준(알림 영역)과 드래그 중 표시 SP 기준(화면)을 나눈다
   const confirmedBaseline = useMemo(() => speedBaseline(game, mySet, myTailwind, evalOptions), [game, mySet, myTailwind, evalOptions])
@@ -79,11 +74,8 @@ export function SpeedTab({ game, input, state, mySet, displaySp, dispatch, tabId
   )
   // 고정 후보·갈래 예산의 내 세트(고정 전 값, 드래그 중이면 표시 SP)
   const draft = state.draft
-  const lockSet = useMemo(() => {
-    if (!lockUi.enabled) return undefined
-    const set = toPokemonSet(game, draft).set
-    return shownSp === null ? set : { ...set, sp: shownSp }
-  }, [lockUi.enabled, game, draft, shownSp])
+  const confirmedLockSet = useMemo(() => (lockUi.enabled ? toPokemonSet(game, draft).set : undefined), [lockUi.enabled, game, draft])
+  const lockSet = useMemo(() => (confirmedLockSet === undefined || shownSp === null ? confirmedLockSet : { ...confirmedLockSet, sp: shownSp }), [confirmedLockSet, shownSp])
   const rows = useMemo(() => ladderRows(badges, baseline.kind === 'ok' ? baseline.speed : null, cmp), [badges, baseline, cmp])
   // 알림 영역은 확정 SP 기준(드래그 중에는 알리지 않는다)
   const summary = summaryText(confirmedBaseline)
@@ -147,6 +139,7 @@ export function SpeedTab({ game, input, state, mySet, displaySp, dispatch, tabId
         baseline={baseline}
         shownSet={shownSet}
         lockSet={lockSet}
+        confirmedLockSet={confirmedLockSet}
         myTailwind={myTailwind}
         customTargets={targets}
         dispatch={dispatch}

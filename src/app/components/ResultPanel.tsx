@@ -32,7 +32,7 @@ import { josa, koReason } from '../../ui/koErrors'
 import type { TabViewState } from '../executor'
 import type { DamageReveal } from '../reveal'
 import type { AppAction, MoveChoice } from '../state'
-import { useLockUi } from '../lockContext'
+import { ViewCurrentContext, useLockUi } from '../lockContext'
 import { CardItem, type AddStat } from './CardItem'
 import { OUTSIDE_FILTER_TEXT } from './lockText'
 import { moveNoticeText } from './text'
@@ -67,6 +67,8 @@ interface Props {
   customPanel?: ReactNode
   /** 기술 선택 목록을 연 줄의 항목 카드 id(닫으면 빈 목록). 계산 입력이 아니라 실행기 수요다 */
   onMenuCards: (tab: Tab, cardIds: readonly string[]) => void
+  /** 지금 보이는 카드 id(상대 그룹마다 고른 묶음 카드). 계산 입력이 아니라 실행기 미리 계산 대상이다(고정이 있을 때만 쓰인다) */
+  onVisibleCards?: (tab: Tab, cardIds: readonly string[]) => void
   /** 카드 '직접 추가' 판정 입력: '포켓몬 추가' 패널과 같은 화면 메타 기준 */
   addInput: CardInput
   /** 패널에서 추가한 배분: 그 줄을 그 배분으로 고르고, 새 계산에 나타나면 스크롤·포커스한다 */
@@ -127,7 +129,7 @@ function revealTarget(groups: readonly CardGroup[], tab: DamageTab, lock: CutLoc
   return null
 }
 
-export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySet, customTargets, pinnedBundles, sortMode, moveChoices, dispatch, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel, onMenuCards, addInput, reveal, onRevealed }: Props) {
+export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySet, customTargets, pinnedBundles, sortMode, moveChoices, dispatch, customOpen, onToggleCustom, customButtonRef, customPanelId, customPanel, onMenuCards, onVisibleCards, addInput, reveal, onRevealed }: Props) {
   const names = namesOf(game)
   // 배분 선택은 탭마다 따로(같은 포켓몬이라도 탭이 다르면 다른 행), 배분을 바꿔도 행이 유지되게 그룹 키로 둔다.
   const scoped = (groupKey: string) => JSON.stringify([tab, groupKey])
@@ -197,6 +199,11 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
     if (sortMode === 'usage') return [{ key: 'all', bucket: undefined, items: rows }]
     return sortByResult(rows, tab, (r) => r.card)
   }, [groups, tab, chosen, sortMode])
+  // 보이는 카드(그룹마다 고른 묶음)를 실행기에 알린다. 같은 집합이면 실행기가 무시한다
+  const visibleSig = useMemo(() => JSON.stringify(sections.flatMap((sec) => sec.items.map((it) => it.card.id))), [sections])
+  useEffect(() => {
+    onVisibleCards?.(tab, JSON.parse(visibleSig) as string[])
+  }, [tab, visibleSig, onVisibleCards])
   const uid = useId()
   const labelId = (sectionKey: string) => `${uid}-sort-${sectionKey}`
 
@@ -421,43 +428,45 @@ export function ResultPanel({ game, tab, tabId, panelId, state, generation, mySe
               {/* 계산결과순 그룹 라벨은 같은 목록 안 제목 항목(li > h2)이라 행이 그룹을 옮겨도 다시 마운트되지 않는다.
                   목록은 listitem만 갖는다(role=presentation li는 ARIA list 규칙 위반). 라벨에는 포커스가 없어 키보드 순서는 행만,
                   행 소속은 변동 버튼의 aria-describedby(그룹 제목 id)로 전한다. */}
-              <ol className="cards" data-sort={sortMode}>
-                {sections.flatMap((sec) => {
-                  const items = sec.items.map(({ group: g, card: c }) => (
-                    <CardItem
-                      key={scoped(g.key)}
-                      game={game}
-                      tab={tab}
-                      group={g}
-                      card={c}
-                      rollSteps={view.rollSteps}
-                      onSelect={onSelect}
-                      target={c.opponent.source === 'custom' ? targetOf(c.opponent.id) : undefined}
-                      dispatch={dispatch}
-                      groupLabelId={sec.bucket === undefined ? undefined : labelId(sec.key)}
-                      items={itemsOf.get(g.key) ?? NO_ITEMS}
-                      onChooseItem={onChooseItem}
-                      onResetItem={onResetItem}
-                      onMenuCards={onMenu}
-                      judgeAdd={judgeAdd}
-                    />
-                  ))
-                  if (sec.bucket === undefined) return items
-                  return [
-                    <li
-                      key={`sort-group:${sec.key}`}
-                      className="sort-group"
-                      data-testid="sort-group"
-                      data-group={sec.bucket.kind}
-                      data-tier={sec.bucket.kind === 'tier' ? sec.bucket.tier : undefined}
-                      data-count={sec.items.length}
-                    >
-                      <SectionLabel id={labelId(sec.key)} bucket={sec.bucket} count={sec.items.length} />
-                    </li>,
-                    ...items,
-                  ]
-                })}
-              </ol>
+              <ViewCurrentContext.Provider value={!superseded}>
+                <ol className="cards" data-sort={sortMode}>
+                  {sections.flatMap((sec) => {
+                    const items = sec.items.map(({ group: g, card: c }) => (
+                      <CardItem
+                        key={scoped(g.key)}
+                        game={game}
+                        tab={tab}
+                        group={g}
+                        card={c}
+                        rollSteps={view.rollSteps}
+                        onSelect={onSelect}
+                        target={c.opponent.source === 'custom' ? targetOf(c.opponent.id) : undefined}
+                        dispatch={dispatch}
+                        groupLabelId={sec.bucket === undefined ? undefined : labelId(sec.key)}
+                        items={itemsOf.get(g.key) ?? NO_ITEMS}
+                        onChooseItem={onChooseItem}
+                        onResetItem={onResetItem}
+                        onMenuCards={onMenu}
+                        judgeAdd={judgeAdd}
+                      />
+                    ))
+                    if (sec.bucket === undefined) return items
+                    return [
+                      <li
+                        key={`sort-group:${sec.key}`}
+                        className="sort-group"
+                        data-testid="sort-group"
+                        data-group={sec.bucket.kind}
+                        data-tier={sec.bucket.kind === 'tier' ? sec.bucket.tier : undefined}
+                        data-count={sec.items.length}
+                      >
+                        <SectionLabel id={labelId(sec.key)} bucket={sec.bucket} count={sec.items.length} />
+                      </li>,
+                      ...items,
+                    ]
+                  })}
+                </ol>
+              </ViewCurrentContext.Provider>
             </>
           )}
         </>

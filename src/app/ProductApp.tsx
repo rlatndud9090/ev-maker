@@ -191,6 +191,8 @@ function Workspace({ boot }: { boot: Boot }) {
   }, [displaySp, draft])
   // 기술 선택 목록을 연 줄의 항목 변동 판정도 계산 입력이 아니라 수요다.
   const onMenuCards = useCallback((t: Tab, cardIds: readonly string[]) => executor.setMenuCards(t, cardIds), [executor])
+  // 보이는 카드도 수요다(고정이 있을 때 다른 계산 뒤 미리 계산 대상)
+  const onVisibleCards = useCallback((t: Tab, cardIds: readonly string[]) => executor.setVisibleCards(t, cardIds), [executor])
   // 조정 팝오버를 연 카드와 핀 단계 메뉴를 연 카드는 같은 고정 후보·조정 수요(setDetailCards)로 합쳐 알린다.
   const [lockDemand] = useState(() => new Map<Tab, { adjust: readonly string[]; pin: readonly string[] }>())
   const pushLockDemand = useCallback(
@@ -356,6 +358,7 @@ function Workspace({ boot }: { boot: Boot }) {
             sortMode={state.sortMode}
             moveChoices={state.moveChoices}
             onMenuCards={onMenuCards}
+            onVisibleCards={onVisibleCards}
             dispatch={dispatch}
             customOpen={customOpen}
             onToggleCustom={toggleCustom}

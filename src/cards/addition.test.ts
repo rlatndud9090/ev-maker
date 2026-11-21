@@ -88,13 +88,18 @@ describe('스피드 판정', () => {
   const inp = (partial: Partial<SpeedChartInput> = {}) => speedInput({ view, filters: { topN: 30, selected: ['garchomp'] }, ...partial })
   const target: AdditionTarget = { source: 'ladder', id: 'garchomp' }
 
-  it('범위 안 1위 값(기본 배지)은 duplicate, 관측 다른 묶음은 ok', () => {
+  it('AC8: 범위 안 SP 배분 기준 이상 묶음(1위·2위 기본 배지)은 duplicate, 기준 미만 묶음과 관측에 없는 배분은 ok', () => {
     const q = speedAdditionQuery(inp(), DEFAULT_CRITERIA.bundleShareMin, target)
     if (q.kind !== 'ok') throw new Error(q.kind)
     expect(q.defaultValue).toEqual({ sp: 32, nature: 'plus' })
     expect(judgeSpeedAddition(q, 32, 'plus', SP_MAX)).toEqual({ kind: 'duplicate' })
-    expect(judgeSpeedAddition(q, 20, 'neutral', SP_MAX)).toEqual({ kind: 'ok' })
+    expect(judgeSpeedAddition(q, 20, 'neutral', SP_MAX)).toEqual({ kind: 'duplicate' })
+    expect(judgeSpeedAddition(q, 0, 'neutral', SP_MAX)).toEqual({ kind: 'ok' })
     expect(judgeSpeedAddition(q, 32, 'neutral', SP_MAX)).toEqual({ kind: 'ok' })
+    // 기준을 올려 2위가 기본 배지에서 빠지면 다시 추가할 수 있다
+    const high = speedAdditionQuery(inp(), 0.4, target)
+    if (high.kind !== 'ok') throw new Error(high.kind)
+    expect(judgeSpeedAddition(high, 20, 'neutral', SP_MAX)).toEqual({ kind: 'ok' })
   })
 
   it('조건 배지는 비교 대상이 아니다: shownKeys = 기본 배지 키뿐', () => {
@@ -103,9 +108,8 @@ describe('스피드 판정', () => {
     expect(r.conditions.length).toBeGreaterThan(0)
     const q = speedAdditionQuery(inp(), DEFAULT_CRITERIA.bundleShareMin, target)
     if (q.kind !== 'ok') throw new Error(q.kind)
-    expect([...q.shownKeys]).toEqual([speedKey(32, 'plus')])
-    const base = r.base
-    if (base === null) throw new Error('base')
+    expect([...q.shownKeys]).toEqual([speedKey(32, 'plus'), speedKey(20, 'neutral')])
+    const base = r.bases[0]
     for (const c of r.conditions) expect(c.speed).not.toBe(base.speed)
   })
 
@@ -114,7 +118,7 @@ describe('스피드 판정', () => {
     if (q.kind !== 'ok') throw new Error(q.kind)
     expect(q.observed.map((o) => [o.sp, o.nature, o.share, o.state])).toEqual([
       [32, 'plus', 0.5, 'shown'],
-      [20, 'neutral', 0.3, 'addable'],
+      [20, 'neutral', 0.3, 'shown'],
     ])
     const high = speedAdditionQuery(inp(), 0.9, target)
     if (high.kind !== 'ok') throw new Error(high.kind)
@@ -130,19 +134,17 @@ describe('스피드 판정', () => {
     expect(q.observed.find((o) => o.sp === 20)?.state).toBe('shown')
   })
 
-  it('addable 관측 줄은 judge ok이고, 그대로 추가하면 차트에 추가 배지가 생겨 shown이 된다', () => {
+  it('기준 미만 묶음은 judge ok이고, 그대로 추가하면 차트에 점유율 있는 추가 배지가 생겨 duplicate가 된다', () => {
     const q = speedAdditionQuery(inp(), DEFAULT_CRITERIA.bundleShareMin, target)
     if (q.kind !== 'ok') throw new Error(q.kind)
-    const line = q.observed.find((o) => o.state === 'addable')
-    if (line === undefined) throw new Error('no addable line')
-    expect(judgeSpeedAddition(q, line.sp, line.nature, SP_MAX)).toEqual({ kind: 'ok' })
-    const added: SpeedAddedBundle[] = [{ source: 'ladder', opponentId: 'garchomp', sp: line.sp, nature: line.nature }]
+    expect(judgeSpeedAddition(q, 0, 'neutral', SP_MAX)).toEqual({ kind: 'ok' })
+    const added: SpeedAddedBundle[] = [{ source: 'ladder', opponentId: 'garchomp', sp: 0, nature: 'neutral' }]
     const chart = buildSpeedChart(inp({ added }))
     const badge = chart.badges.find((b) => b.origin === 'added' && b.opponentId === 'garchomp')
-    expect(badge?.bundle).toEqual({ sp: line.sp, nature: line.nature, share: line.share })
+    expect(badge?.bundle).toEqual({ sp: 0, nature: 'neutral', share: 0.02 })
     const after = speedAdditionQuery(inp({ added }), DEFAULT_CRITERIA.bundleShareMin, target)
     if (after.kind !== 'ok') throw new Error(after.kind)
-    expect(after.observed.find((o) => o.sp === line.sp && o.nature === line.nature)?.state).toBe('shown')
+    expect(judgeSpeedAddition(after, 0, 'neutral', SP_MAX)).toEqual({ kind: 'duplicate' })
   })
 
   it('범위 밖이면 1위 값도 ok(shownKeys 빈 집합)이고, 그대로 추가하면 추가 배지만 생겨 duplicate가 된다', () => {

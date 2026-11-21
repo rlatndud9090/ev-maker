@@ -98,11 +98,13 @@ function fingerprint(c: Case) {
   const attack = buildTabView(input, 'attack')
   const defense = buildTabView(input, 'defense')
   const myAbility = attempt(() => validateSet(game, c.mySet).ability)
+  // speed-bundles-pin-disable R1이 무고정 스피드 기본 배지를 "SP 배분 기준 이상 전부"로 의도적으로 바꿨다(고정 경로 누수가 아님).
+  // 봉인 지문은 그대로 두고, 기준을 100% 초과로 두어 "1위 하나" 대체 규칙(= 변경 전 선정)만 남긴 차트로 나머지 전부(조건·추가·세트·실수치)를 봉인한다
   const chart = buildSpeedChart({
     game,
     view: input.view,
     myAbility: typeof myAbility === 'string' ? myAbility : null,
-    criteria: input.criteria,
+    criteria: { ...input.criteria, bundleShareMin: Infinity },
     filters: input.filters,
     customTargets: input.customTargets,
     added: [],

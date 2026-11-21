@@ -478,6 +478,94 @@ test(`반응성 보조: 공격 탭 계산 중 렌더 프레임 간격 중앙값 
   expect(Math.max(...medians)).toBeLessThanOrEqual(FRAME_INTERVAL_MEDIAN_LIMIT_MS)
 })
 
+interface DragProbe {
+  frames: number[]
+  downs: number[]
+  ups: number[]
+  longTasks: LongTaskEntry[]
+}
+declare global {
+  interface Window {
+    __drag: DragProbe
+  }
+}
+
+/** S 슬라이더 드래그 한 번의 폭(SP). 놓기 시나리오(±4)보다 길게 끌어 드래그 중 프레임을 충분히 모은다 */
+const SPEED_DRAG_SP = 12
+const SPEED_DRAG_RUNS = 5
+
+// speed-bundles-pin-disable 비기능 성능·AC15: 배지가 늘고 배지마다 핀 비활성 판정이 붙어도 S 슬라이더를 끄는 동안 프레임 간격 예산(34ms)을 지킨다.
+// 핀 판정은 확정 세트로만 메모한다(ADR 결정 4). 드래그 중 표시 SP로 다시 돌면 배지 수만큼 최소 S가 프레임마다 돌아 이 예산을 넘는다.
+test(`반응성 보조: 스피드 S 슬라이더 드래그 중 렌더 프레임 간격 중앙값 ≤ ${FRAME_INTERVAL_MEDIAN_LIMIT_MS}ms (조건 필터 전부 켬, ${SPEED_DRAG_RUNS}회)`, async ({ page, browser }) => {
+  test.setTimeout(180_000)
+  await page.addInitScript(() => {
+    const probe: DragProbe = { frames: [], downs: [], ups: [], longTasks: [] }
+    window.__drag = probe
+    const frame = (t: number) => {
+      probe.frames.push(t)
+      requestAnimationFrame(frame)
+    }
+    requestAnimationFrame(frame)
+    window.addEventListener('pointerdown', () => probe.downs.push(performance.now()), true)
+    window.addEventListener('pointerup', () => probe.ups.push(performance.now()), true)
+    new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) probe.longTasks.push({ start: e.startTime, duration: e.duration })
+    }).observe({ type: 'longtask', buffered: true })
+  })
+  await page.goto('/')
+  await waitComplete(page)
+  await resultTab(page, '스피드').click()
+  for (const f of SPEED_FILTERS) {
+    if ((await speedChip(page, f).getAttribute('aria-pressed')) !== 'true') await speedChip(page, f).click()
+    await expect(speedChip(page, f)).toHaveAttribute('aria-pressed', 'true')
+  }
+  const badges = await speedBadges(page).count()
+  const pins = page.locator('.speed-badge-item [data-testid="cut-pin"]')
+  const disabledPins = page.locator('.speed-badge-item [data-testid="cut-pin"][aria-disabled="true"]')
+  const pinCount = await pins.count()
+  const disabledCount = await disabledPins.count()
+  // 판정이 실제로 도는 상태에서 잰다(도달 불가 배지가 있으면 비활성 핀이 있다)
+  expect(pinCount).toBe(badges)
+  expect(disabledCount).toBeGreaterThan(0)
+
+  const slider = mySet(page).getByRole('slider', { name: MAIN_STAT['스피드'], exact: true })
+  const medians: number[] = []
+  const maxima: number[] = []
+  const longTasks: number[] = []
+  const moves: string[] = []
+  for (let i = 0; i < SPEED_DRAG_RUNS; i++) {
+    const from = Number(await slider.inputValue())
+    const remaining = Number(await mySet(page).getByTestId('sp-remaining').textContent())
+    const max = Number(await slider.getAttribute('max'))
+    const to = from >= SPEED_DRAG_SP ? from - SPEED_DRAG_SP : Math.min(max, from + remaining, from + SPEED_DRAG_SP)
+    expect(to).not.toBe(from)
+    expect(await dragSlider(page, slider, to)).toBe(to)
+    moves.push(`${from}→${to}`)
+    const { frames, down, up, lts } = await page.evaluate(() => {
+      const p = window.__drag
+      return { frames: p.frames, down: p.downs[p.downs.length - 1], up: p.ups[p.ups.length - 1], lts: p.longTasks }
+    })
+    // rAF 시각은 프레임 시작 시각이라 누르기 직전 프레임 하나를 경계로 포함한다
+    const during = frames.filter((t, j) => t <= up && (t >= down || (frames[j + 1] ?? Infinity) >= down))
+    expect(during.length).toBeGreaterThanOrEqual(3)
+    const gaps = during.slice(1).map((t, j) => t - during[j])
+    medians.push(median(gaps))
+    maxima.push(Math.max(...gaps))
+    longTasks.push(Math.max(0, ...lts.filter((l) => l.start + l.duration >= down && l.start <= up).map((l) => l.duration)))
+    // 놓은 뒤 차트가 확정 세트로 다시 그려진 다음 회차로
+    await expect(slider).toHaveValue(String(to))
+    await expect(disabledPins.first()).toBeAttached()
+  }
+  const line =
+    `스피드 S 슬라이더 드래그 중 rAF 간격(조건 필터 전부 켬, 배지 ${badges}, 핀 ${pinCount} 중 비활성 ${disabledCount}): ` +
+    `회차 중앙값 [${medians.map((x) => x.toFixed(1)).join(',')}] · 회차 최대 [${maxima.map((x) => x.toFixed(1)).join(',')}]` +
+    ` · 드래그 구간 Long Task 최대 [${longTasks.map(fmt).join(',')}] · SP [${moves.join(',')}]`
+  console.log(`[product-perf] chromium ${browser.version()} ${line}`)
+  test.info().annotations.push({ type: 'perf', description: line })
+  expect(Math.max(...medians)).toBeLessThanOrEqual(FRAME_INTERVAL_MEDIAN_LIMIT_MS)
+  expect(Math.max(...longTasks)).toBeLessThanOrEqual(LONG_TASK_LIMIT_MS)
+})
+
 // ---------- 컷 고정(cut-lock-budget 비기능 3항) ----------
 
 /** 고정 상태 탭별 첫 결과 중앙값 ≤ 같은 실행 무고정 첫 결과 중앙값 × 3 */
@@ -658,4 +746,87 @@ test(`컷 고정 3개(스피드·공격·H 포함 방어 쌍, 필터 밖 1건) �
     expect.soft(a.longTaskMs, `${name} 탭 변동 팝오버 Long Task`).toBeLessThanOrEqual(LONG_TASK_LIMIT_MS)
   }
   for (const lane of lanes) expect(lane.tasks).toBeGreaterThan(0)
+})
+
+// ---------- 공·방 미리 계산(speed-bundles-pin-disable R6 비기능, AC15b) ----------
+
+/** src/app/executor.ts PRECOMPUTE_DONE_MARK(detail: generation, tab, tasks) */
+const PRECOMPUTE_DONE_MARK = 'cards:precompute-done'
+
+interface PrecomputeRun {
+  /** 세대 compute-start ~ 두 탭 미리 계산 끝 표식 중 늦은 쪽 */
+  doneMs: number
+  /** 미리 계산 구간(보는 탭 완료 ~ 두 탭 미리 계산 끝)과 겹친 Long Task 최대 */
+  longTaskMs: number
+  /** 같은 구간 rAF 간격 중앙값 */
+  frameMedianMs: number
+  tasks: number
+}
+
+test(`컷 고정 3개 미리 계산: 세대 시작 ~ 두 공·방 탭 미리 계산 끝 중앙값 ≤ ${COMPLETE_MEDIAN_LIMIT_MS}ms · 구간 Long Task ≤ ${LONG_TASK_LIMIT_MS}ms · 프레임 간격 중앙값 ≤ ${FRAME_INTERVAL_MEDIAN_LIMIT_MS}ms (${LOCK_RUNS}회)`, async ({ page, browser }) => {
+  test.setTimeout(600_000)
+  await page.addInitScript(installProbe, null)
+  await page.addInitScript(() => {
+    const w = window as unknown as { __inputAt: number; __allFrames: number[] }
+    w.__inputAt = 0
+    w.__allFrames = []
+    window.addEventListener('input', () => (w.__inputAt = performance.now()), true)
+    const frame = (t: number) => {
+      w.__allFrames.push(t)
+      requestAnimationFrame(frame)
+    }
+    requestAnimationFrame(frame)
+  })
+  const runs: PrecomputeRun[] = []
+  for (let i = 0; i < LOCK_RUNS; i++) {
+    await openProduct(page)
+    await waitComplete(page)
+    await fillMySet(page, { moves: LOCK_MOVES })
+    await lockBadge(page, NINETALES_152)
+    await settle(page)
+    await lockRow(page, '공격', 'garchomp', 'dragonclaw')
+    await lockRow(page, '방어', 'garchomp', 'dragonclaw')
+    await expect(lockList(page).locator('.lock-item')).toHaveCount(3)
+    await selectTab(page, '공격')
+    await waitComplete(page)
+    const genBefore = Number(await tabPanel(page).getAttribute('data-generation'))
+    await page.getByRole('spinbutton', { name: '상위 N', exact: true }).fill(TOP_N_AFTER)
+    await expect(tabPanel(page)).not.toHaveAttribute('data-generation', String(genBefore))
+    const generation = Number(await tabPanel(page).getAttribute('data-generation'))
+    await page.waitForFunction(
+      ({ mark, generation }) => performance.getEntriesByName(mark, 'mark').filter((m) => (m as PerformanceMark).detail?.generation === generation).length >= 2,
+      { mark: PRECOMPUTE_DONE_MARK, generation },
+      { timeout: 60_000 },
+    )
+    const r = await page.evaluate(
+      ({ start, done, generation }) => {
+        const startAt = performance.getEntriesByName(start, 'mark').find((m) => (m as PerformanceMark).detail?.generation === generation)?.startTime ?? NaN
+        const marks = performance.getEntriesByName(done, 'mark').filter((m) => (m as PerformanceMark).detail?.generation === generation) as PerformanceMark[]
+        const completeAt = window.__probe.panel.find((e) => e.tab === 'attack' && e.generation === generation && e.complete && !e.superseded)?.t ?? NaN
+        return {
+          startAt,
+          completeAt,
+          endAt: Math.max(...marks.map((m) => m.startTime)),
+          tasks: marks.reduce((n, m) => n + ((m.detail as { tasks?: number }).tasks ?? 0), 0),
+          longTasks: window.__probe.longTasks,
+          frames: (window as unknown as { __allFrames: number[] }).__allFrames,
+        }
+      },
+      { start: COMPUTE_START_MARK, done: PRECOMPUTE_DONE_MARK, generation },
+    )
+    const overlap = r.longTasks.filter((lt) => lt.start < r.endAt && lt.start + lt.duration > r.completeAt)
+    const frames = r.frames.filter((t, j) => t <= r.endAt && (t >= r.completeAt || (r.frames[j + 1] ?? Infinity) >= r.completeAt))
+    const gaps = frames.slice(1).map((t, j) => t - frames[j])
+    runs.push({ doneMs: r.endAt - r.startAt, longTaskMs: Math.max(0, ...overlap.map((lt) => lt.duration)), frameMedianMs: gaps.length === 0 ? 0 : median(gaps), tasks: r.tasks })
+  }
+  const line =
+    `미리 계산(고정 3개, 상위 N 100 → 30): 세대 시작 ~ 두 탭 끝 중앙값 ${fmt(median(runs.map((r) => r.doneMs)))}ms [${runs.map((r) => fmt(r.doneMs)).join(',')}]` +
+    ` · 구간 Long Task 최대 ${fmt(Math.max(...runs.map((r) => r.longTaskMs)))}ms · 구간 프레임 간격 회차 중앙값 [${runs.map((r) => fmt(r.frameMedianMs)).join(',')}]` +
+    ` · 미리 계산 작업 수 [${runs.map((r) => r.tasks).join(',')}]`
+  console.log(`[product-perf] chromium ${browser.version()} ${line}`)
+  test.info().annotations.push({ type: 'perf', description: line })
+  expect.soft(median(runs.map((r) => r.doneMs)), '미리 계산 완료 중앙값').toBeLessThanOrEqual(COMPLETE_MEDIAN_LIMIT_MS)
+  expect.soft(Math.max(...runs.map((r) => r.longTaskMs)), '미리 계산 구간 Long Task').toBeLessThanOrEqual(LONG_TASK_LIMIT_MS)
+  expect.soft(Math.max(...runs.map((r) => r.frameMedianMs)), '미리 계산 중 프레임 간격 중앙값').toBeLessThanOrEqual(FRAME_INTERVAL_MEDIAN_LIMIT_MS)
+  for (const r of runs) expect(r.tasks).toBeGreaterThan(0)
 })

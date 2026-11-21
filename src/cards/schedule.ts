@@ -334,6 +334,17 @@ export function primaryCardIds(plan: TabPlan): Set<string> {
   return out
 }
 
+/**
+ * 고정이 있을 때 미리 계산 기본 대상(화면이 알린 보이는 카드는 실행기가 더한다): 먼저 계산할 카드와 그 카드 묶음의 도구 변형 카드.
+ * 도구(열매·화력 도구) 변형은 따로 그룹이 되어 그 카드가 그 그룹 기본 선택이므로 함께 든다.
+ */
+export function precomputeCardIds(plan: TabPlan): Set<string> {
+  const primary = primaryCardIds(plan)
+  const keyOf = (c: TabPlan['cards'][number]) => JSON.stringify([c.opponent.source, c.opponent.id, c.category, c.bundle.key])
+  const keys = new Set(plan.cards.filter((c) => primary.has(c.id)).map(keyOf))
+  return new Set(plan.cards.filter((c) => primary.has(c.id) || (c.berry !== undefined && keys.has(keyOf(c)))).map((c) => c.id))
+}
+
 /** 카드 순 → 행 순. 결과(오류 포함)가 있는 작업은 다시 내지 않는다. selections = 상대 그룹 키(groupKey) → 사용자가 고른 항목 키 */
 export function pendingTasks(plan: TabPlan, results: ResultMap, selections: ReadonlyMap<string, string> = new Map()): PendingTasks {
   const stage1: RowTask[] = []
