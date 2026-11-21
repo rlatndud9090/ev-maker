@@ -10,6 +10,7 @@ import {
   lockTargetKeyOf,
   lockedInput,
   planTab,
+  precomputeCardIds,
   resolveLaneLock,
   taskCardId,
   type CardInput,
@@ -23,7 +24,7 @@ import {
 } from '../cards'
 import { cardInput, realData } from '../cards/testing'
 import { tierRank, type PokemonSet } from '../core'
-import { createExecutor } from './executor'
+import { PRECOMPUTE_DONE_MARK, createExecutor } from './executor'
 import type { Executor, ExecutorSnapshot, LockRun, TabViewState } from './executor'
 import type { Scheduler } from './scheduler'
 
@@ -70,6 +71,18 @@ function manualScheduler() {
 
 async function runToEnd(m: ReturnType<typeof manualScheduler>, onStep?: () => void): Promise<void> {
   while (await m.step()) onStep?.()
+}
+
+/** 두 공·방 탭이 지금 세대로 전체 완료될 때까지만 돌린다(고정이 있으면 그 뒤 미리 계산 층이 남는다). sliceMs 1 + tickingClock이면 조각마다 작업 하나라 완료 직후에 멈춘다 */
+async function runToComplete(m: ReturnType<typeof manualScheduler>, ex: Executor, onStep?: () => void): Promise<void> {
+  const done = () => {
+    const snap = ex.getSnapshot()
+    return DAMAGE_TABS.every((t) => {
+      const st = snap.tabs[t]
+      return st.kind === 'view' && st.generation === snap.generation && !st.superseded && st.view.complete
+    })
+  }
+  while (!done() && (await m.step())) onStep?.()
 }
 
 function tickingClock(step = 1) {
@@ -204,7 +217,7 @@ describe('실행기: 고정 레인', () => {
     executor.setInput(input(8), 1, lockRun)
     expect(executor.getSnapshot().locks).toEqual({ generation: 1, pending: true, lane: { done: 0, total: 2 } })
     const seen: ExecutorSnapshot[] = []
-    await runToEnd(m, () => seen.push(executor!.getSnapshot()))
+    await runToComplete(m, executor, () => seen.push(executor!.getSnapshot()))
     const pending = seen.filter((s) => s.locks?.pending === true)
     expect(pending.length).toBeGreaterThan(0)
     for (const s of pending) {
@@ -232,7 +245,15 @@ describe('실행기: 고정 레인', () => {
     expect(d.resolutions.get(2)).toEqual(resolveLaneLock(input(8), defenseLock(2)))
     expect(d.resolutions.get(3)).toEqual(speedOk)
     expect(d.planSet?.sp.spe).toBe(20)
+    // 전체 완료 시점(미리 계산 전) 뷰 = buildLockedTabView
     for (const tab of DAMAGE_TABS) expectSameAsLocked(snap.tabs[tab], input(8), tab, lockRun)
+    // 그 뒤 고정이 있으니 미리 계산 층이 고정 후보 작업을 돌리고, 완료·세대는 그대로다
+    const before = computeSpy.mock.calls.length
+    await runToEnd(m)
+    expect(computeSpy.mock.calls.length).toBeGreaterThan(before)
+    const end = executor.getSnapshot()
+    expect(end.generation).toBe(1)
+    for (const tab of DAMAGE_TABS) expect(viewOf(end.tabs[tab]).complete).toBe(true)
   })
 
   it('스피드 고정만이면 레인 작업 없이 setInput에서 바로 파생한다', async () => {
@@ -325,14 +346,15 @@ describe('실행기: 고정 레인', () => {
 
   it('AC5 경로: 스피드 해석이 도달 불가가 되면 고정은 남고 계산에서 빠지며(무고정 뷰), 돌아오면 다시 들어간다', async () => {
     const m = manualScheduler()
-    executor = createExecutor({ scheduler: m.scheduler, sliceMs: 5, now: tickingClock() })
+    executor = createExecutor({ scheduler: m.scheduler, sliceMs: 1, now: tickingClock() })
     const inp = input(3)
     executor.setInput(inp, 1, run([speedLock(1)], [[1, speedOk]]))
     await runToEnd(m)
     expect(derived(executor.getSnapshot()).derivation.statuses.get(1)).toEqual({ kind: 'active' })
 
+    // 고정은 남아 있으므로 전체 완료 뒤 미리 계산이 이어진다. 비교는 전체 완료 시점(미리 계산 전)으로 한다
     executor.setInput(inp, 2, run([speedLock(1)], [[1, { kind: 'unreachable' }]]))
-    await runToEnd(m)
+    await runToComplete(m, executor)
     const off = executor.getSnapshot()
     const d = derived(off)
     expect(d.derivation.locks.map((l) => l.seq)).toEqual([1])
@@ -340,6 +362,7 @@ describe('실행기: 고정 레인', () => {
     expect(d.derivation.branches).toEqual([])
     expect(d.planSet).toBeNull()
     for (const tab of DAMAGE_TABS) expect(comparable(viewOf(off.tabs[tab]))).toEqual(comparable(buildTabView(inp, tab, undefined, undefined, CONTROLS)))
+    await runToEnd(m)
 
     executor.setInput(inp, 3, run([speedLock(1)], [[1, speedOk]]))
     await runToEnd(m)
@@ -372,22 +395,28 @@ describe('실행기: setDetailCards', () => {
   it('조정을 연 카드의 갈래 재스윕(branch, 고정 밖 갈래 S20 덮어쓰기)을 돌리고 세대·완료는 그대로', async () => {
     const inp = input(4, raichu(['electroball']))
     const m = manualScheduler()
-    executor = createExecutor({ scheduler: m.scheduler, sliceMs: 5, now: tickingClock() })
+    executor = createExecutor({ scheduler: m.scheduler, sliceMs: 1, now: tickingClock() })
     executor.setActiveTab('attack')
     executor.setInput(inp, 1, run([speedLock(1)], [[1, speedOk]], 'plus:spe'))
-    await runToEnd(m)
+    // 미리 계산이 같은 작업을 먼저 하지 않게 전체 완료 직후(미리 계산 전)에 연다
+    await runToComplete(m, executor)
     const before = viewOf(executor.getSnapshot().tabs.attack)
     expect(before.complete).toBe(true)
     computeSpy.mockClear()
 
     executor.setDetailCards('attack', before.cards.map((c) => c.id))
+    // 다음 작업 하나는 연 카드(메뉴·상세 층)의 것이다: 미리 계산 층보다 앞선다
+    await m.step()
+    const first = computeSpy.mock.calls[0]
+    expect(first?.[1].kind).toBe('branch')
     await runToEnd(m)
     const snap = executor.getSnapshot()
     expect(snap.generation).toBe(1)
     const branch = computeSpy.mock.calls.filter(([plan, task]) => plan.lock?.mode === 'main' && task.kind === 'branch')
     expect(branch.length).toBeGreaterThan(0)
     for (const [, task] of branch) if (task.kind === 'branch') expect(task.sp?.spe).toBe(20)
-    expect(computeSpy.mock.calls.length).toBe(branch.length)
+    // 새 스윕 없이 고정 후보·조정 대기 작업만 돈다(연 카드 + 미리 계산 층)
+    for (const [plan, task] of computeSpy.mock.calls) expect(plan.lock?.mode === 'main' && ['branch', 'variant', 'stairs', 'pair'].includes(task.kind)).toBe(true)
     const after = snap.tabs.attack
     expect(after).toMatchObject({ kind: 'view', generation: 1, superseded: false })
     expect(viewOf(after).complete).toBe(true)
@@ -481,3 +510,138 @@ describe('실행기: setDetailCards', () => {
     expect(computeSpy).not.toHaveBeenCalled()
   })
 })
+
+describe('실행기: 고정이 있을 때 미리 계산 층(speed-bundles-pin-disable AC11c)', () => {
+  type Call = { plan: TabPlan; task: (typeof computeSpy.mock.calls)[number][1] }
+  const callsFrom = (from: number): Call[] => computeSpy.mock.calls.slice(from).map(([plan, task]) => ({ plan, task }))
+  const CANDIDATE_KINDS = ['branch', 'variant', 'stairs', 'pair']
+
+  it('다른 층이 모두 끝난 뒤에만 돌고, 먼저 계산할 카드(+ 도구 변형)의 고정 후보·조정 대기 작업만 돌며, 남아 있어도 완료 플래그는 참이다', async () => {
+    const inp = input(4)
+    const m = manualScheduler()
+    executor = createExecutor({ scheduler: m.scheduler, sliceMs: 1, now: tickingClock() })
+    executor.setActiveTab('defense')
+    executor.setInput(inp, 1, run([speedLock(1)], [[1, speedOk]]))
+    await runToComplete(m, executor)
+    const atComplete = computeSpy.mock.calls.length
+    // 완료 시점 뒤: 두 탭 모두 완료이고 남은 일은 미리 계산뿐
+    await m.step()
+    const mid = executor.getSnapshot()
+    expect(computeSpy.mock.calls.length).toBe(atComplete + 1)
+    for (const tab of DAMAGE_TABS) expect(viewOf(mid.tabs[tab]).complete).toBe(true)
+    await runToEnd(m)
+    const pre = callsFrom(atComplete)
+    expect(pre.length).toBeGreaterThan(1)
+    for (const { plan, task } of pre) {
+      expect(CANDIDATE_KINDS).toContain(task.kind)
+      expect(precomputeCardIds(plan).has(taskCardId(plan, task))).toBe(true)
+    }
+    // 보고 있는 탭(방어)의 미리 계산이 먼저다
+    expect(pre[0].plan.tab).toBe('defense')
+    const firstAttack = pre.findIndex((c) => c.plan.tab === 'attack')
+    if (firstAttack >= 0) expect(pre.slice(firstAttack).every((c) => c.plan.tab === 'attack')).toBe(true)
+    // 미리 계산 결과로 먼저 계산할 방어 카드의 쌍 후보가 열기 전에 준비된다
+    const defense = viewOf(executor.getSnapshot().tabs.defense)
+    const primary = precomputeCardIds(planTab(lockedInput(inp, derived(executor.getSnapshot()).derivation), 'defense'))
+    const ids = new Set(defense.cards.filter((c) => primary.has(c.id) && c.pair?.lock?.control?.kind === 'lockable').map((c) => c.id))
+    expect(ids.size).toBeGreaterThan(0)
+    expect(candidateKindsOf(defense, ids).length).toBeGreaterThan(0)
+    expect(candidateKindsOf(defense, ids).every((k) => k === 'ready')).toBe(true)
+  })
+
+  it('보이지 않는 묶음 카드는 대상이 아니고, setVisibleCards로 알리면 그 카드 후보도 미리 계산한다', async () => {
+    const inp = input(6)
+    const m = manualScheduler()
+    executor = createExecutor({ scheduler: m.scheduler, sliceMs: 1, now: tickingClock() })
+    executor.setActiveTab('defense')
+    executor.setInput(inp, 1, run([speedLock(1)], [[1, speedOk]]))
+    await runToEnd(m)
+    const defense = viewOf(executor.getSnapshot().tabs.defense)
+    const plan = planTab(lockedInput(inp, derived(executor.getSnapshot()).derivation), 'defense')
+    const primary = precomputeCardIds(plan)
+    const hidden = defense.cards.filter((c) => !primary.has(c.id) && c.pair?.lock?.control?.kind === 'lockable')
+    expect(hidden.length).toBeGreaterThan(0)
+    expect(candidateKindsOf(defense, new Set(hidden.map((c) => c.id)))).toContain('computing')
+    const target = hidden[0]
+    const from = computeSpy.mock.calls.length
+    executor.setVisibleCards('defense', [target.id])
+    await runToEnd(m)
+    const pre = callsFrom(from)
+    expect(pre.length).toBeGreaterThan(0)
+    for (const { plan: p, task } of pre) expect(taskCardId(p, task)).toBe(target.id)
+    const after = viewOf(executor.getSnapshot().tabs.defense)
+    expect(candidateKindsOf(after, new Set([target.id])).every((k) => k === 'ready')).toBe(true)
+    expect(after.complete).toBe(true)
+  })
+
+  it('미리 계산 중 연 카드(setDetailCards) 작업이 다음 작업으로 앞선다', async () => {
+    const inp = input(6)
+    const m = manualScheduler()
+    executor = createExecutor({ scheduler: m.scheduler, sliceMs: 1, now: tickingClock() })
+    executor.setActiveTab('defense')
+    executor.setInput(inp, 1, run([speedLock(1)], [[1, speedOk]]))
+    await runToComplete(m, executor)
+    await m.step()
+    const defense = viewOf(executor.getSnapshot().tabs.defense)
+    const plan = planTab(lockedInput(inp, derived(executor.getSnapshot()).derivation), 'defense')
+    const primary = precomputeCardIds(plan)
+    const hidden = defense.cards.find((c) => !primary.has(c.id) && c.pair?.lock?.control?.kind === 'lockable')
+    expect(hidden).toBeDefined()
+    if (hidden === undefined) return
+    const from = computeSpy.mock.calls.length
+    executor.setDetailCards('defense', [hidden.id])
+    await m.step()
+    const [next] = callsFrom(from)
+    expect(taskCardId(next.plan, next.task)).toBe(hidden.id)
+    await runToEnd(m)
+  })
+
+  it('세대가 바뀌면 미리 계산 층을 새 세대 결과로 다시 쌓고, 탭마다 미리 계산 끝 표식을 한 번 남긴다', async () => {
+    const inp = input(4)
+    const m = manualScheduler()
+    performance.clearMarks(PRECOMPUTE_DONE_MARK)
+    executor = createExecutor({ scheduler: m.scheduler, sliceMs: 1, now: tickingClock() })
+    executor.setInput(inp, 1, run([speedLock(1)], [[1, speedOk]]))
+    await runToEnd(m)
+    const marks1 = performance.getEntriesByName(PRECOMPUTE_DONE_MARK) as PerformanceMark[]
+    expect(marks1.map((e) => (e.detail as { tab: string }).tab).sort()).toEqual(['attack', 'defense'])
+    expect(marks1.every((e) => (e.detail as { generation: number }).generation === 1)).toBe(true)
+    executor.setInput(inp, 2, run([speedLock(1)], [[1, speedOk]]))
+    await runToComplete(m, executor)
+    const from = computeSpy.mock.calls.length
+    await runToEnd(m)
+    expect(callsFrom(from).length).toBeGreaterThan(0)
+    const marks2 = (performance.getEntriesByName(PRECOMPUTE_DONE_MARK) as PerformanceMark[]).filter((e) => (e.detail as { generation: number }).generation === 2)
+    expect(marks2).toHaveLength(2)
+  })
+
+  it('고정이 없으면 미리 계산 작업이 없다: 보이는 카드를 알려도 실행된 작업 목록이 같고 표식도 없다', async () => {
+    const record = async (visible: boolean) => {
+      computeSpy.mockClear()
+      performance.clearMarks(PRECOMPUTE_DONE_MARK)
+      const m = manualScheduler()
+      const ex = createExecutor({ scheduler: m.scheduler, cache: createLruCache(), sliceMs: 3, now: tickingClock() })
+      if (visible) ex.setVisibleCards('defense', planTab(input(4), 'defense').cards.map((c) => c.id))
+      ex.setInput(input(4), 1)
+      await runToEnd(m)
+      if (visible) {
+        ex.setVisibleCards('attack', planTab(input(4), 'attack').cards.map((c) => c.id))
+        await runToEnd(m)
+      }
+      ex.dispose()
+      return { tasks: computeSpy.mock.calls.map(([, t]) => t), marks: performance.getEntriesByName(PRECOMPUTE_DONE_MARK).length }
+    }
+    const plain = await record(false)
+    const told = await record(true)
+    expect(told.tasks).toEqual(plain.tasks)
+    expect(told.marks).toBe(0)
+    expect(plain.marks).toBe(0)
+  })
+})
+
+function candidateKindsOf(v: TabView, ids: ReadonlySet<string>): string[] {
+  return v.cards
+    .filter((c) => ids.has(c.id))
+    .flatMap((c) => [...c.rows.map((r) => r.lock?.control), c.pair?.lock?.control])
+    .flatMap((ctl) => (ctl?.kind === 'lockable' ? ctl.stages.map((s) => s.candidate.kind) : []))
+}

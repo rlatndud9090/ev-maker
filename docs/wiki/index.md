@@ -41,6 +41,8 @@ authoring_rules: 위키 구조·영역(area)/섹션(section) 작성 규칙은 �
 - `2026-11-18` **포켓몬 추가 UI/UX 개선** — [PRD](../raw/feature/add-pokemon-ux/prd.md) · [ADR](../raw/feature/add-pokemon-ux/adr.md) · [Notes](../raw/feature/add-pokemon-ux/notes.md)
 - `2026-11-18` **컷 고정과 남은 SP 예산 기반 타 탭 재계산** — [PRD](../raw/feature/cut-lock-budget/prd.md) · [ADR](../raw/feature/cut-lock-budget/adr.md) · [Notes](../raw/feature/cut-lock-budget/notes.md)
 - `2026-11-20` **파티 6칸과 PokePaste 가져오기** — [PRD](../raw/feature/party-pokepaste/prd.md) · [ADR](../raw/feature/party-pokepaste/adr.md) · [Notes](../raw/feature/party-pokepaste/notes.md)
+- `2026-11-20` **스피드 탭에서 SP 조정이 내 스피드에 반영되지 않음** — [Bugfix](../raw/bugfix/speed-sp-not-reflected/bugfix.md) · [Notes](../raw/bugfix/speed-sp-not-reflected/notes.md)
+- `2026-11-21` **스피드 탭 기본 배분 전부 표시와 고정 불가 핀 비활성화** — [PRD](../raw/feature/speed-bundles-pin-disable/prd.md) · [ADR](../raw/feature/speed-bundles-pin-disable/adr.md) · [Notes](../raw/feature/speed-bundles-pin-disable/notes.md)
 
 ### 프로젝트 운영
 

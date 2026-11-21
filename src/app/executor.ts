@@ -15,6 +15,7 @@ import {
   lockedInput,
   opponentKey,
   planTab,
+  precomputeCardIds,
   primaryCardIds,
   taskCardId,
   taskKey,
@@ -97,6 +98,12 @@ export interface Executor {
    * 메뉴 층(완료 판정 밖)에 넣는다. 세대가 바뀌어도 유지된다. speed면 무시
    */
   setDetailCards(tab: Tab, cardIds: readonly string[]): void
+  /**
+   * 결과 화면에 지금 보이는 카드 id(상대 그룹마다 고른 묶음 카드). 계산 입력이 아니다: 세대를 바꾸지 않는다.
+   * 고정이 있는 실행이면 이 카드와 먼저 계산할 카드의 고정 후보·조정 대기 작업을 그 탭의 다른 층이 모두 빈 뒤 맨 아래 미리 계산 층(완료 판정 밖)에 넣는다.
+   * 세대가 바뀌어도 유지된다. speed면 무시
+   */
+  setVisibleCards(tab: Tab, cardIds: readonly string[]): void
   dispose(): void
 }
 
@@ -110,21 +117,26 @@ export interface ExecutorDeps {
 
 export const DEFAULT_SLICE_MS = 12
 export const COMPUTE_START_MARK = 'cards:compute-start'
+/** 고정이 있는 실행에서 그 탭 미리 계산 층이 처음 빈 때(detail: generation, tab, tasks = 그때까지 미리 계산 층에서 꺼낸 작업 수) */
+export const PRECOMPUTE_DONE_MARK = 'cards:precompute-done'
 
 type Stage = 0 | 1 | 2 | 3 | 4
 /**
  * 0 = 사용자가 기술을 고른 상대의 카드(수요), 1 = 기술 선택 메뉴를 연 카드의 항목 변동 판정과 조정 팝오버·핀 메뉴를 연 카드의 고정 후보·조정 대기 작업(수요, 완료 판정 밖),
- * 2 = 먼저 계산할 카드(primaryCardIds: 상대·분류마다 최대 묶음·사용자 추가·커스텀), 3 = 나머지 묶음
+ * 2 = 먼저 계산할 카드(primaryCardIds: 상대·분류마다 최대 묶음·사용자 추가·커스텀), 3 = 나머지 묶음,
+ * 4 = 미리 계산(고정이 있는 실행만: 먼저 계산할 카드 ∪ 보이는 카드의 고정 후보·조정 대기 작업, 그 탭 0·2·3층이 빈 뒤에만 만든다. 완료 판정 밖)
  */
-type Tier = 0 | 1 | 2 | 3
+type Tier = 0 | 1 | 2 | 3 | 4
 const STAGE_KEYS = ['stage1', 'stage2', 'stage3', 'stage4', 'stage5'] as const
 /** 진행률·완료에 세는 층 */
 const COUNTED_TIERS: readonly Tier[] = [0, 2, 3]
 const MENU_TIER = 1
+const PRECOMPUTE_TIER = 4
 const STAGES: readonly Stage[] = [0, 1, 2, 3, 4]
 type Pos = [number, number, number, number, number]
-type Tiers<T> = [T, T, T, T]
+type Tiers<T> = [T, T, T, T, T]
 const zeroPos = (): Tiers<Pos> => [
+  [0, 0, 0, 0, 0],
   [0, 0, 0, 0, 0],
   [0, 0, 0, 0, 0],
   [0, 0, 0, 0, 0],
@@ -142,6 +154,16 @@ interface TabRun {
   menu: ReadonlySet<string>
   /** 조정 팝오버·핀 메뉴를 연 카드 id(메뉴 층에 고정 후보·조정 대기 작업) */
   detail: ReadonlySet<string>
+  /** 화면이 알린 보이는 카드 id(미리 계산 층 대상) */
+  visible: ReadonlySet<string>
+  /** 미리 계산 기본 대상(precomputeCardIds: 먼저 계산할 카드 + 그 도구 변형). 고정이 없는 실행이면 빈 집합 */
+  precomputeBase: ReadonlySet<string>
+  /** 그 실행에 고정이 하나라도 있음(스피드 고정 포함) = 미리 계산 층을 만든다 */
+  precompute: boolean
+  /** 미리 계산 끝 표식을 남겼음 */
+  precomputeMarked: boolean
+  /** 미리 계산 층에서 꺼낸 작업 수(성능 측정 표식용) */
+  precomputeTasks: number
   selections: ReadonlyMap<string, string>
   results: Map<string, RowTaskResult>
   /** 층별 마지막 남은 작업 목록과 단계별 소비 위치 */
@@ -195,9 +217,14 @@ function newTabRun(): TabRun {
     demand: new Set(),
     menu: new Set(),
     detail: new Set(),
+    visible: new Set(),
+    precomputeBase: new Set(),
+    precompute: false,
+    precomputeMarked: false,
+    precomputeTasks: 0,
     selections: new Map(),
     results: new Map(),
-    queue: [EMPTY_QUEUE, EMPTY_QUEUE, EMPTY_QUEUE, EMPTY_QUEUE],
+    queue: [EMPTY_QUEUE, EMPTY_QUEUE, EMPTY_QUEUE, EMPTY_QUEUE, EMPTY_QUEUE],
     pos: zeroPos(),
     dirty: false,
     fatal: false,
@@ -208,7 +235,7 @@ function newTabRun(): TabRun {
 
 /**
  * 활성 탭 수요(사용자가 고른 기술의 카드, 모든 단계 → 메뉴를 연 카드의 항목 변동 판정) → 활성 탭 1·2단계(먼저 계산할 카드 → 나머지 묶음) → 나머지 탭(DAMAGE_TABS 순) 수요·1·2단계 →
- * 활성 탭 3·4·5단계(확인 스윕·성격 변형·쌍) → 나머지 탭 3·4·5단계. 3·4·5단계도 단계마다 먼저 계산할 카드가 앞선다.
+ * 활성 탭 3·4·5단계(확인 스윕·성격 변형·쌍) → 나머지 탭 3·4·5단계 → 활성 탭 미리 계산 → 나머지 탭 미리 계산. 3·4·5단계도 단계마다 먼저 계산할 카드가 앞선다.
  * 활성 탭이 speed면 공격·방어 탭 모두 나머지 탭이다.
  */
 function priority(active: Tab): readonly Slot[] {
@@ -218,7 +245,18 @@ function priority(active: Tab): readonly Slot[] {
   const menu = (t: DamageTab): Slot[] => [[t, 0, 1], [t, 1, 1], [t, 3, 1], [t, 4, 1]]
   const early = (t: DamageTab): Slot[] => [...STAGES.map((s): Slot => [t, s, 0]), ...menu(t), [t, 0, 2], [t, 1, 2], [t, 0, 3], [t, 1, 3]]
   const late = (t: DamageTab): Slot[] => ([2, 3, 4] as const).flatMap((s) => ([2, 3] as const).map((tier): Slot => [t, s, tier]))
-  return [...first.flatMap(early), ...others.flatMap(early), ...first.flatMap(late), ...others.flatMap(late)]
+  // 미리 계산 층은 고정 후보·조정 대기 작업이라 4·5단계지만, 대기열이 다른 단계를 내도 남지 않게 전 단계를 둔다
+  const pre = (t: DamageTab): Slot[] => STAGES.map((s): Slot => [t, s, PRECOMPUTE_TIER])
+  return [...first.flatMap(early), ...others.flatMap(early), ...first.flatMap(late), ...others.flatMap(late), ...first.flatMap(pre), ...others.flatMap(pre)]
+}
+
+const isEmptyQueue = (q: PendingTasks): boolean => STAGE_KEYS.every((k) => q[k].length === 0)
+
+/** 미리 계산 층: 고정이 있는 실행이고 그 탭 0·2·3층이 비었을 때만, 먼저 계산할 카드(+ 도구 변형) ∪ 보이는 카드(연 카드는 메뉴 층이 맡는다)의 고정 후보·조정 대기 작업 */
+function precomputeOf(t: TabRun, rest: readonly PendingTasks[]): PendingTasks {
+  if (!t.precompute || t.assembler === null || !rest.every(isEmptyQueue)) return EMPTY_QUEUE
+  const ids = new Set([...t.precomputeBase, ...t.visible].filter((id) => !t.detail.has(id)))
+  return ids.size === 0 ? EMPTY_QUEUE : t.assembler.candidates(t.results, ids)
 }
 
 function mergeQueues(a: PendingTasks, b: PendingTasks): PendingTasks {
@@ -243,12 +281,10 @@ function refresh(t: TabRun): void {
   const demanded = new Set(plan.cards.filter((c) => demand.has(opponentKey(c.opponent))).map((c) => c.id))
   const menu = t.menu.size === 0 ? EMPTY_QUEUE : t.assembler.explore(t.results, t.menu)
   const detail = lockDemandOf(t)
-  t.queue = [
-    t.assembler.pending(t.results, (id) => demanded.has(id)),
-    detail === null ? menu : mergeQueues(menu, detail),
-    t.assembler.pending(t.results, (id) => !demanded.has(id) && primary.has(id)),
-    t.assembler.pending(t.results, (id) => !demanded.has(id) && !primary.has(id)),
-  ]
+  const q0 = t.assembler.pending(t.results, (id) => demanded.has(id))
+  const q2 = t.assembler.pending(t.results, (id) => !demanded.has(id) && primary.has(id))
+  const q3 = t.assembler.pending(t.results, (id) => !demanded.has(id) && !primary.has(id))
+  t.queue = [q0, detail === null ? menu : mergeQueues(menu, detail), q2, q3, precomputeOf(t, [q0, q2, q3])]
   t.pos = zeroPos()
   t.dirty = false
 }
@@ -270,12 +306,18 @@ function take(t: TabRun, stage: Stage, tier: Tier): RowTask | null {
   }
 }
 
-/** menuLeft = 메뉴 층에 남은 작업이 있음(완료와 따로: 완료 뒤에도 메뉴를 열면 계산을 이어 간다) */
-function flags(t: TabRun): { stage12Done: boolean; complete: boolean; menuLeft: boolean } {
+/** menuLeft = 메뉴 층에 남은 작업이 있음(완료와 따로: 완료 뒤에도 메뉴를 열면 계산을 이어 간다), precomputeLeft = 미리 계산 층에 남은 작업이 있음(역시 완료와 따로) */
+function flags(t: TabRun): { stage12Done: boolean; complete: boolean; menuLeft: boolean; precomputeLeft: boolean } {
   if (t.dirty) refresh(t)
   const stage12Done = remaining(t, 0) === 0 && remaining(t, 1) === 0
   const menuLeft = STAGES.some((s) => remaining(t, s, [MENU_TIER]) > 0)
-  return { stage12Done, complete: stage12Done && remaining(t, 2) === 0 && remaining(t, 3) === 0 && remaining(t, 4) === 0, menuLeft }
+  const precomputeLeft = STAGES.some((s) => remaining(t, s, [PRECOMPUTE_TIER]) > 0)
+  return { stage12Done, complete: stage12Done && remaining(t, 2) === 0 && remaining(t, 3) === 0 && remaining(t, 4) === 0, menuLeft, precomputeLeft }
+}
+
+function markPrecomputeDone(generation: number, tab: DamageTab, tasks: number): void {
+  if (typeof performance === 'undefined' || typeof performance.mark !== 'function') return
+  performance.mark(PRECOMPUTE_DONE_MARK, { detail: { generation, tab, tasks } })
 }
 
 function messageOf(e: unknown): string {
@@ -334,6 +376,7 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
   const selections: Record<DamageTab, ReadonlyMap<string, string>> = { attack: new Map(), defense: new Map() }
   const menus: Record<DamageTab, ReadonlySet<string>> = { attack: new Set(), defense: new Set() }
   const details: Record<DamageTab, ReadonlySet<string>> = { attack: new Set(), defense: new Set() }
+  const visibles: Record<DamageTab, ReadonlySet<string>> = { attack: new Set(), defense: new Set() }
   let running = false
   let disposed = false
 
@@ -396,7 +439,11 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
       } else if ((a?.stage12Done ?? false) !== f.stage12Done || (a?.complete ?? false) !== f.complete) {
         assemble(run, tab, null)
       }
-      if ((!f.complete || f.menuLeft) && !t.fatal) more = true
+      if (t.precompute && f.complete && !f.precomputeLeft && !t.precomputeMarked && !t.fatal) {
+        t.precomputeMarked = true
+        markPrecomputeDone(run.generation, tab, t.precomputeTasks)
+      }
+      if ((!f.complete || f.menuLeft || f.precomputeLeft) && !t.fatal) more = true
     }
     return more
   }
@@ -471,7 +518,10 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
       if (t.plan === null) return { tab, kind: 'plan' }
       try {
         const task = take(t, stage, tier)
-        if (task !== null) return { tab, kind: 'task', task }
+        if (task !== null) {
+          if (tier === PRECOMPUTE_TIER) t.precomputeTasks++
+          return { tab, kind: 'task', task }
+        }
       } catch (e) {
         fail(run, tab, e)
       }
@@ -492,6 +542,9 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
         t.selections = selections[unit.tab]
         t.menu = menus[unit.tab]
         t.detail = details[unit.tab]
+        t.visible = visibles[unit.tab]
+        t.precompute = run.lock !== null
+        t.precomputeBase = t.precompute ? precomputeCardIds(plan) : new Set()
         refresh(t)
         return
       }
@@ -659,6 +712,18 @@ export function createExecutor(deps: ExecutorDeps = {}): Executor {
       const t = current?.tabs[tab]
       if (current === null || t === undefined || t.assembler === null || t.fatal) return
       t.detail = next
+      t.dirty = true
+      ensureLoop()
+    },
+    setVisibleCards(tab, cardIds) {
+      if (disposed || !isDamageTab(tab)) return
+      const next = new Set(cardIds)
+      const prev = visibles[tab]
+      if (next.size === prev.size && [...next].every((id) => prev.has(id))) return
+      visibles[tab] = next
+      const t = current?.tabs[tab]
+      if (current === null || t === undefined || t.assembler === null || t.fatal) return
+      t.visible = next
       t.dirty = true
       ensureLoop()
     },

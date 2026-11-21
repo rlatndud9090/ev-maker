@@ -20,11 +20,11 @@ const damageTarget = (source: 'ladder' | 'custom', opponentId: string, kind: 'at
   item: null,
   itemKey: 'earthquake',
 })
-const attackLock = (source: 'ladder' | 'custom', opponentId: string): Omit<CutLock, 'seq'> => ({
+const attackLock = (source: 'ladder' | 'custom', opponentId: string, stat: 'atk' | 'spa' = 'atk'): Omit<CutLock, 'seq'> => ({
   kind: 'attack',
   target: damageTarget(source, opponentId),
   stage: 'guaranteed-ohko',
-  stats: ['atk'],
+  stats: [stat],
 })
 const speedLock = (origin: 'ladder' | 'added' | 'preset', opponentId: string): Omit<CutLock, 'seq'> => ({
   kind: 'speed',
@@ -232,22 +232,23 @@ describe('party-hydrate', () => {
 
 describe('remove-custom-target 고정 연쇄(R12·A3)', () => {
   it('최상위와 보관함 모든 칸의 그 목록 밖 타겟 대상 고정을 풀고 다른 고정은 남긴다', () => {
+    // 같은 능력치 고정은 하나(add-lock 교체)라 한 칸의 고정은 서로 다른 능력치로 건다
     const s = run(
       start(),
       addCustom('pikachu'),
       add(attackLock('custom', 'pikachu')),
       add(speedLock('preset', 'pikachu')),
-      add(attackLock('ladder', 'pikachu')), // 래더 출처 같은 id는 남는다
+      add(attackLock('ladder', 'pikachu', 'spa')), // 래더 출처 같은 id는 남는다
       select(1),
       { type: 'switch-species', from: undefined, to: 'togedemaru', draft: TOGEDEMARU },
       add(speedLock('added', 'pikachu')),
-      add(speedLock('ladder', 'pikachu')),
+      add(attackLock('ladder', 'pikachu')),
     )
     expect(s.party.slots[0]?.locks).toHaveLength(3)
     expect(s.locks).toHaveLength(2)
     const next = reducer(s, { type: 'remove-custom-target', rosterId: 'pikachu' })
     expect(next.customTargets).toEqual([])
-    expect(next.locks.map((l) => l.target.kind === 'speed' && l.target.origin)).toEqual(['ladder'])
+    expect(next.locks.map((l) => l.target.kind !== 'speed' && l.target.source)).toEqual(['ladder'])
     expect(next.party.slots[0]?.locks.map((l) => l.target.kind !== 'speed' && l.target.source)).toEqual(['ladder'])
     expect(next.generation).toBeGreaterThan(s.generation)
   })

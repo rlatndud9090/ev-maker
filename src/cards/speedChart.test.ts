@@ -17,7 +17,7 @@ import {
 } from './speedChart'
 import { bundleLabel, bundleSpoken, visibleBadges } from './speedLadder'
 import { realData, syntheticEntry, syntheticView } from './testing'
-import { DEFAULT_CRITERIA, DEFAULT_SPEED_FILTERS, type CustomTarget } from './types'
+import { DEFAULT_CRITERIA, DEFAULT_SPEED_FILTERS, type CustomTarget, type SpeedAddedBundle } from './types'
 
 const { game, bo1 } = realData()
 
@@ -59,16 +59,84 @@ const viewWith = (...entries: MetaEntry[]): MetaView => syntheticView(game, bo1.
 const dist = (shares: Record<string, number>): MetaEntry['items'] => ({ shares, keptShare: Object.values(shares).reduce((a, s) => a + s, 0), excludedShare: 0 })
 const spreads = (kept: [string, number][]): MetaEntry['spreads'] => ({ kept, keptShare: kept.reduce((a, [, s]) => a + s, 0), excludedShare: 0 })
 
-describe('기본 배지(1위 묶음)', () => {
-  it('래더 상대마다 기본 배지가 정확히 하나이고 그 종의 점유율 1위 S 묶음이다', () => {
+describe('기본 배지(SP 배분 기준 이상 묶음 전부, 없으면 1위)', () => {
+  it('래더 상대마다 기본 배지 = SP 배분 기준 이상 S 묶음 전부(없으면 1위 하나)이고, 첫째가 1위다(R1)', () => {
     const m = build()
     const ladder = bo1.ranking.slice(0, 30)
+    let multi = 0
     for (const e of ladder) {
       const base = of(m.badges, e.id).filter((b) => b.origin === 'ladder' && b.condition.kind === 'none')
-      expect(base, e.id).toHaveLength(1)
-      const top = bundlesOf(game, e, ['spe'], { bundleShareMin: 0 })[0]
-      expect(base[0].bundle).toEqual({ sp: top.stats[0].sp, nature: top.stats[0].nature, share: top.share })
-      expect(base[0].speed).toBe(finalSpeed(game, base[0].set))
+      const all = bundlesOf(game, e, ['spe'], { bundleShareMin: 0 })
+      const passing = all.filter((b) => (b.share ?? 0) >= DEFAULT_CRITERIA.bundleShareMin)
+      const want = (passing.length > 0 ? passing : [all[0]]).map((b) => ({ sp: b.stats[0].sp, nature: b.stats[0].nature, share: b.share }))
+      expect(base.map((b) => b.bundle), e.id).toEqual(want)
+      for (const b of base) expect(b.speed).toBe(finalSpeed(game, b.set))
+      if (base.length > 1) multi += 1
+    }
+    expect(multi).toBeGreaterThan(0)
+  })
+
+  it('AC1: 점유율 [40%, 30%, 8%, 3%]는 기준 5% → 기본 3개, 10% → 2개, 50% → 1위 하나이고, 조건 배지는 40% 묶음에만 붙는다', () => {
+    const e = speciesEntry('garchomp', { ability: 'roughskin', item: 'lifeorb', nature: 'adamant', sp: { hp: 2, atk: 32, def: 0, spa: 0, spd: 0, spe: 32 } }, {
+      spreads: spreads([
+        ['adamant:2/32/0/0/0/32', 0.4],
+        ['jolly:2/32/0/0/0/32', 0.3],
+        ['adamant:2/32/0/0/0/20', 0.08],
+        ['brave:2/32/0/0/0/0', 0.03],
+      ]),
+      items: dist({ lifeorb: 0.5, choicescarf: 0.5 }),
+    })
+    const basesAt = (bundleShareMin: number) => {
+      const m = build({ view: viewWith(e), criteria: { ...DEFAULT_CRITERIA, bundleShareMin } })
+      return { m, bases: m.badges.filter((b) => b.condition.kind === 'none').map((b) => b.bundle.share) }
+    }
+    expect(basesAt(0.05).bases).toEqual([0.4, 0.3, 0.08])
+    expect(basesAt(0.1).bases).toEqual([0.4, 0.3])
+    expect(basesAt(0.5).bases).toEqual([0.4])
+    const { m } = basesAt(0.05)
+    const conditions = m.badges.filter((b) => b.condition.kind !== 'none')
+    expect(kinds(conditions)).toEqual(expect.arrayContaining(['scarf', 'tailwind']))
+    for (const c of conditions) expect(c.bundle).toEqual({ sp: 32, nature: 'neutral', share: 0.4 })
+  })
+
+  it('AC2: 기준 이상 묶음이 없으면 1위 묶음 하나가 기본 배지다', () => {
+    const e = speciesEntry('garchomp', { ability: 'roughskin', item: 'lifeorb', nature: 'adamant', sp: { hp: 2, atk: 32, def: 0, spa: 0, spd: 0, spe: 32 } }, {
+      spreads: spreads([
+        ['adamant:2/32/0/0/0/32', 0.029],
+        ['hardy:2/32/0/0/0/10', 0.02],
+      ]),
+    })
+    const base = build({ view: viewWith(e) }).badges.filter((b) => b.condition.kind === 'none')
+    expect(base.map((b) => b.bundle)).toEqual([{ sp: 32, nature: 'neutral', share: 0.029 }])
+  })
+
+  it('계산할 수 없는 묶음은 기준 이상이어도 기본 배지가 아니고, 선정·조건 기준은 계산 가능 묶음 안에서 한다', () => {
+    const e = speciesEntry('garchomp', { ability: 'roughskin', item: 'lifeorb', nature: 'adamant', sp: { hp: 2, atk: 32, def: 0, spa: 0, spd: 0, spe: 32 } }, {
+      spreads: spreads([
+        ['adamant:2/32/0/0/0/40', 0.5],
+        ['jolly:2/32/0/0/0/32', 0.3],
+        ['brave:2/32/0/0/0/0', 0.03],
+      ]),
+    })
+    const m = build({ view: viewWith(e) })
+    const base = m.badges.filter((b) => b.condition.kind === 'none')
+    expect(base.map((b) => b.bundle)).toEqual([{ sp: 32, nature: 'plus', share: 0.3 }])
+    for (const c of m.badges.filter((b) => b.condition.kind !== 'none')) expect(c.bundle.share).toBe(0.3)
+    expect(m.options.get('garchomp')?.map((o) => o.share)).toEqual([0.3, 0.03])
+    expect(m.unsupported).toEqual([])
+  })
+
+  it('AC3: 2위 이하 기본 배지 실수치 = "다른 배분 추가" 목록 실수치이고, 대표 도구가 스카프여도 기본 배지에 구애스카프가 없다', () => {
+    const m = build()
+    const chomp = of(m.badges, 'garchomp').filter((b) => b.origin === 'ladder' && b.condition.kind === 'none')
+    expect(chomp.length).toBeGreaterThan(1)
+    const options = m.options.get('garchomp') ?? []
+    for (const b of chomp) {
+      const o = options.find((x) => x.sp === b.bundle.sp && x.nature === b.bundle.nature)
+      expect(o?.speed, JSON.stringify(b.bundle)).toBe(b.speed)
+      expect(o?.onChart).toBe(true)
+      expect(b.set.item).not.toBe('choicescarf')
+      expect(b.item).toBeNull()
     }
   })
 
@@ -92,7 +160,9 @@ describe('기본 배지(1위 묶음)', () => {
         ['jolly:2/32/0/0/0/32', 0.3],
       ]),
     })
-    const m = build({ view: viewWith(e) })
+    // 둘 다 기준 이상이면 둘 다 기본 배지다. 기준 미만 대체(1위 하나)에서만 동률 규칙이 쓰인다
+    expect(build({ view: viewWith(e) }).badges.filter((b) => b.condition.kind === 'none')).toHaveLength(2)
+    const m = build({ view: viewWith(e), criteria: { ...DEFAULT_CRITERIA, bundleShareMin: 0.5 } })
     const base = m.badges.filter((b) => b.condition.kind === 'none')
     expect(base).toHaveLength(1)
     expect(base[0].bundle).toEqual({ sp: 32, nature: 'plus', share: 0.3 })
@@ -173,7 +243,9 @@ describe('조건 배지 생성(AC9)', () => {
     const scarf = chomp.find((b) => b.condition.kind === 'scarf')
     // 154 × 1.5 = 231
     expect(scarf).toMatchObject({ condition: { kind: 'scarf', share: 0.5155 }, filterKind: 'scarf', set: { item: 'choicescarf' }, item: 'choicescarf', speed: 231 })
-    expect(chomp.filter((b) => b.condition.kind === 'none').map((b) => b.set.item)).toEqual(['lifeorb'])
+    const bases = chomp.filter((b) => b.condition.kind === 'none')
+    expect(bases.length).toBeGreaterThan(1)
+    expect(new Set(bases.map((b) => b.set.item))).toEqual(new Set(['lifeorb']))
     expect(scarfConditionOf(entryOf(bo1, 'garchomp'), 0.05)).toEqual({ kind: 'scarf', share: 0.5155 })
     expect(scarfConditionOf(entryOf(bo1, 'pelipper'), 0.06)).toBeNull()
   })
@@ -199,7 +271,7 @@ describe('조건 배지 생성(AC9)', () => {
   })
 
   it('스카프 필터를 끄면 래더·추가 배지 중 구애스카프 장착 세트가 하나도 없다', () => {
-    const m = build({ filters: { topN: 200, selected: [] }, added: [{ source: 'ladder', opponentId: 'garchomp', sp: 0, nature: 'minus' }, { source: 'ladder', opponentId: 'hydreigon', sp: 10, nature: 'neutral' }] })
+    const m = build({ filters: { topN: 200, selected: [] }, added: [{ source: 'ladder', opponentId: 'garchomp', sp: 10, nature: 'neutral' }, { source: 'ladder', opponentId: 'hydreigon', sp: 10, nature: 'neutral' }] })
     expect(m.badges.some((b) => b.set.item === 'choicescarf')).toBe(true)
     const shown = visibleBadges(m, { ...DEFAULT_SPEED_FILTERS, scarf: false, tailwind: true })
     expect(shown.filter((b) => b.set.item === 'choicescarf')).toEqual([])
@@ -230,19 +302,25 @@ describe('조건 배지 생성(AC9)', () => {
     expect(field?.condition).toMatchObject({ ability: 'surgesurfer', field: { kind: 'terrain', terrain: 'Electric' } })
   })
 
-  it('순풍: 표시 중인 상대(기본 배지)마다 하나다', () => {
+  it('순풍: 표시 중인 상대마다 하나(1위 기본 배지에만, 기본 배지가 여럿이어도)다', () => {
     const m = build()
     const base = m.badges.filter((b) => b.condition.kind === 'none')
     const tailwind = m.badges.filter((b) => b.condition.kind === 'tailwind')
-    expect(tailwind.map((b) => b.opponentId)).toEqual(base.map((b) => b.opponentId))
+    expect(base.length).toBeGreaterThan(new Set(base.map((b) => b.opponentId)).size)
+    expect(tailwind.map((b) => b.opponentId)).toEqual([...new Set(base.map((b) => b.opponentId))])
     for (const t of tailwind) expect(t.speed).toBe(finalSpeed(game, t.set, { attacker: { tailwind: true } }))
   })
 
-  it('조건 배지는 기본 배지(1위 묶음)에만 붙고 추가한 배분에는 없다', () => {
-    const m = build({ added: [{ source: 'ladder', opponentId: 'garchomp', sp: 0, nature: 'minus' }] })
+  it('조건 배지는 1위 기본 배지에만 붙고 2위 이하 기본 배지·추가한 배분에는 없다(R2)', () => {
+    const m = build({ added: [{ source: 'ladder', opponentId: 'garchomp', sp: 10, nature: 'neutral' }] })
     const chomp = of(m.badges, 'garchomp')
-    const base = chomp.find((b) => b.origin === 'ladder' && b.condition.kind === 'none') as SpeedBadge
-    for (const b of chomp.filter((x) => x.condition.kind !== 'none')) expect(b.bundle).toEqual(base.bundle)
+    const bases = chomp.filter((b) => b.origin === 'ladder' && b.condition.kind === 'none')
+    expect(bases.length).toBeGreaterThan(1)
+    const base = bases[0]
+    expect(base.bundle.share).toBe(Math.max(...bases.map((b) => b.bundle.share ?? 0)))
+    const conditions = chomp.filter((x) => x.condition.kind !== 'none')
+    expect(conditions.length).toBeGreaterThan(0)
+    for (const b of conditions) expect(b.bundle).toEqual(base.bundle)
     expect(chomp.filter((b) => b.origin === 'added').map((b) => b.condition.kind)).toEqual(['none'])
   })
 
@@ -324,13 +402,13 @@ describe('추가 배분(R15)', () => {
   it('목록 묶음은 점유율을 갖고, 직접 입력은 점유율 없이 기본 세트의 S만 바꾼다', () => {
     const m = build({
       added: [
-        { source: 'ladder', opponentId: 'garchomp', sp: 32, nature: 'plus' },
+        { source: 'ladder', opponentId: 'garchomp', sp: 28, nature: 'neutral' },
         { source: 'ladder', opponentId: 'garchomp', sp: 20, nature: 'minus' },
       ],
     })
     const added = of(m.badges, 'garchomp').filter((b) => b.origin === 'added')
     expect(added.map((b) => [b.bundle, b.listed, b.addedOrder])).toEqual([
-      [{ sp: 32, nature: 'plus', share: 0.1767 }, true, 0],
+      [{ sp: 28, nature: 'neutral', share: 0.0253 }, true, 0],
       [{ sp: 20, nature: 'minus', share: null }, false, 1],
     ])
     const base = of(m.badges, 'garchomp').find((b) => b.origin === 'ladder' && b.condition.kind === 'none') as SpeedBadge
@@ -399,8 +477,8 @@ describe('추가 배분(R15)', () => {
       // 스카프 없는 세트(생명의구슬): 102족 기본 122 + SP, 보정 ×1.1·×0.9 내림
       { sp: 32, nature: 'neutral', share: 0.3392, speed: 154, onChart: true },
       { sp: 0, nature: 'minus', share: 0.1774, speed: 109, onChart: true },
-      { sp: 32, nature: 'plus', share: 0.1767, speed: 169, onChart: false },
-      { sp: 29, nature: 'neutral', share: 0.0619, speed: 151, onChart: false },
+      { sp: 32, nature: 'plus', share: 0.1767, speed: 169, onChart: true },
+      { sp: 29, nature: 'neutral', share: 0.0619, speed: 151, onChart: true },
       { sp: 28, nature: 'neutral', share: 0.0253, speed: 150, onChart: false },
       { sp: 0, nature: 'neutral', share: 0.0114, speed: 122, onChart: false },
       { sp: 10, nature: 'neutral', share: 0.011, speed: 132, onChart: false },
@@ -512,7 +590,7 @@ describe('상대 단위 배지 계산(ladderSpeedOpponent·customSpeedOpponent)'
   it('래더 shownKeys = buildSpeedChart 결과의 그 상대 기본·추가 배지 speedKey', () => {
     const top = bo1.ranking.slice(0, 30)
     const added = [
-      { source: 'ladder' as const, opponentId: top[0].id, sp: 0, nature: 'minus' as const },
+      { source: 'ladder' as const, opponentId: top[0].id, sp: 1, nature: 'minus' as const },
       { source: 'ladder' as const, opponentId: top[1].id, sp: 10, nature: 'neutral' as const },
       { source: 'ladder' as const, opponentId: top[1].id, sp: 11, nature: 'plus' as const },
     ]
@@ -526,7 +604,7 @@ describe('상대 단위 배지 계산(ladderSpeedOpponent·customSpeedOpponent)'
         continue
       }
       expect(new Set(r.shownKeys), e.id).toEqual(shownOnChart(m.badges, e.id))
-      expect(of(m.badges, e.id).filter((b) => b.origin !== 'preset')).toEqual([...(r.base === null ? [] : [r.base]), ...r.conditions, ...r.added])
+      expect(of(m.badges, e.id).filter((b) => b.origin !== 'preset')).toEqual([...r.bases, ...r.conditions, ...r.added])
       expect(m.options.get(e.id)).toEqual(r.options)
       if (r.added.length > 0) withAdded += 1
     }
@@ -539,9 +617,9 @@ describe('상대 단위 배지 계산(ladderSpeedOpponent·customSpeedOpponent)'
     const inRange = ladderSpeedOpponent(inp, e)
     const out = ladderSpeedOpponent(inp, e, true)
     if (inRange.kind !== 'ok' || out.kind !== 'ok') throw new Error('kind')
-    expect(out.base).toBeNull()
+    expect(out.bases).toEqual([])
     expect(out.conditions).toEqual([])
-    expect(out.top).toEqual(inRange.base?.bundle)
+    expect(out.top).toEqual(inRange.bases[0]?.bundle)
     expect([...out.shownKeys]).toEqual([speedKey(3, 'neutral')])
     expect(out.added).toEqual(inRange.added)
     expect(out.options.map((o) => o.speed)).toEqual(inRange.options.map((o) => o.speed))
@@ -631,3 +709,20 @@ describe('목록 밖 추가 배지', () => {
 function chartInputOf(customTargets: CustomTarget[], added: SpeedChartInput['added']): SpeedChartInput {
   return { game, view: bo1, myAbility: 'roughskin', criteria: { ...DEFAULT_CRITERIA }, filters: { topN: 30, selected: [] }, customTargets, added }
 }
+
+describe('AC7: 추가 배분과 기본 배지의 흡수·복귀(speed-bundles-pin-disable R4)', () => {
+  const added: SpeedAddedBundle[] = [{ source: 'ladder', opponentId: 'garchomp', sp: 32, nature: 'plus' }]
+  const at = (bundleShareMin: number) => build({ added, criteria: { ...DEFAULT_CRITERIA, bundleShareMin } })
+  const plus = (badges: readonly SpeedBadge[]) => of(badges, 'garchomp').filter((b) => b.condition.kind === 'none' && b.bundle.sp === 32 && b.bundle.nature === 'plus')
+
+  it('2위 묶음을 추가한 뒤 기준을 낮춰 기본 배지가 되면 그 배분 배지는 하나뿐이고 "추가"가 아니며, 기준을 올리면 추가 배지로 돌아온다', () => {
+    const high = plus(at(0.2).badges)
+    expect(high.map((b) => [b.origin, b.bundle.share, b.listed])).toEqual([['added', 0.1767, true]])
+    const low = plus(at(0.05).badges)
+    expect(low.map((b) => [b.origin, b.bundle.share])).toEqual([['ladder', 0.1767]])
+    // 두 배지의 실수치가 같다(R1: 같은 (S SP, S 보정 부호)면 기본·추가 실수치가 같다)
+    expect(low[0].speed).toBe(high[0].speed)
+    expect(at(0.05).options.get('garchomp')?.find((o) => o.sp === 32 && o.nature === 'plus')?.onChart).toBe(true)
+    expect(plus(at(0.2).badges)).toEqual(high)
+  })
+})

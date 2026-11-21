@@ -1,25 +1,45 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
-import { useLockUi } from '../lockContext'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type RefObject } from 'react'
+import type { AdjustAllocation, PinMenuView } from '../../cards'
+import { useLockUi, type LockUi } from '../lockContext'
+import { AdjustMenu } from './AdjustPopover'
 import { LOCK_NAME, lockStatusText, pinLabel, type PinStageView } from './lockText'
 import { LOCKED_MARK_TEXT } from './speedText'
+import { useAdjustMenu } from './useAdjustMenu'
+import { useFocusReturn } from './useFocusReturn'
 import { judgementText } from '../../ui/format'
 import './cutPin.css'
+import './adjust.css'
 
-interface Props {
+interface CommonProps {
   /** 읽기 이름의 대상(상대 이름) */
   subject: string
   /** 이 대상에 걸린 고정 seq. 하나라도 있으면 찬 핀이고 누르면 모두 해제한다 */
   lockedBy: readonly number[]
   /** 빈 핀 전체를 막는 이유(aria-disabled + 툴팁·읽기 설명) */
   disabledReason?: string
-  /** 메뉴 항목(고를 수 있는 항목은 고르면 그 고정을 더한다). 메뉴가 열린 동안만 부른다 */
-  items: () => readonly PinStageView[]
-  /** 단계가 하나뿐이라 고를 수 있으면 메뉴 없이 바로 고정한다(스피드) */
-  direct?: boolean
   onOpenChange?: (open: boolean) => void
   tabIndex?: number
   onKeyDown?: (e: KeyboardEvent<HTMLButtonElement>) => void
 }
+
+/** 스피드 배지 핀: 단계 하나(선공)를 바로 고정하고, 걸 수 없으면 그 이유를 한 항목짜리 메뉴로 */
+interface DirectProps extends CommonProps {
+  /** 메뉴 항목(고를 수 있는 항목은 고르면 그 고정을 더한다). 누를 때·메뉴가 열린 동안만 부른다 */
+  items: () => readonly PinStageView[]
+  direct: true
+}
+
+/** 공·방 카드 핀: 변동 팝오버와 같은 2단 메뉴(결과 → 성격·배분, 사용자 결정 2026-11-21) */
+interface MenuProps extends CommonProps {
+  /** 메뉴 모델. 메뉴가 열린 동안만 부른다 */
+  menu: () => PinMenuView
+  /** 고른 결과(view.results index)·성격 선택지(view.natures index)·배분 */
+  onPick: (view: PinMenuView, result: number, option: number, allocation: AdjustAllocation) => void
+  /** 고른 뒤 재계산으로 카드가 다시 붙어도 이 핀으로 포커스를 돌려줄 키(탭·카드마다 하나, 변동 버튼과 같은 방식) */
+  returnKey: string
+}
+
+type Props = DirectProps | MenuProps
 
 /** 핀 모양(고정이면 채움, 아니면 윤곽선) */
 function CutPinIcon({ filled }: { filled: boolean }) {
@@ -38,11 +58,157 @@ function CutPinIcon({ filled }: { filled: boolean }) {
 
 const stop = (e: MouseEvent) => e.stopPropagation()
 
+/** 찬 핀의 툴팁 "컷 고정됨: 확정견딤, 저난수1타(SP 부족(8))" */
+function lockedTitle(ui: LockUi, lockedBy: readonly number[]): string {
+  const parts = lockedBy.flatMap((seq) => {
+    const lock = ui.locks.find((l) => l.seq === seq)
+    if (lock === undefined) return []
+    const st = ui.derivation?.statuses.get(seq)
+    const t = st === undefined ? undefined : lockStatusText(st)
+    return [t === undefined ? judgementText(lock.stage) : `${judgementText(lock.stage)}(${t.text})`]
+  })
+  return `${LOCK_NAME} ${LOCKED_MARK_TEXT}${parts.length > 0 ? `: ${parts.join(', ')}` : ''}`
+}
+
 /**
- * 컷 고정 핀: 빈 핀 → 단계 메뉴(role=menu, ↑↓·Home/End, Esc·Tab으로 닫고 핀으로 포커스), 찬 핀 → 그 대상 고정 모두 해제.
+ * 열린 메뉴가 비활성으로 바뀌는 순간(계산이 끝나 고를 것이 없다고 판명): 열림 상태를 지우고(나중에 다시 활성이 돼도 저절로 열리지 않게),
+ * 포커스를 핀에 두고(메뉴 안 포커스가 문서로 빠지지 않게), 이유를 알림 영역으로 한 번 낸다. 돌려준 글자 = 알림 영역 내용
+ */
+function useCloseOnDisable(disabled: boolean, reason: string | undefined, open: boolean, dismiss: () => void, btnRef: RefObject<HTMLButtonElement | null>): string {
+  const [prev, setPrev] = useState(disabled)
+  const [said, setSaid] = useState('')
+  const [refocus, setRefocus] = useState(0)
+  if (prev !== disabled) {
+    setPrev(disabled)
+    if (disabled && open) {
+      dismiss()
+      setSaid(reason ?? '')
+      setRefocus((n) => n + 1)
+    } else if (!disabled && said !== '') setSaid('')
+  }
+  useLayoutEffect(() => {
+    if (refocus > 0) btnRef.current?.focus()
+  }, [refocus, btnRef])
+  return said
+}
+
+/** 메뉴가 열린 동안(또는 닫히며 알린 뒤) 두는 알림 영역. 미리 있어야 글자가 바뀔 때 읽힌다 */
+function DisableNotice({ shown, text }: { shown: boolean; text: string }) {
+  if (!shown) return null
+  return (
+    <span className="sr-only" role="status" data-testid="cut-pin-notice">
+      {text}
+    </span>
+  )
+}
+
+/**
+ * 컷 고정 핀: 빈 핀 → 메뉴(스피드는 바로 고정), 찬 핀 → 그 대상 고정 모두 해제.
  * 누름은 감싼 줄(카드 펼침·배지 상세)로 올리지 않는다.
  */
-export function CutPin({ subject, lockedBy, disabledReason, items, direct = false, onOpenChange, tabIndex, onKeyDown }: Props) {
+export function CutPin(props: Props) {
+  return 'menu' in props ? <MenuCutPin {...props} /> : <DirectCutPin {...props} />
+}
+
+/**
+ * 공·방 핀: 빈 핀 → 변동과 같은 2단 메뉴(AdjustMenu variant pin, 오른쪽으로 펼침). 키보드는 변동 팝오버와 같다(useAdjustMenu).
+ * 선택지를 고르면 메뉴를 닫고 핀으로 포커스한 뒤 onPick을 한 번 부른다. 재계산으로 카드가 다시 붙어도 포커스를 핀으로 돌려준다(useFocusReturn).
+ */
+function MenuCutPin({ subject, lockedBy, disabledReason, menu, onPick, returnKey, onOpenChange, tabIndex, onKeyDown }: MenuProps) {
+  const ui = useLockUi()
+  const uid = useId()
+  const openChange = useRef(onOpenChange)
+  useLayoutEffect(() => {
+    openChange.current = onOpenChange
+  })
+  const locked = lockedBy.length > 0
+  const disabled = !locked && disabledReason !== undefined
+  // 한 렌더 안에서 메뉴 모델은 한 번만 계산한다(열린 동안만)
+  let cached: PinMenuView | undefined
+  const view = () => (cached ??= menu())
+  const { open, shown, stage, wrapRef, btnRef, menuRef, close, dismiss, goBack, toggle, onMenuKey, onBlur, chooseResult } = useAdjustMenu({
+    results: () => view().results,
+    enabled: !locked && !disabled && ui.enabled,
+    anchor: 'start',
+  })
+  const notice = useCloseOnDisable(disabled, disabledReason, open, dismiss, btnRef)
+  const rememberFocusReturn = useFocusReturn(JSON.stringify(['pin', returnKey]), btnRef)
+
+  useEffect(() => {
+    if (!shown) return
+    openChange.current?.(true)
+    return () => openChange.current?.(false)
+  }, [shown])
+
+  if (!ui.enabled) return null
+  const onClick = () => {
+    if (locked) {
+      dismiss()
+      for (const seq of lockedBy) ui.removeLock(seq)
+      return
+    }
+    toggle()
+  }
+  const title = locked ? lockedTitle(ui, lockedBy) : (disabledReason ?? LOCK_NAME)
+  const noteId = `${uid}-note`
+  const menuButton = !locked && !disabled
+  const current = shown ? view() : undefined
+  return (
+    <span className="cut-pin-wrap" ref={wrapRef} onClick={stop}>
+      <button
+        type="button"
+        ref={btnRef}
+        className="cut-pin"
+        aria-label={pinLabel(subject, locked)}
+        aria-pressed={locked}
+        aria-haspopup={menuButton ? 'menu' : undefined}
+        aria-expanded={menuButton ? shown : undefined}
+        aria-disabled={disabled ? 'true' : undefined}
+        aria-describedby={locked || disabled ? noteId : undefined}
+        title={title}
+        tabIndex={tabIndex}
+        data-testid="cut-pin"
+        data-locked={locked ? 'true' : undefined}
+        onClick={onClick}
+        onKeyDown={onKeyDown}
+      >
+        <CutPinIcon filled={locked} />
+      </button>
+      {(locked || disabled) && (
+        <span id={noteId} className="sr-only">
+          {title}
+        </span>
+      )}
+      <DisableNotice shown={open || notice !== ''} text={notice} />
+      {current !== undefined && (
+        <AdjustMenu
+          subject={subject}
+          view={current}
+          variant="pin"
+          emptyOver={current.emptyOver}
+          empty={current.empty}
+          stage={stage}
+          menuRef={menuRef}
+          onKeyDown={onMenuKey}
+          onBlur={onBlur}
+          onChooseResult={chooseResult}
+          onChooseNature={(option, allocation) => {
+            if (stage === null) return
+            close()
+            rememberFocusReturn()
+            onPick(current, stage, option, allocation)
+          }}
+          onBack={goBack}
+        />
+      )}
+    </span>
+  )
+}
+
+/**
+ * 스피드 배지 핀: 빈 핀 → 바로 고정(걸 수 없으면 이유 메뉴, role=menu, ↑↓·Home/End, Esc·Tab으로 닫고 핀으로 포커스), 찬 핀 → 해제.
+ */
+function DirectCutPin({ subject, lockedBy, disabledReason, items, direct, onOpenChange, tabIndex, onKeyDown }: DirectProps) {
   const ui = useLockUi()
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLSpanElement>(null)
@@ -56,6 +222,7 @@ export function CutPin({ subject, lockedBy, disabledReason, items, direct = fals
   const locked = lockedBy.length > 0
   const disabled = !locked && disabledReason !== undefined
   const shown = open && !locked && !disabled
+  const notice = useCloseOnDisable(disabled, disabledReason, open, () => setOpen(false), btnRef)
   const list = shown ? items() : []
   const selectable = list.findIndex((it) => it.lock !== undefined)
   // 바로 고정하는 핀은 메뉴가 열린 동안만 메뉴 버튼이다(닫힌 동안 누르면 대개 바로 고정)
@@ -150,17 +317,7 @@ export function CutPin({ subject, lockedBy, disabledReason, items, direct = fals
   }
 
   if (!ui.enabled) return null
-  const lockedTitle = () => {
-    const parts = lockedBy.flatMap((seq) => {
-      const lock = ui.locks.find((l) => l.seq === seq)
-      if (lock === undefined) return []
-      const st = ui.derivation?.statuses.get(seq)
-      const t = st === undefined ? undefined : lockStatusText(st)
-      return [t === undefined ? judgementText(lock.stage) : `${judgementText(lock.stage)}(${t.text})`]
-    })
-    return `${LOCK_NAME} ${LOCKED_MARK_TEXT}${parts.length > 0 ? `: ${parts.join(', ')}` : ''}`
-  }
-  const title = locked ? lockedTitle() : (disabledReason ?? LOCK_NAME)
+  const title = locked ? lockedTitle(ui, lockedBy) : (disabledReason ?? LOCK_NAME)
   const noteId = `${uid}-note`
   return (
     <span className="cut-pin-wrap" ref={wrapRef} onClick={stop}>
@@ -188,6 +345,7 @@ export function CutPin({ subject, lockedBy, disabledReason, items, direct = fals
           {title}
         </span>
       )}
+      <DisableNotice shown={open || notice !== ''} text={notice} />
       {shown && (
         <div
           className="cut-pin-menu"

@@ -8,6 +8,7 @@ import {
   combo,
   lockBadge,
   lockList,
+  lockRow,
   lockedSp,
   mySet,
   openBadge,
@@ -146,10 +147,8 @@ test.describe('파티 6칸 · PokePaste', () => {
 
   test('A3: 2번 칸에서 더한 커스텀 상대가 1번 칸 공·방·스피드에 보이고, 지우면 모든 칸의 그 상대 고정이 풀린다', async ({ page }) => {
     await openProduct(page)
-    // 1번 칸: 래더 상대 고정 하나(지워지면 안 된다)
-    await lockBadge(page, MOLDURYU_140)
-    await settle(page)
-    await selectTab(page, '공격')
+    // 1번 칸: 래더 상대 고정 하나(지워지면 안 된다). 같은 능력치 고정은 하나(교체)라 뒤의 커스텀 스피드 고정과 겹치지 않게 공격 고정으로 건다
+    await lockRow(page, '공격', 'garchomp', 'dragonclaw')
 
     await selectSlot(page, 2)
     await pickSpecies(page, '한카리아스')
@@ -180,7 +179,7 @@ test.describe('파티 6칸 · PokePaste', () => {
     await expect(customCards(page)).toHaveCount(0)
     await settle(page)
     await expect(lockItems(page)).toHaveCount(1)
-    await expect(lockItems(page).first().getByRole('button', { name: /보기$/ })).toHaveAccessibleName(/몰드류/)
+    await expect(lockItems(page).first().getByRole('button', { name: /보기$/ })).toHaveAccessibleName(/한카리아스/)
     await expect(lockList(page)).not.toContainText('대상 없음')
 
     await selectSlot(page, 2)

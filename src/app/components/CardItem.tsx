@@ -1,5 +1,5 @@
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type Dispatch, type KeyboardEvent, type ReactNode } from 'react'
-import { LOCK_STAGES, addedBundleCardId, defaultOption, isDamageTab, isPinned, isSpValue, normalizeKeySigns, pinOf, setKeySign, signOf, type AddedBundle, type KeySigns, type NatureSign, type AdditionTarget, type AdditionVerdict, type CardGroup, type CardView, type Category, type CustomTarget, type GroupItem, type LockCandidate, type RowView, type Tab } from '../../cards'
+import { memo, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type Dispatch, type KeyboardEvent, type ReactNode } from 'react'
+import { addedBundleCardId, defaultOption, isDamageTab, isPinned, isSpValue, normalizeKeySigns, pinOf, setKeySign, signOf, type AddedBundle, type KeySigns, type NatureSign, type AdditionTarget, type AdditionVerdict, type CardGroup, type CardView, type Category, type CustomTarget, type GroupItem, type RowView, type Tab } from '../../cards'
 import type { Snapshot, StatId } from '../../data/schema'
 import { namesOf } from '../../ui/names'
 import { STAT_SHORT, bundleText, categoryBadge, fixedText, koBadge, shareText, type KoBadge } from '../../ui/format'
@@ -7,9 +7,9 @@ import { STAT_LABEL } from '../../ui/labels'
 import { koReason } from '../../ui/koErrors'
 import { additionMessage } from '../additionText'
 import type { AppAction } from '../state'
-import { useLockUi } from '../lockContext'
+import { ViewCurrentContext, useLockUi } from '../lockContext'
 import { CutPin } from './CutPin'
-import { DROP_WARNING_TEXT, blockedText, pinStageView } from './lockText'
+import { DROP_WARNING_TEXT, blockedText, pinEmptyReasonText } from './lockText'
 import { AdjustPopover } from './AdjustPopover'
 import { useAnnounce } from '../useAnnounce'
 import { CustomEditor } from './CustomEditor'
@@ -198,24 +198,23 @@ function SpeciesName({ label }: { label: string }) {
   )
 }
 
-const COMPUTING: LockCandidate = { kind: 'computing' }
-
-/** 카드 줄 컷 고정 핀: 단계마다 후보를 지금 고정에 더해 본 결과(선택지 SP 또는 고를 수 없는 이유)를 메뉴로 */
+/** 카드 줄 컷 고정 핀: 변동 팝오버와 같은 2단 메뉴(결과 → 성격·배분, cards pinMenuView). 고르면 그 고정을 더한다 */
 function CardPin({ game, tab, card }: { game: Snapshot; tab: Tab; card: CardView }) {
   const ui = useLockUi()
+  const viewCurrent = useContext(ViewCurrentContext)
   const pin = card.lockPin
   if (pin === undefined || !isDamageTab(tab)) return null
   const control = pin.control
-  const items = () =>
-    LOCK_STAGES[tab].map((stage) =>
-      pinStageView(stage, (control.kind === 'lockable' ? control.stages.find((s) => s.stage === stage)?.candidate : undefined) ?? COMPUTING, ui.check),
-    )
+  // 고를 것이 없다고 판정된 빈 핀은 그 이유로 비활성(계산 중·밀려난 뷰면 활성)
+  const emptyReason = ui.pinDisabled(tab, pin, viewCurrent)
   return (
     <CutPin
       subject={namesOf(game).species.label(card.opponent.id)}
       lockedBy={pin.lockedBy ?? []}
-      disabledReason={control.kind === 'blocked' ? blockedText(control.reason) : undefined}
-      items={items}
+      disabledReason={control.kind === 'blocked' ? blockedText(control.reason) : emptyReason === undefined ? undefined : pinEmptyReasonText(emptyReason)}
+      menu={() => ui.pinMenu(tab, pin)}
+      onPick={ui.pinLock}
+      returnKey={JSON.stringify([tab, card.id])}
       onOpenChange={(open) => ui.onPinMenu(tab, open ? card.id : null)}
     />
   )

@@ -758,8 +758,11 @@ function buildCard(ctx: Ctx, card: CardSpec, pending: PendingTasks, selected: st
   const view: CardView = { ...base, rows, headline, variable: isVariable(rows), items: itemViews(plan, refs, states), selected: isSelected }
   if (shown !== undefined) view.shownItem = shown
   if (pair !== undefined) view.pair = pair
-  if (ctx.controls) view.lockPin = cardLockPin(ctx, card, rows, pair, shown === undefined)
   const current = headlineLabel(ctx, rows, headline)
+  if (ctx.controls) {
+    view.lockPin = cardLockPin(ctx, card, rows, pair, shown === undefined)
+    if (current !== undefined) view.lockPin.current = current
+  }
   if (ctx.adjust && view.variable && ref !== undefined && ref.candidate.target !== 'fixed') {
     const adjust = adjustView({ plan, results, shown: { target: ref.candidate.target, id: ref.candidate.id }, displaySp: ctx.displaySp, current })
     if (adjust !== undefined) view.adjust = adjust

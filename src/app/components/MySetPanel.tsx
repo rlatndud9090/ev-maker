@@ -216,7 +216,7 @@ export function MySetPanel({ game, view, draft, dispatch, reasons, onDisplaySp, 
     dragRef.current = null
     setDrag(null)
     dispatch({ type: 'commit-sp', stat, value, rules: game.manifest.rules, lockedSp })
-    // 값이 바뀌면 새 세대 setInput이 표시용 SP를 비운다(먼저 비우면 드래그 전 값으로 튄다).
+    // 값이 바뀌면 실행기는 새 세대 setInput이, 화면 표시 SP는 ProductApp이 초안 변경 직후(칠하기 전) 비운다(먼저 비우면 드래그 전 값으로 튄다).
     if (value === committed[stat]) onDisplaySp(null)
   }
 

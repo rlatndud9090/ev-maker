@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { deriveLocks, itemKey, type AdjustNature, type AdjustResult, type CutLock, type LockCandidate, type LockResolution, type SpeedBranchLine } from '../../cards'
+import { deriveLocks, itemKey, type AdjustNature, type AdjustResult, type CutLock, type LockCandidate, type LockResolution, type SpeedBranchLine, type SpeedLockCandidate } from '../../cards'
+import type { LockCheckView } from '../lockContext'
 import { realData } from '../../cards/testing'
 import type { PokemonSet } from '../../core'
 import {
@@ -21,7 +22,14 @@ import {
   lockCheckText,
   lockDescription,
   lockDescriptionSpoken,
+  lockAllocationText,
+  lockChoiceText,
   lockOptionText,
+  pinEmptyMenuText,
+  pinEmptyReasonText,
+  pinEmptyText,
+  pinResultsLabel,
+  speedPinDisabledText,
   lockStatusText,
   lockedStatText,
   lockSubjectView,
@@ -282,6 +290,7 @@ describe('변동 팝오버 문구', () => {
     expect(adjustOffText({ kind: 'off', reason: 'budget' })).toBe('SP 부족')
     expect(adjustOffText({ kind: 'off', reason: 'unreachable' })).toBe('닿지 않음')
     expect(adjustOffText({ kind: 'off', reason: 'no-branch' })).toBe('고정과 겹침')
+    expect(adjustOffText({ kind: 'off', reason: 'budget', over: 8 })).toBe('SP 부족(8)')
   })
 
   it('leadStats: lead 선택지의 능력치, 고를 수 없는 lead면 빈 목록', () => {
@@ -295,5 +304,65 @@ describe('변동 팝오버 문구', () => {
     ] as const
     const pair: AdjustResult = { label: 'guaranteed-survive', current: false, lead: 0, options: [{ kind: 'ok', stats: [{ stat: 'def', sp: 30, plus: false, locked: false }], hMax }] }
     expect(leadStats(pair)).toEqual(hMax)
+  })
+})
+
+describe('공·방 핀 메뉴·고정 목록 SP 문구(2026-11-21)', () => {
+  const stairs = (f: (hp: number) => number): number[] => Array.from({ length: 33 }, (_, hp) => f(hp))
+  const set: PokemonSet = { regulation: game.manifest.regulation.id, species: 'raichu', ability: 'static', nature: 'hardy', sp: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }, moves: [] }
+
+  it('핀 메뉴 이름·빈 목록', () => {
+    expect(pinResultsLabel('한카리아스')).toBe('컷 고정할 결과: 한카리아스')
+    expect(pinEmptyText(undefined)).toBe('고정할 수 있는 결과 없음')
+    expect(pinEmptyText(8)).toBe('고정할 수 있는 결과 없음 · SP 부족(8)')
+  })
+
+  it('lockChoiceText: 파생 갈래 값(상승 갈래 먼저, 같은 글자 한 번), H 최대 배분이 그대로 보인다', () => {
+    const res = new Map<number, LockResolution>([[1, single('spe', 20, 12)]])
+    const d = deriveLocks({ game, mySet: set, locks: [speedLock], resolutions: res, baseChoice: null })
+    expect(lockChoiceText(d, speedLock)).toBe('S12+ / S20')
+    const pair: LockResolution = { kind: 'ok', options: { shape: 'pair', defense: 'def', neutral: stairs((hp) => Math.max(0, 16 - hp)), plus: stairs((hp) => Math.max(0, 10 - hp)) } }
+    const hMax = { ...defenseLock, allocation: 'h-max' as const }
+    const dd = deriveLocks({ game, mySet: set, locks: [hMax], resolutions: new Map([[2, pair]]), baseChoice: null })
+    expect(lockChoiceText(dd, hMax)).toBe('H32 B0+ / H32 B0')
+    const plain = deriveLocks({ game, mySet: set, locks: [defenseLock], resolutions: new Map([[2, pair]]), baseChoice: null })
+    expect(lockChoiceText(plain, defenseLock)).toBe('H10 B0+ / H16 B0')
+  })
+
+  it('H 최대 표지(목록·읽기 이름)', () => {
+    expect(lockAllocationText(defenseLock)).toBeUndefined()
+    expect(lockAllocationText({ allocation: 'h-max' })).toBe('H 최대')
+    expect(lockDescriptionSpoken(game, { ...defenseLock, allocation: 'h-max' })).toMatch(/ · H 최대$/)
+  })
+})
+
+describe('핀 비활성 이유 문구(speed-bundles-pin-disable R6·R7)', () => {
+  it('공·방 핀: SP 부족(n) · 성격 충돌 · 고정할 수 있는 결과 없음, 빈 메뉴 문구도 같은 이유를 쓴다', () => {
+    expect(pinEmptyReasonText({ kind: 'sp-short', over: 8 })).toBe('SP 부족(8)')
+    expect(pinEmptyReasonText({ kind: 'nature-conflict' })).toBe('성격 충돌')
+    expect(pinEmptyReasonText({ kind: 'none' })).toBe('고정할 수 있는 결과 없음')
+    expect(pinEmptyMenuText({ kind: 'sp-short', over: 8 })).toBe(pinEmptyText(8))
+    expect(pinEmptyMenuText({ kind: 'nature-conflict' })).toBe('고정할 수 있는 결과 없음 · 성격 충돌')
+    expect(pinEmptyMenuText({ kind: 'none' })).toBe('고정할 수 있는 결과 없음')
+  })
+
+  it('스피드 핀: 메뉴 한 줄 문구와 같은 이유, 바로 고정 가능·계산 중이면 이유 없음(활성)', () => {
+    const ready: SpeedLockCandidate = {
+      kind: 'ready',
+      lock: { kind: 'speed', target: { kind: 'speed', origin: 'ladder', opponentId: 's', bundle: { sp: 32, nature: 'plus' }, condition: 'none', filterKind: null }, stage: 'first', stats: ['spe'] },
+      resolution: { kind: 'ok', options: { shape: 'single', stat: 'spe', neutral: 20, plus: 12 } },
+    }
+    const checkOf = (c: LockCheckView) => () => c
+    expect(speedPinDisabledText(ready, checkOf({ kind: 'ok' }))).toBeUndefined()
+    expect(speedPinDisabledText(ready, checkOf({ kind: 'computing' }))).toBeUndefined()
+    expect(speedPinDisabledText(ready, checkOf({ kind: 'unreachable' }))).toBe('도달 불가')
+    expect(speedPinDisabledText(ready, checkOf({ kind: 'sp-short', over: 8 }))).toBe('SP 부족(8)')
+    expect(speedPinDisabledText(ready, checkOf({ kind: 'nature-conflict' }))).toBe('성격 충돌')
+    expect(speedPinDisabledText({ kind: 'blocked', reason: 'set-error' }, checkOf({ kind: 'ok' }))).toBe(pinStageView('first', { kind: 'blocked', reason: 'set-error' }, checkOf({ kind: 'ok' })).detail)
+    expect(speedPinDisabledText({ kind: 'blocked', reason: 'speed-unsupported' }, checkOf({ kind: 'ok' }))).toBe(pinStageView('first', { kind: 'blocked', reason: 'speed-unsupported' }, checkOf({ kind: 'ok' })).detail)
+    // 메뉴 한 줄 문구와 같다
+    for (const c of [{ kind: 'unreachable' }, { kind: 'sp-short', over: 3 }, { kind: 'nature-conflict' }] as const) {
+      expect(speedPinDisabledText(ready, checkOf(c))).toBe(pinStageView('first', ready, checkOf(c)).detail)
+    }
   })
 })

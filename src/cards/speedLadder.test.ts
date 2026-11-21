@@ -106,27 +106,65 @@ describe('상태·필터', () => {
   })
 })
 
-describe('같은 줄 순서(R2)', () => {
-  const names: Record<string, string> = { a: '가디', b: '나몰빼미', c: '다부니' }
-  const cmp = compareInRow((id) => names[id] ?? id)
-  it('점유율 내림 → 기본 먼저 → 이름 → 직접 입력 추가(추가 순) → 목록 밖 타겟(추가 순·프리셋 순)', () => {
+describe('같은 줄 순서(speed-bundles-pin-disable R3)', () => {
+  const cmp = compareInRow()
+  it('AC5: 사용률 순위 3위·1위·2위 상대 배지는 1위·2위·3위 순이다(점유율·이름과 무관)', () => {
     const list = [
-      badge('preset-1-0', 150, { origin: 'preset', source: 'custom', speciesId: 'a', bundle: { sp: 32, nature: 'neutral', share: null }, presetIndex: 0, addedOrder: 1, listed: false }),
-      badge('preset-0-1', 150, { origin: 'preset', source: 'custom', speciesId: 'a', bundle: { sp: 32, nature: 'neutral', share: null }, presetIndex: 1, addedOrder: 0, listed: false }),
-      badge('preset-0-0', 150, { origin: 'preset', source: 'custom', speciesId: 'a', bundle: { sp: 32, nature: 'neutral', share: null }, presetIndex: 0, addedOrder: 0, listed: false }),
-      badge('free-2', 150, { origin: 'added', bundle: { sp: 3, nature: 'neutral', share: null }, addedOrder: 2, listed: false }),
-      badge('free-0', 150, { origin: 'added', bundle: { sp: 4, nature: 'neutral', share: null }, addedOrder: 0, listed: false }),
-      badge('c-cond', 150, { speciesId: 'c', bundle: { sp: 32, nature: 'neutral', share: 0.5 }, condition: { kind: 'tailwind' }, filterKind: 'tailwind' }),
-      badge('c-base', 150, { speciesId: 'c', bundle: { sp: 32, nature: 'neutral', share: 0.5 } }),
-      badge('a-base', 150, { speciesId: 'a', bundle: { sp: 32, nature: 'neutral', share: 0.5 } }),
-      badge('b-listed', 150, { origin: 'added', speciesId: 'b', bundle: { sp: 20, nature: 'plus', share: 0.7 }, addedOrder: 5 }),
+      badge('r3', 150, { opponentId: 'r3', speciesId: 'a', usageRank: 3, bundle: { sp: 32, nature: 'neutral', share: 0.9 } }),
+      badge('r1', 150, { opponentId: 'r1', speciesId: 'z', usageRank: 1, bundle: { sp: 32, nature: 'neutral', share: 0.1 } }),
+      badge('r2', 150, { opponentId: 'r2', speciesId: 'm', usageRank: 2, bundle: { sp: 32, nature: 'neutral', share: 0.5 } }),
     ]
-    expect([...list].sort(cmp).map((b) => b.id)).toEqual(['b-listed', 'a-base', 'c-base', 'c-cond', 'free-0', 'free-2', 'preset-0-0', 'preset-0-1', 'preset-1-0'])
+    expect([...list].sort(cmp).map((b) => b.id)).toEqual(['r1', 'r2', 'r3'])
+  })
+
+  it('AC5: 같은 상대는 점유율 내림(30% → 8%) → 기본 먼저 → 직접 입력(추가 순)이고, 직접 입력 배지도 그 포켓몬 자리에 놓으며, 목록 밖 타겟은 줄 맨 뒤다', () => {
+    const one = { opponentId: 'p1', speciesId: 'p1', usageRank: 1 }
+    const two = { opponentId: 'p2', speciesId: 'p2', usageRank: 2 }
+    const list = [
+      badge('preset-1-0', 150, { origin: 'preset', source: 'custom', opponentId: 'x', speciesId: 'x', usageRank: 0, bundle: { sp: 32, nature: 'neutral', share: null }, presetIndex: 0, addedOrder: 1, listed: false }),
+      badge('preset-0-1', 150, { origin: 'preset', source: 'custom', opponentId: 'y', speciesId: 'y', usageRank: 0, bundle: { sp: 32, nature: 'neutral', share: null }, presetIndex: 1, addedOrder: 0, listed: false }),
+      badge('preset-0-0', 150, { origin: 'preset', source: 'custom', opponentId: 'y', speciesId: 'y', usageRank: 0, bundle: { sp: 32, nature: 'neutral', share: null }, presetIndex: 0, addedOrder: 0, listed: false }),
+      badge('custom-added', 150, { origin: 'added', source: 'custom', opponentId: 'x', speciesId: 'x', usageRank: 0, bundle: { sp: 5, nature: 'neutral', share: null }, addedOrder: 3, listed: false }),
+      badge('p2-base', 150, { ...two, bundle: { sp: 32, nature: 'neutral', share: 0.6 } }),
+      badge('p2-free', 150, { ...two, origin: 'added', bundle: { sp: 9, nature: 'neutral', share: null }, addedOrder: 1, listed: false }),
+      badge('p1-free-2', 150, { ...one, origin: 'added', bundle: { sp: 3, nature: 'neutral', share: null }, addedOrder: 2, listed: false }),
+      badge('p1-free-0', 150, { ...one, origin: 'added', bundle: { sp: 4, nature: 'neutral', share: null }, addedOrder: 0, listed: false }),
+      badge('p1-8', 150, { ...one, bundle: { sp: 20, nature: 'neutral', share: 0.08 } }),
+      badge('p1-30-cond', 150, { ...one, bundle: { sp: 32, nature: 'neutral', share: 0.3 }, condition: { kind: 'tailwind' }, filterKind: 'tailwind' }),
+      badge('p1-30', 150, { ...one, bundle: { sp: 32, nature: 'neutral', share: 0.3 } }),
+      badge('p1-listed', 150, { ...one, origin: 'added', bundle: { sp: 28, nature: 'neutral', share: 0.2 }, addedOrder: 5 }),
+    ]
+    expect([...list].sort(cmp).map((b) => b.id)).toEqual([
+      'p1-30',
+      'p1-30-cond',
+      'p1-listed',
+      'p1-8',
+      'p1-free-0',
+      'p1-free-2',
+      'p2-base',
+      'p2-free',
+      'custom-added',
+      'preset-0-0',
+      'preset-0-1',
+      'preset-1-0',
+    ])
+  })
+
+  it('실데이터: 같은 실수치 줄의 래더 배지는 사용률 순위가 줄지 않는다', () => {
+    const model = buildSpeedChart({ game, view: bo1, myAbility: 'roughskin', criteria: DEFAULT_CRITERIA, filters: { topN: 100, selected: [] }, customTargets: [], added: [] })
+    const byId = new Map(model.badges.map((b) => [b.id, b]))
+    let shared = 0
+    for (const row of ladderRows(model.badges, null, cmp)) {
+      const ranks = row.badgeIds.map((id) => byId.get(id)?.usageRank ?? 0)
+      expect(ranks).toEqual([...ranks].sort((a, b) => a - b))
+      if (new Set(ranks).size > 1) shared += 1
+    }
+    expect(shared).toBeGreaterThan(0)
   })
 })
 
 describe('사다리 줄', () => {
-  const cmp = compareInRow((id) => id)
+  const cmp = compareInRow()
   const badges = [badge('a', 200), badge('b', 150), badge('c', 150, { bundle: { sp: 0, nature: 'neutral', share: 0.9 } }), badge('d', 149)]
   it('실수치 내림차순 줄(윗줄 차이 없음), 내 실수치에 배지가 없으면 빈 기준선 줄이 낀다', () => {
     expect(ladderRows(badges, 160, cmp)).toEqual([

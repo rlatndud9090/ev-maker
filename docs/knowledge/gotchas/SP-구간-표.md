@@ -24,3 +24,17 @@ area: SP 구간 표
 **규칙:** 받는 아이콘 목록(`itemIconIds(snapshots)`)은 현재 레귤레이션 스냅샷 도구 합집합이다. 판정 카드는 여전히 계산에 효과를 준 도구만 표시한다(INV-261117-relevant-item-only). 받는 목록을 판정 대상 집합으로 줄이거나, 표시 규칙을 받는 목록으로 넓히지 않는다. 범위를 바꾸면 `src/assets/item-icons/LICENSE`·`sources.config.json` 고지도 함께 고친다.
 
 **왜:** 파티 칸은 모든 지닌 도구를 그리는데 받는 목록이 판정 대상 42종뿐이라 자뭉열매·기합의띠·메가스톤 등 대부분이 가방 표지로 나왔다. 스냅샷 전체(166종)로 넓혀 해결했다.
+
+### G-261121-display-sp-two-copies: 드래그 표시 SP는 화면 스토어와 실행기 사본을 둘 다 비운다 (미확인)
+> 발견: 2026-11-21 · 유형: 잘못된추론 · area: SP 구간 표 · 출처: docs/raw/bugfix/speed-sp-not-reflected/bugfix.md · 코드: `src/app/ProductApp.tsx:onDisplaySp`, `src/app/components/MySetPanel.tsx:commit`, `src/app/executor.ts:setInput`
+
+**규칙:** 드래그 표시 SP는 화면 스토어(`displaySp`, 스피드 탭 구독)와 실행기 사본 두 곳에 있다. 실행기 `setInput`이 비우는 건 실행기 사본뿐이니, 화면 스토어는 확정(초안 변경) 때 따로 비운다.
+
+**왜:** 드래그를 새 값에서 놓은 뒤 화면 스토어가 남아, 스피드 탭 기준선이 숫자 입력·±에도 멈춰 있었다.
+
+### G-261121-pin-check-current-view: 핀 비활성 판정은 현재 세대 뷰에서만 한다 (미확인)
+> 발견: 2026-11-21 · 유형: 규칙부재 · area: SP 구간 표 · 출처: docs/raw/feature/speed-bundles-pin-disable/notes.md · 코드: `src/app/lockContext.ts:pinDisabled`, `src/app/components/ResultPanel.tsx`
+
+**규칙:** 고정 문맥이 새 세대여도 화면이 대체된(superseded) 이전 세대 뷰를 보이는 동안에는 그 뷰의 후보로 핀 비활성을 판정하지 않는다(`ViewCurrentContext`).
+
+**왜:** 스피드 고정만 있을 때 새 세대 고정 상태가 먼저 준비돼, 옛 후보를 새 초안으로 판정해 핀이 활성→비활성→활성으로 깜빡였다(리뷰에서 발견).

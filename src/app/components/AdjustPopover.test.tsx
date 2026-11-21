@@ -189,3 +189,38 @@ describe('AdjustPopover 버튼', () => {
     expect(html).toContain(`<span id="${note}" class="sr-only">고정된 능력치라 변동할 수 없음</span>`)
   })
 })
+
+describe('AdjustMenu pin 변형(공·방 카드 핀, 2026-11-21)', () => {
+  const pinMenu = (view: Pick<AdjustView, 'state' | 'natures' | 'results'>, stage: number | null, emptyOver?: number) =>
+    renderToStaticMarkup(
+      <AdjustMenu subject="한카리아스" view={view} variant="pin" emptyOver={emptyOver} stage={stage} onChooseResult={noop} onChooseNature={noop} onBack={noop} />,
+    )
+
+  it('같은 항목 구조, 제목·메뉴 이름·testid·펼침 방향(pin 클래스)만 다르다', () => {
+    const html = pinMenu(attack, null)
+    expect(attr(html, 'data-testid')).toBe('cut-pin-menu')
+    expect(attr(html, 'class')).toBe('adjust-menu pin')
+    expect(attr(html, 'aria-label')).toBe('컷 고정할 결과: 한카리아스')
+    expect(text(html)).toContain('고정할 결과')
+    expect(items(html, 'adjust-result')).toHaveLength(2)
+    const second = pinMenu(attack, 1)
+    expect(items(second, 'adjust-nature')).toHaveLength(2)
+    expect(items(second, 'adjust-back')).toHaveLength(1)
+  })
+
+  it('빈 목록은 "고정할 수 있는 결과 없음", SP 부족 초과량을 붙이고 2단 선택지는 SP 부족(n)을 보인다', () => {
+    const empty = { state: 'ready' as const, natures: attack.natures, results: [] }
+    expect(text(pinMenu(empty, null))).toContain('고정할 수 있는 결과 없음')
+    expect(text(pinMenu(empty, null, 8))).toContain('고정할 수 있는 결과 없음 · SP 부족(8)')
+    // 핀 전체 이유가 있으면 그 이유(성격 충돌)를 쓴다(speed-bundles-pin-disable R6)
+    const conflict = renderToStaticMarkup(
+      <AdjustMenu subject="한카리아스" view={empty} variant="pin" empty={{ kind: 'nature-conflict' }} stage={null} onChooseResult={noop} onChooseNature={noop} onBack={noop} />,
+    )
+    expect(text(conflict)).toContain('고정할 수 있는 결과 없음 · 성격 충돌')
+    const over: Pick<AdjustView, 'state' | 'natures' | 'results'> = {
+      ...attack,
+      results: [{ ...attack.results[0], options: [ok(stat('atk', 28)), { kind: 'off', reason: 'budget', over: 6 }] }],
+    }
+    expect(text(pinMenu(over, 0))).toContain('SP 부족(6)')
+  })
+})

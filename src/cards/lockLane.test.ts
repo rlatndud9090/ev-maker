@@ -105,6 +105,30 @@ describe('고정 레인 해석', () => {
     }
   })
 
+  it('방어 H 최대 저난수 고정만 한 단계 위(확정견딤) 계단 작업을 더하고 next를 채운다', () => {
+    const plain = planTab(input(6), 'defense')
+    const [{ card, key, id }] = shownRefs(plain, 1)
+    const def = plain.filters[id].stats[1]
+    const base: CutLock = { seq: 1, kind: 'defense', target: lockTargetKeyOf('defense', card, key), stage: 'low-roll-ohko', stats: ['hp', def] }
+    const lane = planTab(laneInput(input(6), base), 'defense')
+    const target = { filterId: id }
+    const minSum = laneTasks(lane, base, target)
+    const hMax = laneTasks(lane, { ...base, allocation: 'h-max' }, target)
+    const survive = laneTasks(lane, { ...base, stage: 'guaranteed-survive', allocation: 'h-max' }, target)
+    expect(minSum).toHaveLength(2)
+    expect(survive).toEqual(laneTasks(lane, { ...base, stage: 'guaranteed-survive' }, target))
+    expect(hMax.slice(0, 2)).toEqual(minSum)
+    expect(hMax.slice(2).map((t) => (t.kind === 'stairs' ? t.rank : -1))).toEqual([tierRank('defense', 'guaranteed-survive'), tierRank('defense', 'guaranteed-survive')])
+    const r = resolveLaneLock(input(6), { ...base, allocation: 'h-max' })
+    const up = resolveLaneLock(input(6), { ...base, stage: 'guaranteed-survive' })
+    expect(r.kind).toBe('ok')
+    if (r.kind !== 'ok' || r.options.shape !== 'pair') throw new Error('쌍 해석이 아니다')
+    const want = up.kind === 'ok' && up.options.shape === 'pair' ? { neutral: up.options.neutral, plus: up.options.plus } : { neutral: null, plus: null }
+    expect(r.options.next).toEqual(want)
+    const plainRes = resolveLaneLock(input(6), base)
+    expect(plainRes.kind === 'ok' && plainRes.options.shape === 'pair' ? plainRes.options.next : 'x').toBeUndefined()
+  })
+
   it('표시 필터(상위 N) 밖 래더 상대도 해석한다', () => {
     const wide = planTab(input(20), 'attack')
     const far = shownRefs(wide, 40).find((r) => (r.card.opponent.rank ?? 0) > 3)

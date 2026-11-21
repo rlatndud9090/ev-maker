@@ -61,7 +61,7 @@ function customTargetOf(view: MetaView, customTargets: readonly CustomTarget[], 
 }
 
 /**
- * 스피드 탭 판정 질의. shownKeys = 차트 위 기본·추가 배지(조건 배지 제외)의 speedKey. 범위 밖 래더 상대는 추가 배지만 친다.
+ * 스피드 탭 판정 질의. shownKeys = 차트 위 기본(SP 배분 기준 이상 묶음 전부)·추가 배지(조건 배지 제외)의 speedKey. 범위 밖 래더 상대는 추가 배지만 친다.
  * observed(래더만) = 점유율 기준 이상(minority 아님) S 묶음, 점유율 내림차순.
  * defaultValue = 래더 1위 묶음(범위 밖이어도) 또는 목록 밖 프리셋 1의 (S SP, S 보정 부호).
  */
@@ -70,7 +70,8 @@ export function speedAdditionQuery(input: SpeedChartInput, bundleShareMin: numbe
   if (target.source === 'ladder') {
     const entry = view.entry(target.id)
     if (entry === undefined) return { kind: 'unavailable', reason: 'not-found' }
-    const r = ladderSpeedOpponent(input, entry, !isInRange(view, input.filters, entry.id))
+    // 표시 중 키는 화면과 같은 SP 배분 기준으로 고른 기본 배지에서 온다
+    const r = ladderSpeedOpponent({ ...input, criteria: { ...input.criteria, bundleShareMin } }, entry, !isInRange(view, input.filters, entry.id))
     if (r.kind === 'none') return { kind: 'unavailable', reason: 'speed-unsupported' }
     const passing = new Set(
       bundlesOf(game, entry, SPE_KEY, { bundleShareMin })

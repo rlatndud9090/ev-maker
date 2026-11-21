@@ -168,6 +168,25 @@ describe('읽을 수 없는 저장은 버린다(R24)', () => {
     expect(mutate((l) => (l.target.source = 'other')), 'source').toBeNull()
     expect(mutate((l) => delete l.target.item), 'item 누락').toBeNull()
     expect(mutate((l) => (l.target.kind = 'speed')), 'kind 불일치').toBeNull()
+    expect(mutate((l) => ((l as Lock & { allocation?: unknown }).allocation = 'h-max')), '공격 고정의 H 최대 배분').toBeNull()
+    expect(
+      mutate((l) => {
+        l.kind = 'defense'
+        l.target.kind = 'defense'
+        ;(l as Lock & { stats: string[]; stage: string; allocation?: unknown }).stats = ['hp', 'def']
+        ;(l as Lock & { stage: string }).stage = 'guaranteed-survive'
+        ;(l as Lock & { allocation?: unknown }).allocation = 'h-max'
+      }),
+      '방어 고정의 H 최대 배분',
+    ).not.toBeNull()
+    expect(
+      mutate((l) => {
+        l.kind = 'defense'
+        l.target.kind = 'defense'
+        ;(l as Lock & { allocation?: unknown }).allocation = 'other'
+      }),
+      '알 수 없는 배분',
+    ).toBeNull()
     expect(
       mutate((l) => {
         l.kind = 'speed'

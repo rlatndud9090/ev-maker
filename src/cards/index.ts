@@ -41,6 +41,7 @@ export {
   shownItemKey,
   opponentKey,
   probeKey,
+  precomputeCardIds,
   primaryCardIds,
   taskCardId,
   type RowJudgements,
@@ -106,6 +107,7 @@ export {
   branchBudget,
   budgetMark,
   checkLockCandidate,
+  conflictingLocks,
   deriveLocks,
   lockTargetId,
   sameLockTarget,
@@ -127,12 +129,14 @@ export {
 export { branchNature, laneNature, rowNature, strictVariants } from './lockNature'
 export { findLockTarget, lockTargetKeyOf, type DamageLockKey, type LockTargetRef } from './lockTarget'
 export { laneInput, laneResolution, laneTasks, lockedInput } from './lockLane'
+export { pinDisabledReason, pinMenuView, type PinEmptyReason, type PinMenuInput, type PinChoice, type PinMenuView, type PinPick } from './lockPin'
 export { minSumWithFloors } from './stairs'
 export { branchEquivalent } from './schedule'
 export { buildLockedTabView, resolveLaneLock } from './batch'
 export {
   resolveSpeedLocks,
   speedBadgeLockKey,
+  speedLockBadge,
   speedBranchLines,
   speedDropWarning,
   speedLockCandidate,

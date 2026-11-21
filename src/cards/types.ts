@@ -583,6 +583,8 @@ export interface LockStageCandidate {
 export interface CardLockPin {
   control: LockControl | { kind: 'pending' } | { kind: 'blocked'; reason: 'fixed-value' | 'no-target' }
   lockedBy?: readonly number[]
+  /** 카드 현재 결과(조정 모델 current와 같다). 핀 메뉴 1단의 "현재" 표지에 쓴다 */
+  current?: RollTier
 }
 
 /** computing.tasks = 후보 해석에 아직 없는 행 작업(갈래 재스윕·고정 단계 계단, 핀 메뉴·조정 팝오버 수요로 계산한다) */
@@ -734,7 +736,10 @@ export interface AdjustResult {
  * 같은 결과를 정확히 내는 배분(합 최소보다 H가 높을 때만, 표기 순서·고정 표지는 stats와 같다).
  * off: unreachable = SP 0~최대에서 그 결과를 정확히 내지 못함(건너뛰거나 더 좋은 결과가 먼저 남·성격 없음·결과 오류 포함), budget = 최소 SP가 예산 밖, no-branch = AdjustNature.off
  */
-export type AdjustOption = { kind: 'ok'; stats: readonly AdjustStat[]; hMax?: readonly AdjustStat[] } | { kind: 'off'; reason: 'unreachable' | 'budget' | 'no-branch' }
+export type AdjustOption =
+  | { kind: 'ok'; stats: readonly AdjustStat[]; hMax?: readonly AdjustStat[] }
+  /** over = budget일 때 66 초과량(핀 메뉴만 싣는다, 변동은 없음) */
+  | { kind: 'off'; reason: 'unreachable' | 'budget' | 'no-branch'; over?: number }
 
 /** 성격 선택지 안의 배분: 합 최소(stats) · H 최대(hMax) */
 export type AdjustAllocation = 'min-sum' | 'h-max'

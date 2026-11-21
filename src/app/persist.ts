@@ -109,6 +109,8 @@ function isSpeedTarget(t: Rec): boolean {
 
 function isLock(v: unknown): boolean {
   if (!isRec(v) || !isNum(v.seq) || !oneOf(v.stage, LOCK_STAGES) || !arrayOf(v.stats, (s) => oneOf(s, STAT_IDS))) return false
+  // 방어 쌍 배분(cards CutLock.allocation): 방어 고정에만, 'h-max'만
+  if (v.allocation !== undefined && !(v.kind === 'defense' && v.allocation === 'h-max')) return false
   const t = v.target
   if (!isRec(t) || t.kind !== v.kind || !isStr(t.opponentId)) return false
   if (t.kind === 'speed') return isSpeedTarget(t)
