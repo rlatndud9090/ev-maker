@@ -344,18 +344,21 @@ test.describe("'포켓몬 추가' 패널", () => {
   test('중복 문구: 패널(1위 값)·배지 상세 직접 입력·카드 메뉴 직접 추가 모두 "이미 존재합니다 — [배분 표기]", 배지·선택지 수는 그대로', async ({ page }) => {
     await openSpeed(page)
     const entry = plainEntries[0]
-    const base = (await badgesOf(page, entry.id)).find((b) => b.origin === 'ladder' && b.condition === 'none')!
+    const bases = (await badgesOf(page, entry.id)).filter((b) => b.origin === 'ladder' && b.condition === 'none')
     const count = (await readBadges(page)).length
-    // 패널: 기본값 = 1위 배분 = 차트 위 기본 배지
+    // 패널: 기본값 = 1위 배분 = 차트 위 기본 배지 중 하나. 기준 이상 묶음(기본 배지) 전부가 "이미 존재합니다"(speed-bundles-pin-disable R5)
     const panel = await openAddPanel(page)
     await pickAddTarget(page, speciesLabel(entry.id), '메타 목록')
     const value = await panelSpeedValue(panel)
-    expect(value).toEqual({ sp: base.sp, sign: base.sign })
+    const base = bases.find((b) => b.sp === value.sp && b.sign === value.sign)!
+    expect(base, `1위 배분 ${JSON.stringify(value)}이 기본 배지에 있다`).toBeDefined()
     const shown = panel.getByTestId('add-observed-option').and(page.locator('[data-state="shown"]'))
-    await expect(shown).toHaveCount(1)
-    await expect(shown).toBeDisabled()
-    await expect(shown).toContainText('이미 존재합니다')
-    await expect(shown.locator('b')).toContainText(speedText(base.sp, base.sign))
+    await expect(shown).toHaveCount(bases.length)
+    for (let i = 0; i < bases.length; i++) {
+      await expect(shown.nth(i)).toBeDisabled()
+      await expect(shown.nth(i)).toContainText('이미 존재합니다')
+    }
+    await expect(shown.first().locator('b')).toContainText(speedText(base.sp, base.sign))
     const msg = `이미 존재합니다 — ${speedText(base.sp, base.sign)}`
     await panel.getByTestId('add-submit').click()
     await expect(panel.getByTestId('add-msg')).toHaveText(msg)

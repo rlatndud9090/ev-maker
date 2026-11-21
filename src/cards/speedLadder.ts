@@ -54,26 +54,27 @@ export function visibleBadges(model: SpeedChartModel, filters: SpeedConditionFil
   return model.badges.filter((b) => b.filterKind === null || filters[b.filterKind])
 }
 
-/** 0 = 점유율 있는 래더 배지, 1 = 직접 입력 추가 배지, 2 = 목록 밖 타겟 */
-const rowTier = (b: SpeedBadge): number => (b.origin === 'preset' ? 2 : b.bundle.share === null ? 1 : 0)
+/** 0 = 래더 상대 배지(기본·조건·묶음 추가·직접 입력), 1 = 목록 밖 타겟 추가 배지, 2 = 목록 밖 타겟 프리셋 배지 */
+const rowTier = (b: SpeedBadge): number => (b.source === 'ladder' ? 0 : b.origin === 'preset' ? 2 : 1)
 
 /**
- * 같은 실수치 줄 안 순서: 점유율 있는 래더 배지(점유율 내림 → 기본 먼저 → 이름 → 래더 순위) → 직접 입력 추가 배지(추가 순)
- * → 목록 밖 타겟(추가 순 → 프리셋 순 → 기본 먼저). 마지막은 id 순.
+ * 같은 실수치 줄 안 순서: 래더 상대 배지(사용률 순위 오름 → 점유율 있는 배지 먼저·점유율 내림 → 기본 먼저 → 직접 입력은 추가 순)
+ * → 목록 밖 타겟 추가 배지(추가 순) → 목록 밖 타겟 프리셋(추가 순 → 프리셋 순 → 기본 먼저). 마지막은 id 순.
  */
-export function compareInRow(nameOf: (speciesId: string) => string): (a: SpeedBadge, b: SpeedBadge) => number {
+export function compareInRow(): (a: SpeedBadge, b: SpeedBadge) => number {
   const conditional = (b: SpeedBadge): number => (b.condition.kind === 'none' ? 0 : 1)
   const byId = (a: SpeedBadge, b: SpeedBadge): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+  const shareOf = (b: SpeedBadge): number => b.bundle.share ?? -1
   return (a, b) => {
     const ta = rowTier(a)
     const tb = rowTier(b)
     if (ta !== tb) return ta - tb
     if (ta === 0) {
       return (
-        (b.bundle.share ?? 0) - (a.bundle.share ?? 0) ||
-        conditional(a) - conditional(b) ||
-        nameOf(a.speciesId).localeCompare(nameOf(b.speciesId), 'ko') ||
         a.usageRank - b.usageRank ||
+        shareOf(b) - shareOf(a) ||
+        conditional(a) - conditional(b) ||
+        (a.addedOrder ?? 0) - (b.addedOrder ?? 0) ||
         byId(a, b)
       )
     }

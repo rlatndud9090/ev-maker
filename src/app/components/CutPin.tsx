@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type RefObject } from 'react'
 import type { AdjustAllocation, PinMenuView } from '../../cards'
 import { useLockUi, type LockUi } from '../lockContext'
 import { AdjustMenu } from './AdjustPopover'
@@ -71,6 +71,38 @@ function lockedTitle(ui: LockUi, lockedBy: readonly number[]): string {
 }
 
 /**
+ * 열린 메뉴가 비활성으로 바뀌는 순간(계산이 끝나 고를 것이 없다고 판명): 열림 상태를 지우고(나중에 다시 활성이 돼도 저절로 열리지 않게),
+ * 포커스를 핀에 두고(메뉴 안 포커스가 문서로 빠지지 않게), 이유를 알림 영역으로 한 번 낸다. 돌려준 글자 = 알림 영역 내용
+ */
+function useCloseOnDisable(disabled: boolean, reason: string | undefined, open: boolean, dismiss: () => void, btnRef: RefObject<HTMLButtonElement | null>): string {
+  const [prev, setPrev] = useState(disabled)
+  const [said, setSaid] = useState('')
+  const [refocus, setRefocus] = useState(0)
+  if (prev !== disabled) {
+    setPrev(disabled)
+    if (disabled && open) {
+      dismiss()
+      setSaid(reason ?? '')
+      setRefocus((n) => n + 1)
+    } else if (!disabled && said !== '') setSaid('')
+  }
+  useLayoutEffect(() => {
+    if (refocus > 0) btnRef.current?.focus()
+  }, [refocus, btnRef])
+  return said
+}
+
+/** 메뉴가 열린 동안(또는 닫히며 알린 뒤) 두는 알림 영역. 미리 있어야 글자가 바뀔 때 읽힌다 */
+function DisableNotice({ shown, text }: { shown: boolean; text: string }) {
+  if (!shown) return null
+  return (
+    <span className="sr-only" role="status" data-testid="cut-pin-notice">
+      {text}
+    </span>
+  )
+}
+
+/**
  * 컷 고정 핀: 빈 핀 → 메뉴(스피드는 바로 고정), 찬 핀 → 그 대상 고정 모두 해제.
  * 누름은 감싼 줄(카드 펼침·배지 상세)로 올리지 않는다.
  */
@@ -94,11 +126,12 @@ function MenuCutPin({ subject, lockedBy, disabledReason, menu, onPick, returnKey
   // 한 렌더 안에서 메뉴 모델은 한 번만 계산한다(열린 동안만)
   let cached: PinMenuView | undefined
   const view = () => (cached ??= menu())
-  const { shown, stage, wrapRef, btnRef, menuRef, close, dismiss, goBack, toggle, onMenuKey, onBlur, chooseResult } = useAdjustMenu({
+  const { open, shown, stage, wrapRef, btnRef, menuRef, close, dismiss, goBack, toggle, onMenuKey, onBlur, chooseResult } = useAdjustMenu({
     results: () => view().results,
     enabled: !locked && !disabled && ui.enabled,
     anchor: 'start',
   })
+  const notice = useCloseOnDisable(disabled, disabledReason, open, dismiss, btnRef)
   const rememberFocusReturn = useFocusReturn(JSON.stringify(['pin', returnKey]), btnRef)
 
   useEffect(() => {
@@ -146,12 +179,14 @@ function MenuCutPin({ subject, lockedBy, disabledReason, menu, onPick, returnKey
           {title}
         </span>
       )}
+      <DisableNotice shown={open || notice !== ''} text={notice} />
       {current !== undefined && (
         <AdjustMenu
           subject={subject}
           view={current}
           variant="pin"
           emptyOver={current.emptyOver}
+          empty={current.empty}
           stage={stage}
           menuRef={menuRef}
           onKeyDown={onMenuKey}
@@ -187,6 +222,7 @@ function DirectCutPin({ subject, lockedBy, disabledReason, items, direct, onOpen
   const locked = lockedBy.length > 0
   const disabled = !locked && disabledReason !== undefined
   const shown = open && !locked && !disabled
+  const notice = useCloseOnDisable(disabled, disabledReason, open, () => setOpen(false), btnRef)
   const list = shown ? items() : []
   const selectable = list.findIndex((it) => it.lock !== undefined)
   // 바로 고정하는 핀은 메뉴가 열린 동안만 메뉴 버튼이다(닫힌 동안 누르면 대개 바로 고정)
@@ -309,6 +345,7 @@ function DirectCutPin({ subject, lockedBy, disabledReason, items, direct, onOpen
           {title}
         </span>
       )}
+      <DisableNotice shown={open || notice !== ''} text={notice} />
       {shown && (
         <div
           className="cut-pin-menu"

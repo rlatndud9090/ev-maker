@@ -24,3 +24,10 @@ area: SP 구간 표
 **규칙:** 드래그 표시 SP는 화면 스토어(`displaySp`, 스피드 탭 구독)와 실행기 사본 두 곳에 있다. 실행기 `setInput`이 비우는 건 실행기 사본뿐이니, 화면 스토어는 확정(초안 변경) 때 따로 비운다.
 
 **왜:** 드래그를 새 값에서 놓은 뒤 화면 스토어가 남아, 스피드 탭 기준선이 숫자 입력·±에도 멈춰 있었다.
+
+### G-261121-pin-check-current-view: 핀 비활성 판정은 현재 세대 뷰에서만 한다 (미확인)
+> 발견: 2026-11-21 · 유형: 규칙부재 · area: SP 구간 표 · 출처: docs/raw/feature/speed-bundles-pin-disable/notes.md · 코드: `src/app/lockContext.ts:pinDisabled`, `src/app/components/ResultPanel.tsx`
+
+**규칙:** 고정 문맥이 새 세대여도 화면이 대체된(superseded) 이전 세대 뷰를 보이는 동안에는 그 뷰의 후보로 핀 비활성을 판정하지 않는다(`ViewCurrentContext`).
+
+**왜:** 스피드 고정만 있을 때 새 세대 고정 상태가 먼저 준비돼, 옛 후보를 새 초안으로 판정해 핀이 활성→비활성→활성으로 깜빡였다(리뷰에서 발견).

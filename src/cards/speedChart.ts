@@ -105,7 +105,8 @@ export interface SpeedChartInput {
   view: MetaView
   /** 내 계산 특성(메가면 메가 폼). null = 해석 불가, 날씨 무효 없음으로 본다 */
   myAbility: string | null
-  criteria: Pick<DisplayCriteria, 'rankShareMin' | 'scarfShareMin' | 'weatherShareMin'>
+  /** bundleShareMin = 래더 상대 기본 배지 선정 기준(공·방 탭 관측 카드와 같은 SP 배분 기준) */
+  criteria: Pick<DisplayCriteria, 'bundleShareMin' | 'rankShareMin' | 'scarfShareMin' | 'weatherShareMin'>
   filters: CardFilters
   customTargets: readonly CustomTarget[]
   added: readonly SpeedAddedBundle[]
@@ -359,10 +360,10 @@ function ladderBundles(game: Snapshot, view: MetaView, entry: MetaEntry, baseSet
 export type LadderSpeedOpponent =
   | {
       kind: 'ok'
-      /** 1위 묶음(스카프 없는 판). 추가분만 상대도 늘 계산한다 */
+      /** 1위 묶음(스카프 없는 판, 조건·추가 배지 기준). 추가분만 상대도 늘 계산한다 */
       top: SpeedBadge['bundle']
-      /** 기본 배지. 추가분만 상대는 null */
-      base: SpeedBadge | null
+      /** 기본 배지: SP 배분 기준 이상 계산 가능 묶음 전부(점유율 내림차순, 첫째 = 1위), 없으면 1위 하나. 추가분만 상대는 빈 배열 */
+      bases: SpeedBadge[]
       conditions: SpeedBadge[]
       added: SpeedBadge[]
       options: SpeedBundleOption[]
@@ -371,7 +372,8 @@ export type LadderSpeedOpponent =
   | { kind: 'none'; unsupported?: SpeedUnsupported }
 
 /**
- * 래더 상대 하나의 배지: 기본(1위 묶음, 스카프 없는 판)·조건·추가 배지와 묶음 선택지. shownKeys = 차트 위 기본·추가 배지의 speedKey.
+ * 래더 상대 하나의 배지: 기본(SP 배분 기준 이상 묶음 전부, 없으면 1위. 묶음별 스카프 없는 대표 세트)·조건(1위 기본 배지에만)·추가 배지와 묶음 선택지.
+ * shownKeys = 차트 위 기본·추가 배지의 speedKey. 추가 배분이 기본 배지 키와 같으면 기본 배지가 대신한다(추가 기록은 상태에 남는다).
  * addedOnly(범위 밖 추가분만 상대)면 기본·조건 배지를 내지 않고 shownKeys를 빈 집합에서 시작한다(추가 배지는 1위 가정 세트 기준 그대로).
  */
 export function ladderSpeedOpponent(input: SpeedChartInput, entry: MetaEntry, addedOnly = false): LadderSpeedOpponent {
@@ -389,7 +391,10 @@ export function ladderSpeedOpponent(input: SpeedChartInput, entry: MetaEntry, ad
   }
   const topShare = ok[0].share
   const top = ok.filter((b) => b.share === topShare).reduce((best, b) => (b.speed > best.speed ? b : best))
-  const base = makeBadge(subject, { sp: top.sp, nature: top.nature, share: top.share }, { kind: 'none' }, top.set, top.resolved, top.speed)
+  const badgeOf = (b: (typeof ok)[number]) => makeBadge(subject, { sp: b.sp, nature: b.nature, share: b.share }, { kind: 'none' }, b.set, b.resolved, b.speed)
+  const base = badgeOf(top)
+  // 기준 이상 전부(계산 가능 묶음 안, 1위 먼저). 기준 이상이 없으면 1위 하나(동률 → 실수치 높은 쪽)
+  const bases = addedOnly ? [] : [base, ...ok.filter((b) => b !== top && b.share >= criteria.bundleShareMin && top.share >= criteria.bundleShareMin).map(badgeOf)]
 
   const means = ladderMeans(entry, criteria.rankShareMin)
   const scarf = scarfConditionOf(entry, criteria.scarfShareMin)
@@ -398,7 +403,7 @@ export function ladderSpeedOpponent(input: SpeedChartInput, entry: MetaEntry, ad
     .map((ab) => ({ ability: ab, field: SPEED_FIELD_ABILITIES[ab], share: entry.abilities[ab] }))
   const conditions = addedOnly ? [] : conditionBadges(game, subject, base, top.resolved, means, scarf, fields)
 
-  const onChart = new Set(addedOnly ? [] : [speedKey(top.sp, top.nature)])
+  const onChart = new Set(bases.map((b) => speedKey(b.bundle.sp, b.bundle.nature)))
   const listedShare = new Map(ok.map((b) => [speedKey(b.sp, b.nature), b.share]))
   const added: SpeedBadge[] = []
   input.added.forEach((a, addedOrder) => {
@@ -414,7 +419,7 @@ export function ladderSpeedOpponent(input: SpeedChartInput, entry: MetaEntry, ad
     added.push(makeBadge(s, { sp: a.sp, nature: a.nature, share: share ?? null }, { kind: 'none' }, set, c.resolved, c.speed))
   })
   const options = ok.map((b) => ({ sp: b.sp, nature: b.nature, share: b.share, speed: b.speed, onChart: onChart.has(speedKey(b.sp, b.nature)) }))
-  return { kind: 'ok', top: base.bundle, base: addedOnly ? null : base, conditions, added, options, shownKeys: onChart }
+  return { kind: 'ok', top: base.bundle, bases, conditions, added, options, shownKeys: onChart }
 }
 
 /**
@@ -477,8 +482,7 @@ export function buildSpeedChart(input: SpeedChartInput): SpeedChartModel {
       if (r.unsupported !== undefined) unsupported.push(r.unsupported)
       continue
     }
-    if (r.base !== null) badges.push(r.base)
-    badges.push(...r.conditions, ...r.added)
+    badges.push(...r.bases, ...r.conditions, ...r.added)
     options.set(entry.id, r.options)
   }
 

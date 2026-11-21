@@ -59,6 +59,8 @@ const RAICHU_Y_190 = /^메가라이츄Y S23 성격 상승, 실수치 190,/
 const EXAMPLE_MOVES = ['지진', '드래곤클로', '스톤샤워', '분함의발구르기'] as const
 /** 나인테일 152(S31 / S18+), 비비용 155(S20+로만), 짜랑고우거 +1 168(S32+로만) */
 const NINETALES_152 = /^나인테일 S32 성격 무보정, 실수치 152,/
+/** 방어 탭 생명의구슬 타부자고 거다이스트 카드(예시 세트, 대쓰여너 확정견딤 B 상승 고정 뒤 D 상승으로만 견딘다) */
+const GHOLDENGO_ORB = (page: Page) => cards(page).and(page.locator('[data-opponent="gholdengo"][data-move="makeitrain"][data-berry="lifeorb"]')).first()
 const VIVILLON_155 = /^비비용 S32 성격 상승, 실수치 155,/
 const KOMMOO_RANK_168 = /^짜랑고우거 S7 성격 무보정 \+1, 실수치 168,/
 
@@ -209,7 +211,28 @@ test.describe('컷 고정', () => {
     await expect(spBox(page, '스피드')).toHaveValue('32')
   })
 
-  test('AC4: SP 합 66을 넘기는 컷은 "SP 부족(n)"·성격 충돌 컷은 "성격 충돌"로 비활성(aria-disabled, 사유는 읽기 설명)', async ({ page }) => {
+  test('AC12(speed-bundles-pin-disable R7): 도달 불가·SP 합 66 초과·성격 충돌 스피드 핀은 누르기 전부터 비활성(aria-disabled, 이유는 title·읽기 설명), 눌러도 고정도 메뉴도 없다', async ({ page }) => {
+    const expectDisabled = async (name: RegExp, reason: string | RegExp) => {
+      await openBadge(page, name)
+      const pin = badgePin(page, name)
+      await expect(pin).toHaveAttribute('aria-disabled', 'true')
+      await expect(pin).toHaveAttribute('title', reason)
+      await expect(pin).toHaveAccessibleDescription(reason)
+      await expect(pin).toHaveAccessibleName(/^컷 고정: /)
+      const before = await lockList(page).locator('.lock-item').count()
+      // aria-disabled 버튼은 Playwright 동작 가능성 검사에서 막히므로 실제 마우스 누름을 강제한다
+      await pin.click({ force: true })
+      await expect(pin.locator('xpath=..').getByTestId('cut-pin-menu')).toHaveCount(0)
+      await expect(pin).toHaveAttribute('aria-pressed', 'false')
+      await pin.focus()
+      await page.keyboard.press('Enter')
+      await expect(pin).toBeFocused()
+      await expect(pin.locator('xpath=..').getByTestId('cut-pin-menu')).toHaveCount(0)
+      await expect(lockList(page).locator('.lock-item')).toHaveCount(before)
+    }
+    // 고정이 없어도 S32 상승으로 추월할 수 없는 배지(몰드류 280, 모래헤치기)는 도달 불가
+    await expectDisabled(MOLDURYU_280, '도달 불가')
+
     await fillMySet(page, { moves: [...EXAMPLE_MOVES.slice(0, 3), '용성군'] })
     // S31 / S18+ → 드래곤클로 A30 / A14+ → 용성군 C12 / C2+(고정 밖 갈래는 73이라 사라지고 S18+ 갈래 60이 기준)
     await lockBadge(page, NINETALES_152)
@@ -218,36 +241,95 @@ test.describe('컷 고정', () => {
     await lockRow(page, '공격', 'kommoo', 'dracometeor', '고난수1타')
     await expect(lockList(page).locator('.lock-item')).toHaveCount(3)
     await expect(lockList(page).getByTestId('lock-status')).toHaveCount(0)
-    // 짜랑고우거 +1 168은 S32+로만 닿는다: S32 + C12 + A30 = 74 → 8 초과, 상승을 S 밖에 두는 갈래는 S 무보정으로 못 닿는다
-    // 걸 수 없는 배지 핀은 바로 고정하지 않고 그 한 단계 메뉴에 이유를 보인다(aria-disabled라 포커스는 남고 눌러도 고정되지 않는다)
-    await openBadge(page, KOMMOO_RANK_168)
-    const pin = badgePin(page, KOMMOO_RANK_168)
-    await pin.click()
-    const short = pin.locator('xpath=..').getByTestId('cut-pin-item')
-    await expect(short).toHaveCount(1)
-    await expect(short).toHaveAttribute('aria-disabled', 'true')
-    await expect(short).toHaveText(/^선공\s*SP 부족\(8\)$/)
-    await expect(short).toBeFocused()
-    await page.keyboard.press('Enter')
-    await expect(short).toBeFocused()
-    await expect(pin).toHaveAttribute('aria-pressed', 'false')
-    await expect(lockList(page).locator('.lock-item')).toHaveCount(3)
-    await page.keyboard.press('Escape')
-    await expect(short).toHaveCount(0)
-    await expect(pin).toBeFocused()
+    // 짜랑고우거 +1 168은 S32+로만 닿는다: S32 + C12 + A30 = 74 → 8 초과
+    await expectDisabled(KOMMOO_RANK_168, 'SP 부족(8)')
 
     await removeAllLocks(page)
     // S31 / S18+ → 메가앱솔Z 드래곤클로 A20+(상승으로만) → 비비용 155(S20+로만): 상승 자리가 겹친다
     await lockBadge(page, NINETALES_152)
     await settle(page)
     await lockRow(page, '공격', 'absolmegaz', 'dragonclaw', '확정1타', 'plus')
-    await openBadge(page, VIVILLON_155)
-    const vivillon = badgePin(page, VIVILLON_155)
-    await vivillon.click()
-    const conflict = vivillon.locator('xpath=..').getByTestId('cut-pin-item')
-    await expect(conflict).toHaveAttribute('aria-disabled', 'true')
-    await expect(conflict.locator('.cut-pin-detail')).toHaveText('성격 충돌')
-    await expect(vivillon).toHaveAttribute('aria-pressed', 'false')
+    await expectDisabled(VIVILLON_155, '성격 충돌')
+  })
+
+  test('AC13(speed-bundles-pin-disable): 바로 고정할 수 있는 스피드 핀은 누르는 즉시 고정되고, 찬 핀을 누르면 풀린다', async ({ page }) => {
+    await openBadge(page, MOLDURYU_140)
+    const pin = badgePin(page, MOLDURYU_140)
+    await expect(pin).not.toHaveAttribute('aria-disabled', 'true')
+    await pin.click()
+    await expect(pin).toHaveAttribute('aria-pressed', 'true')
+    await expect(pin.locator('xpath=..').getByTestId('cut-pin-menu')).toHaveCount(0)
+    await expect(lockList(page).locator('.lock-item')).toHaveCount(1)
+    await pin.click()
+    await expect(pin).toHaveAttribute('aria-pressed', 'false')
+    await expect(lockList(page)).toHaveCount(0)
+  })
+
+  test('AC11(speed-bundles-pin-disable R6): B 상승 고정이 있으면 미리 계산 뒤 D 상승으로만 닿는 방어 카드 핀이 열기 전부터 "성격 충돌"로 비활성, 해제하면 활성이고 메뉴는 저절로 열리지 않는다', async ({ page }) => {
+    // 대쓰여너 성묘 확정견딤은 B 상승으로만 닿는다(H32 B22+) → 생명의구슬 타부자고 거다이스트 견딤은 D 상승으로만 닿아 상승 자리가 겹친다
+    await lockRow(page, '방어', 'basculegion', 'lastrespects', '확정견딤', 'plus')
+    await settle(page)
+    const card = GHOLDENGO_ORB(page)
+    const pin = card.getByTestId('cut-pin')
+    // 핀을 한 번도 열지 않고 미리 계산이 닿기를 기다린다
+    await expect(pin).toHaveAttribute('aria-disabled', 'true', { timeout: 20_000 })
+    await expect(pin).toHaveAttribute('title', '성격 충돌')
+    await expect(pin).toHaveAccessibleDescription('성격 충돌')
+    await expect(pin).toHaveAccessibleName(/^컷 고정: /)
+    await pin.click({ force: true })
+    await expect(pinMenu(card)).toHaveCount(0)
+    await pin.focus()
+    await page.keyboard.press('Enter')
+    await expect(pinMenu(card)).toHaveCount(0)
+    await expect(pin).toHaveAttribute('aria-pressed', 'false')
+    await removeAllLocks(page)
+    await waitComplete(page)
+    await expect(pin).not.toHaveAttribute('aria-disabled', 'true')
+    await expect(pin).toHaveAttribute('aria-expanded', 'false')
+    await expect(pinMenu(card)).toHaveCount(0)
+  })
+
+  test('AC11b(speed-bundles-pin-disable R6): 미리 계산 전에 연 방어 핀은 "계산 중" 뒤 닫히며 비활성("성격 충돌")이 되고 포커스는 핀에 남으며, 해제 뒤 메뉴가 저절로 열리지 않는다', async ({ page }) => {
+    // 고정 직후(새 세대 계산 중) 바로 연다. 새 세대 뷰에 이 카드가 나타난 뒤 미리 계산이 끝나기까지 수백 ms뿐이라 테스트 쪽 클릭은
+    // 그 창을 놓치기 쉽다(경합). 그래서 페이지 안에서 고정 뒤 지금 세대 뷰에 카드 핀이 활성으로 나타나는 즉시 열고,
+    // 그 메뉴가 한 번이라도 "계산 중"으로 떴는지 기록해 확인한다
+    await selectTab(page, '방어')
+    await waitComplete(page)
+    await page.evaluate(() => {
+      const w = window as unknown as { __sawComputing: boolean; __opened: boolean }
+      w.__sawComputing = false
+      w.__opened = false
+      const sel = '[data-testid="card"][data-opponent="gholdengo"][data-move="makeitrain"][data-berry="lifeorb"]'
+      new MutationObserver(() => {
+        const card = document.querySelector(sel)
+        const panel = document.querySelector('[data-testid="tab-panel"]')
+        const pin = card?.querySelector<HTMLButtonElement>('[data-testid="cut-pin"]')
+        const locked = document.querySelector('[data-testid="cut-pin"][data-locked="true"]') !== null
+        if (!w.__opened && locked && pin && panel?.getAttribute('data-superseded') !== 'true' && pin.getAttribute('aria-disabled') !== 'true') {
+          w.__opened = true
+          pin.focus()
+          pin.click()
+        }
+        if (card?.querySelector('[data-testid="cut-pin-menu"]')?.textContent?.includes('계산 중')) w.__sawComputing = true
+      }).observe(document, { subtree: true, childList: true, characterData: true, attributes: true })
+    })
+    await lockRow(page, '방어', 'basculegion', 'lastrespects', '확정견딤', 'plus')
+    const card = GHOLDENGO_ORB(page)
+    const pin = card.getByTestId('cut-pin')
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __opened: boolean }).__opened)).toBe(true)
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __sawComputing: boolean }).__sawComputing)).toBe(true)
+    await expect(pinMenu(card)).toHaveCount(0, { timeout: 20_000 })
+    await expect(pin).toHaveAttribute('aria-disabled', 'true')
+    await expect(pin).toHaveAttribute('title', '성격 충돌')
+    await expect(pin).toBeFocused()
+    // 이유는 알림 영역으로 한 번 알린다
+    await expect(card.getByTestId('cut-pin-notice')).toHaveText('성격 충돌')
+    await settle(page)
+    await removeAllLocks(page)
+    await waitComplete(page)
+    await expect(pin).not.toHaveAttribute('aria-disabled', 'true')
+    await expect(pin).toHaveAttribute('aria-expanded', 'false')
+    await expect(pinMenu(card)).toHaveCount(0)
   })
 
   test('AC9·R25: 고정 배지·고정 카드 핀 구분, 공격·방어 탭에는 갈래 줄·고정 미달·n 문구가 고정 중에도 해제 뒤에도 없다', async ({ page }) => {
@@ -266,7 +348,13 @@ test.describe('컷 고정', () => {
       for (const t of ['공격', '방어'] as const) {
         await selectTab(page, t)
         await waitComplete(page)
-        await expect(tabPanel(page).getByText(/다른 능력치에서 \d+ 필요|SP 부족\(|고정 미달/)).toHaveCount(0)
+        // 고를 것이 없는 핀의 비활성 이유(툴팁·읽기 설명, speed-bundles-pin-disable R6)는 핀 안에만 있고 카드 본문 문구가 아니다
+        const body = await tabPanel(page).evaluate((el) => {
+          const copy = el.cloneNode(true) as HTMLElement
+          for (const pin of copy.querySelectorAll('.cut-pin-wrap')) pin.remove()
+          return copy.textContent ?? ''
+        })
+        expect(body).not.toMatch(/다른 능력치에서 \d+ 필요|SP 부족\(|고정 미달/)
         await expect(tabPanel(page).locator('[data-testid="lock-branch"], [data-testid="below-lock"], .card-detail')).toHaveCount(0)
       }
     }
@@ -626,18 +714,15 @@ test.describe('컷 고정', () => {
     await expect(lockList(page)).toHaveCount(0)
     await expect(speedDetail(page)).toHaveCount(0)
 
-    // 걸 수 없는 배지는 이유 메뉴를 열고, 열린 동안만 메뉴 버튼으로 알린다
+    // 걸 수 없고 이유가 정해진 배지 핀은 비활성(speed-bundles-pin-disable R7): 메뉴를 열지 않고 툴팁·읽기 설명에 이유
     const far = badgePin(page, MOLDURYU_280)
     await far.scrollIntoViewIfNeeded()
-    await far.click()
-    const menu = far.locator('xpath=..').getByRole('menu')
-    await expect(menu.getByRole('menuitem')).toHaveText([/^선공\s*도달 불가$/])
-    await expect(far).toHaveAttribute('aria-haspopup', 'menu')
-    await expect(far).toHaveAttribute('aria-expanded', 'true')
-    await page.keyboard.press('Escape')
-    await expect(menu).toHaveCount(0)
-    await expect(far).toBeFocused()
+    await expect(far).toHaveAttribute('aria-disabled', 'true')
+    await expect(far).toHaveAttribute('title', '도달 불가')
+    await far.click({ force: true })
+    await expect(far.locator('xpath=..').getByRole('menu')).toHaveCount(0)
     await expect(far).not.toHaveAttribute('aria-haspopup', /.*/)
+    await expect(far).not.toHaveAttribute('aria-expanded', /.*/)
     await expect(lockList(page)).toHaveCount(0)
   })
 

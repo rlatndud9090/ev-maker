@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { PokemonSet } from '../core'
 import type { StatId } from '../data/schema'
 import { deriveLocks, type CutLock, type LockResolution, type LockStage, type LockTargetKey, type Stairs } from './lock'
-import { pinMenuView, type PinMenuInput, type PinMenuView } from './lockPin'
+import { pinDisabledReason, pinMenuView, type PinMenuInput, type PinMenuView } from './lockPin'
 import { realData } from './testing'
 import type { AdjustOption, AdjustStat, LockStageCandidate } from './types'
 
@@ -245,5 +245,55 @@ describe('pinMenuView 방어', () => {
     const resolutions = new Map([[1, pair('def', stairs((hp) => (hp >= 30 ? 0 : null)), null)]])
     const v = view({ side: 'defense', stages, locks: [hb], resolutions })
     expect(grid(v)).toEqual(grid(view({ side: 'defense', stages })))
+  })
+})
+
+describe('핀 비활성 이유(speed-bundles-pin-disable R6·AC10)', () => {
+  const speedLock = (seq = 1): CutLock => ({
+    seq,
+    kind: 'speed',
+    target: { kind: 'speed', origin: 'ladder', opponentId: 's', bundle: { sp: 32, nature: 'plus' }, condition: 'none', filterKind: null },
+    stage: 'first',
+    stats: ['spe'],
+  })
+  /** S 상승으로만 닿는 스피드 고정(+S 갈래만) */
+  const plusOnlySpeed = new Map([[1, single('spe', null, 12)]])
+  /** A 상승으로만 닿는 공격 후보: +S 고정과 성격 상승 자리가 겹친다 */
+  const plusOnlyAtk = [attackStage('guaranteed-ohko', single('atk', null, 30)), attackStage('high-roll-ohko', single('atk', null, 20))]
+
+  it('성격 충돌 칸과 닿지 않는 칸만 섞였으면 "성격 충돌"', () => {
+    const v = view({ side: 'attack', stages: plusOnlyAtk, locks: [speedLock()], resolutions: plusOnlySpeed })
+    expect(v.results).toEqual([])
+    expect(v.empty).toEqual({ kind: 'nature-conflict' })
+    expect(pinDisabledReason(v)).toEqual({ kind: 'nature-conflict' })
+  })
+
+  it('SP 부족 칸이 있으면 "SP 부족(n)"(최소 초과량)이다(성격 충돌보다 앞선다)', () => {
+    const spa: CutLock = { seq: 2, kind: 'attack', target: target('attack', 'c'), stage: 'guaranteed-ohko', stats: ['spa'] }
+    const resolutions = new Map([
+      [1, single('spe', 32, null)],
+      [2, single('spa', 30, null)],
+    ])
+    // 무보정 칸은 SP 부족(S32 + C30 + A), 상승 칸은 상승 자리가 없다
+    const v = view({ side: 'attack', stages: [attackStage('guaranteed-ohko', single('atk', 28, 20)), attackStage('high-roll-ohko', single('atk', 20, 14))], locks: [speedLock(), spa], resolutions })
+    expect(v.results).toEqual([])
+    expect(v.empty).toEqual({ kind: 'sp-short', over: v.emptyOver })
+    expect(v.emptyOver).toBeGreaterThan(0)
+    expect(pinDisabledReason(v)).toEqual({ kind: 'sp-short', over: v.emptyOver })
+  })
+
+  it('닿지 않는 칸만 있으면 "고정할 수 있는 결과 없음"', () => {
+    const v = view({ side: 'attack', stages: [attackStage('guaranteed-ohko', single('atk', null, null)), attackStage('high-roll-ohko', single('atk', null, null))] })
+    expect(v.results).toEqual([])
+    expect(pinDisabledReason(v)).toEqual({ kind: 'none' })
+  })
+
+  it('고를 수 있는 칸이 하나라도 있으면 활성(이유 없음), 후보가 하나라도 계산 중이면 활성', () => {
+    const ok = view({ side: 'attack', stages: [attackStage('guaranteed-ohko', single('atk', 28, 20)), attackStage('high-roll-ohko', single('atk', 20, 14))] })
+    expect(ok.results.length).toBeGreaterThan(0)
+    expect(ok.empty).toBeUndefined()
+    expect(pinDisabledReason(ok)).toBeUndefined()
+    const computing = view({ side: 'attack', stages: [plusOnlyAtk[0], { stage: 'high-roll-ohko', candidate: { kind: 'computing' } }], locks: [speedLock()], resolutions: plusOnlySpeed })
+    expect(pinDisabledReason(computing)).toBeUndefined()
   })
 })

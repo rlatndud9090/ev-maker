@@ -83,7 +83,8 @@ export interface ResolveSpeedLocksInput {
   view: MetaView
   mySet: PokemonSet
   locks: readonly CutLock[]
-  criteria: Pick<DisplayCriteria, 'rankShareMin' | 'scarfShareMin' | 'weatherShareMin'>
+  /** bundleShareMin = 화면과 같은 기본 배지 선정 기준(기준 밖으로 빠진 대상은 missing) */
+  criteria: Pick<DisplayCriteria, 'bundleShareMin' | 'rankShareMin' | 'scarfShareMin' | 'weatherShareMin'>
   customTargets: readonly CustomTarget[]
   added: readonly SpeedAddedBundle[]
   myTailwind: boolean
@@ -100,17 +101,20 @@ function abilityOf(game: Snapshot, set: PokemonSet): string | null {
 
 const sameBundle = (a: SpeedLockKey['bundle'], b: SpeedLockKey['bundle']): boolean => JSON.stringify(a) === JSON.stringify(b)
 
-/** 정확한 키, 없으면 래더·추가 배지끼리 출처만 다른 같은 배분·조건 */
-function findBadge(model: SpeedChartModel, key: SpeedLockKey): SpeedBadge | undefined {
+/**
+ * 고정 키가 가리키는 배지: 정확한 키, 없으면 래더·추가 배지끼리 출처만 다른 같은 배분·조건.
+ * 해석(resolveSpeedLocks)·차트 표시(고정 핀·이동)·갈래 줄이 모두 이 규칙 하나로 대상 배지를 정한다(기준 변경으로 기본↔추가가 바뀌어도 고정이 그 배지에 이어진다)
+ */
+export function speedLockBadge<B extends SpeedBadge>(badges: readonly B[], key: SpeedLockKey): B | undefined {
   const id = lockTargetId(key)
-  const keyed = model.badges.map((b) => ({ b, k: speedBadgeLockKey(b) }))
+  const keyed = badges.map((b) => ({ b, k: speedBadgeLockKey(b) }))
   const exact = keyed.find(({ k }) => lockTargetId(k) === id)
   if (exact !== undefined || key.origin === 'preset') return exact?.b
   return keyed.find(({ k }) => k.origin !== 'preset' && k.opponentId === key.opponentId && sameBundle(k.bundle, key.bundle) && k.condition === key.condition)?.b
 }
 
 /**
- * 스피드 고정마다 대상 상대 배지를 필터와 무관하게 다시 만들어 해석한다(합계 검사 끔, 내 랭크 무시).
+ * 스피드 고정마다 대상 상대 배지를 필터와 무관하게(SP 배분 기준은 화면과 같게) 다시 만들어 해석한다(합계 검사 끔, 내 랭크 무시).
  * 우선순위: 내 세트 오류 → set-error, 스피드 미지원 → unreachable('speed-unsupported'), 대상 배지 없음 → missing.
  */
 export function resolveSpeedLocks(input: ResolveSpeedLocksInput): ReadonlyMap<number, LockResolution> {
@@ -147,7 +151,7 @@ export function resolveSpeedLocks(input: ResolveSpeedLocksInput): ReadonlyMap<nu
       })
       models.set(modelKey, model)
     }
-    const badge = findBadge(model, key)
+    const badge = speedLockBadge(model.badges, key)
     out.set(lock.seq, badge === undefined ? { kind: 'missing' } : speedResolution(game, checked.set, badge.speed, myTailwind, IGNORE_TOTAL))
   }
   return out
@@ -189,8 +193,7 @@ export function speedDropWarning(game: Snapshot, derivation: LockDerivation): bo
 export function speedBranchLines(input: SpeedBranchLinesInput): SpeedBranchLine[] {
   const { game, derivation, badge, myTailwind, mySp, spTotal } = input
   if (derivation.branches.length === 0) return []
-  const selfId = lockTargetId(speedBadgeLockKey(badge))
-  if (derivation.locks.some((l) => lockTargetId(l.target) === selfId)) return []
+  if (derivation.locks.some((l) => l.target.kind === 'speed' && speedLockBadge([badge], l.target) !== undefined)) return []
   const checked = checkedMySet(game, input.mySet, IGNORE_TOTAL)
   if (checked === null || 'rejection' in checked) return []
   const sLocked = derivation.lockedStats.includes('spe')

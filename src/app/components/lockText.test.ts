@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { deriveLocks, itemKey, type AdjustNature, type AdjustResult, type CutLock, type LockCandidate, type LockResolution, type SpeedBranchLine } from '../../cards'
+import { deriveLocks, itemKey, type AdjustNature, type AdjustResult, type CutLock, type LockCandidate, type LockResolution, type SpeedBranchLine, type SpeedLockCandidate } from '../../cards'
+import type { LockCheckView } from '../lockContext'
 import { realData } from '../../cards/testing'
 import type { PokemonSet } from '../../core'
 import {
@@ -24,8 +25,11 @@ import {
   lockAllocationText,
   lockChoiceText,
   lockOptionText,
+  pinEmptyMenuText,
+  pinEmptyReasonText,
   pinEmptyText,
   pinResultsLabel,
+  speedPinDisabledText,
   lockStatusText,
   lockedStatText,
   lockSubjectView,
@@ -329,5 +333,36 @@ describe('공·방 핀 메뉴·고정 목록 SP 문구(2026-11-21)', () => {
     expect(lockAllocationText(defenseLock)).toBeUndefined()
     expect(lockAllocationText({ allocation: 'h-max' })).toBe('H 최대')
     expect(lockDescriptionSpoken(game, { ...defenseLock, allocation: 'h-max' })).toMatch(/ · H 최대$/)
+  })
+})
+
+describe('핀 비활성 이유 문구(speed-bundles-pin-disable R6·R7)', () => {
+  it('공·방 핀: SP 부족(n) · 성격 충돌 · 고정할 수 있는 결과 없음, 빈 메뉴 문구도 같은 이유를 쓴다', () => {
+    expect(pinEmptyReasonText({ kind: 'sp-short', over: 8 })).toBe('SP 부족(8)')
+    expect(pinEmptyReasonText({ kind: 'nature-conflict' })).toBe('성격 충돌')
+    expect(pinEmptyReasonText({ kind: 'none' })).toBe('고정할 수 있는 결과 없음')
+    expect(pinEmptyMenuText({ kind: 'sp-short', over: 8 })).toBe(pinEmptyText(8))
+    expect(pinEmptyMenuText({ kind: 'nature-conflict' })).toBe('고정할 수 있는 결과 없음 · 성격 충돌')
+    expect(pinEmptyMenuText({ kind: 'none' })).toBe('고정할 수 있는 결과 없음')
+  })
+
+  it('스피드 핀: 메뉴 한 줄 문구와 같은 이유, 바로 고정 가능·계산 중이면 이유 없음(활성)', () => {
+    const ready: SpeedLockCandidate = {
+      kind: 'ready',
+      lock: { kind: 'speed', target: { kind: 'speed', origin: 'ladder', opponentId: 's', bundle: { sp: 32, nature: 'plus' }, condition: 'none', filterKind: null }, stage: 'first', stats: ['spe'] },
+      resolution: { kind: 'ok', options: { shape: 'single', stat: 'spe', neutral: 20, plus: 12 } },
+    }
+    const checkOf = (c: LockCheckView) => () => c
+    expect(speedPinDisabledText(ready, checkOf({ kind: 'ok' }))).toBeUndefined()
+    expect(speedPinDisabledText(ready, checkOf({ kind: 'computing' }))).toBeUndefined()
+    expect(speedPinDisabledText(ready, checkOf({ kind: 'unreachable' }))).toBe('도달 불가')
+    expect(speedPinDisabledText(ready, checkOf({ kind: 'sp-short', over: 8 }))).toBe('SP 부족(8)')
+    expect(speedPinDisabledText(ready, checkOf({ kind: 'nature-conflict' }))).toBe('성격 충돌')
+    expect(speedPinDisabledText({ kind: 'blocked', reason: 'set-error' }, checkOf({ kind: 'ok' }))).toBe(pinStageView('first', { kind: 'blocked', reason: 'set-error' }, checkOf({ kind: 'ok' })).detail)
+    expect(speedPinDisabledText({ kind: 'blocked', reason: 'speed-unsupported' }, checkOf({ kind: 'ok' }))).toBe(pinStageView('first', { kind: 'blocked', reason: 'speed-unsupported' }, checkOf({ kind: 'ok' })).detail)
+    // 메뉴 한 줄 문구와 같다
+    for (const c of [{ kind: 'unreachable' }, { kind: 'sp-short', over: 3 }, { kind: 'nature-conflict' }] as const) {
+      expect(speedPinDisabledText(ready, checkOf(c))).toBe(pinStageView('first', ready, checkOf(c)).detail)
+    }
   })
 })

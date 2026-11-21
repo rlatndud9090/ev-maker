@@ -78,3 +78,8 @@ area: SP 구간 표
 > area: SP 구간 표 · 출처: docs/raw/feature/cut-lock-budget/adr.md#결정-19 · 코드: `src/cards/adjust.ts:adjustView`, `src/app/adjustAction.ts:adjustAction` · 봉인: `src/cards/adjust.test.ts` "상승 바닥(A0+)이 이미 더 좋은 결과면 낮은 결과에서 상승은 unreachable…", "비단조 칸에서도 각 결과의 SP는 그 결과 이상의 실제 최소이고, 더 좋은 결과와 같은 비용인 결과는 빠진다", `src/cards/adjust-acceptance.test.ts`
 
 **위반 시:** "이 결과의 최소 SP로 맞춘다"는 조정의 뜻이 깨져, 낮은 결과를 골랐는데 다른(더 좋은) 결과가 적용되거나 같은 비용의 낮은 결과가 목록에 중복으로 남는다. 최소 SP는 새 판정 규칙 없이 기존 변형 스윕·쌍 계단 산출물로만 계산한다.
+
+### INV-261121-speed-lock-badge-one-rule: 스피드 고정↔배지 연결은 speedLockBadge 하나로만 찾는다
+> area: SP 구간 표 · 출처: docs/raw/feature/speed-bundles-pin-disable/adr.md#결정-2 · 코드: `src/cards/speedLock.ts:speedLockBadge`, `src/app/components/SpeedChart.tsx` · 봉인: `src/cards/speedLock.test.ts`
+
+**위반 시:** SP 배분 기준을 바꿔 배지가 기본↔추가로 바뀌면, 해석은 이어지는데 차트 핀이 빈 핀으로 보여 누르면 고정 해제 대신 교체가 된다.

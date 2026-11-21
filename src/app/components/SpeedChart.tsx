@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent } from 'react'
 import {
   focusAfterRemove,
-  lockTargetId,
   minSpToPass,
   navigate,
-  speedBadgeLockKey,
   speedBranchLines,
+  speedLockBadge,
   speedLockCandidate,
   statusOf,
   type CustomTarget,
@@ -25,7 +24,7 @@ import { namesOf } from '../../ui/names'
 import { useLockUi } from '../lockContext'
 import type { SpeedReveal } from '../reveal'
 import type { AppAction } from '../state'
-import { OUTSIDE_FILTER_TEXT } from './lockText'
+import { OUTSIDE_FILTER_TEXT, speedPinDisabledText } from './lockText'
 import { BundleText } from './BundleText'
 import { ItemMark } from './ItemMark'
 import { PokemonIcon } from './PokemonIcon'
@@ -52,6 +51,8 @@ interface Props {
   shownSet: PokemonSet
   /** 고정 후보·갈래 예산의 내 세트(고정 전 값). 고정 문맥이 없으면 없음 */
   lockSet?: PokemonSet
+  /** 확정된 내 세트(드래그 중 표시 SP 없음). 핀 비활성 판정용. 고정 문맥이 없으면 없음 */
+  confirmedLockSet?: PokemonSet
   myTailwind: boolean
   customTargets: readonly CustomTarget[]
   dispatch: Dispatch<AppAction>
@@ -67,18 +68,8 @@ type Pending = { kind: 'id'; id: string } | { kind: 'added'; source: TargetSourc
 const IGNORE_TOTAL: EvalOptions = { ignoreSpTotal: true }
 const NO_SEQS: readonly number[] = []
 
-/** 고정 대상 배지: 정확한 키, 없으면 출처만 다른(래더·추가) 같은 배분·조건 */
-function revealBadge(badges: readonly Badge[], target: ReturnType<typeof speedBadgeLockKey>): Badge | undefined {
-  const id = lockTargetId(target)
-  const keyed = badges.map((b) => ({ b, k: speedBadgeLockKey(b) }))
-  const exact = keyed.find(({ k }) => lockTargetId(k) === id)
-  if (exact !== undefined || target.origin === 'preset') return exact?.b
-  const bundle = JSON.stringify(target.bundle)
-  return keyed.find(({ k }) => k.origin !== 'preset' && k.opponentId === target.opponentId && JSON.stringify(k.bundle) === bundle && k.condition === target.condition)?.b
-}
-
 /** 실수치 내림차순 줄 목록(기준선 띠 포함)과 배지에 붙는 상세 팝오버, 순서 비교 불가 영역 */
-export function SpeedChart({ game, model, input, bundleShareMin, badges, rows, baseline, shownSet, lockSet, myTailwind, customTargets, dispatch, empty, reveal, onRevealed }: Props) {
+export function SpeedChart({ game, model, input, bundleShareMin, badges, rows, baseline, shownSet, lockSet, confirmedLockSet, myTailwind, customTargets, dispatch, empty, reveal, onRevealed }: Props) {
   const frame = useRef<HTMLDivElement>(null)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -175,12 +166,17 @@ export function SpeedChart({ game, model, input, bundleShareMin, badges, rows, b
   const lockUi = useLockUi()
   const { locks, derivation, reveal: lockReveal, clearReveal } = lockUi
   const locked = locks.length > 0
-  const lockedByTarget = useMemo(() => {
+  // 고정이 이어진 배지(해석과 같은 규칙: 기준 변경으로 기본↔추가가 바뀌어도 그 배지가 고정 상태)
+  const lockedById = useMemo(() => {
     const m = new Map<string, number[]>()
-    for (const l of locks) if (l.target.kind === 'speed') m.set(lockTargetId(l.target), [...(m.get(lockTargetId(l.target)) ?? []), l.seq])
+    for (const l of locks) {
+      if (l.target.kind !== 'speed') continue
+      const b = speedLockBadge(badges, l.target)
+      if (b !== undefined) m.set(b.id, [...(m.get(b.id) ?? []), l.seq])
+    }
     return m
-  }, [locks])
-  const lockedBy = (b: Badge): readonly number[] => (lockedByTarget.size === 0 ? NO_SEQS : (lockedByTarget.get(lockTargetId(speedBadgeLockKey(b))) ?? NO_SEQS))
+  }, [locks, badges])
+  const lockedBy = (b: Badge): readonly number[] => lockedById.get(b.id) ?? NO_SEQS
 
   const names = namesOf(game)
   const minSp = useMemo(() => {
@@ -200,13 +196,27 @@ export function SpeedChart({ game, model, input, bundleShareMin, badges, rows, b
     () => (lockSet === undefined ? undefined : (b: Badge): SpeedLockCandidate => speedLockCandidate(game, lockSet, b, myTailwind, locked ? IGNORE_TOTAL : undefined)),
     [game, lockSet, myTailwind, locked],
   )
+  // 핀 비활성 판정: 확정 세트·고정 기준으로 배지마다 한 번(드래그 중에는 다시 판정하지 않는다). 계산 중·바로 고정 가능이면 활성
+  const check = lockUi.check
+  const pinDisabled = useMemo(() => {
+    if (confirmedLockSet === undefined) return undefined
+    const memo = new Map<string, string | null>()
+    return (b: Badge): string | undefined => {
+      let r = memo.get(b.id)
+      if (r === undefined) {
+        r = speedPinDisabledText(speedLockCandidate(game, confirmedLockSet, b, myTailwind, locked ? IGNORE_TOTAL : undefined), check) ?? null
+        memo.set(b.id, r)
+      }
+      return r ?? undefined
+    }
+  }, [game, confirmedLockSet, myTailwind, locked, check])
 
   // 고정 목록의 이동 요청: 그 배지 상세를 열고 포커스, 표시 필터 밖이면 안내(조건 칩은 리듀서가 켠다)
   // 요청은 렌더 중 한 번만 처리하고(nonce), 요청 지우기·포커스는 커밋 뒤에 한다
   const [revealDone, setRevealDone] = useState<{ nonce: number; outside: number | null; badgeId?: string } | null>(null)
   const revealLock = lockReveal === null ? undefined : locks.find((l) => l.seq === lockReveal.seq)
   if (lockReveal !== null && revealLock !== undefined && revealLock.target.kind === 'speed' && revealDone?.nonce !== lockReveal.nonce) {
-    const b = revealBadge(badges, revealLock.target)
+    const b = speedLockBadge(badges, revealLock.target)
     if (b === undefined) {
       const missing = derivation?.statuses.get(revealLock.seq)?.kind === 'missing'
       setRevealDone({ nonce: lockReveal.nonce, outside: missing ? null : revealLock.seq })
@@ -260,6 +270,7 @@ export function SpeedChart({ game, model, input, bundleShareMin, badges, rows, b
                       handlers={handlers}
                       lockedBy={lockedBy(b)}
                       pinCandidate={pinCandidate}
+                      pinDisabled={pinDisabled === undefined || lockedBy(b).length > 0 ? undefined : pinDisabled(b)}
                     />
                   )
                 })}

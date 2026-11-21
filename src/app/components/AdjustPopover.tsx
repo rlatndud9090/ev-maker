@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, type FocusEvent, type KeyboardEvent, type Ref } from 'react'
-import type { AdjustAllocation, AdjustStat, AdjustView, Tab } from '../../cards'
+import type { AdjustAllocation, AdjustStat, AdjustView, PinEmptyReason, Tab } from '../../cards'
 import type { RollTier } from '../../core'
 import { categoryBadge } from '../../ui/format'
 import { useLockUi } from '../lockContext'
@@ -21,6 +21,7 @@ import {
   adjustStatText,
   leadStats,
   PIN_RESULTS_TITLE,
+  pinEmptyMenuText,
   pinEmptyText,
   pinResultsLabel,
 } from './lockText'
@@ -70,8 +71,10 @@ export interface AdjustMenuProps {
   view: Pick<AdjustView, 'state' | 'natures' | 'results'>
   /** adjust = 변동 팝오버, pin = 공·방 카드 핀(제목·빈 목록 문구·testid가 다르고 오른쪽으로 펼친다) */
   variant?: 'adjust' | 'pin'
-  /** pin: 결과가 없을 때 끈 이유 중 SP 부족 최소 초과량 */
+  /** pin: 결과가 없을 때 끈 이유 중 SP 부족 최소 초과량(empty가 없을 때만 쓴다) */
   emptyOver?: number
+  /** pin: 결과가 없을 때 핀 전체 이유(SP 부족 > 성격 충돌 > 일반) */
+  empty?: PinEmptyReason
   /** 2단에서 고른 결과의 view.results index. null = 1단 */
   stage: number | null
   menuRef?: Ref<HTMLDivElement>
@@ -87,7 +90,7 @@ export interface AdjustMenuProps {
  * 팝오버 내용: 1단 결과 목록(role=menu) 또는 같은 자리의 2단 성격 선택(머리줄 "‹ 뒤로" + 고른 결과 배지·SP).
  * 방어 쌍 선택지에 H 최대 배분이 있으면 그 선택지 항목은 "합 최소"로, 바로 아래 들여쓴 "H 최대" 항목을 하나 더 둔다(PRD R23).
  */
-export function AdjustMenu({ subject, view, variant = 'adjust', emptyOver, stage, menuRef, onKeyDown, onBlur, onChooseResult, onChooseNature, onBack }: AdjustMenuProps) {
+export function AdjustMenu({ subject, view, variant = 'adjust', emptyOver, empty: emptyReason, stage, menuRef, onKeyDown, onBlur, onChooseResult, onChooseNature, onBack }: AdjustMenuProps) {
   const pin = variant === 'pin'
   const result = stage === null ? undefined : view.results[stage]
   const common = {
@@ -100,7 +103,7 @@ export function AdjustMenu({ subject, view, variant = 'adjust', emptyOver, stage
     'data-testid': pin ? 'cut-pin-menu' : 'adjust-menu',
   } as const
   if (result === undefined) {
-    const empty = pin ? pinEmptyText(emptyOver) : ADJUST_EMPTY_TEXT
+    const empty = pin ? (emptyReason === undefined ? pinEmptyText(emptyOver) : pinEmptyMenuText(emptyReason)) : ADJUST_EMPTY_TEXT
     return (
       <div {...common} aria-label={pin ? pinResultsLabel(subject) : adjustResultsLabel(subject)} data-stage="result">
         <div className="adjust-title" role="none" aria-hidden="true">

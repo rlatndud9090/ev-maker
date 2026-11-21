@@ -68,6 +68,23 @@ function topBundle(e: MetaEntry): { sp: number; sign: Sign; share: number; speed
   return { ...list[0], tied: list.length > 1 && list[1].share === list[0].share }
 }
 
+/** 메타 원자료에서 SP 배분 기준 이상 S 묶음 전부(점유율 내림, 같으면 빠른 쪽), 없으면 1위 하나 */
+function defaultBundles(e: MetaEntry, min: number): { sp: number; sign: Sign; share: number; speed: number }[] {
+  const by = new Map<string, { sp: number; sign: Sign; share: number }>()
+  for (const [key, share] of e.spreads.kept) {
+    const [nature, spread] = key.split(':')
+    const sp = Number(spread.split('/')[5])
+    const sign = signOf(nature)
+    const k = `${sp}:${sign}`
+    const cur = by.get(k) ?? { sp, sign, share: 0 }
+    cur.share = Math.round((cur.share + share) * 1e4) / 1e4
+    by.set(k, cur)
+  }
+  const list = [...by.values()].map((b) => ({ ...b, speed: finalSpeed(game, withSpeed(baseSet(e), b.sp, b.sign)) })).sort((a, b) => b.share - a.share || b.speed - a.speed)
+  const passing = list.filter((b) => b.share >= min)
+  return passing.length > 0 ? passing : list.slice(0, 1)
+}
+
 const speciesKo = (id: string) => game.data.species[id]?.name.ko ?? id
 const idByKo = <T extends { name: { ko?: string } }>(table: Record<string, T>, ko: string): string => {
   const hit = Object.entries(table).find(([, v]) => v.name.ko === ko)
@@ -139,6 +156,14 @@ async function setTopN(page: Page, n: number) {
   await box.fill(String(n))
   await box.press('Enter')
   await expect(box).toHaveValue(String(n))
+}
+
+/** 툴바 통계 설정 "SP 배분 최소(%)" */
+async function setBundleMin(page: Page, percent: number) {
+  const box = toolbarSpin(page, 'SP 배분 최소(%)')
+  await box.fill(String(percent))
+  await box.press('Enter')
+  await expect(box).toHaveValue(String(percent))
 }
 
 async function setMySp(page: Page, sp: number) {
@@ -341,7 +366,7 @@ test.describe('스피드 차트 배치(AC1~AC4, AC24)', () => {
     }
   })
 
-  test('AC4: 래더 상대마다 기본 배지 하나 = 메타 원자료의 점유율 1위 S 묶음(동률은 빠른 쪽), 표기 "S32↑"·"S20"·"S0↓"(접근 이름은 성격 보정 글자), 실수치 = 코어 공식', async ({ page }) => {
+  test('AC4(speed-bundles-pin-disable R1): 래더 상대마다 기본 배지 = 메타 원자료의 SP 배분 기준(5%) 이상 S 묶음 전부(없으면 1위, 동률은 빠른 쪽), 표기 "S32↑"·"S20"·"S0↓"(접근 이름은 성격 보정 글자), 실수치 = 코어 공식', async ({ page }) => {
     await openSpeed(page)
     const list = await readBadges(page)
     const base = list.filter((b) => b.origin === 'ladder' && b.condition === 'none')
@@ -349,23 +374,95 @@ test.describe('스피드 차트 배치(AC1~AC4, AC24)', () => {
     expect([...opponents].sort()).toEqual(ranking.slice(0, DEFAULT_TOP_N).map((e) => e.id).sort())
     let small = 0
     let tied = 0
+    let multi = 0
     for (const id of opponents) {
       const mine = base.filter((b) => b.opponent === id)
-      expect(mine, `${id} 기본 배지 수`).toHaveLength(1)
+      const want = defaultBundles(entryOf(id), 0.05)
       const top = topBundle(entryOf(id))
       if (top.share < 0.05) small++
       if (top.tied) tied++
-      expect({ sp: mine[0].sp, sign: mine[0].sign }, id).toEqual({ sp: top.sp, sign: top.sign })
-      expect(mine[0].label, id).toContain(` ${bundleSpoken(top.sp, top.sign)}`)
-      expect(mine[0].speed, `${id} 실수치`).toBe(top.speed)
+      if (want.length > 1) multi++
+      expect(new Set(mine.map((b) => `${b.sp}:${b.sign}`)), `${id} 기본 배지`).toEqual(new Set(want.map((b) => `${b.sp}:${b.sign}`)))
+      for (const w of want) {
+        const b = mine.find((x) => x.sp === w.sp && x.sign === w.sign)!
+        expect(b.label, id).toContain(` ${bundleSpoken(w.sp, w.sign)}`)
+        expect(b.speed, `${id} ${bundleText(w.sp, w.sign)} 실수치`).toBe(w.speed)
+      }
     }
+    expect(multi, '기본 배지가 여럿인 상대').toBeGreaterThan(0)
     // 표기 형식: 세 보정 모두 화면에 나온다(상위 30에 하락 묶음이 없으면 래더 전 종에서 찾는다)
     const visible = await badges(page).locator('.num').allTextContents()
     for (const v of visible) expect(v).toMatch(/^S\d{1,2}[↑↓]?$/)
     expect(visible.some((v) => v.endsWith('↑'))).toBe(true)
     expect(visible.some((v) => /\d$/.test(v)), '무보정은 기호 없음').toBe(true)
     for (const v of visible) expect(v).not.toMatch(/[=+−]/)
-    test.info().annotations.push({ type: 'AC4', description: `상위 30 중 1위 점유율 5% 미만 ${small}종, 1위 동률 ${tied}종(그 밖의 경계 사례는 단위 테스트)` })
+    test.info().annotations.push({ type: 'AC4', description: `기본 배지 ${base.length}개, 여럿인 상대 ${multi}종, 1위 점유율 5% 미만 ${small}종, 1위 동률 ${tied}종(그 밖의 경계 사례는 단위 테스트)` })
+  })
+
+  test('AC4(speed-bundles-pin-disable): 포푸니크는 기준 이상 묶음 수만큼 기본 배지, 툴바 SP 배분 100이면 하나로 줄고 5로 돌리면 다시 늘어난다', async ({ page }) => {
+    await openSpeed(page)
+    const want = defaultBundles(entryOf('sneasler'), 0.05)
+    expect(want.length, '포푸니크 기준 이상 묶음').toBeGreaterThan(1)
+    const sneaslerBases = async () => (await readBadges(page)).filter((b) => b.opponent === 'sneasler' && b.origin === 'ladder' && b.condition === 'none')
+    await expect.poll(async () => (await sneaslerBases()).length).toBe(want.length)
+    await setBundleMin(page, 100)
+    await expect.poll(async () => (await sneaslerBases()).map((b) => `${b.sp}:${b.sign}`)).toEqual([`${topBundle(entryOf('sneasler')).sp}:${topBundle(entryOf('sneasler')).sign}`])
+    await setBundleMin(page, 5)
+    await expect.poll(async () => (await sneaslerBases()).length).toBe(want.length)
+  })
+
+  test('AC6(speed-bundles-pin-disable R3): 같은 실수치 줄의 래더 배지 DOM 순서(= 좌우 키 순서)는 사용률 순위 오름차순', async ({ page }) => {
+    await openSpeed(page, true)
+    const list = await readBadges(page)
+    const rows = new Map<number, number[]>()
+    for (const b of list) {
+      if (b.origin === 'preset') continue
+      rows.set(b.rowSpeed, [...(rows.get(b.rowSpeed) ?? []), entryOf(b.opponent).rank])
+    }
+    let mixed = 0
+    for (const [speed, ranks] of rows) {
+      expect(ranks, `실수치 ${speed} 줄`).toEqual([...ranks].sort((a, b) => a - b))
+      if (new Set(ranks).size > 1) mixed++
+    }
+    expect(mixed, '여러 상대가 섞인 줄').toBeGreaterThan(0)
+    // 좌우 키 이동 순서 = DOM 순서: 여러 상대가 섞인 줄 하나에서 → 로 끝까지 간다
+    const [rowSpeed] = [...rows].find(([, r]) => new Set(r).size > 1)!
+    const ids = list.filter((b) => b.rowSpeed === rowSpeed).map((b) => b.id)
+    await badgeById(page, ids[0]).focus()
+    for (const id of ids.slice(1)) {
+      await page.keyboard.press('ArrowRight')
+      await expect(badgeById(page, id)).toBeFocused()
+    }
+  })
+
+  test('AC7(speed-bundles-pin-disable R4): 2위 묶음을 추가한 뒤 기준을 낮춰 기본 배지가 되면 그 배분 배지가 하나뿐이고 "추가" 표지가 없으며, 기준을 올리면 추가 배지로 돌아온다', async ({ page }) => {
+    await openSpeed(page)
+    const [first, second] = defaultBundles(entryOf('sneasler'), 0.05)
+    await setBundleMin(page, 100)
+    const sneasler = async () => (await readBadges(page)).filter((b) => b.opponent === 'sneasler' && b.condition === 'none')
+    await expect.poll(async () => (await sneasler()).length).toBe(1)
+    const top = (await sneasler())[0]
+    expect(`${top.sp}:${top.sign}`).toBe(`${first.sp}:${first.sign}`)
+    await badgeById(page, top.id).click()
+    await detail(page).getByTestId('speed-add-toggle').click()
+    await detail(page)
+      .getByTestId('speed-add-option')
+      .filter({ has: page.locator('b .bundle-mark', { hasText: new RegExp(`^${bundleText(second.sp, second.sign)}$`) }) })
+      .click()
+    const secondOf = async () => (await sneasler()).filter((b) => b.sp === second.sp && b.sign === second.sign)
+    await expect.poll(async () => (await secondOf()).map((b) => b.origin)).toEqual(['added'])
+    const addedSpeed = (await secondOf())[0].speed
+    await expect(page.locator('[data-testid="speed-badge"][data-origin="added"] .speed-mark.add')).toHaveText('추가')
+    // 기준을 낮추면 기본 배지가 그 자리를 대신한다(하나뿐, "추가" 없음, 실수치 같음)
+    await page.keyboard.press('Escape')
+    await setBundleMin(page, 5)
+    await expect.poll(async () => (await secondOf()).map((b) => b.origin)).toEqual(['ladder'])
+    expect((await secondOf())[0].speed).toBe(addedSpeed)
+    await expect(page.locator('[data-testid="speed-badge"][data-origin="added"]')).toHaveCount(0)
+    // 다시 올리면 추가 기록이 추가 배지로 돌아온다
+    await setBundleMin(page, 100)
+    await expect.poll(async () => (await secondOf()).map((b) => b.origin)).toEqual(['added'])
+    await expect(page.locator('[data-testid="speed-badge"][data-origin="added"] .speed-mark.add')).toHaveText('추가')
   })
 
   for (const width of [400, 1280]) {
