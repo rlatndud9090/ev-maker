@@ -3,7 +3,7 @@ import { finalSpeed } from '../src/core/speed'
 import type { PokemonSet } from '../src/core/types'
 import type { MetaEntry } from '../src/data/meta-schema'
 import { loadMetaSnapshotSync, loadSnapshotSync } from '../src/data/testing'
-import { addCustomTarget, cards, combo, dragSlider, findOverlaps, mySet, openProduct, resultTab, selectTab, tabPanel, waitComplete } from './helpers'
+import { addCustomTarget, badge as badgeByName, cards, combo, dragSlider, findOverlaps, lockBadge, mySet, openProduct, resultTab, selectTab, settle, tabPanel, waitComplete } from './helpers'
 /** 상위 N 기본값(src/cards/types.ts DEFAULT_TOP_N과 같다) */
 const DEFAULT_TOP_N = 100
 
@@ -97,6 +97,19 @@ const idByKo = <T extends { name: { ko?: string } }>(table: Record<string, T>, k
 const badges = (page: Page) => page.getByTestId('speed-badge')
 const frame = (page: Page) => page.getByTestId('speed-frame')
 const band = (page: Page) => page.getByTestId('speed-baseline')
+
+/** 내 스피드가 구간 경계(S0·S32·S32↑ 등)와 같을 때(2026-11-24 사용자 요청): 띠 라벨에 보이는 표지(칩) 없이 읽기 문구만 있다 */
+async function expectBandMarkSrOnly(page: Page, spoken: string) {
+  const mark = band(page).getByTestId('speed-baseline-mark')
+  await expect(mark).toHaveText(spoken)
+  await expect(mark).toHaveClass(/(^|\s)sr-only(\s|$)/)
+  const label = band(page).locator('.speed-baseline-label')
+  await expect(label.locator('[aria-hidden="true"]', { hasText: /최대|최소/ })).toHaveCount(0)
+  await expect(label.getByTestId('speed-threshold-mark')).toHaveCount(0)
+  const box = await mark.boundingBox()
+  expect(box === null || (box.width <= 1 && box.height <= 1), `보이는 표지 크기 ${JSON.stringify(box)}`).toBe(true)
+  expect(await label.innerText()).not.toMatch(/S32↑? 최대|S0 최소/)
+}
 const detail = (page: Page) => page.getByTestId('speed-detail')
 const chip = (page: Page, f: string) => page.locator(`[data-testid="speed-head"] [data-filter="${f}"]`)
 const toolbarSpin = (page: Page, name: string) => page.getByRole('spinbutton', { name, exact: true })
@@ -250,11 +263,15 @@ const OVERLAP_SEL = [
   '[data-testid="speed-frame"] [data-testid="speed-badge"]',
   '[data-testid="speed-frame"] .speed-row-speed',
   '[data-testid="speed-frame"] .speed-baseline-label',
+  '[data-testid="speed-frame"] .speed-threshold-mark',
 ].join(', ')
 const STUCK_OVERLAP_SEL = [
   '[data-testid="speed-frame"] li.speed-row [data-testid="speed-badge"]',
   '[data-testid="speed-frame"] .speed-row-speed',
+  '[data-testid="speed-frame"] .speed-threshold-mark',
 ].join(', ')
+/** 실수치 줄(배지 줄·기준선 띠·배지 없는 구간 경계 줄, speed-reach-band) */
+const ROW_SEL = 'li.speed-row[data-speed], li.speed-baseline, li.speed-threshold'
 
 /** 요소가 프레임 사각형 안에 온전히 있는가 */
 async function insideFrame(page: Page, loc: Locator): Promise<boolean> {
@@ -293,7 +310,8 @@ test.describe('스피드 차트 배치(AC1~AC4, AC24)', () => {
       await openSpeed(page, true)
       const list = await readBadges(page)
       // 줄 순서: 줄(띠 포함) 실수치가 위에서 아래로 엄격히 내려간다 = 같은 실수치는 한 줄
-      const rowSpeeds = await frame(page).locator('li.speed-row[data-speed], li.speed-baseline').evaluateAll((els) => els.map((e) => Number((e as HTMLElement).dataset.speed)))
+      // 배지 없는 구간 경계 줄도 같은 내림차순 자리에 낀다(speed-reach-band AC14)
+      const rowSpeeds = await frame(page).locator(ROW_SEL).evaluateAll((els) => els.map((e) => Number((e as HTMLElement).dataset.speed)))
       for (let i = 1; i < rowSpeeds.length; i++) expect(rowSpeeds[i], `줄 ${i}`).toBeLessThan(rowSpeeds[i - 1])
       for (const b of list) expect(b.rowSpeed, `${b.label}`).toBe(b.speed)
       // 실수치 라벨은 실수치마다 한 번(띠 줄은 띠 라벨이 그 실수치를 보인다)
@@ -338,7 +356,7 @@ test.describe('스피드 차트 배치(AC1~AC4, AC24)', () => {
     })
   }
 
-  test('AC3: 모든 배지(스카프·랭크업 포함)가 자기 실수치 줄 안에 잘리지 않고, 기준선 띠는 내 실수치 줄 하나뿐(도달 범위 띠 없음)', async ({ page }) => {
+  test('AC3: 모든 배지(스카프·랭크업 포함)가 자기 실수치 줄 안에 잘리지 않고, 기준선 띠는 내 실수치 줄 하나뿐(배경색 구간은 S0 최소~맨 위 경계 안)', async ({ page }) => {
     for (const width of [400, 1280]) {
       await page.setViewportSize({ width, height: 800 })
       await openSpeed(page, true)
@@ -360,7 +378,13 @@ test.describe('스피드 차트 배치(AC1~AC4, AC24)', () => {
       })
       expect(clipped, `${width}px`).toEqual([])
       await expect(band(page)).toHaveCount(1)
-      await expect(frame(page).locator('[class*="reach"]')).toHaveCount(0)
+      // speed-reach-band(2026-11-24 세 번째 개정): 배경색 구간은 S0 최소~맨 위 경계(스카프 S32↑) 안 줄뿐이고 띠 자신은 칠하지 않는다
+      const lo = Number(await frame(page).locator('li[data-mark="floor"]').getAttribute('data-speed'))
+      const hi = Number(await frame(page).locator('li[data-mark]').first().getAttribute('data-speed'))
+      const zoneSpeeds = await frame(page).locator('.speed-zone').evaluateAll((els) => els.map((e) => Number((e as HTMLElement).dataset.speed)))
+      expect(zoneSpeeds.length).toBeGreaterThan(0)
+      for (const s of zoneSpeeds) expect(s >= lo && s <= hi, `${s} in ${lo}~${hi}`).toBe(true)
+      await expect(band(page)).not.toHaveClass(/speed-zone/)
       // 기준선 = 내 포켓몬 패널의 스피드 실능치(내 도구 생명의구슬·순풍 꺼짐)
       await expect(band(page)).toHaveAttribute('data-speed', (await myStat(page).textContent())!.trim())
     }
@@ -986,6 +1010,9 @@ test.describe('필터와 범위(AC11, AC13~AC16)', () => {
       await expect(badges(page)).toHaveCount(0)
       await expect(page.getByTestId('speed-empty')).toContainText('표시할 상대가 없습니다')
       await expect(band(page)).toBeVisible()
+      // speed-reach-band AC9: 빈 상태에서도 경계 줄이 띠와 함께 보인다(예시 세트 S32 무보정: S32 경계는 띠에 합쳐지고 S32↑·스카프 둘·S0 줄)
+      await expect.poll(() => frame(page).locator('li.speed-threshold').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.mark))).toEqual(['scarfMaxPlus', 'scarfMax', 'maxPlus', 'floor'])
+      await expectBandMarkSrOnly(page, ', S32 성격 무보정 최대와 같음')
       await expectNoCountSummary(page)
       await expect(page.getByTestId('speed-unsupported').getByRole('listitem')).toHaveText(['포푸니크 · 행동 순서 변경 · 선제공격손톱'])
     })
@@ -1155,4 +1182,356 @@ test.describe('차트에서 배분 추가(AC26)', () => {
     await expect(badges(page).first()).toBeVisible()
     await expect(added).toHaveCount(addedCount)
   })
+})
+
+// ---------- 배경색 구간 4개와 오른쪽 경계 표지(speed-reach-band PRD AC5~AC11, 2026-11-24 세 번째 개정) ----------
+
+type Mark = 'floor' | 'max' | 'maxPlus' | 'scarfMax' | 'scarfMaxPlus'
+type Zone = 'base' | 'basePlus' | 'scarf' | 'scarfPlus'
+const markRow = (page: Page, kind: Mark) => frame(page).locator(`li[data-mark="${kind}"]`)
+const markText = (page: Page, kind: Mark) => markRow(page, kind).getByTestId('speed-threshold-mark').locator('.speed-threshold-text')
+const natPlusBtn = (page: Page) => mySet(page).getByRole('button', { name: '스피드 성격 상승', exact: true })
+const markKeys = (page: Page) =>
+  frame(page)
+    .locator('li[data-mark]')
+    .evaluateAll((els) => els.map((e) => `${(e as HTMLElement).dataset.mark}:${(e as HTMLElement).dataset.speed}`))
+
+async function setMyPlus(page: Page, on: boolean) {
+  const b = natPlusBtn(page)
+  if (((await b.getAttribute('aria-pressed')) === 'true') !== on) await b.click()
+  await expect(b).toHaveAttribute('aria-pressed', String(on))
+}
+
+/** 화면 줄(배지 줄·띠·경계 줄) 실수치·표지 */
+const readRows = (page: Page) =>
+  frame(page)
+    .locator(ROW_SEL)
+    .evaluateAll((els) =>
+      els.map((e) => {
+        const d = (e as HTMLElement).dataset
+        return { speed: Number(d.speed), mark: d.mark ?? null, zone: d.zone ?? null, band: e.matches('.speed-baseline') }
+      }),
+    )
+
+/** 경계 실수치 기대값(독립 경로): 내 세트의 S SP·성격(·도구)만 바꾼 코어 공식 실수치 */
+interface Bounds {
+  floor: number
+  neutral: number
+  plus: number
+  scarf: { neutral: number; plus: number } | null
+}
+async function boundsFromUi(page: Page, tailwind: boolean): Promise<Bounds> {
+  const set = await mySetFromUi(page)
+  const at = (item: string | undefined, sign: Sign, spe: number) => finalSpeed(game, { ...set, item, nature: SIGN_NATURE[sign], sp: { ...set.sp, spe } }, { attacker: { tailwind } })
+  return {
+    floor: at(set.item, 'neutral', 0),
+    neutral: at(set.item, 'neutral', 32),
+    plus: at(set.item, 'plus', 32),
+    scarf: set.item === 'choicescarf' ? null : { neutral: at('choicescarf', 'neutral', 32), plus: at('choicescarf', 'plus', 32) },
+  }
+}
+
+/** 기대 구간(아래→위, 위 끝 포함, 비는 구간 제외) */
+function zonesOf(b: Bounds): { zone: Zone; top: number; mark: Mark }[] {
+  const out: { zone: Zone; top: number; mark: Mark }[] = [{ zone: 'base', top: b.neutral, mark: 'max' }]
+  const push = (zone: Zone, top: number, mark: Mark) => {
+    if (top > out[out.length - 1].top) out.push({ zone, top, mark })
+  }
+  push('basePlus', b.plus, 'maxPlus')
+  if (b.scarf !== null) {
+    push('scarf', b.scarf.neutral, 'scarfMax')
+    push('scarfPlus', b.scarf.plus, 'scarfMaxPlus')
+  }
+  return out
+}
+
+function wantZone(speed: number, me: number, b: Bounds): string | null {
+  if (speed < b.floor || speed === me) return null
+  return zonesOf(b).find((z) => speed <= z.top)?.zone ?? null
+}
+
+/** 기대 경계 표지(위→아래 "kind:speed") */
+function wantMarks(b: Bounds): string[] {
+  return [
+    ...zonesOf(b)
+      .reverse()
+      .map((z) => `${z.mark}:${z.top}`),
+    `floor:${b.floor}`,
+  ]
+}
+
+/** 표지가 줄 오른쪽 끝에 있고 배지·실수치와 겹치지 않는가(잘림 포함) */
+const markLayoutProblems = (page: Page) =>
+  frame(page).evaluate((f) => {
+    const out: string[] = []
+    for (const m of f.querySelectorAll<HTMLElement>('[data-testid="speed-threshold-mark"]')) {
+      const li = m.closest('li')!
+      const r = m.getBoundingClientRect()
+      const row = li.getBoundingClientRect()
+      const tag = `${m.dataset.mark}@${li.dataset.speed}`
+      if (Math.abs(r.right - row.right) > 1) out.push(`${tag}: 오른쪽 끝 아님 ${r.right} / ${row.right}`)
+      if (r.top < row.top - 0.5 || r.bottom > row.bottom + 0.5 || r.left < row.left - 0.5) out.push(`${tag}: 줄 밖`)
+      if (m.scrollWidth > m.clientWidth + 1) out.push(`${tag}: 잘림`)
+      for (const o of li.querySelectorAll<HTMLElement>('[data-testid="speed-badge"], .speed-row-speed')) {
+        const q = o.getBoundingClientRect()
+        if (q.left < r.right && r.left < q.right && q.top < r.bottom && r.top < q.bottom) out.push(`${tag}: 겹침 ${o.textContent}`)
+      }
+    }
+    return out
+  })
+
+test.describe('배경색 구간·오른쪽 경계 표지(speed-reach-band)', () => {
+  test('AC5·AC6: 무보정·S10 세트에서 S0·S32·S32↑·스카프 S32·스카프 S32↑ 경계가 코어 공식 값 자리에 오른쪽 표지로 있고, 줄은 네 구간 색으로 틈 없이 칠해진다', async ({ page }) => {
+    await openSpeed(page)
+    await setMyPlus(page, false)
+    await setMySp(page, 10)
+    const b = await boundsFromUi(page, false)
+    const me = Number(await band(page).getAttribute('data-speed'))
+    expect(me).toBeLessThan(b.neutral)
+    expect(b.scarf!.neutral).toBeGreaterThan(b.plus)
+    await expect.poll(() => markKeys(page)).toEqual(wantMarks(b))
+    await expect(markText(page, 'floor')).toHaveText('S0')
+    await expect(markText(page, 'max')).toHaveText('S32')
+    await expect(markText(page, 'maxPlus')).toHaveText('S32↑')
+    await expect(markText(page, 'scarfMax')).toHaveText('S32')
+    await expect(markText(page, 'scarfMaxPlus')).toHaveText('S32↑')
+    // 스카프 표지만 구애스카프 아이콘(장식, 읽기는 sr 문구)
+    const icon = (k: Mark) => markRow(page, k).getByTestId('speed-threshold-mark').locator('[data-testid="item-mark"]')
+    for (const k of ['scarfMax', 'scarfMaxPlus'] as const) await expect(icon(k)).toHaveAttribute('data-item-id', 'choicescarf')
+    for (const k of ['floor', 'max', 'maxPlus'] as const) await expect(icon(k)).toHaveCount(0)
+    // 왼쪽 얇은 선·왼쪽 라벨은 없다
+    await expect(frame(page).locator('.speed-ceiling-mark, .speed-ceiling-label')).toHaveCount(0)
+    await expect(page.getByTestId('speed-baseline-mark')).toHaveCount(0)
+
+    const rows = await readRows(page)
+    for (let i = 1; i < rows.length; i++) expect(rows[i].speed, `줄 ${i}`).toBeLessThan(rows[i - 1].speed)
+    for (const r of rows) expect(r.zone, `${r.speed}`).toBe(wantZone(r.speed, me, b))
+    for (const z of ['base', 'basePlus', 'scarf', 'scarfPlus']) expect(rows.some((r) => r.zone === z), z).toBe(true)
+    // 이웃 줄 사이 틈 없음, 같은 구간은 같은 색, 네 구간 색은 서로 다르다
+    await frame(page).evaluate((f) => (f.scrollTop = 0))
+    const res = await frame(page).evaluate((f) => {
+      const els = [...f.querySelectorAll<HTMLElement>('li.speed-zone, li.speed-baseline')]
+      const out: string[] = []
+      const colors = new Map<string, string>()
+      for (let i = 0; i < els.length; i++) {
+        const e = els[i]
+        if (e.matches('.speed-zone')) {
+          const bg = getComputedStyle(e).backgroundColor
+          if (bg === 'rgba(0, 0, 0, 0)') out.push(`배경 없음 ${e.dataset.speed}`)
+          const z = e.dataset.zone!
+          if (!colors.has(z)) colors.set(z, bg)
+          else if (colors.get(z) !== bg) out.push(`색 ${e.dataset.speed}`)
+        }
+        if (i === 0) continue
+        if (e.previousElementSibling !== els[i - 1]) out.push(`구간 끊김 ${els[i - 1].dataset.speed}→${e.dataset.speed}`)
+        if (e.matches('.speed-baseline') || els[i - 1].matches('.speed-baseline')) continue
+        const gap = e.getBoundingClientRect().top - els[i - 1].getBoundingClientRect().bottom
+        if (Math.abs(gap) > 0.5) out.push(`틈 ${els[i - 1].dataset.speed}→${e.dataset.speed}: ${gap}`)
+      }
+      return { out, colors: [...colors.values()], bandBg: getComputedStyle(f.querySelector('[data-testid="speed-baseline"]')!).backgroundColor }
+    })
+    expect(res.out).toEqual([])
+    expect(new Set(res.colors).size).toBe(4)
+    expect(res.colors).not.toContain(res.bandBg)
+    // 구간 줄 좌우는 기준선 띠 안
+    const sides = await frame(page).evaluate((f) => {
+      const bb = f.querySelector<HTMLElement>('[data-testid="speed-baseline"]')!.getBoundingClientRect()
+      return [...f.querySelectorAll<HTMLElement>('li.speed-zone')]
+        .map((e) => ({ s: e.dataset.speed, r: e.getBoundingClientRect() }))
+        .filter(({ r }) => r.left < bb.left - 0.5 || r.right > bb.right + 0.5)
+        .map(({ s, r }) => `${s}: ${r.left}~${r.right} / 띠 ${bb.left}~${bb.right}`)
+    })
+    expect(sides).toEqual([])
+    expect(await markLayoutProblems(page)).toEqual([])
+  })
+
+  test('AC7: S32↑로 바꾸면 S32↑ 경계는 띠에 합쳐지고(보이는 표지 없이 읽기만 "S32 성격 상승 최대와 같음") 띠는 구간 색이 없다', async ({ page }) => {
+    await openSpeed(page)
+    await setMySp(page, 32)
+    await setMyPlus(page, true)
+    const b = await boundsFromUi(page, false)
+    await expect(band(page)).toHaveAttribute('data-speed', String(b.plus))
+    await expect(band(page)).toHaveAttribute('data-mark', 'maxPlus')
+    await expect(frame(page).locator('li.speed-threshold[data-mark="maxPlus"], li.speed-row[data-mark="maxPlus"]')).toHaveCount(0)
+    await expectBandMarkSrOnly(page, ', S32 성격 상승 최대와 같음')
+    const rows = await readRows(page)
+    for (const r of rows) expect(r.zone, `${r.speed}`).toBe(wantZone(r.speed, b.plus, b))
+    expect(rows.find((r) => r.band)?.zone).toBeNull()
+    await expect(markRow(page, 'max')).toHaveAttribute('data-speed', String(b.neutral))
+    await expect(markRow(page, 'scarfMax')).toHaveAttribute('data-speed', String(b.scarf!.neutral))
+  })
+
+  test('AC7b: S0 무보정이면 S0 경계는 띠에 합쳐지고(읽기만 "S0 성격 무보정 최소와 같음"), 하락 성격이면 띠가 구간 아래에 있다', async ({ page }) => {
+    await openSpeed(page)
+    await setMyPlus(page, false)
+    await setMySp(page, 0)
+    const b = await boundsFromUi(page, false)
+    await expect(band(page)).toHaveAttribute('data-speed', String(b.floor))
+    await expect(band(page)).toHaveAttribute('data-mark', 'floor')
+    await expect(frame(page).locator('li.speed-threshold[data-mark="floor"]')).toHaveCount(0)
+    await expectBandMarkSrOnly(page, ', S0 성격 무보정 최소와 같음')
+    let rows = await readRows(page)
+    for (const r of rows) expect(r.zone, `${r.speed}`).toBe(wantZone(r.speed, b.floor, b))
+    // 하락 성격(S0↓): 띠는 S0 최소보다 낮고 구간은 그대로(공격 상승·스피드 하락 = 용감)
+    await mySet(page).getByRole('button', { name: '공격 성격 상승', exact: true }).click()
+    await mySet(page).getByRole('button', { name: /^스피드 성격 하락/ }).click()
+    await expect(band(page)).not.toHaveAttribute('data-speed', String(b.floor))
+    const me = Number(await band(page).getAttribute('data-speed'))
+    expect(me).toBeLessThan(b.floor)
+    await expect(markRow(page, 'floor')).toHaveAttribute('data-speed', String(b.floor))
+    await expect(band(page)).not.toHaveAttribute('data-mark')
+    rows = await readRows(page)
+    for (const r of rows) expect(r.zone, `${r.speed}`).toBe(wantZone(r.speed, me, b))
+    expect(rows.filter((r) => r.zone !== null && r.speed < b.floor)).toEqual([])
+  })
+
+  test('AC7c: 내 도구가 이미 구애스카프면 파랑 구간·스카프 표지가 없고 보라 구간이 스카프 값을 포함한다', async ({ page }) => {
+    await openSpeed(page)
+    await setMyPlus(page, false)
+    await setMySp(page, 10)
+    const before = await boundsFromUi(page, false)
+    await setMyItem(page, '구애스카프')
+    const b = await boundsFromUi(page, false)
+    expect(b.scarf).toBeNull()
+    expect(b.plus).toBe(before.scarf!.plus)
+    await expect.poll(() => markKeys(page)).toEqual(wantMarks(b))
+    await expect(frame(page).locator('li[data-mark^="scarf"], li[data-zone^="scarf"], [data-testid="speed-threshold-mark"] [data-testid="item-mark"]')).toHaveCount(0)
+    const me = Number(await band(page).getAttribute('data-speed'))
+    for (const r of await readRows(page)) expect(r.zone, `${r.speed}`).toBe(wantZone(r.speed, me, b))
+  })
+
+  test('AC8: S 슬라이더를 끄는 동안 경계 숫자·자리와 구간 범위는 그대로이고 띠만 화면 기준선을 따른다. 내 순풍이면 경계 숫자가 바뀐다', async ({ page }) => {
+    await openSpeed(page)
+    await setMySp(page, 10)
+    const b = await boundsFromUi(page, false)
+    await expect.poll(() => markKeys(page)).toEqual(wantMarks(b))
+    await frame(page).scrollIntoViewIfNeeded()
+    await page.evaluate(() => {
+      const w = window as unknown as { __rf: { frames: number; bands: number[]; marks: string[]; bad: string[]; stop: boolean } }
+      w.__rf = { frames: 0, bands: [], marks: [], bad: [], stop: false }
+      const f = document.querySelector('[data-testid="speed-frame"]')!
+      const tick = () => {
+        const s = w.__rf
+        if (s.stop) return
+        s.frames++
+        const me = Number(f.querySelector<HTMLElement>('[data-testid="speed-baseline"]')?.dataset.speed ?? NaN)
+        s.bands.push(me)
+        const marked = [...f.querySelectorAll<HTMLElement>('li[data-mark]')]
+        s.marks.push(
+          marked
+            .map((e) => `${e.dataset.mark}:${e.dataset.speed}`)
+            .sort()
+            .join(','),
+        )
+        const top = Number(marked[0]?.dataset.speed ?? NaN)
+        const bottom = Number(f.querySelector<HTMLElement>('li[data-mark="floor"]')?.dataset.speed ?? NaN)
+        for (const li of f.querySelectorAll<HTMLElement>('li[data-speed]')) {
+          const sp = Number(li.dataset.speed)
+          if ((sp >= bottom && sp <= top && sp !== me) !== (li.dataset.zone !== undefined)) s.bad.push(`${s.frames}: ${sp} (기준선 ${me}, 범위 ${bottom}~${top})`)
+        }
+        requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+    })
+    const slider = mySet(page).getByRole('slider', { name: 'SP 스피드', exact: true })
+    expect(await dragSlider(page, slider, 25)).toBe(25)
+    expect(await dragSlider(page, slider, 4)).toBe(4)
+    const res = await page.evaluate(() => {
+      const w = window as unknown as { __rf: { frames: number; bands: number[]; marks: string[]; bad: string[]; stop: boolean } }
+      w.__rf.stop = true
+      return { frames: w.__rf.frames, bands: [...new Set(w.__rf.bands)], marks: [...new Set(w.__rf.marks)], bad: w.__rf.bad.slice(0, 10) }
+    })
+    expect(res.frames).toBeGreaterThan(10)
+    expect(res.bands.length, '드래그 중 기준선이 움직였다').toBeGreaterThan(3)
+    // 경계 표지(띠에 합쳐진 것 포함)는 늘 같은 다섯 실수치
+    expect(res.marks).toEqual([[...wantMarks(b)].sort().join(',')])
+    expect(res.bad).toEqual([])
+
+    await chip(page, 'my-tailwind').click()
+    await expect(chip(page, 'my-tailwind')).toHaveAttribute('aria-pressed', 'true')
+    const tw = await boundsFromUi(page, true)
+    expect(tw.plus).toBe(b.plus * 2)
+    await expect.poll(() => markKeys(page)).toEqual(wantMarks(tw))
+  })
+
+  test('AC9: 거부 도구·무효 세트면 경계 표지·구간이 사라지고, 조건 필터를 모두 끄거나 선택 필터로 배지를 줄여도 경계 줄은 남는다', async ({ page }) => {
+    await openSpeed(page)
+    await setMySp(page, 10)
+    const marks = frame(page).getByTestId('speed-threshold-mark')
+    await expect(marks).toHaveCount(5)
+    await setMyItem(page, '선제공격손톱')
+    await expect(band(page)).toHaveCount(0)
+    await expect(marks).toHaveCount(0)
+    await expect(frame(page).locator('li[data-mark], li[data-zone], .speed-zone')).toHaveCount(0)
+    await setMyItem(page, '생명의구슬')
+    await expect(marks).toHaveCount(5)
+    await chooseMySpecies(page, '파비코리')
+    await expect(tabPanel(page).getByText('내 세트를 확인해 주세요. 기준선을 그릴 수 없습니다.')).toBeVisible()
+    await expect(band(page)).toHaveCount(0)
+    await expect(frame(page).locator('li[data-mark], li[data-zone], .speed-zone')).toHaveCount(0)
+    await chooseMySpecies(page, '한카리아스')
+    await expect(band(page)).toHaveCount(1)
+    await expect(marks).toHaveCount(5)
+    const before = await markKeys(page)
+    for (const f of FILTERS) {
+      if ((await chip(page, f).getAttribute('aria-pressed')) === 'true') await chip(page, f).click()
+      await expect(chip(page, f)).toHaveAttribute('aria-pressed', 'false')
+    }
+    await expect.poll(() => markKeys(page)).toEqual(before)
+    const pick = combo(page.getByTestId('tool-row-search'), '포켓몬 찾기')
+    await pick.fill('포푸니크')
+    await pick.press('Enter')
+    await expect.poll(async () => new Set((await readBadges(page)).filter((x) => x.origin === 'ladder').map((x) => x.opponent)).size).toBe(1)
+    await expect.poll(() => markKeys(page)).toEqual(before)
+    // 경계 실수치에 상대 줄이 없어 배지 없는 경계 줄이 따로 낀다(실수치 + 오른쪽 표지): 내림차순 자리·겹침 없음
+    await expect(frame(page).locator('li.speed-threshold')).toHaveCount(5)
+    await expect(frame(page).locator('li.speed-threshold .speed-row-speed')).toHaveCount(5)
+    const rows = await readRows(page)
+    for (let i = 1; i < rows.length; i++) expect(rows[i].speed, `줄 ${i}`).toBeLessThan(rows[i - 1].speed)
+    // 띠가 제자리(끝에 붙지 않음)일 때 겹침 없음(끝에 붙은 띠 뒤로 지나가는 줄은 AC11이 따로 본다)
+    expect(await placeBandInPlace(page)).toBe(true)
+    expect(await findOverlaps(page, OVERLAP_SEL)).toEqual([])
+    expect(await markLayoutProblems(page)).toEqual([])
+  })
+
+  test('AC10: 스피드 컷 고정 중에도 경계가 계획 세트의 도구·특성·성격 기준으로 보인다', async ({ page }) => {
+    test.setTimeout(120_000)
+    await openSpeed(page)
+    const molduryu = /^몰드류 S32 성격 무보정, 실수치 140,/
+    await lockBadge(page, molduryu)
+    await settle(page)
+    await page.keyboard.press('Escape')
+    await expect(band(page)).toHaveCount(1)
+    await expect(badgeByName(page, molduryu)).toBeVisible()
+    const b = await boundsFromUi(page, false)
+    // 예시 세트는 S32 무보정이라 S32 경계는 띠에 합쳐진다
+    const want = wantMarks(b)
+    await expect.poll(() => markKeys(page)).toEqual(want)
+  })
+
+  for (const width of [320, 400, 1280]) {
+    test(`AC11(${width}px): 경계 표지가 줄 오른쪽 끝에 있고 배지·실수치·기준선 라벨과 겹치지 않고 잘리지 않으며 가로 스크롤이 없다`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 })
+      await openSpeed(page, true)
+      await setMySp(page, 10)
+      await expect(frame(page).getByTestId('speed-threshold-mark')).toHaveCount(5)
+      await frame(page).scrollIntoViewIfNeeded()
+      const steps = await frame(page).evaluate((f) => Math.ceil(f.scrollHeight / f.clientHeight))
+      for (let i = 0; i <= steps; i++) {
+        await frame(page).evaluate((f, k) => (f.scrollTop = k * f.clientHeight), i)
+        const stuck = await frame(page).evaluate((f) => {
+          const el = f.querySelector('[data-testid="speed-baseline"]')!
+          const bb = el.getBoundingClientRect()
+          const prev = el.previousElementSibling?.getBoundingClientRect()
+          const next = el.nextElementSibling?.getBoundingClientRect()
+          return !(prev ? Math.abs(bb.top - prev.bottom) <= 1 : next ? Math.abs(bb.bottom - next.top) <= 1 : true)
+        })
+        expect(await findOverlaps(page, stuck ? STUCK_OVERLAP_SEL : OVERLAP_SEL), `스크롤 ${i}`).toEqual([])
+      }
+      expect(await markLayoutProblems(page)).toEqual([])
+      expect(await frame(page).evaluate((f) => f.scrollWidth <= f.clientWidth)).toBe(true)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+      for (const pos of await frame(page).locator('li.speed-threshold').evaluateAll((els) => els.map((e) => getComputedStyle(e).position))) expect(pos).not.toBe('sticky')
+    })
+  }
 })

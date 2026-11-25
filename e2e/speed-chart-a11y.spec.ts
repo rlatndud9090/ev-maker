@@ -416,7 +416,11 @@ async function measureItemMarks(page: Page): Promise<ItemMarkSample[]> {
       const overlap = mon === undefined ? 0 : Math.max(0, Math.min(r.right, mon.right) - Math.max(r.left, mon.left)) * Math.max(0, Math.min(r.bottom, mon.bottom) - Math.max(r.top, mon.top))
       // 기준 글자: 배지·상세 머리는 배분 표기, 카드 이름 칸은 그 칸의 첫 글자 노드, 그 밖은 포켓몬 이미지
       let anchor: DOMRect | undefined
-      const text = el.closest('.speed-badge')?.querySelector('.speed-badge-text .num') ?? el.closest('.speed-detail-bundle')?.querySelector('.bundle-mark')
+      // 구간 경계 표지(speed-reach-band)의 구애스카프 아이콘은 "S32"·"S32↑" 글자 오른쪽
+      const text =
+        el.closest('.speed-badge')?.querySelector('.speed-badge-text .num') ??
+        el.closest('.speed-detail-bundle')?.querySelector('.bundle-mark') ??
+        el.closest('[data-testid="speed-threshold-mark"]')?.querySelector('.speed-threshold-text')
       if (text) anchor = text.getBoundingClientRect()
       else if (el.closest('.card-name')) {
         const range = document.createRange()
@@ -511,3 +515,153 @@ for (const scheme of ['light', 'dark'] as const) {
     for (const s of speed) expect.soft(s.ratio, `${scheme} ${s.kind} "${s.text}" fg ${s.fg} bg ${s.bg}`).toBeGreaterThanOrEqual(4.5)
   })
 }
+
+// ---------- 배경색 구간·오른쪽 경계 표지 접근성(speed-reach-band PRD AC12·AC13, 2026-11-24 세 번째 개정) ----------
+
+const outerList = (page: Page) => page.getByTestId('speed-frame').getByRole('list', { name: '스피드 실수치 내림차순' })
+
+async function setMySpeedSp(page: Page, sp: number) {
+  const box = mySet(page).getByRole('spinbutton', { name: 'SP 스피드 숫자', exact: true })
+  await box.fill(String(sp))
+  await expect(box).toHaveValue(String(sp))
+  await expect(page.getByTestId('speed-frame').getByTestId('speed-threshold-mark')).toHaveCount(sp === 32 ? 4 : 5)
+}
+
+// 네 구간 면 위의 경계 표지 글자·실수치 글자(띠 위 표지는 보이지 않는다)
+const ZONES = ['base', 'basePlus', 'scarf', 'scarfPlus'] as const
+const ZONE_CONTRAST = ZONES.flatMap((z) => [
+  { kind: `경계 표지(${z})`, sel: `[data-testid="speed-frame"] li.speed-zone[data-zone="${z}"] .speed-threshold-text` },
+  { kind: `실수치(${z})`, sel: `[data-testid="speed-frame"] li.speed-zone[data-zone="${z}"] > .speed-row-speed` },
+])
+
+/** 읽기 문구 기대값 */
+const MARK_SPOKEN: Record<string, string> = {
+  floor: 'S0 성격 무보정 최소',
+  max: 'S32 성격 무보정 최대',
+  maxPlus: 'S32 성격 상승 최대',
+  scarfMax: '구애스카프 S32 성격 무보정 최대',
+  scarfMaxPlus: '구애스카프 S32 성격 상승 최대',
+}
+const ZONE_SPOKEN: Record<string, string> = {
+  base: 'S0~S32 무보정 구간',
+  basePlus: 'S32 성격 상승 구간',
+  scarf: '구애스카프 S32 무보정 구간',
+  scarfPlus: '구애스카프 S32 성격 상승 구간',
+}
+
+test.describe('배경색 구간·경계 표지 접근성(speed-reach-band)', () => {
+  test('AC12: 경계 표지는 목록 항목 안에서 "기준: …"으로 읽히고, 구간 배지 줄만 구간 읽기 설명을 가지며, 배지 없는 경계 줄은 포커스되지 않는다', async ({ page }) => {
+    await openSpeed(page)
+    // 예시 세트(S32 무보정): S32 경계는 띠에 합쳐지고, 보이는 표지 없이 "S32 성격 무보정 최대와 같음"으로만 읽힌다
+    const bandEl = page.getByTestId('speed-baseline')
+    await expect(bandEl).toHaveAttribute('data-mark', 'max')
+    expect(await outerList(page).ariaSnapshot()).toMatch(/내 스피드 \d+[^\n]*S32 성격 무보정 최대와 같음/)
+    await expect(bandEl.getByTestId('speed-baseline-mark')).toHaveClass(/(^|\s)sr-only(\s|$)/)
+    await expect(bandEl.getByTestId('speed-threshold-mark')).toHaveCount(0)
+
+    await setMySpeedSp(page, 10)
+    const snap = await outerList(page).ariaSnapshot()
+    // 다섯 경계가 위에서 아래로(스카프 S32↑ → 스카프 S32 → S32↑ → S32 → 띠 → S0) 읽힌다. 화살표 글자는 읽기에서 숨는다
+    const order = ['scarfMaxPlus', 'scarfMax', 'maxPlus', 'max'].map((k) => snap.indexOf(`기준: ${MARK_SPOKEN[k]}`))
+    for (const i of order) expect(i, snap.slice(0, 400)).toBeGreaterThanOrEqual(0)
+    for (let i = 1; i < order.length; i++) expect(order[i]).toBeGreaterThan(order[i - 1])
+    const bandAt = snap.search(/내 스피드 \d+/)
+    expect(order[3]).toBeLessThan(bandAt)
+    expect(snap.indexOf(`기준: ${MARK_SPOKEN.floor}`)).toBeGreaterThan(bandAt)
+    expect(snap).not.toMatch(/S32↑/)
+    // 표지는 바깥 목록의 항목 안
+    expect(
+      await page
+        .locator('[data-testid="speed-threshold-mark"]')
+        .evaluateAll((els) => els.every((m) => m.closest('li')!.parentElement!.getAttribute('aria-label') === '스피드 실수치 내림차순')),
+    ).toBe(true)
+
+    // 구간 읽기 설명: 배지가 있는 구간 줄에만, 그 구간 문구
+    const rows = await page.getByTestId('speed-frame').locator('li[data-speed]').evaluateAll((els) =>
+      els.map((e) => ({
+        speed: Number((e as HTMLElement).dataset.speed),
+        zone: (e as HTMLElement).dataset.zone ?? null,
+        badge: e.querySelector('[data-testid="speed-badge"]') !== null,
+        desc: e.querySelector('[data-testid="speed-zone-desc"]')?.textContent ?? null,
+      })),
+    )
+    const seen = new Set<string>()
+    for (const r of rows) {
+      if (r.zone === null || !r.badge) expect(r.desc, `${r.speed}`).toBeNull()
+      else {
+        expect(r.desc, `${r.speed}`).toBe(`, ${ZONE_SPOKEN[r.zone]}`)
+        seen.add(r.zone)
+      }
+    }
+    expect([...seen].sort()).toEqual([...ZONES].sort())
+
+    // 배지 없는 경계 줄: 선택 필터로 한 종(포푸니크)만 두면 경계 실수치에 상대 줄이 없어 따로 낀다
+    const pick = combo(page.getByTestId('tool-row-search'), '포켓몬 찾기')
+    await pick.fill('포푸니크')
+    await pick.press('Enter')
+    const lone = page.locator('li.speed-threshold')
+    await expect(lone).toHaveCount(5)
+    const alone = await outerList(page).ariaSnapshot()
+    for (const k of Object.keys(MARK_SPOKEN)) expect(alone).toMatch(new RegExp(`- listitem: "?\\d+ 기준: ${MARK_SPOKEN[k]}"?$`, 'm'))
+    await expect(lone.getByTestId('speed-zone-desc')).toHaveCount(0)
+    expect(await lone.evaluateAll((els) => els.some((li) => li.matches('[tabindex]') || li.querySelector('[tabindex], button, a[href], input') !== null))).toBe(false)
+    const around = await page.getByTestId('speed-frame').evaluate((f) => {
+      const c = f.querySelector<HTMLElement>('li.speed-threshold[data-mark="maxPlus"]')!
+      let up = c.previousElementSibling as HTMLElement | null
+      while (up && up.querySelector('[data-testid="speed-badge"]') === null) up = up.previousElementSibling as HTMLElement | null
+      let down = c.nextElementSibling as HTMLElement | null
+      while (down && down.querySelector('[data-testid="speed-badge"]') === null) down = down.nextElementSibling as HTMLElement | null
+      return { up: up?.querySelector<HTMLElement>('[data-testid="speed-badge"]')?.dataset.badgeId ?? null, downSpeed: Number(down?.dataset.speed ?? NaN), at: Number(c.dataset.speed) }
+    })
+    expect(around.up).not.toBeNull()
+    expect(around.downSpeed).toBeLessThan(around.at)
+    await page.locator(`[data-testid="speed-badge"][data-badge-id='${around.up}']`).focus()
+    await page.keyboard.press('ArrowDown')
+    expect((await activeBadge(page))?.speed).toBe(around.downSpeed)
+    await page.keyboard.press('ArrowUp')
+    expect((await activeBadge(page))?.id).toBe(around.up)
+    await expect(liveRegion(page)).toHaveText(LIVE)
+  })
+
+  for (const scheme of ['light', 'dark'] as const) {
+    test(`AC13(${scheme}): 네 구간 면 위 경계 표지·실수치 글자 4.5:1 이상, 구간 색은 서로 다르고 기준선 띠보다 옅다, 알림 영역 "내 스피드 N" 그대로`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme })
+      await openSpeed(page)
+      await setMySpeedSp(page, 10)
+      const rows = await measureContrast(page, ZONE_CONTRAST)
+      const pick = combo(page.getByTestId('tool-row-search'), '포켓몬 찾기')
+      await pick.fill('포푸니크')
+      await pick.press('Enter')
+      await expect(page.locator('li.speed-threshold')).toHaveCount(5)
+      const alone = await measureContrast(page, ZONE_CONTRAST)
+      const all = [...rows, ...alone]
+      for (const kind of ZONE_CONTRAST.map((c) => c.kind)) expect(all.some((s) => s.kind === kind), `${kind} 표본`).toBe(true)
+      for (const l of summarizeContrast(all)) test.info().annotations.push({ type: 'contrast', description: `${scheme} ${l}` })
+      for (const s of all) expect.soft(s.ratio, `${scheme} ${s.kind} "${s.text}" fg ${s.fg} bg ${s.bg}`).toBeGreaterThanOrEqual(4.5)
+      // 구간 색은 서로 다르고, 카드 바탕과의 색 거리는 기준선 띠가 가장 크다(띠가 가장 진하다)
+      const dist = await page.getByTestId('speed-frame').evaluate((f) => {
+        const rgb = (el: Element) => getComputedStyle(el).backgroundColor.match(/\d+/g)!.slice(0, 3).map(Number)
+        let card: number[] = []
+        for (let p: Element | null = f; p; p = p.parentElement) {
+          const c = getComputedStyle(p).backgroundColor
+          if (c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent') {
+            card = rgb(p)
+            break
+          }
+        }
+        const d = (a: number[], b: number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])
+        const zones = ['base', 'basePlus', 'scarf', 'scarfPlus'].map((z) => rgb(f.querySelector(`.speed-zone[data-zone="${z}"]`)!))
+        return { band: d(rgb(f.querySelector('[data-testid="speed-baseline"]')!), card), zones: zones.map((z) => d(z, card)), keys: zones.map((z) => z.join(',')) }
+      })
+      expect(new Set(dist.keys).size).toBe(4)
+      for (const z of dist.zones) {
+        expect(z).toBeGreaterThan(0)
+        expect(dist.band).toBeGreaterThan(z)
+      }
+      // 같은 색 계열에서 진한 쪽이 카드 바탕과 더 멀다
+      expect(dist.zones[1]).toBeGreaterThan(dist.zones[0])
+      expect(dist.zones[3]).toBeGreaterThan(dist.zones[2])
+      await expect(liveRegion(page)).toHaveText(LIVE)
+    })
+  }
+})

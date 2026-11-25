@@ -6,13 +6,20 @@ import {
   compareInRow,
   focusAfterRemove,
   ladderRows,
+  markHasScarf,
+  markLabel,
+  markSpoken,
   minSpToPass,
   navigate,
   speedBaseline,
+  speedCeilings,
+  speedZones,
   statusOf,
   visibleBadges,
+  zoneSpoken,
   type LadderRow,
   type SpeedBaseline,
+  type SpeedCeilings,
 } from './speedLadder'
 import { realData } from './testing'
 import { DEFAULT_CRITERIA, DEFAULT_SPEED_FILTERS } from './types'
@@ -316,5 +323,235 @@ describe('키보드 탐색(AC20)', () => {
     expect(focusAfterRemove(tail, 'z')).toBe('a1')
     expect(focusAfterRemove([{ speed: 1, badgeIds: ['only'], baseline: false }], 'only')).toBeNull()
     expect(focusAfterRemove(rows, 'gone')).toBeNull()
+  })
+})
+
+describe('기준 실수치(speed-reach-band AC1, 2026-11-24 세 번째 개정: 구애스카프 가정 포함)', () => {
+  // 기대값은 독립 경로: S SP를 32로(성격은 무보정 hardy·상승 jolly) 둔 세트, S SP를 0으로(무보정 hardy) 둔 세트, 그 세트의 도구만 구애스카프로 둔 세트의 기준선 값
+  const atSp = (set: PokemonSet, nature: string, spe: number): PokemonSet => ({ ...set, nature, sp: { ...set.sp, spe } })
+  const ok = (b: SpeedBaseline): number => {
+    if (b.kind !== 'ok') throw new Error('기대값 세트가 유효하지 않다')
+    return b.speed
+  }
+  const at = (set: PokemonSet, nature: string, spe: number, tw: boolean) => ok(speedBaseline(game, atSp(set, nature, spe), tw, { ignoreSpTotal: true }))
+  const expected = (set: PokemonSet, tw: boolean, withScarf = true): SpeedCeilings => {
+    const scarfSet: PokemonSet = { ...set, item: 'choicescarf' }
+    return {
+      floor: at(set, 'hardy', 0, tw),
+      neutral: at(set, 'hardy', 32, tw),
+      plus: at(set, 'jolly', 32, tw),
+      plusSign: 'plus',
+      scarf: withScarf ? { neutral: at(scarfSet, 'hardy', 32, tw), plus: at(scarfSet, 'jolly', 32, tw) } : null,
+    }
+  }
+  const low: PokemonSet = { ...chomp, nature: 'hardy', sp: { ...chomp.sp, spe: 5 } }
+
+  it('도구 없음·생명의구슬·내 순풍 각각 "S0 무보정"·"S32 무보정"·"S32 상승"·"구애스카프 S32 무보정·상승" 기준선과 같다', () => {
+    const noItem: PokemonSet = { ...low, item: undefined }
+    expect(speedCeilings(game, noItem, false)).toEqual(expected(noItem, false))
+    expect(speedCeilings(game, low, false)).toEqual(expected(low, false))
+    expect(speedCeilings(game, low, true)).toEqual(expected(low, true))
+    const c = speedCeilings(game, low, false)!
+    expect(speedCeilings(game, low, true)!.plus).toBeGreaterThan(c.plus)
+    expect(speedCeilings(game, low, true)!.floor).toBeGreaterThan(c.floor)
+    // 구애스카프 구간은 보라 구간 위에 쌓인다
+    expect(c.scarf!.neutral).toBeGreaterThan(c.plus)
+    expect(c.scarf!.plus).toBeGreaterThan(c.scarf!.neutral)
+  })
+
+  it('지금 도구가 구애스카프면 스카프 가정이 없다(보라 구간이 이미 스카프 포함)', () => {
+    const scarf: PokemonSet = { ...low, item: 'choicescarf' }
+    const c = speedCeilings(game, scarf, false)!
+    expect(c).toEqual(expected(scarf, false, false))
+    expect(c.scarf).toBeNull()
+    expect(c.plus).toBe(speedCeilings(game, low, false)!.scarf!.plus)
+  })
+
+  it('S0 최소는 하락 성격을 넣지 않은 무보정 값이고 지금 기준선 이하일 수 있다(지금 S 하락이면 범위 아래)', () => {
+    const c = speedCeilings(game, low, false)!
+    expect(c.floor).toBeLessThan(c.neutral)
+    const atFloor = speedBaseline(game, atSp(low, 'hardy', 0), false)
+    expect(atFloor.kind === 'ok' && atFloor.speed).toBe(c.floor)
+    const minus = speedBaseline(game, atSp(low, 'brave', 0), false)
+    expect(minus.kind === 'ok' && minus.speed).toBeLessThan(c.floor)
+  })
+
+  it('지금 S SP·성격(하락 포함)·SP 합계 초과·랭크와 무관하다', () => {
+    const want = speedCeilings(game, low, false)
+    expect(want).toEqual(expected(low, false))
+    expect(want!.plus).toBeGreaterThan(want!.neutral)
+    for (const v of [
+      { ...low, sp: { ...low.sp, spe: 32 } },
+      { ...low, nature: 'brave' },
+      { ...low, nature: 'jolly', sp: { ...low.sp, spe: 0 } },
+      { ...low, nature: 'timid' },
+      { ...low, sp: { hp: 32, atk: 32, def: 32, spa: 0, spd: 0, spe: 20 } },
+      { ...low, boosts: { spe: 2 } },
+    ] satisfies PokemonSet[]) {
+      expect(speedCeilings(game, v, false), JSON.stringify(v.sp) + v.nature).toEqual(want)
+    }
+  })
+
+  it('합계 말고 다른 이유로 무효이거나 스피드 거부면 없다', () => {
+    expect(speedCeilings(game, { ...low, sp: { ...low.sp, hp: 33 } }, false)).toBeNull()
+    expect(speedCeilings(game, { ...low, species: 'nope' }, false)).toBeNull()
+    expect(speedCeilings(game, { ...low, item: 'quickclaw' }, false)).toBeNull()
+  })
+
+  it('표지·읽기 표기', () => {
+    expect(markLabel(32, 'floor')).toBe('S0')
+    expect(markLabel(32, 'max')).toBe('S32')
+    expect(markLabel(32, 'maxPlus')).toBe('S32↑')
+    expect(markLabel(32, 'scarfMax')).toBe('S32')
+    expect(markLabel(32, 'scarfMaxPlus')).toBe('S32↑')
+    expect((['floor', 'max', 'maxPlus', 'scarfMax', 'scarfMaxPlus'] as const).map(markHasScarf)).toEqual([false, false, false, true, true])
+    expect(markSpoken(32, 'floor', '구애스카프')).toBe('S0 성격 무보정 최소')
+    expect(markSpoken(32, 'max', '구애스카프')).toBe('S32 성격 무보정 최대')
+    expect(markSpoken(32, 'maxPlus', '구애스카프')).toBe('S32 성격 상승 최대')
+    expect(markSpoken(32, 'scarfMax', '구애스카프')).toBe('구애스카프 S32 성격 무보정 최대')
+    expect(markSpoken(32, 'scarfMaxPlus', '구애스카프')).toBe('구애스카프 S32 성격 상승 최대')
+    expect(zoneSpoken(32, 'base', '구애스카프')).toBe('S0~S32 무보정 구간')
+    expect(zoneSpoken(32, 'basePlus', '구애스카프')).toBe('S32 성격 상승 구간')
+    expect(zoneSpoken(32, 'scarf', '구애스카프')).toBe('구애스카프 S32 무보정 구간')
+    expect(zoneSpoken(32, 'scarfPlus', '구애스카프')).toBe('구애스카프 S32 성격 상승 구간')
+  })
+})
+
+describe('배경색 구간·경계 줄(speed-reach-band AC2~AC4, 2026-11-24 세 번째 개정)', () => {
+  const cmp = compareInRow()
+  // 경계: S0 120 · S32 165 · S32↑ 181 · 스카프 S32 247 · 스카프 S32↑ 271
+  const C: SpeedCeilings = { floor: 120, neutral: 165, plus: 181, plusSign: 'plus', scarf: { neutral: 247, plus: 271 } }
+  const view = (rows: LadderRow[]) => rows.map((r) => [r.speed, r.badgeIds.length, r.baseline, r.mark ?? null, r.zone ?? null])
+  const ofSpeeds = (xs: number[]) => xs.map((x) => badge(`s${x}`, x))
+
+  it('speedZones: 아래에서 위로 네 구간, 비는 구간은 빠진다', () => {
+    expect(speedZones(C)).toEqual([
+      { kind: 'base', top: 165, mark: 'max' },
+      { kind: 'basePlus', top: 181, mark: 'maxPlus' },
+      { kind: 'scarf', top: 247, mark: 'scarfMax' },
+      { kind: 'scarfPlus', top: 271, mark: 'scarfMaxPlus' },
+    ])
+    expect(speedZones({ ...C, scarf: null }).map((z) => z.kind)).toEqual(['base', 'basePlus'])
+    // 스카프가 효과 없음(스카프 S32 ≤ S32↑): 스카프 무보정 구간이 비고, 스카프 상승 위 끝도 S32↑ 이하면 둘 다 빠진다
+    expect(speedZones({ ...C, scarf: { neutral: 165, plus: 181 } }).map((z) => z.kind)).toEqual(['base', 'basePlus'])
+    expect(speedZones({ ...C, scarf: { neutral: 175, plus: 190 } })).toEqual([
+      { kind: 'base', top: 165, mark: 'max' },
+      { kind: 'basePlus', top: 181, mark: 'maxPlus' },
+      { kind: 'scarfPlus', top: 190, mark: 'scarfMaxPlus' },
+    ])
+  })
+
+  it('AC2: 줄 구성·구간(S0 최소 이상, 각 위 끝 포함, 기준선 띠 제외)·경계 표지', () => {
+    expect(view(ladderRows(ofSpeeds([300, 260, 250, 200, 178, 160, 150, 110]), 154, cmp, C))).toEqual([
+      [300, 1, false, null, null],
+      [271, 0, false, 'scarfMaxPlus', 'scarfPlus'],
+      [260, 1, false, null, 'scarfPlus'],
+      [250, 1, false, null, 'scarfPlus'],
+      [247, 0, false, 'scarfMax', 'scarf'],
+      [200, 1, false, null, 'scarf'],
+      [181, 0, false, 'maxPlus', 'basePlus'],
+      [178, 1, false, null, 'basePlus'],
+      [165, 0, false, 'max', 'base'],
+      [160, 1, false, null, 'base'],
+      [154, 0, true, null, null],
+      [150, 1, false, null, 'base'],
+      [120, 0, false, 'floor', 'base'],
+      [110, 1, false, null, null],
+    ])
+  })
+
+  it('AC3 (a)(b): 같은 실수치 상대 줄에 표지를 붙이고 새 줄을 만들지 않는다. 각 경계 줄은 아래 구간의 위 끝', () => {
+    expect(view(ladderRows(ofSpeeds([272, 271, 248, 247, 182, 181, 166, 165, 120, 119]), 154, cmp, C))).toEqual([
+      [272, 1, false, null, null],
+      [271, 1, false, 'scarfMaxPlus', 'scarfPlus'],
+      [248, 1, false, null, 'scarfPlus'],
+      [247, 1, false, 'scarfMax', 'scarf'],
+      [182, 1, false, null, 'scarf'],
+      [181, 1, false, 'maxPlus', 'basePlus'],
+      [166, 1, false, null, 'basePlus'],
+      [165, 1, false, 'max', 'base'],
+      [154, 0, true, null, null],
+      [120, 1, false, 'floor', 'base'],
+      [119, 1, false, null, null],
+    ])
+  })
+
+  it('AC3 (c)(d): 기준선이 경계 실수치와 같으면 기준선 줄에 표지(따로 줄 없음, 띠는 구간 없음)', () => {
+    const c = view(ladderRows(ofSpeeds([178]), 181, cmp, { ...C, scarf: null }))
+    expect(c).toEqual([
+      [181, 0, true, 'maxPlus', null],
+      [178, 1, false, null, 'basePlus'],
+      [165, 0, false, 'max', 'base'],
+      [120, 0, false, 'floor', 'base'],
+    ])
+    const e = view(ladderRows(ofSpeeds([130, 110]), 120, cmp, { ...C, scarf: null }))
+    expect(e).toEqual([
+      [181, 0, false, 'maxPlus', 'basePlus'],
+      [165, 0, false, 'max', 'base'],
+      [130, 1, false, null, 'base'],
+      [120, 0, true, 'floor', null],
+      [110, 1, false, null, null],
+    ])
+  })
+
+  it('AC3 (e): 두 S32 기준이 같으면 줄 하나, 표기는 상승 변형의 실제 S 보정. 스카프 두 기준이 같아도 하나', () => {
+    const same = (plusSign: 'plus' | 'neutral') => view(ladderRows(ofSpeeds([180, 160]), 150, cmp, { floor: 120, neutral: 170, plus: 170, plusSign, scarf: null }))
+    expect(same('neutral')).toEqual([
+      [180, 1, false, null, null],
+      [170, 0, false, 'max', 'base'],
+      [160, 1, false, null, 'base'],
+      [150, 0, true, null, null],
+      [120, 0, false, 'floor', 'base'],
+    ])
+    expect(same('plus').map((r) => r[3])).toEqual([null, 'maxPlus', null, null, 'floor'])
+    const scarfSame = view(ladderRows([], 150, cmp, { floor: 120, neutral: 170, plus: 170, plusSign: 'neutral', scarf: { neutral: 255, plus: 255 } }))
+    expect(scarfSame).toEqual([
+      [255, 0, false, 'scarfMax', 'scarf'],
+      [170, 0, false, 'max', 'base'],
+      [150, 0, true, null, null],
+      [120, 0, false, 'floor', 'base'],
+    ])
+  })
+
+  it('AC3 (f)(h): 기준선 없으면 경계·구간 없음. 지금 S 하락이라 기준선이 S0 최소보다 낮으면 띠는 구간 아래', () => {
+    const f = ladderRows(ofSpeeds([194, 160]), null, cmp, C)
+    expect(view(f)).toEqual([
+      [194, 1, false, null, null],
+      [160, 1, false, null, null],
+    ])
+    expect(f.every((r) => !('mark' in r) && !('zone' in r))).toBe(true)
+    const h = view(ladderRows(ofSpeeds([125, 118]), 115, cmp, { ...C, scarf: null }))
+    expect(h).toEqual([
+      [181, 0, false, 'maxPlus', 'basePlus'],
+      [165, 0, false, 'max', 'base'],
+      [125, 1, false, null, 'base'],
+      [120, 0, false, 'floor', 'base'],
+      [118, 1, false, null, null],
+      [115, 0, true, null, null],
+    ])
+  })
+
+  it('기준 없이 부르면 기존 줄과 같다(필드 없음)', () => {
+    const bs = ofSpeeds([194, 160])
+    expect(ladderRows(bs, 154, cmp, null)).toEqual(ladderRows(bs, 154, cmp))
+    expect(ladderRows(bs, 154, cmp)).toEqual([
+      { speed: 194, badgeIds: ['s194'], baseline: false },
+      { speed: 160, badgeIds: ['s160'], baseline: false },
+      { speed: 154, badgeIds: [], baseline: true },
+    ])
+  })
+
+  it('AC4: 위아래 이동은 배지 없는 경계 줄을 건너뛰고, 표지가 붙은 상대 줄 배지는 이동 대상', () => {
+    const rows = ladderRows(ofSpeeds([300, 200, 178, 160, 150, 110]), 154, cmp, C)
+    expect(navigate(rows, 's300', 'ArrowDown')).toBe('s200')
+    expect(navigate(rows, 's200', 'ArrowDown')).toBe('s178')
+    expect(navigate(rows, 's178', 'ArrowDown')).toBe('s160')
+    expect(navigate(rows, 's160', 'ArrowDown')).toBe('s150')
+    expect(navigate(rows, 's150', 'ArrowDown')).toBe('s110')
+    const merged = ladderRows(ofSpeeds([271, 247, 181, 165, 150, 120]), 154, cmp, C)
+    expect(navigate(merged, 's271', 'ArrowDown')).toBe('s247')
+    expect(navigate(merged, 's181', 'ArrowDown')).toBe('s165')
+    expect(navigate(merged, 's150', 'ArrowDown')).toBe('s120')
+    expect(focusAfterRemove(rows, 's178')).toBe('s160')
   })
 })

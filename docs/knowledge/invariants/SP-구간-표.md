@@ -103,3 +103,8 @@ area: SP 구간 표
 > area: SP 구간 표 · 출처: docs/raw/feature/speed-bundles-pin-disable/adr.md#결정-2 · 코드: `src/cards/speedLock.ts:speedLockBadge`, `src/app/components/SpeedChart.tsx` · 봉인: `src/cards/speedLock.test.ts`
 
 **위반 시:** SP 배분 기준을 바꿔 배지가 기본↔추가로 바뀌면, 해석은 이어지는데 차트 핀이 빈 핀으로 보여 누르면 고정 해제 대신 교체가 된다.
+
+### INV-261125-speed-badgeless-rows-no-focus: 스피드 사다리의 배지 없는 줄은 포커스·이동 대상이 아니다
+> area: SP 구간 표 · 출처: docs/raw/feature/speed-reach-band/adr.md#결정-1 · 코드: `src/cards/speedLadder.ts:navigate`, `src/app/components/SpeedChart.tsx` · 봉인: `e2e/speed-chart-a11y.spec.ts` "AC12"
+
+**위반 시:** 기준선·경계 표지만 있는 줄로 화살표 포커스가 들어가 키보드 이동이 빈 줄에 멈추고, 스크린 리더가 버튼 없는 줄을 대화형으로 읽는다.
