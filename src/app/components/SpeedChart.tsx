@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent } from 'react'
 import {
   focusAfterRemove,
+  markHasScarf,
+  markLabel,
+  markSpoken,
   minSpToPass,
   navigate,
+  SCARF_ITEM,
+  zoneSpoken,
   speedBranchLines,
   speedLockBadge,
   speedLockCandidate,
@@ -10,6 +15,7 @@ import {
   type CustomTarget,
   type SpeedBranchLine,
   type LadderRow,
+  type MarkKind,
   type NatureSign,
   type SpeedBadge as Badge,
   type SpeedBaseline,
@@ -67,6 +73,19 @@ type Pending = { kind: 'id'; id: string } | { kind: 'added'; source: TargetSourc
 
 const IGNORE_TOTAL: EvalOptions = { ignoreSpTotal: true }
 const NO_SEQS: readonly number[] = []
+
+/** 구간 경계 표지(줄 오른쪽 끝): "S0" · "S32" · "S32↑" · "S32"+구애스카프 아이콘. 읽기는 "기준: S32 성격 상승 최대" */
+function ThresholdMark({ kind, spMax, scarfName }: { kind: MarkKind; spMax: number; scarfName: string }) {
+  return (
+    <span className="speed-threshold-mark num" data-testid="speed-threshold-mark" data-mark={kind}>
+      <span className="speed-threshold-text" aria-hidden="true">
+        {markLabel(spMax, kind)}
+      </span>
+      {markHasScarf(kind) && <ItemMark item={{ id: SCARF_ITEM, name: scarfName, role: 'held' }} />}
+      <span className="sr-only">기준: {markSpoken(spMax, kind, scarfName)}</span>
+    </span>
+  )
+}
 
 /** 실수치 내림차순 줄 목록(기준선 띠 포함)과 배지에 붙는 상세 팝오버, 순서 비교 불가 영역 */
 export function SpeedChart({ game, model, input, bundleShareMin, badges, rows, baseline, shownSet, lockSet, confirmedLockSet, myTailwind, customTargets, dispatch, empty, reveal, onRevealed }: Props) {
@@ -179,6 +198,8 @@ export function SpeedChart({ game, model, input, bundleShareMin, badges, rows, b
   const lockedBy = (b: Badge): readonly number[] => lockedById.get(b.id) ?? NO_SEQS
 
   const names = namesOf(game)
+  const spMax = game.manifest.rules.spMaxPerStat
+  const scarfName = names.items.label(SCARF_ITEM)
   const minSp = useMemo(() => {
     if (detailBadge === undefined || baseline.kind !== 'ok') return null
     if (!locked) return minSpToPass(game, shownSet, detailBadge.speed, myTailwind)
@@ -279,24 +300,47 @@ export function SpeedChart({ game, model, input, bundleShareMin, badges, rows, b
             if (band) {
               // 기준선 띠 = 내 실수치 줄: 구분 텍스트 → 동속 배지
               return (
-                <li key={row.speed} className="speed-baseline" data-testid="speed-baseline" data-speed={row.speed}>
+                <li key={row.speed} className="speed-baseline" data-testid="speed-baseline" data-speed={row.speed} data-mark={row.mark}>
                   <span className="speed-baseline-label">
                     내 스피드 <b className="num">{baseline.speed}</b>
                     <span className="speed-baseline-bundle num" data-testid="speed-baseline-bundle">
                       <BundleText sp={baseline.sp} nature={baseline.nature} />
                       {baseline.tailwind ? ' · 순풍' : ''}
                     </span>
+                    {/* 내 스피드가 구간 경계와 같으면 보이는 표지 없이 읽기 문구만 붙인다(띠 자체가 그 자리를 보인다, 2026-11-24 사용자 요청) */}
+                    {row.mark !== undefined && (
+                      <span className="sr-only" data-testid="speed-baseline-mark" data-mark={row.mark}>
+                        , {markSpoken(spMax, row.mark, scarfName)}와 같음
+                      </span>
+                    )}
                   </span>
                   <span className="sr-only">. {baseline.speed}과 같으면 동속, 그보다 아래는 추월</span>
                   {badgeList}
                 </li>
               )
             }
-            if (row.badgeIds.length === 0) return null
+            const zoneClass = row.zone === undefined ? '' : ' speed-zone'
+            const mark = row.mark !== undefined && <ThresholdMark kind={row.mark} spMax={spMax} scarfName={scarfName} />
+            if (row.badgeIds.length === 0) {
+              // 배지 없는 경계 줄(S0·S32·S32↑·스카프 S32·S32↑): 목록 안 구분 항목(포커스 대상 아님). 실수치 + 오른쪽 끝 표지, 구간 색은 연속성으로만(읽기 설명 없음)
+              if (row.mark === undefined) return null
+              return (
+                <li key={row.speed} className={`speed-threshold${zoneClass}`} data-testid="speed-threshold" data-speed={row.speed} data-mark={row.mark} data-zone={row.zone}>
+                  <span className="speed-row-speed num">{row.speed}</span>
+                  {mark}
+                </li>
+              )
+            }
             return (
-              <li key={row.speed} className="speed-row" data-speed={row.speed}>
+              <li key={row.speed} className={`speed-row${zoneClass}`} data-speed={row.speed} data-mark={row.mark} data-zone={row.zone}>
                 <span className="speed-row-speed num">{row.speed}</span>
+                {row.zone !== undefined && (
+                  <span className="sr-only" data-testid="speed-zone-desc">
+                    , {zoneSpoken(spMax, row.zone, scarfName)}
+                  </span>
+                )}
                 {badgeList}
+                {mark}
               </li>
             )
           })}

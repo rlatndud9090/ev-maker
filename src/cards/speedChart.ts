@@ -114,7 +114,9 @@ export interface SpeedChartInput {
   force?: { opponentId: string; source: 'ladder' | 'custom' }
 }
 
-const SCARF = 'choicescarf'
+/** 구애스카프 도구 id */
+export const SCARF_ITEM = 'choicescarf'
+const SCARF = SCARF_ITEM
 const SPE_KEY: readonly ['spe'] = ['spe']
 const PRESETS: readonly PresetIndex[] = [0, 1, 2]
 const NATURE_SIGNS: readonly NatureSign[] = ['plus', 'neutral', 'minus']

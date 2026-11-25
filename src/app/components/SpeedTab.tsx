@@ -4,6 +4,7 @@ import {
   compareInRow,
   ladderRows,
   speedBaseline,
+  speedCeilings,
   visibleBadges,
   type CustomTarget,
   type SpeedBaseline,
@@ -76,7 +77,12 @@ export function SpeedTab({ game, input, state, mySet, displaySp, dispatch, tabId
   const draft = state.draft
   const confirmedLockSet = useMemo(() => (lockUi.enabled ? toPokemonSet(game, draft).set : undefined), [lockUi.enabled, game, draft])
   const lockSet = useMemo(() => (confirmedLockSet === undefined || shownSp === null ? confirmedLockSet : { ...confirmedLockSet, sp: shownSp }), [confirmedLockSet, shownSp])
-  const rows = useMemo(() => ladderRows(badges, baseline.kind === 'ok' ? baseline.speed : null, cmp), [badges, baseline, cmp])
+  // 구간 경계(S0 무보정 최소·S32 무보정·상승 최대·구애스카프 S32 무보정·상승 최대)는 확정 세트·내 순풍으로만 계산한다(드래그 비의존, 합계 검사 끔). 화면 기준선이 있을 때만 줄에 넣는다
+  const ceilings = useMemo(() => speedCeilings(game, mySet, myTailwind), [game, mySet, myTailwind])
+  const rows = useMemo(
+    () => (baseline.kind === 'ok' ? ladderRows(badges, baseline.speed, cmp, ceilings) : ladderRows(badges, null, cmp)),
+    [badges, baseline, cmp, ceilings],
+  )
   // 알림 영역은 확정 SP 기준(드래그 중에는 알리지 않는다)
   const summary = summaryText(confirmedBaseline)
 
